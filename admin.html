@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de administración — La Casa de los Placeres</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --bg:#FBF5F2; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
+    --primary:#6E2159; --primary-deep:#4A1642; --rose:#BC355C; --amber:#F6A030;
+    --green:#6E9E1A; --teal:#1AA0B2; --navy:#0A4A5B; --border:#EBD9D3; --radius-pill:999px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#fff;color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
+  a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;} select,input,textarea{font-family:inherit;}
+  .app{max-width:1100px;margin:0 auto;min-height:100vh;}
+  .admin-top{background:var(--navy);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .admin-top .brand-name{font-size:16px;font-weight:600;font-family:'League Spartan',sans-serif;}
+  .admin-top .brand-sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
+  .logout-link{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;border-radius:var(--radius-pill);color:#fff;}
+  .admin-tabs{display:flex;gap:4px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto;}
+  .admin-tab{padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;color:var(--ink-soft);white-space:nowrap;}
+  .admin-tab.active{background:var(--surface-soft);color:var(--primary-deep);}
+  .admin-body{padding:20px 20px 60px;}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:24px;}
+  @media(min-width:700px){.stat-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(min-width:960px){.stat-grid{grid-template-columns:repeat(6,1fr);}}
+  .stat-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .stat-label{font-size:11px;color:var(--ink-soft);margin-bottom:6px;line-height:1.3;}
+  .stat-value{font-size:21px;font-weight:700;font-family:'League Spartan',sans-serif;color:var(--primary-deep);}
+  .stat-delta{font-size:11px;margin-top:4px;font-weight:600;}
+  .stat-delta.up{color:var(--green);}
+  .stat-delta.down{color:var(--rose);}
+
+  .panel{border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:20px;background:#fff;}
+  .panel-title{font-size:14.5px;font-weight:600;color:var(--primary-deep);margin-bottom:14px;font-family:'League Spartan',sans-serif;}
+  .panel-sub{font-size:11.5px;color:var(--ink-soft);margin-top:-10px;margin-bottom:14px;}
+
+  .bars{display:flex;align-items:flex-end;gap:8px;height:150px;padding-top:10px;overflow-x:auto;}
+  .bar-col{flex:1;min-width:26px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+  .bar-val{font-size:10px;color:var(--ink-soft);margin-bottom:4px;font-weight:600;white-space:nowrap;}
+  .bar-fill{width:100%;max-width:30px;border-radius:6px 6px 3px 3px;background:var(--primary);min-height:3px;transition:height .3s ease;}
+  .bar-label{font-size:9.5px;color:var(--ink-soft);margin-top:6px;text-align:center;line-height:1.2;}
+
+  .hbar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .hbar-label{width:110px;flex-shrink:0;font-size:12px;color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .hbar-track{flex:1;height:16px;background:var(--surface-soft);border-radius:8px;overflow:hidden;}
+  .hbar-fill{height:100%;border-radius:8px;}
+  .hbar-val{width:60px;text-align:right;font-size:11.5px;color:var(--ink-soft);font-weight:600;flex-shrink:0;}
+
+  .list-row{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:#fff;}
+  .row-swatch{width:36px;height:36px;border-radius:9px;flex-shrink:0;}
+  .row-main{flex:1;min-width:0;}
+  .row-title{font-size:13.5px;font-weight:600;}
+  .row-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .row-actions{display:flex;gap:6px;flex-shrink:0;}
+  .icon-btn{width:30px;height:30px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:13px;display:flex;align-items:center;justify-content:center;}
+  .icon-btn.danger{background:#FBE2E6;color:var(--rose);}
+  .status-badge{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);color:#fff;flex-shrink:0;}
+  .rank-num{width:22px;height:22px;border-radius:50%;background:var(--surface-soft);color:var(--primary-deep);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+  .btn-add-new{background:var(--primary);color:#fff;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;}
+  .btn-outline{background:#fff;border:1px solid var(--primary);color:var(--primary);padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .form-field{margin-bottom:12px;}
+  .form-field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .form-field input,.form-field textarea,.form-field select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:14px;background:var(--bg);color:var(--ink);}
+  .form-field textarea{resize:vertical;min-height:60px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .note-box{background:var(--surface-soft);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
+  .btn-primary{background:var(--rose);color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;font-weight:600;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(43,22,32,0.5);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
+  @media(min-width:600px){.modal-overlay{align-items:center;}}
+  .modal{background:#fff;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:20px;}
+  @media(min-width:600px){.modal{border-radius:16px;}}
+  .modal h3{font-size:17px;color:var(--primary-deep);margin-bottom:14px;}
+  .modal-actions{display:flex;gap:10px;margin-top:16px;}
+  .modal-actions button{flex:1;padding:12px;border-radius:10px;font-size:13.5px;font-weight:600;}
+  .btn-cancel{background:var(--surface-soft);color:var(--ink-soft);}
+
+  .login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--primary-deep);padding:20px;}
+  .login-card{background:#fff;border-radius:18px;padding:30px 26px;max-width:340px;width:100%;text-align:center;}
+  .login-card h2{color:var(--primary-deep);font-size:19px;margin-bottom:6px;}
+  .login-card p{color:var(--ink-soft);font-size:12.5px;margin-bottom:18px;}
+  .login-card input{width:100%;font-size:14px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;}
+  .login-error{color:var(--rose);font-size:12px;margin-bottom:8px;min-height:14px;}
+  .order-detail{background:var(--bg);border-radius:10px;padding:12px;margin-top:8px;font-size:12.5px;}
+  .order-detail div{display:flex;justify-content:space-between;padding:3px 0;gap:10px;}
+  .status-filter{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;}
+  .status-filter button{flex-shrink:0;padding:7px 13px;border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--ink-soft);font-size:12px;font-weight:600;}
+  .status-filter button.active{background:var(--primary);color:#fff;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .empty-state{padding:40px 20px;text-align:center;color:var(--ink-soft);}
+  .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
+  .cat-manage-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-soft);color:var(--primary-deep);padding:6px 8px 6px 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:500;margin:0 6px 8px 0;}
+  .cat-manage-chip button{background:none;color:var(--rose);font-size:14px;line-height:1;width:18px;height:18px;display:flex;align-items:center;justify-content:center;}
+  .import-drop{border:1.5px dashed var(--border);border-radius:12px;padding:20px;text-align:center;color:var(--ink-soft);font-size:13px;margin-bottom:12px;}
+  .import-drop input[type=file]{margin-top:10px;}
+  .preview-count{font-size:12.5px;color:var(--primary-deep);font-weight:600;margin-bottom:10px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ============== FIREBASE ============== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAhPrEfQSfWOjP2X7GtcXKp86RMWHZa-NQ",
+  authDomain: "casa-de-los-placeres.firebaseapp.com",
+  projectId: "casa-de-los-placeres",
+  storageBucket: "casa-de-los-placeres.firebasestorage.app",
+  messagingSenderId: "689677749733",
+  appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
+const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
+const STATUS_FLOW = ["Nuevo","Preparando","En camino","Entregado","Cancelado"];
+const STATUS_COLOR = {"Nuevo":"#BC355C","Preparando":"#F6A030","En camino":"#1AA0B2","Entregado":"#6E9E1A","Cancelado":"#8a6b78"};
+function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
+
+const DEFAULT_PRODUCTS = [
+  {id:"p1",name:"Set de dilatadores progresivos",cat:"Dilatadores",price:520,stock:8,desc:"Set de silicona médica, 5 tallas progresivas."},
+  {id:"p2",name:"Lubricante base agua 100ml",cat:"Lubricantes",price:180,stock:24,desc:"Fórmula suave, compatible con látex."},
+  {id:"p3",name:"Anillo vibrador recargable",cat:"Anillos",price:380,stock:12,desc:"Silicona, USB, 10 intensidades."},
+  {id:"p4",name:"Plug mediano silicona",cat:"Plugs",price:340,stock:15,desc:"Base segura, silicona médica hipoalergénica."},
+  {id:"p5",name:"Boxer Zuppo edición discreta",cat:"Ropa interior",price:290,stock:20,desc:"Algodón premium, corte moderno."},
+  {id:"p6",name:"Masturbador de manga texturizada",cat:"Masturbadores",price:610,stock:9,desc:"Textura interna, fácil limpieza."},
+  {id:"p7",name:"Vibrador punto G",cat:"Juguetes",price:590,stock:11,desc:"Silicona suave, sumergible, silencioso."},
+  {id:"p8",name:"Dildo realista mediano",cat:"Dildos",price:450,stock:14,desc:"Base ventosa, silicona médica."},
+];
+const DEFAULT_SETTINGS = {
+  storeName:"La Casa de los Placeres", whatsapp:"523317494004",
+  schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
+  heroTitle:"Tu catálogo, con total discreción.",
+  heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
+  categories:[...DEFAULT_CATEGORIES],
+};
+
+let state = {
+  authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
+  products:[], orders:[], settings:{...DEFAULT_SETTINGS},
+  adminTab:"resumen", productModal:null, orderDetail:null, orderStatusFilter:"Todos", loaded:false,
+  importOpen:false, importPreview:[], importText:"", newCatInput:"",
+};
+
+async function loadData(){
+  try{
+    const [catSnap, setSnap, ordersSnap] = await Promise.all([
+      db.collection('catalog').doc('products').get(),
+      db.collection('settings').doc('store').get(),
+      db.collection('orders').orderBy('date','desc').get(),
+    ]);
+    let needsSeedCatalog = !catSnap.exists || !(catSnap.data().items||[]).length;
+    let needsSeedSettings = !setSnap.exists;
+    state.products = needsSeedCatalog ? DEFAULT_PRODUCTS : catSnap.data().items;
+    state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
+    if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    state.orders = ordersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(needsSeedCatalog) await saveProducts();
+    if(needsSeedSettings) await saveSettings();
+  }catch(e){
+    console.error(e);
+    state.products = DEFAULT_PRODUCTS; state.orders = []; state.settings = {...DEFAULT_SETTINGS};
+    showToast('No se pudo cargar todo desde el servidor');
+  }
+  state.loaded = true; render();
+}
+async function saveProducts(){ try{ await db.collection('catalog').doc('products').set({items: state.products}); }catch(e){ console.error(e); showToast('No se pudo guardar el catálogo'); } }
+async function saveOrdersStatus(orderId,status){ try{ await db.collection('orders').doc(orderId).update({status}); }catch(e){ console.error(e); showToast('No se pudo actualizar el pedido'); } }
+async function saveSettings(){ try{ await db.collection('settings').doc('store').set(state.settings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración'); } }
+
+function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function showToast(msg){
+  const t=document.getElementById('toast'); if(!t) return;
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+/* ============== AUTH ============== */
+auth.onAuthStateChanged(user=>{
+  state.user = user; state.authChecked = true;
+  if(user && !state.loaded){ loadData(); } else { render(); }
+});
+async function handleLogin(){
+  state.loginError='';
+  try{
+    await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword);
+  }catch(e){
+    state.loginError = 'Correo o contraseña incorrectos';
+    render();
+  }
+}
+function handleLogout(){ auth.signOut(); state.loaded=false; }
+
+async function saveProduct(p){
+  if(p.id){ const idx=state.products.findIndex(x=>x.id===p.id); state.products[idx]=p; }
+  else{ p.id=uid('p'); state.products.push(p); }
+  if(!state.settings.categories.includes(p.cat)){ state.settings.categories.push(p.cat); await saveSettings(); }
+  await saveProducts(); state.productModal=null; showToast('Producto guardado'); render();
+}
+async function deleteProduct(id){ state.products = state.products.filter(x=>x.id!==id); await saveProducts(); showToast('Producto eliminado'); render(); }
+async function updateOrderStatus(id,status){ const o=state.orders.find(x=>x.id===id); if(o) o.status=status; await saveOrdersStatus(id,status); render(); }
+async function saveSettingsForm(s){ state.settings={...state.settings,...s}; await saveSettings(); showToast('Configuración guardada'); render(); }
+
+/* ============== CSV IMPORT ============== */
+function parseCSV(text){
+  const rows = []; let i=0, field='', row=[], inQuotes=false;
+  while(i<text.length){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inQuotes=false;i++;continue; }
+      field+=c; i++; continue;
+    }else{
+      if(c === '"'){ inQuotes=true; i++; continue; }
+      if(c === ','){ row.push(field); field=''; i++; continue; }
+      if(c === '\n' || c === '\r'){ if(c==='\r' && text[i+1]==='\n') i++; row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+      field+=c; i++; continue;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==''));
+}
+function rowsToProducts(rows){
+  if(!rows.length) return [];
+  let start = 0;
+  const header = rows[0].map(h=>h.trim().toLowerCase());
+  const hasHeader = header.some(h=>h.includes('nombre')) || header.some(h=>h.includes('precio'));
+  let colMap = {name:0,cat:1,price:2,stock:3,desc:4};
+  if(hasHeader){
+    start = 1;
+    header.forEach((h,idx)=>{
+      if(h.includes('nombre')) colMap.name=idx;
+      else if(h.includes('categor')) colMap.cat=idx;
+      else if(h.includes('precio')) colMap.price=idx;
+      else if(h.includes('stock')||h.includes('existenc')) colMap.stock=idx;
+      else if(h.includes('desc')) colMap.desc=idx;
+    });
+  }
+  const out = [];
+  for(let r=start;r<rows.length;r++){
+    const row = rows[r];
+    const name = (row[colMap.name]||'').trim();
+    if(!name) continue;
+    const cat = (row[colMap.cat]||'Otros').trim() || 'Otros';
+    const price = Number((row[colMap.price]||'0').replace(/[^0-9.]/g,'')) || 0;
+    const stock = Number((row[colMap.stock]||'0').replace(/[^0-9]/g,'')) || 0;
+    const desc = (row[colMap.desc]||'').trim();
+    out.push({name,cat,price,stock,desc});
+  }
+  return out;
+}
+function handleImportFile(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{ state.importText = e.target.result; state.importPreview = rowsToProducts(parseCSV(state.importText)); render(); };
+  reader.readAsText(file);
+}
+function handleImportTextChange(val){
+  state.importText = val;
+  state.importPreview = rowsToProducts(parseCSV(val));
+  render();
+}
+async function commitImport(mode){
+  if(state.importPreview.length===0){ showToast('No hay productos para importar'); return; }
+  const newCats = new Set(state.settings.categories);
+  if(mode==='replace'){
+    state.products = state.importPreview.map(p=>({id:uid('p'), name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc}));
+  }else{
+    state.importPreview.forEach(p=>{
+      const existing = state.products.find(x=>x.name.trim().toLowerCase()===p.name.trim().toLowerCase());
+      if(existing){ existing.cat=p.cat; existing.price=p.price; existing.stock=p.stock; existing.desc=p.desc||existing.desc; }
+      else{ state.products.push({id:uid('p'), name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc}); }
+    });
+  }
+  state.importPreview.forEach(p=>newCats.add(p.cat));
+  state.settings.categories = Array.from(newCats);
+  await saveProducts(); await saveSettings();
+  state.importOpen=false; state.importPreview=[]; state.importText='';
+  showToast('Catálogo importado');
+  render();
+}
+
+/* ============== METRICS ============== */
+function computeMetrics(){
+  const valid = state.orders.filter(o=>o.status!=='Cancelado');
+  const cancelled = state.orders.filter(o=>o.status==='Cancelado');
+  const totalRevenue = valid.reduce((s,o)=>s+o.total,0);
+  const avgOrder = valid.length ? totalRevenue/valid.length : 0;
+  const avgItems = valid.length ? valid.reduce((s,o)=>s+o.items.reduce((a,it)=>a+it.qty,0),0)/valid.length : 0;
+  const pending = state.orders.filter(o=>['Nuevo','Preparando','En camino'].includes(o.status)).length;
+  const lowStock = state.products.filter(p=>p.stock<=3);
+  const cancelRate = state.orders.length ? Math.round((cancelled.length/state.orders.length)*100) : 0;
+
+  const byPhone = {};
+  state.orders.forEach(o=>{ (byPhone[o.phone] = byPhone[o.phone]||[]).push(o); });
+  const uniqueCustomers = Object.keys(byPhone).length;
+  const repeatCustomers = Object.values(byPhone).filter(list=>list.length>1).length;
+  const repeatRate = uniqueCustomers ? Math.round((repeatCustomers/uniqueCustomers)*100) : 0;
+  const topCustomers = Object.entries(byPhone).map(([phone,list])=>({
+    phone, name:list[0].customer, spend: list.filter(o=>o.status!=='Cancelado').reduce((s,o)=>s+o.total,0), count:list.length
+  })).sort((a,b)=>b.spend-a.spend).slice(0,5);
+
+  const days = []; for(let i=6;i>=0;i--){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); days.push(d); }
+  const dayRevenue = days.map(d=>{ const next=new Date(d); next.setDate(d.getDate()+1);
+    const rev = valid.filter(o=>{const od=new Date(o.date); return od>=d && od<next;}).reduce((s,o)=>s+o.total,0);
+    return {label: d.toLocaleDateString('es-MX',{weekday:'short'}), value: rev}; });
+
+  const months = []; for(let i=5;i>=0;i--){ const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); d.setMonth(d.getMonth()-i); months.push(d); }
+  const monthRevenue = months.map((m,idx)=>{
+    const next = idx<months.length-1 ? months[idx+1] : new Date(m.getFullYear(), m.getMonth()+1, 1);
+    const rev = valid.filter(o=>{const od=new Date(o.date); return od>=m && od<next;}).reduce((s,o)=>s+o.total,0);
+    return {label: m.toLocaleDateString('es-MX',{month:'short'}), value: rev};
+  });
+
+  const now = new Date();
+  const startThis = new Date(now); startThis.setDate(now.getDate()-6); startThis.setHours(0,0,0,0);
+  const startLast = new Date(startThis); startLast.setDate(startThis.getDate()-7);
+  const revThis = valid.filter(o=>new Date(o.date)>=startThis).reduce((s,o)=>s+o.total,0);
+  const revLast = valid.filter(o=>{const d=new Date(o.date); return d>=startLast && d<startThis;}).reduce((s,o)=>s+o.total,0);
+  const revDelta = revLast>0 ? Math.round(((revThis-revLast)/revLast)*100) : (revThis>0?100:0);
+
+  const catUnits = {}, catRevenue = {};
+  valid.forEach(o=>o.items.forEach(it=>{
+    const prod = state.products.find(p=>p.id===it.id);
+    const cat = prod ? prod.cat : 'Otros';
+    catUnits[cat] = (catUnits[cat]||0)+it.qty;
+    catRevenue[cat] = (catRevenue[cat]||0)+it.price*it.qty;
+  }));
+  const catUnitRows = Object.entries(catUnits).sort((a,b)=>b[1]-a[1]);
+  const catRevRows = Object.entries(catRevenue).sort((a,b)=>b[1]-a[1]);
+  const maxCatUnit = catUnitRows.length ? catUnitRows[0][1] : 1;
+  const maxCatRev = catRevRows.length ? catRevRows[0][1] : 1;
+
+  const prodUnits = {}, prodRevenue = {};
+  valid.forEach(o=>o.items.forEach(it=>{ prodUnits[it.name]=(prodUnits[it.name]||0)+it.qty; prodRevenue[it.name]=(prodRevenue[it.name]||0)+it.price*it.qty; }));
+  const topByUnits = Object.entries(prodUnits).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const topByRevenue = Object.entries(prodRevenue).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const soldNames = new Set(Object.keys(prodUnits));
+  const noSales = state.products.filter(p=>!soldNames.has(p.name));
+
+  const weekdayTotals = [0,0,0,0,0,0,0]; const weekdayCounts=[0,0,0,0,0,0,0];
+  valid.forEach(o=>{ const d=new Date(o.date).getDay(); weekdayTotals[d]+=o.total; weekdayCounts[d]+=1; });
+  const weekdayNames = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const weekdayAvg = weekdayTotals.map((t,i)=> weekdayCounts[i] ? t/weekdayCounts[i] : 0);
+  const bestDayIdx = weekdayAvg.indexOf(Math.max(...weekdayAvg));
+
+  const inventoryValue = state.products.reduce((s,p)=>s+p.price*p.stock,0);
+  const invByCat = {};
+  state.products.forEach(p=>{ invByCat[p.cat]=(invByCat[p.cat]||0)+p.price*p.stock; });
+  const invRows = Object.entries(invByCat).sort((a,b)=>b[1]-a[1]);
+  const maxInv = invRows.length ? invRows[0][1] : 1;
+
+  const statusCounts = {}; STATUS_FLOW.forEach(s=>statusCounts[s]=0);
+  state.orders.forEach(o=>statusCounts[o.status]=(statusCounts[o.status]||0)+1);
+
+  return {totalRevenue,avgOrder,avgItems,pending,lowStock,cancelRate,uniqueCustomers,repeatCustomers,repeatRate,topCustomers,
+    dayRevenue,monthRevenue,revDelta,catUnitRows,catRevRows,maxCatUnit,maxCatRev,topByUnits,topByRevenue,noSales,
+    weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length};
+}
+
+/* ============== RENDER: LOGIN ============== */
+function renderLogin(){
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <h2>Panel de administración</h2>
+      <p>Inicia sesión con tu cuenta de administrador</p>
+      <input id="login-email" type="email" placeholder="Correo" value="${state.loginEmail}" oninput="state.loginEmail=this.value">
+      <input id="login-pass" type="password" placeholder="Contraseña" value="${state.loginPassword}" oninput="state.loginPassword=this.value" onkeydown="if(event.key==='Enter')handleLogin()">
+      <div class="login-error">${state.loginError}</div>
+      <button class="btn-primary" style="width:100%;" onclick="handleLogin()">Entrar</button>
+    </div>
+  </div>`;
+}
+
+function renderAdmin(){
+  return `
+  <div class="app">
+    <div class="admin-top">
+      <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Panel de administración</div></div>
+      <button class="logout-link" onclick="handleLogout()">Cerrar sesión</button>
+    </div>
+    <div class="admin-tabs">
+      ${['resumen','métricas','productos','pedidos','configuración'].map(t=>`
+        <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';render()">${t[0].toUpperCase()+t.slice(1)}</button>
+      `).join('')}
+    </div>
+    <div class="admin-body">
+      ${state.adminTab==='resumen' ? renderResumen() : ''}
+      ${state.adminTab==='métricas' ? renderMetricas() : ''}
+      ${state.adminTab==='productos' ? renderProductos() : ''}
+      ${state.adminTab==='pedidos' ? renderPedidos() : ''}
+      ${state.adminTab==='configuración' ? renderConfig() : ''}
+    </div>
+  </div>
+  ${state.productModal!==null ? renderProductModal() : ''}
+  ${state.importOpen ? renderImportModal() : ''}
+  `;
+}
+
+function renderResumen(){
+  const m = computeMetrics();
+  return `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
+      <div class="stat-card"><div class="stat-label">Ticket promedio</div><div class="stat-value">${money(m.avgOrder)}</div></div>
+      <div class="stat-card"><div class="stat-label">Pedidos activos</div><div class="stat-value">${m.pending}</div></div>
+      <div class="stat-card"><div class="stat-label">Clientes distintos</div><div class="stat-value">${m.uniqueCustomers}</div></div>
+      <div class="stat-card"><div class="stat-label">Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Ingresos — últimos 7 días</div>
+      ${renderBarChart(m.dayRevenue)}
+    </div>
+    ${m.lowStock.length>0 ? `
+    <div class="panel">
+      <div class="panel-title">Reabastecer pronto</div>
+      ${m.lowStock.map(p=>`
+        <div class="list-row">
+          <div class="row-swatch" style="background:${catColor(p.cat)}"></div>
+          <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
+          <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
+        </div>
+      `).join('')}
+    </div>` : ''}
+  `;
+}
+
+function renderMetricas(){
+  const m = computeMetrics();
+  return `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Pedidos totales</div><div class="stat-value">${m.totalOrders}</div></div>
+      <div class="stat-card"><div class="stat-label">Tasa de cancelación</div><div class="stat-value">${m.cancelRate}%</div></div>
+      <div class="stat-card"><div class="stat-label">Artículos por pedido (prom.)</div><div class="stat-value">${m.avgItems.toFixed(1)}</div></div>
+      <div class="stat-card"><div class="stat-label">Clientes recurrentes</div><div class="stat-value">${m.repeatCustomers} (${m.repeatRate}%)</div></div>
+      <div class="stat-card"><div class="stat-label">Mejor día (prom. ingresos)</div><div class="stat-value" style="font-size:16px;">${m.weekdayNames[m.bestDayIdx]}</div></div>
+      <div class="stat-card"><div class="stat-label">Valor de inventario</div><div class="stat-value">${money(m.inventoryValue)}</div></div>
+    </div>
+
+    <div class="panel"><div class="panel-title">Ingresos por mes — últimos 6 meses</div>${renderBarChart(m.monthRevenue)}</div>
+    <div class="panel"><div class="panel-title">Ingresos por día de la semana (promedio)</div>${renderBarChart(m.weekdayNames.map((n,i)=>({label:n.slice(0,3), value:m.weekdayAvg[i]})))}</div>
+
+    <div class="panel">
+      <div class="panel-title">Ventas por categoría — unidades</div>
+      ${m.catUnitRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        m.catUnitRows.map(([cat,units])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(units/m.maxCatUnit*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${units}</div></div>`).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Ingresos por categoría</div>
+      ${m.catRevRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        m.catRevRows.map(([cat,rev])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(rev/m.maxCatRev*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(rev)}</div></div>`).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Productos más vendidos — por unidades</div>
+      ${m.topByUnits.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        m.topByUnits.map(([name,qty],i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${name}</div></div><div class="row-sub">${qty} vendidos</div></div>`).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Productos más vendidos — por ingresos</div>
+      ${m.topByRevenue.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        m.topByRevenue.map(([name,rev],i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${name}</div></div><div class="row-sub">${money(rev)}</div></div>`).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Mejores clientes</div>
+      ${m.topCustomers.length===0 ? `<div class="empty-state">Aún no hay clientes registrados.</div>` :
+        m.topCustomers.map((c,i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${c.name}</div><div class="row-sub">${c.count} pedido(s)</div></div><div class="row-sub">${money(c.spend)}</div></div>`).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Valor de inventario por categoría</div>
+      ${m.invRows.map(([cat,val])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(val/m.maxInv*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(val)}</div></div>`).join('')}
+    </div>
+
+    ${m.noSales.length>0 ? `
+    <div class="panel">
+      <div class="panel-title">Productos sin ninguna venta registrada</div>
+      <div class="panel-sub">Candidatos a promoción, combo o revisión de precio</div>
+      ${m.noSales.slice(0,10).map(p=>`<div class="list-row"><div class="row-swatch" style="background:${catColor(p.cat)}"></div><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)}</div></div></div>`).join('')}
+    </div>` : ''}
+
+    <div class="panel">
+      <div class="panel-title">Estado de todos los pedidos</div>
+      ${STATUS_FLOW.map(s=>{ const count=m.statusCounts[s]||0; const max=Math.max(1,...Object.values(m.statusCounts));
+        return `<div class="hbar-row"><div class="hbar-label">${s}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(count/max*100)}%;background:${STATUS_COLOR[s]}"></div></div><div class="hbar-val">${count}</div></div>`;
+      }).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Lecturas rápidas para mejorar</div>
+      <div class="panel-sub" style="margin-bottom:0;">
+        ${m.avgOrder>0 ? `Tu ticket promedio es ${money(m.avgOrder)} con ${m.avgItems.toFixed(1)} artículos por pedido en promedio — sugerir un producto complementario en el checkout puede subir ambos números.<br><br>`:''}
+        ${m.repeatRate<30 && m.uniqueCustomers>3 ? `Solo ${m.repeatRate}% de tus clientes ha vuelto a comprar. Un mensaje de seguimiento post-entrega podría mejorar la recompra.<br><br>`:''}
+        ${m.lowStock.length>0 ? `Tienes ${m.lowStock.length} producto(s) por agotarse — revisa la pestaña Productos.<br><br>`:''}
+        ${m.noSales.length>0 ? `${m.noSales.length} producto(s) no han tenido ninguna venta — considera destacarlos o descontinuarlos.<br><br>`:''}
+        ${m.catRevRows.length>0 ? `<strong>${m.catRevRows[0][0]}</strong> es tu categoría más rentable; <strong>${m.weekdayNames[m.bestDayIdx]}</strong> es tu día con mejor ticket promedio — buen momento para promociones puntuales.`:''}
+      </div>
+    </div>
+  `;
+}
+
+function renderBarChart(data){
+  const max = Math.max(1,...data.map(d=>d.value));
+  return `<div class="bars">${data.map(d=>`
+    <div class="bar-col">
+      <div class="bar-val">${d.value>0?'$'+Math.round(d.value).toLocaleString('es-MX'):''}</div>
+      <div class="bar-fill" style="height:${Math.max(3,(d.value/max*100))}%"></div>
+      <div class="bar-label">${d.label}</div>
+    </div>`).join('')}</div>`;
+}
+
+function renderProductos(){
+  return `
+    <div class="toolbar">
+      <button class="btn-add-new" onclick="state.productModal={};render()">+ Nuevo producto</button>
+      <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
+    </div>
+    <div class="panel-title" style="margin-bottom:12px;">Catálogo (${state.products.length})</div>
+    ${state.products.map(p=>`
+      <div class="list-row">
+        <div class="row-swatch" style="background:${catColor(p.cat)}"></div>
+        <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)} · stock: ${p.stock}</div></div>
+        <div class="row-actions">
+          <button class="icon-btn" onclick='state.productModal=${JSON.stringify(p).replace(/'/g,"&apos;")};render()'>✎</button>
+          <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">🗑</button>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderImportModal(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.importOpen=false;state.importPreview=[];state.importText='';render();}">
+    <div class="modal">
+      <h3>Importar productos</h3>
+      <div class="note-box">Sube un archivo <strong>CSV</strong> o pega el contenido con columnas: <strong>nombre, categoría, precio, stock, descripción</strong> (en ese orden; encabezado opcional).</div>
+      <div class="import-drop">
+        Selecciona tu archivo .csv<br>
+        <input type="file" accept=".csv,.txt" onchange="handleImportFile(this)">
+      </div>
+      <div class="form-field"><label>O pega aquí el contenido</label>
+        <textarea style="min-height:110px;" placeholder="nombre,categoria,precio,stock,descripcion" oninput="handleImportTextChange(this.value)">${state.importText}</textarea>
+      </div>
+      ${state.importPreview.length>0 ? `<div class="preview-count">${state.importPreview.length} producto(s) detectado(s) y listos para importar.</div>` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.importOpen=false;state.importPreview=[];state.importText='';render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitImport('merge')">Agregar / actualizar</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary" style="width:100%;background:var(--navy);" onclick="if(confirm('Esto reemplaza TODO tu catálogo actual. ¿Continuar?'))commitImport('replace')">Reemplazar catálogo completo</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderPedidos(){
+  const filters = ["Todos", ...STATUS_FLOW];
+  const shown = state.orderStatusFilter==="Todos" ? state.orders : state.orders.filter(o=>o.status===state.orderStatusFilter);
+  return `
+    <div class="status-filter">${filters.map(f=>`<button class="${state.orderStatusFilter===f?'active':''}" onclick="state.orderStatusFilter='${f}';render()">${f}</button>`).join('')}</div>
+    ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` :
+      shown.map(o=>{
+        const open = state.orderDetail===o.id;
+        return `
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="state.orderDetail=state.orderDetail==='${o.id}'?null:'${o.id}';render()">
+            <div class="row-main"><div class="row-title">${o.customer}</div><div class="row-sub">${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${money(o.total)}</div></div>
+            <span class="status-badge" style="background:${STATUS_COLOR[o.status]}">${o.status}</span>
+          </div>
+          ${open ? `
+            <div class="order-detail">
+              ${o.items.map(it=>`<div><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+              <div><span>Teléfono</span><span>${o.phone}</span></div>
+              <div><span>Dirección</span><span style="text-align:right;">${o.address}</span></div>
+              ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+              ${STATUS_FLOW.map(s=>`<button class="icon-btn" style="width:auto;padding:6px 11px;font-size:12px;${o.status===s?`background:${STATUS_COLOR[s]};color:#fff;`:''}" onclick="event.stopPropagation();updateOrderStatus('${o.id}','${s}')">${s}</button>`).join('')}
+            </div>
+          ` : ''}
+        </div>`;
+      }).join('')}
+  `;
+}
+
+function renderConfig(){
+  const s = state.settings;
+  return `
+    <div class="panel-title" style="margin-bottom:12px;">Marca y textos — se reflejan en ambas plataformas</div>
+    <div class="form-field"><label>Nombre de la tienda</label><input id="set-name" value="${s.storeName}"></div>
+    <div class="form-field"><label>Título principal (tienda)</label><input id="set-hero-title" value="${s.heroTitle}"></div>
+    <div class="form-field"><label>Subtítulo (tienda)</label><textarea id="set-hero-sub">${s.heroSubtitle}</textarea></div>
+    <div class="form-field"><label>WhatsApp para confirmaciones (con código de país)</label><input id="set-wa" value="${s.whatsapp}"></div>
+    <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}"></div>
+    <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
+    <div class="note-box" style="margin-top:14px;">Para agregar más administradores o cambiar tu contraseña, hazlo desde la consola de Firebase → Authentication → Users.</div>
+
+    <div class="panel-title" style="margin:26px 0 12px;">Categorías del catálogo</div>
+    <div>${s.categories.map(c=>`<span class="cat-manage-chip">${c}<button onclick="removeCategory('${c.replace(/'/g,"\\'")}')">✕</button></span>`).join('')}</div>
+    <div class="two-col" style="margin-top:8px;">
+      <input id="new-cat-input" placeholder="Nueva categoría" value="${state.newCatInput}" oninput="state.newCatInput=this.value">
+      <button class="btn-outline" onclick="addCategory()">+ Agregar categoría</button>
+    </div>
+  `;
+}
+function handleSaveSettings(){
+  saveSettingsForm({
+    storeName: document.getElementById('set-name').value.trim() || DEFAULT_SETTINGS.storeName,
+    heroTitle: document.getElementById('set-hero-title').value.trim() || DEFAULT_SETTINGS.heroTitle,
+    heroSubtitle: document.getElementById('set-hero-sub').value.trim() || DEFAULT_SETTINGS.heroSubtitle,
+    whatsapp: document.getElementById('set-wa').value.trim(),
+    schedule: document.getElementById('set-sched').value.trim(),
+  });
+}
+async function addCategory(){
+  const val = state.newCatInput.trim();
+  if(!val) return;
+  if(!state.settings.categories.includes(val)) state.settings.categories.push(val);
+  state.newCatInput='';
+  await saveSettings(); showToast('Categoría agregada'); render();
+}
+async function removeCategory(cat){
+  if(state.products.some(p=>p.cat===cat)){ showToast('Hay productos en esta categoría; reasígnalos antes de quitarla'); return; }
+  state.settings.categories = state.settings.categories.filter(c=>c!==cat);
+  await saveSettings(); render();
+}
+
+function renderProductModal(){
+  const p = state.productModal; const isNew = !p.id;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.productModal=null;render();}">
+    <div class="modal">
+      <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
+      <div class="form-field"><label>Nombre</label><input id="pf-name" value="${p.name||''}"></div>
+      <div class="two-col">
+        <div class="form-field"><label>Categoría</label><select id="pf-cat">${state.settings.categories.map(c=>`<option ${p.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Precio (MXN)</label><input id="pf-price" type="number" value="${p.price||''}"></div>
+      </div>
+      <div class="form-field"><label>Existencias</label><input id="pf-stock" type="number" value="${p.stock??''}"></div>
+      <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc">${p.desc||''}</textarea></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.productModal=null;render()">Cancelar</button>
+        <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function handleSaveProduct(existingId){
+  const name = document.getElementById('pf-name').value.trim();
+  const cat = document.getElementById('pf-cat').value;
+  const price = Number(document.getElementById('pf-price').value)||0;
+  const stock = Number(document.getElementById('pf-stock').value)||0;
+  const desc = document.getElementById('pf-desc').value.trim();
+  if(!name){ showToast('Ponle un nombre al producto'); return; }
+  saveProduct({id: existingId||null, name, cat, price, stock, desc});
+}
+
+function render(){
+  const root = document.getElementById('root');
+  if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; return; }
+  if(!state.user){ root.innerHTML = renderLogin(); return; }
+  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; return; }
+  root.innerHTML = renderAdmin();
+  if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+}
+render();
+</script>
+</body>
+</html>

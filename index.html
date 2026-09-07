@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>La Casa de los Placeres — Catálogo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg: #FBF5F2; --surface: #FFFFFF; --surface-soft: #F6E9E6;
+    --ink: #2B1620; --ink-soft: #6E5560;
+    --primary: #6E2159; --primary-deep: #4A1642; --rose: #BC355C;
+    --border: #EBD9D3; --radius-card: 14px; --radius-pill: 999px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  h1,h2,.display{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
+  a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;}
+  .app{max-width:1100px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+  .topbar{position:sticky;top:0;z-index:30;background:var(--primary-deep);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 6px 20px -12px rgba(0,0,0,0.4);}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--rose),#F6A030);flex-shrink:0;}
+  .brand-name{font-family:'League Spartan',sans-serif;font-size:17px;font-weight:600;line-height:1.1;}
+  .brand-sub{font-size:11px;color:#e9c9dc;letter-spacing:0.02em;}
+  .cart-btn{position:relative;background:rgba(255,255,255,0.12);color:#fff;padding:9px 14px;border-radius:var(--radius-pill);font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;}
+  .cart-count{background:#F6A030;color:#3a2200;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 4px;}
+  .hero{padding:34px 20px 22px;}
+  .hero h1{font-size:28px;font-weight:600;color:var(--primary-deep);max-width:480px;line-height:1.15;}
+  .hero p{margin-top:10px;color:var(--ink-soft);max-width:460px;font-size:15px;line-height:1.5;}
+  .hero-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;}
+  .tag{font-size:12.5px;padding:6px 12px;border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--primary-deep);border:1px solid var(--border);}
+  .cats{display:flex;gap:8px;overflow-x:auto;padding:6px 20px 18px;scrollbar-width:none;}
+  .cats::-webkit-scrollbar{display:none;}
+  .cat-chip{flex-shrink:0;padding:9px 16px;border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--border);color:var(--ink-soft);font-size:13.5px;font-weight:500;white-space:nowrap;}
+  .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;padding:0 20px 40px;}
+  @media(min-width:720px){.grid{grid-template-columns:repeat(3,1fr);}}
+  @media(min-width:960px){.grid{grid-template-columns:repeat(4,1fr);}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:hidden;display:flex;flex-direction:column;}
+  .card-swatch{height:88px;display:flex;align-items:center;justify-content:center;font-size:26px;color:#fff;}
+  .card-body{padding:12px 13px 14px;display:flex;flex-direction:column;gap:6px;flex:1;}
+  .card-cat{font-size:11px;color:var(--ink-soft);}
+  .card-name{font-size:14px;font-weight:600;line-height:1.25;font-family:'League Spartan',sans-serif;}
+  .card-desc{font-size:12px;color:var(--ink-soft);line-height:1.4;flex:1;}
+  .card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:4px;}
+  .card-price{font-weight:700;color:var(--primary-deep);font-size:14.5px;}
+  .add-btn{background:var(--primary);color:#fff;width:30px;height:30px;border-radius:50%;font-size:17px;display:flex;align-items:center;justify-content:center;}
+  .stock-flag{font-size:10.5px;color:var(--rose);font-weight:600;}
+  .empty-state{padding:50px 20px;text-align:center;color:var(--ink-soft);}
+  .overlay{position:fixed;inset:0;background:rgba(43,22,32,0.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s ease;}
+  .overlay.open{opacity:1;pointer-events:auto;}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:100%;max-width:400px;background:var(--surface);z-index:50;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;}
+  .drawer.open{transform:translateX(0);}
+  .drawer-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .drawer-head h2{font-size:18px;color:var(--primary-deep);}
+  .close-x{background:none;color:var(--ink-soft);font-size:20px;line-height:1;}
+  .drawer-body{flex:1;overflow-y:auto;padding:14px 20px;}
+  .cart-item{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);}
+  .cart-item-swatch{width:44px;height:44px;border-radius:10px;flex-shrink:0;}
+  .cart-item-info{flex:1;}
+  .cart-item-name{font-size:13.5px;font-weight:600;}
+  .cart-item-price{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .qty-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .qty-btn{width:22px;height:22px;border-radius:6px;background:var(--surface-soft);color:var(--primary-deep);font-size:14px;display:flex;align-items:center;justify-content:center;}
+  .qty-val{font-size:13px;font-weight:600;min-width:16px;text-align:center;}
+  .remove-link{font-size:11.5px;color:var(--rose);margin-left:auto;}
+  .drawer-foot{padding:16px 20px 20px;border-top:1px solid var(--border);}
+  .total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-bottom:12px;color:var(--primary-deep);}
+  .btn-primary{width:100%;background:var(--rose);color:#fff;padding:13px;border-radius:12px;font-size:14.5px;font-weight:600;}
+  .btn-secondary{width:100%;background:var(--surface-soft);color:var(--primary-deep);padding:13px;border-radius:12px;font-size:14px;font-weight:600;margin-top:8px;}
+  .form-field{margin-bottom:12px;}
+  .form-field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+  .form-field input,.form-field textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit;background:var(--bg);color:var(--ink);}
+  .form-field textarea{resize:vertical;min-height:60px;}
+  .note-box{background:var(--surface-soft);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
+  .site-foot{padding:24px 20px 30px;border-top:1px solid var(--border);margin-top:auto;display:flex;flex-direction:column;gap:6px;color:var(--ink-soft);font-size:12.5px;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;text-align:center;padding:20px;}
+  .success-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .success-card{background:#fff;border-radius:18px;padding:34px 26px;max-width:360px;text-align:center;}
+  .success-card .mark{width:52px;height:52px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px;}
+  .success-card h2{color:var(--primary-deep);font-size:19px;margin-bottom:8px;}
+  .success-card p{color:var(--ink-soft);font-size:13.5px;line-height:1.5;margin-bottom:18px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ============== FIREBASE ============== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAhPrEfQSfWOjP2X7GtcXKp86RMWHZa-NQ",
+  authDomain: "casa-de-los-placeres.firebaseapp.com",
+  projectId: "casa-de-los-placeres",
+  storageBucket: "casa-de-los-placeres.firebasestorage.app",
+  messagingSenderId: "689677749733",
+  appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
+const ICONS = ["✦","●","◐","▲","♥","◆","■","◯","✧","✺","❖","✤"];
+const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
+function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
+function catIcon(cat){ const i = state.settings.categories.indexOf(cat); return ICONS[(i<0?0:i) % ICONS.length]; }
+
+const DEFAULT_PRODUCTS = [
+  {id:"p1",name:"Set de dilatadores progresivos",cat:"Dilatadores",price:520,stock:8,desc:"Set de silicona médica, 5 tallas progresivas."},
+  {id:"p2",name:"Lubricante base agua 100ml",cat:"Lubricantes",price:180,stock:24,desc:"Fórmula suave, compatible con látex."},
+  {id:"p3",name:"Anillo vibrador recargable",cat:"Anillos",price:380,stock:12,desc:"Silicona, USB, 10 intensidades."},
+  {id:"p4",name:"Plug mediano silicona",cat:"Plugs",price:340,stock:15,desc:"Base segura, silicona médica hipoalergénica."},
+  {id:"p5",name:"Boxer Zuppo edición discreta",cat:"Ropa interior",price:290,stock:20,desc:"Algodón premium, corte moderno."},
+  {id:"p6",name:"Masturbador de manga texturizada",cat:"Masturbadores",price:610,stock:9,desc:"Textura interna, fácil limpieza."},
+  {id:"p7",name:"Vibrador punto G",cat:"Juguetes",price:590,stock:11,desc:"Silicona suave, sumergible, silencioso."},
+  {id:"p8",name:"Dildo realista mediano",cat:"Dildos",price:450,stock:14,desc:"Base ventosa, silicona médica."},
+];
+const DEFAULT_SETTINGS = {
+  storeName:"La Casa de los Placeres", whatsapp:"523317494004",
+  schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
+  heroTitle:"Tu catálogo, con total discreción.",
+  heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
+  categories:[...DEFAULT_CATEGORIES],
+};
+
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false };
+
+async function loadData(){
+  try{
+    const [catSnap, setSnap] = await Promise.all([
+      db.collection('catalog').doc('products').get(),
+      db.collection('settings').doc('store').get(),
+    ]);
+    state.products = (catSnap.exists && catSnap.data().items && catSnap.data().items.length) ? catSnap.data().items : DEFAULT_PRODUCTS;
+    state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
+    if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+  }catch(e){
+    console.error(e);
+    state.products = DEFAULT_PRODUCTS; state.settings = {...DEFAULT_SETTINGS}; state.loadError = true;
+  }
+  state.loaded = true; render();
+}
+
+function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+function showToast(msg){
+  const t = document.getElementById('toast'); if(!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window._toastTimer); window._toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
+function cartTotal(){ return Object.entries(state.cart).reduce((s,[id,qty])=>{const p=state.products.find(x=>x.id===id);return s+(p?p.price*qty:0);},0); }
+
+function addToCart(id){
+  const p = state.products.find(x=>x.id===id);
+  if(!p || p.stock<=0){ showToast('Sin existencias'); return; }
+  state.cart[id]=(state.cart[id]||0)+1; showToast('Agregado al carrito'); render();
+}
+function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
+function removeFromCart(id){ delete state.cart[id]; render(); }
+
+async function submitOrder(formData){
+  const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
+  const order = { date:new Date().toISOString(), customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo" };
+  try{
+    await db.collection('orders').add(order);
+  }catch(e){
+    console.error(e);
+    showToast('No se pudo enviar el pedido, intenta de nuevo');
+    return;
+  }
+  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; render();
+
+  const lines = items.map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('%0A');
+  const msg = `Hola, quiero confirmar mi pedido:%0A${lines}%0A%0ATotal: ${money(order.total)}%0ANombre: ${formData.name}%0ADirección: ${formData.address}%0APago contra entrega.`;
+  if(state.settings.whatsapp){
+    const num = state.settings.whatsapp.replace(/\D/g,'');
+    window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+  }
+}
+
+function renderStore(){
+  const cats = ["Todos", ...state.settings.categories];
+  const filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>p.cat===state.activeCat);
+  return `
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Discreto · Confidencial · A domicilio</div></div>
+      </div>
+      <button class="cart-btn" onclick="state.cartOpen=true;render()">Carrito ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}</button>
+    </div>
+    ${state.loadError ? `<div class="note-box" style="margin:14px 20px 0;">No pudimos conectar con el servidor, mostrando catálogo de referencia.</div>` : ''}
+    <div class="hero">
+      <h1>${state.settings.heroTitle}</h1>
+      <p>${state.settings.heroSubtitle}</p>
+      <div class="hero-tags">
+        <span class="tag">Empaque 100% discreto</span>
+        <span class="tag">Pago contra entrega</span>
+        <span class="tag">${state.settings.schedule}</span>
+      </div>
+    </div>
+    <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}</div>
+    ${filtered.length ? `<div class="grid">${filtered.map(p=>`
+      <div class="card">
+        <div class="card-swatch" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>
+        <div class="card-body">
+          <div class="card-cat">${p.cat}</div>
+          <div class="card-name">${p.name}</div>
+          <div class="card-desc">${p.desc||''}</div>
+          <div class="card-foot">
+            <div><div class="card-price">${money(p.price)}</div>${p.stock<=3?`<div class="stock-flag">${p.stock===0?'Agotado':'Últimas piezas'}</div>`:''}</div>
+            <button class="add-btn" ${p.stock<=0?'disabled style="opacity:.4"':''} onclick="addToCart('${p.id}')">+</button>
+          </div>
+        </div>
+      </div>`).join('')}</div>` : `<div class="empty-state">No hay productos en esta categoría todavía.</div>`}
+    <div class="site-foot">
+      <div><strong>${state.settings.storeName}</strong></div>
+      <div>${state.settings.schedule}</div>
+      <div>Pedidos por catálogo con entrega a domicilio y pago contra entrega.</div>
+    </div>
+  </div>
+  <div class="overlay ${state.cartOpen||state.checkoutOpen?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;render()"></div>
+  <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
+  <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
+  `;
+}
+
+function renderCartDrawer(){
+  const entries = Object.entries(state.cart);
+  return `
+    <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" onclick="state.cartOpen=false;render()">✕</button></div>
+    <div class="drawer-body">
+      ${entries.length===0 ? `<div class="empty-state">Tu carrito está vacío.</div>` :
+        entries.map(([id,qty])=>{const p=state.products.find(x=>x.id===id); if(!p) return ''; return `
+          <div class="cart-item">
+            <div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>
+            <div class="cart-item-info">
+              <div class="cart-item-name">${p.name}</div>
+              <div class="cart-item-price">${money(p.price)} c/u</div>
+              <div class="qty-row">
+                <button class="qty-btn" onclick="changeQty('${id}',-1)">−</button>
+                <div class="qty-val">${qty}</div>
+                <button class="qty-btn" onclick="changeQty('${id}',1)">+</button>
+                <a class="remove-link" onclick="removeFromCart('${id}')">Quitar</a>
+              </div>
+            </div>
+          </div>`;}).join('')}
+    </div>
+    <div class="drawer-foot">
+      <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
+      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="state.cartOpen=false;state.checkoutOpen=true;render()">Continuar pedido</button>
+    </div>`;
+}
+
+function renderCheckoutDrawer(){
+  return `
+    <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">✕</button></div>
+    <div class="drawer-body">
+      <div class="note-box">Pago contra entrega. Tu pedido llega en empaque neutro, sin ningún logo visible.</div>
+      <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre"></div>
+      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" placeholder="33 1234 5678"></div>
+      <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" placeholder="Calle, número, colonia, referencias"></textarea></div>
+      <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..."></textarea></div>
+    </div>
+    <div class="drawer-foot">
+      <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
+      <button class="btn-primary" onclick="handleCheckoutSubmit()">Confirmar pedido</button>
+      <button class="btn-secondary" onclick="state.checkoutOpen=false;state.cartOpen=true;render()">Volver al carrito</button>
+    </div>`;
+}
+function handleCheckoutSubmit(){
+  const name = document.getElementById('ck-name').value.trim();
+  const phone = document.getElementById('ck-phone').value.trim();
+  const address = document.getElementById('ck-address').value.trim();
+  const notes = document.getElementById('ck-notes').value.trim();
+  if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
+  submitOrder({name,phone,address,notes});
+}
+
+function renderSuccess(){
+  return `<div class="success-screen"><div class="success-card">
+    <div class="mark">✓</div>
+    <h2>¡Pedido recibido!</h2>
+    <p>Te contactaremos por WhatsApp para confirmar tu pedido y coordinar la entrega. Pago contra entrega, empaque discreto.</p>
+    <button class="btn-primary" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>
+  </div></div>`;
+}
+
+function render(){
+  const root = document.getElementById('root');
+  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando catálogo…</div>`; return; }
+  root.innerHTML = state.orderPlaced ? renderSuccess() : renderStore();
+  if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+}
+loadData();
+</script>
+</body>
+</html>
