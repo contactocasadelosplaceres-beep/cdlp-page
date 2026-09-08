@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Punto de venta — La Casa de los Placeres</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --bg:#FBF5F2; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
+    --primary:#6E2159; --primary-deep:#4A1642; --rose:#BC355C; --amber:#F6A030;
+    --green:#6E9E1A; --navy:#0A4A5B; --border:#EBD9D3; --radius-pill:999px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
+  button{font-family:inherit;cursor:pointer;border:none;} input,select{font-family:inherit;}
+  .app{max-width:1100px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
+  .top .brand{font-size:15.5px;font-weight:600;font-family:'League Spartan',sans-serif;}
+  .top .sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
+  .pill-btn{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;border-radius:var(--radius-pill);color:#fff;}
+  .login-screen,.select-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--primary-deep);padding:20px;}
+  .card{background:#fff;border-radius:18px;padding:30px 26px;max-width:360px;width:100%;text-align:center;}
+  .card h2{color:var(--primary-deep);font-size:19px;margin-bottom:6px;}
+  .card p{color:var(--ink-soft);font-size:12.5px;margin-bottom:16px;}
+  .card input{width:100%;font-size:14px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;}
+  .card input.pin{text-align:center;letter-spacing:6px;font-size:20px;}
+  .err{color:var(--rose);font-size:12px;margin-bottom:8px;min-height:14px;}
+  .btn-primary{width:100%;background:var(--rose);color:#fff;padding:13px;border-radius:12px;font-size:14.5px;font-weight:600;}
+  .cashier-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
+  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px;border-radius:12px;font-size:14.5px;font-weight:600;}
+
+  .pos-body{flex:1;display:flex;flex-direction:column;}
+  .toolbar{padding:14px 16px 0;display:flex;flex-direction:column;gap:10px;}
+  .search-row input{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--border);font-size:14px;background:#fff;}
+  .cats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none;}
+  .cats::-webkit-scrollbar{display:none;}
+  .cat-chip{flex-shrink:0;padding:8px 14px;border-radius:var(--radius-pill);background:#fff;border:1px solid var(--border);color:var(--ink-soft);font-size:13px;font-weight:500;white-space:nowrap;}
+  .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+  .layout{display:flex;flex:1;min-height:0;}
+  .prod-grid{flex:1;overflow-y:auto;padding:0 16px 100px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start;}
+  @media(min-width:600px){.prod-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(min-width:900px){.prod-grid{grid-template-columns:repeat(4,1fr);}}
+  .prod-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;}
+  .prod-card:active{transform:scale(0.97);}
+  .prod-swatch{width:100%;height:44px;border-radius:8px;}
+  .prod-name{font-size:12.5px;font-weight:600;line-height:1.25;}
+  .prod-price{font-size:13px;font-weight:700;color:var(--primary-deep);}
+  .prod-stock{font-size:10.5px;color:var(--ink-soft);}
+
+  .sale-panel{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);max-height:60vh;display:flex;flex-direction:column;box-shadow:0 -8px 24px -12px rgba(0,0,0,0.15);}
+  .sale-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+  .sale-items{overflow-y:auto;padding:8px 16px;flex:1;}
+  .sale-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .sale-item .name{flex:1;}
+  .qty-btn{width:24px;height:24px;border-radius:6px;background:var(--surface-soft);color:var(--primary-deep);font-size:14px;}
+  .sale-foot{padding:12px 16px 16px;border-top:1px solid var(--border);}
+  .total-row{display:flex;justify-content:space-between;font-weight:700;color:var(--primary-deep);font-size:16px;margin-bottom:10px;}
+  .pay-row{display:flex;gap:8px;margin-bottom:10px;}
+  .pay-btn{flex:1;padding:10px;border-radius:10px;background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:600;}
+  .pay-btn.active{background:var(--primary);color:#fff;}
+  .empty-cart{padding:30px;text-align:center;color:var(--ink-soft);font-size:13px;}
+  .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .receipt-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .receipt-card{background:#fff;border-radius:18px;padding:30px 26px;max-width:340px;text-align:center;}
+  .receipt-card .mark{width:52px;height:52px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAhPrEfQSfWOjP2X7GtcXKp86RMWHZa-NQ",
+  authDomain: "casa-de-los-placeres.firebaseapp.com",
+  projectId: "casa-de-los-placeres",
+  storageBucket: "casa-de-los-placeres.firebasestorage.app",
+  messagingSenderId: "689677749733",
+  appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
+function catColor(cat){ const i = state.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
+const PAY_METHODS = ["Efectivo","Tarjeta","Transferencia"];
+
+let state = {
+  authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
+  loaded:false, products:[], categories:[], cashiers:[],
+  activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
+  activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo",
+  saleDone:false, lastSaleTotal:0, sending:false,
+};
+
+async function loadData(){
+  try{
+    const [prodSnap, setSnap, cashiersSnap] = await Promise.all([
+      db.collection('products').get(),
+      db.collection('settings').doc('store').get(),
+      db.collection('cashiers').get(),
+    ]);
+    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
+    state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
+  }catch(e){ console.error(e); showToast('No se pudo cargar la información'); }
+  state.loaded = true; render();
+}
+function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+function showToast(msg){
+  const t=document.getElementById('toast'); if(!t) return;
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+auth.onAuthStateChanged(user=>{
+  state.user = user; state.authChecked = true;
+  if(user && !state.loaded){ loadData(); } else { render(); }
+});
+async function handleLogin(){
+  state.loginError='';
+  try{ await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword); }
+  catch(e){ state.loginError='Correo o contraseña incorrectos'; render(); }
+}
+function handleLogout(){ auth.signOut(); state.loaded=false; state.activeCashier=null; }
+
+function selectCashier(c){ state.activeCashier = c; state.pinInput=''; state.pinError=''; state.pinConfirmed=false; render(); }
+function confirmCashierPin(){
+  if(state.pinInput === state.activeCashier.pin){ state.pinConfirmed=true; state.pinInput=''; state.pinError=''; render(); }
+  else{ state.pinError='PIN incorrecto'; state.pinInput=''; render(); }
+}
+function changeCashier(){ state.activeCashier=null; state.pinConfirmed=false; state.cart={}; render(); }
+
+function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
+function cartTotal(){ return Object.entries(state.cart).reduce((s,[id,qty])=>{const p=state.products.find(x=>x.id===id);return s+(p?p.price*qty:0);},0); }
+function addToCart(id){
+  const p = state.products.find(x=>x.id===id);
+  if(!p || p.stock<=(state.cart[id]||0)){ showToast('Sin existencias suficientes'); return; }
+  state.cart[id]=(state.cart[id]||0)+1; render();
+}
+function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
+
+async function chargeSale(){
+  if(cartCount()===0) return;
+  state.sending = true; render();
+  const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
+  const total = items.reduce((s,it)=>s+it.price*it.qty,0);
+  try{
+    await Promise.all(items.map(it=>{
+      const p = state.products.find(x=>x.id===it.id);
+      const newStock = Math.max(0, p.stock - it.qty);
+      p.stock = newStock;
+      return db.collection('products').doc(it.id).update({stock: newStock});
+    }));
+    await db.collection('sales').add({
+      date: new Date().toISOString(),
+      cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
+      items, total, paymentMethod: state.payMethod,
+    });
+    state.lastSaleTotal = total; state.cart = {}; state.saleDone = true;
+  }catch(e){
+    console.error(e); showToast('No se pudo registrar la venta');
+  }
+  state.sending = false; render();
+}
+function newSale(){ state.saleDone=false; render(); }
+
+function renderLogin(){
+  return `
+  <div class="login-screen"><div class="card">
+    <h2>Punto de venta</h2>
+    <p>Inicia sesión con tu cuenta de administrador</p>
+    <input type="email" placeholder="Correo" value="${state.loginEmail}" oninput="state.loginEmail=this.value">
+    <input type="password" placeholder="Contraseña" value="${state.loginPassword}" oninput="state.loginPassword=this.value" onkeydown="if(event.key==='Enter')handleLogin()">
+    <div class="err">${state.loginError}</div>
+    <button class="btn-primary" onclick="handleLogin()">Entrar</button>
+  </div></div>`;
+}
+
+function renderCashierSelect(){
+  if(state.cashiers.length===0){
+    return `<div class="select-screen"><div class="card">
+      <h2>Sin cajeros configurados</h2>
+      <p>Ve al panel de administración → pestaña Cajeros, y crea al menos uno para poder usar el punto de venta.</p>
+      <button class="btn-primary" onclick="handleLogout()">Cerrar sesión</button>
+    </div></div>`;
+  }
+  return `<div class="select-screen"><div class="card">
+    <h2>¿Quién está atendiendo?</h2>
+    <p>Selecciona tu nombre para comenzar</p>
+    <div class="cashier-list">
+      ${state.cashiers.map(c=>`<button class="cashier-item" onclick='selectCashier(${JSON.stringify(c).replace(/'/g,"&apos;")})'>${c.name}</button>`).join('')}
+    </div>
+  </div></div>`;
+}
+
+function renderPinScreen(){
+  return `<div class="select-screen"><div class="card">
+    <h2>Hola, ${state.activeCashier.name}</h2>
+    <p>Ingresa tu PIN</p>
+    <input class="pin" type="password" inputmode="numeric" maxlength="6" value="${state.pinInput}" oninput="state.pinInput=this.value" onkeydown="if(event.key==='Enter')confirmCashierPin()">
+    <div class="err">${state.pinError}</div>
+    <button class="btn-primary" onclick="confirmCashierPin()">Entrar</button>
+  </div></div>`;
+}
+
+function renderPOS(){
+  const cats = ["Todos", ...state.categories];
+  let filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>p.cat===state.activeCat);
+  if(state.search.trim()) filtered = filtered.filter(p=>p.name.toLowerCase().includes(state.search.trim().toLowerCase()));
+  const entries = Object.entries(state.cart);
+  return `
+  <div class="app">
+    <div class="top">
+      <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta</div></div>
+      <div style="display:flex;gap:8px;">
+        <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
+        <button class="pill-btn" onclick="handleLogout()">Salir</button>
+      </div>
+    </div>
+    <div class="pos-body">
+      <div class="toolbar">
+        <div class="search-row"><input placeholder="Buscar producto..." value="${state.search}" oninput="state.search=this.value;render()"></div>
+        <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}</div>
+      </div>
+      <div class="prod-grid">
+        ${filtered.map(p=>`
+          <div class="prod-card" onclick="addToCart('${p.id}')">
+            ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
+            <div class="prod-name">${p.name}</div>
+            <div class="prod-price">${money(p.price)}</div>
+            <div class="prod-stock">Stock: ${p.stock}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="sale-panel">
+      <div class="sale-head"><h3>Venta actual (${cartCount()})</h3></div>
+      <div class="sale-items">
+        ${entries.length===0 ? `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>` :
+          entries.map(([id,qty])=>{const p=state.products.find(x=>x.id===id); if(!p) return ''; return `
+            <div class="sale-item">
+              <div class="name">${p.name}</div>
+              <button class="qty-btn" onclick="changeQty('${id}',-1)">−</button>
+              <div>${qty}</div>
+              <button class="qty-btn" onclick="changeQty('${id}',1)">+</button>
+              <div style="width:70px;text-align:right;font-weight:600;">${money(p.price*qty)}</div>
+            </div>`;}).join('')}
+      </div>
+      <div class="sale-foot">
+        <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
+        <div class="pay-row">${PAY_METHODS.map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="state.payMethod='${m}';render()">${m}</button>`).join('')}</div>
+        <button class="btn-primary" ${entries.length===0||state.sending?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(cartTotal())}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderReceipt(){
+  return `<div class="receipt-screen"><div class="receipt-card">
+    <div class="mark">✓</div>
+    <h2>Venta registrada</h2>
+    <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>Método: ${state.payMethod}<br>Atendió: ${state.activeCashier.name}</p>
+    <button class="btn-primary" onclick="newSale()">Nueva venta</button>
+  </div></div>`;
+}
+
+function render(){
+  const root = document.getElementById('root');
+  if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; return; }
+  if(!state.user){ root.innerHTML = renderLogin(); return; }
+  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando…</div>`; return; }
+  if(!state.activeCashier){ root.innerHTML = renderCashierSelect(); }
+  else if(!state.pinConfirmed){ root.innerHTML = renderPinScreen(); }
+  else{ root.innerHTML = state.saleDone ? renderReceipt() : renderPOS(); }
+  if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+}
+render();
+</script>
+</body>
+</html>
