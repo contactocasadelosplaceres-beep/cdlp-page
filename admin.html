@@ -116,6 +116,23 @@
   .add-thumb{display:flex;align-items:center;justify-content:center;background:var(--surface-soft);color:var(--primary-deep);font-size:22px;cursor:pointer;}
   .crop-box{width:280px;height:280px;max-width:100%;margin:0 auto;overflow:hidden;position:relative;border-radius:12px;background:#000;touch-action:none;cursor:grab;}
   #crop-img{position:absolute;top:0;left:0;user-select:none;pointer-events:none;}
+
+  .section-row{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:#fff;}
+  .section-row.dragging{opacity:0.4;}
+  .drag-handle{color:var(--ink-soft);font-size:15px;letter-spacing:-2px;cursor:grab;flex-shrink:0;user-select:none;padding:4px;}
+  .section-name{flex:1;font-size:13.5px;font-weight:600;color:var(--ink);}
+  .section-name.hidden-section{color:var(--ink-soft);}
+  .section-arrows{display:flex;gap:3px;flex-shrink:0;}
+  .arrow-btn{width:24px;height:24px;border-radius:6px;background:var(--surface-soft);color:var(--primary-deep);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .visibility-toggle{flex-shrink:0;padding:6px 12px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap;}
+  .visibility-toggle.on{background:var(--surface-soft);color:var(--primary-deep);}
+  .visibility-toggle.off{background:#f1f1f1;color:#9a9a9a;}
+  .subpanel-item{display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:1px solid var(--border);font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;}
+  .subpanel-item:last-child{border-bottom:none;}
+  .subpanel-item .chev{color:var(--ink-soft);font-size:15px;}
+  .subpanel-back{display:inline-flex;align-items:center;gap:4px;background:none;color:var(--primary-deep);font-weight:700;font-size:13.5px;margin-bottom:14px;padding:4px 0;}
+  .checkbox-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;font-size:13px;font-weight:600;cursor:pointer;}
+  .checkbox-row input{width:16px;height:16px;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -150,12 +167,30 @@ const DEFAULT_PRODUCTS = [
   {name:"Vibrador punto G",cat:"Juguetes",price:590,stock:11,desc:"Silicona suave, sumergible, silencioso.",images:[]},
   {name:"Dildo realista mediano",cat:"Dildos",price:450,stock:14,desc:"Base ventosa, silicona médica.",images:[]},
 ];
+const DEFAULT_SECTIONS = [
+  {key:"hero", label:"Mensaje de bienvenida", visible:true},
+  {key:"categories", label:"Categorías principales", visible:true},
+  {key:"promoBanner", label:"Banner promocional", visible:false},
+  {key:"featured", label:"Productos destacados", visible:false},
+  {key:"grid", label:"Catálogo completo", visible:true},
+  {key:"testimonials", label:"Testimonios", visible:false},
+  {key:"newsletter", label:"Contacto directo por WhatsApp", visible:false},
+  {key:"footer", label:"Pie de página", visible:true},
+];
 const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
+  sections: JSON.parse(JSON.stringify(DEFAULT_SECTIONS)),
+  headerSubtitle:"Discreto · Confidencial · A domicilio",
+  showHeaderSubtitle:true,
+  promoBanner:{title:"", text:"", image:"", buttonText:"", buttonLink:""},
+  featuredProductIds:[],
+  testimonials:[],
+  socialInstagram:"", socialFacebook:"", contactEmail:"",
+  customCss:"",
 };
 const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-sonnet-5", systemPrompt:"Eres un asistente que ayuda a la tienda a redactar respuestas para clientes y a analizar su catálogo." };
 
@@ -165,6 +200,7 @@ let state = {
   adminTab:"resumen", productModal:null, orderDetail:null, orderStatusFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false,
+  designSubpanel:null,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -194,6 +230,10 @@ async function loadData(){
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
+    if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
+    if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
+    if(!state.settings.testimonials) state.settings.testimonials = [];
     state.orders = ordersSnap.docs.map(d=>({id:d.id, archived:false, ...d.data()}));
     state.visits = visitsSnap.docs.map(d=>d.data());
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -621,8 +661,8 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','asistente ia','configuración'].map(t=>`
-        <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';render()">${t[0].toUpperCase()+t.slice(1)}</button>
+      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','diseño','asistente ia','configuración'].map(t=>`
+        <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
     <div class="admin-body">
@@ -632,6 +672,7 @@ function renderAdmin(){
       ${state.adminTab==='productos' ? renderProductos() : ''}
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
+      ${state.adminTab==='diseño' ? renderDiseno() : ''}
       ${state.adminTab==='asistente ia' ? renderAsistenteIA() : ''}
       ${state.adminTab==='configuración' ? renderConfig() : ''}
     </div>
@@ -903,6 +944,230 @@ function renderAsistenteIA(){
       <button class="btn-primary" onclick="sendAiTestMessage()">Enviar</button>
     </div>
   `;
+}
+
+/* ============== DISEÑO (secciones de la página de inicio) ============== */
+const DESIGN_SUBPANELS = [
+  {key:"header", icon:"↑", label:"Encabezado"},
+  {key:"promo", icon:"🖼", label:"Banner promocional"},
+  {key:"featured", icon:"⭐", label:"Productos destacados"},
+  {key:"testimonials", icon:"💬", label:"Testimonios"},
+  {key:"footer", icon:"↓", label:"Pie de página"},
+  {key:"css", icon:"</>", label:"Edición avanzada de CSS"},
+];
+let sectionDragIdx = null;
+
+function renderDiseno(){
+  if(state.designSubpanel) return renderDesignSubpanel(state.designSubpanel);
+  return `
+    <div class="panel">
+      <div class="panel-title">Secciones de la página de inicio</div>
+      <div class="panel-sub">Actívalas, ocúltalas y ordénalas (arrastra o usa las flechas). Se reflejan en tu tienda en cuanto las cambias.</div>
+      ${state.settings.sections.map((s,idx)=>renderSectionRow(s,idx)).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Configuración avanzada</div>
+      ${DESIGN_SUBPANELS.map(sp=>`
+        <div class="subpanel-item" onclick="state.designSubpanel='${sp.key}';render()">
+          <span>${sp.icon}&nbsp;&nbsp;${sp.label}</span>
+          <span class="chev">›</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+function renderSectionRow(s, idx){
+  const total = state.settings.sections.length;
+  return `
+    <div class="section-row" draggable="true"
+      ondragstart="sectionDragStart(event, ${idx})"
+      ondragover="event.preventDefault()"
+      ondrop="sectionDrop(event, ${idx})">
+      <span class="drag-handle">⠿</span>
+      <span class="section-name ${s.visible?'':'hidden-section'}">${s.label}</span>
+      <div class="section-arrows">
+        <button class="arrow-btn" ${idx===0?'disabled style="opacity:.35"':''} onclick="moveSection(${idx},-1)">▲</button>
+        <button class="arrow-btn" ${idx===total-1?'disabled style="opacity:.35"':''} onclick="moveSection(${idx},1)">▼</button>
+      </div>
+      <button class="visibility-toggle ${s.visible?'on':'off'}" onclick="toggleSectionVisible(${idx})">${s.visible?'Visible':'Oculta'}</button>
+    </div>`;
+}
+function toggleSectionVisible(idx){
+  state.settings.sections[idx].visible = !state.settings.sections[idx].visible;
+  saveSettings(); render();
+}
+function moveSection(idx, dir){
+  const arr = state.settings.sections; const j = idx+dir;
+  if(j<0||j>=arr.length) return;
+  [arr[idx],arr[j]] = [arr[j],arr[idx]];
+  saveSettings(); render();
+}
+function sectionDragStart(e, idx){ sectionDragIdx = idx; }
+function sectionDrop(e, idx){
+  e.preventDefault();
+  if(sectionDragIdx===null || sectionDragIdx===idx) return;
+  const arr = state.settings.sections;
+  const [moved] = arr.splice(sectionDragIdx,1);
+  arr.splice(idx,0,moved);
+  sectionDragIdx = null;
+  saveSettings(); render();
+}
+
+function renderDesignSubpanel(key){
+  const back = `<button class="subpanel-back" onclick="state.designSubpanel=null;render()">‹ Volver a Diseño</button>`;
+  const map = {
+    header: renderHeaderSubpanel, promo: renderPromoSubpanel, featured: renderFeaturedSubpanel,
+    testimonials: renderTestimonialsSubpanel, footer: renderFooterSubpanel, css: renderCssSubpanel,
+  };
+  return back + (map[key] ? map[key]() : '');
+}
+
+function renderHeaderSubpanel(){
+  const s = state.settings;
+  return `
+  <div class="panel">
+    <div class="panel-title">Encabezado</div>
+    <div class="form-field"><label>Texto bajo el nombre de la tienda</label><input id="hdr-subtitle" value="${s.headerSubtitle||''}"></div>
+    <div class="form-field">
+      <label>Mostrar ese texto</label>
+      <button class="visibility-toggle ${s.showHeaderSubtitle?'on':'off'}" onclick="state.settings.showHeaderSubtitle=!state.settings.showHeaderSubtitle;render()">${s.showHeaderSubtitle?'Visible':'Oculto'}</button>
+    </div>
+    <button class="btn-primary" onclick="saveHeaderSettings()">Guardar</button>
+  </div>`;
+}
+function saveHeaderSettings(){
+  state.settings.headerSubtitle = document.getElementById('hdr-subtitle').value.trim();
+  saveSettings(); showToast('Encabezado actualizado'); render();
+}
+
+function renderPromoSubpanel(){
+  const p = state.settings.promoBanner || {};
+  return `
+  <div class="panel">
+    <div class="panel-title">Banner promocional</div>
+    <div class="note-box">Actívalo desde "Secciones de la página de inicio" para que se muestre en la tienda. Útil para anunciar una promoción temporal, un combo o una categoría nueva.</div>
+    <div class="form-field"><label>Título</label><input id="promo-title" value="${p.title||''}" placeholder="Ej. 2x1 en lubricantes"></div>
+    <div class="form-field"><label>Texto</label><textarea id="promo-text" placeholder="Detalles de la promoción...">${p.text||''}</textarea></div>
+    <div class="two-col">
+      <div class="form-field"><label>Texto del botón</label><input id="promo-btn-text" value="${p.buttonText||''}" placeholder="Ver catálogo"></div>
+      <div class="form-field"><label>Categoría a la que enlaza</label>
+        <select id="promo-btn-link">
+          <option value="">Sin enlace</option>
+          ${state.settings.categories.map(c=>`<option value="${c}" ${p.buttonLink===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-field"><label>Imagen (opcional)</label>
+      ${p.image?`<img src="${p.image}" style="width:100%;max-width:220px;border-radius:10px;margin-bottom:8px;display:block;">`:''}
+      <input type="file" accept="image/*" onchange="handlePromoImage(this)">
+    </div>
+    <button class="btn-primary" onclick="savePromoBanner()">Guardar banner</button>
+  </div>`;
+}
+function handlePromoImage(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    if(!state.settings.promoBanner) state.settings.promoBanner = {};
+    state.settings.promoBanner.image = e.target.result;
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+function savePromoBanner(){
+  state.settings.promoBanner = {
+    ...state.settings.promoBanner,
+    title: document.getElementById('promo-title').value.trim(),
+    text: document.getElementById('promo-text').value.trim(),
+    buttonText: document.getElementById('promo-btn-text').value.trim(),
+    buttonLink: document.getElementById('promo-btn-link').value,
+  };
+  saveSettings(); showToast('Banner guardado'); render();
+}
+
+function renderFeaturedSubpanel(){
+  const ids = state.settings.featuredProductIds || [];
+  return `
+  <div class="panel">
+    <div class="panel-title">Productos destacados</div>
+    <div class="panel-sub">Elige qué productos aparecen en la sección de destacados (actívala en "Secciones").</div>
+    ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
+      state.products.map(p=>`
+        <label class="checkbox-row">
+          <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleFeatured('${p.id}', this.checked)">
+          <span>${p.name}</span>
+        </label>
+      `).join('')}
+  </div>`;
+}
+function toggleFeatured(id, checked){
+  let ids = state.settings.featuredProductIds || [];
+  ids = checked ? [...new Set([...ids, id])] : ids.filter(x=>x!==id);
+  state.settings.featuredProductIds = ids;
+  saveSettings(); render();
+}
+
+function renderTestimonialsSubpanel(){
+  const list = state.settings.testimonials || [];
+  return `
+  <div class="panel">
+    <div class="panel-title">Testimonios</div>
+    <div class="panel-sub">Frases cortas de clientes satisfechos. Por discreción, usa solo iniciales o nada.</div>
+    ${list.length===0 ? `<div class="empty-state">Aún no has agregado testimonios.</div>` :
+      list.map((t,idx)=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${t.name||'Cliente anónimo'}</div><div class="row-sub">${t.text}</div></div>
+          <button class="icon-btn danger" onclick="removeTestimonial(${idx})">🗑</button>
+        </div>
+      `).join('')}
+    <div class="form-field" style="margin-top:14px;"><label>Nombre o iniciales (opcional)</label><input id="test-name" placeholder="Ej. J.R."></div>
+    <div class="form-field"><label>Testimonio</label><textarea id="test-text" placeholder="Excelente atención y muy discretos..."></textarea></div>
+    <button class="btn-primary" onclick="addTestimonial()">+ Agregar testimonio</button>
+  </div>`;
+}
+function addTestimonial(){
+  const name = document.getElementById('test-name').value.trim();
+  const text = document.getElementById('test-text').value.trim();
+  if(!text){ showToast('Escribe el texto del testimonio'); return; }
+  if(!state.settings.testimonials) state.settings.testimonials = [];
+  state.settings.testimonials.push({name, text});
+  saveSettings(); showToast('Testimonio agregado'); render();
+}
+function removeTestimonial(idx){
+  state.settings.testimonials.splice(idx,1);
+  saveSettings(); render();
+}
+
+function renderFooterSubpanel(){
+  const s = state.settings;
+  return `
+  <div class="panel">
+    <div class="panel-title">Pie de página</div>
+    <div class="form-field"><label>Instagram (usuario o link, opcional)</label><input id="foot-ig" value="${s.socialInstagram||''}" placeholder="@tuusuario"></div>
+    <div class="form-field"><label>Facebook (link, opcional)</label><input id="foot-fb" value="${s.socialFacebook||''}"></div>
+    <div class="form-field"><label>Correo de contacto (opcional)</label><input id="foot-email" value="${s.contactEmail||''}"></div>
+    <button class="btn-primary" onclick="saveFooterSettings()">Guardar</button>
+  </div>`;
+}
+function saveFooterSettings(){
+  state.settings.socialInstagram = document.getElementById('foot-ig').value.trim();
+  state.settings.socialFacebook = document.getElementById('foot-fb').value.trim();
+  state.settings.contactEmail = document.getElementById('foot-email').value.trim();
+  saveSettings(); showToast('Pie de página actualizado'); render();
+}
+
+function renderCssSubpanel(){
+  return `
+  <div class="panel">
+    <div class="panel-title">Edición avanzada de CSS</div>
+    <div class="note-box">Solo para uso avanzado. Este CSS se agrega directamente a tu tienda; un error de sintaxis puede afectar el diseño que ven tus clientes.</div>
+    <div class="form-field"><textarea id="custom-css" style="min-height:180px;font-family:monospace;font-size:12.5px;" placeholder=".hero h1{ font-size:30px; }">${state.settings.customCss||''}</textarea></div>
+    <button class="btn-primary" onclick="saveCustomCss()">Guardar CSS</button>
+  </div>`;
+}
+function saveCustomCss(){
+  state.settings.customCss = document.getElementById('custom-css').value;
+  saveSettings(); showToast('CSS guardado'); render();
 }
 
 function renderConfig(){
