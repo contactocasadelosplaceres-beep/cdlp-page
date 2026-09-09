@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style id="custom-css-injected"></style>
 <style>
   :root{
     --bg: #FBF5F2; --surface: #FFFFFF; --surface-soft: #F6E9E6;
@@ -95,6 +96,28 @@
   .success-card .mark{width:52px;height:52px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px;}
   .success-card h2{color:var(--primary-deep);font-size:19px;margin-bottom:8px;font-weight:700;}
   .success-card p{color:var(--ink-soft);font-size:13.5px;line-height:1.5;margin-bottom:18px;}
+
+  .promo-banner{margin:0 20px 26px;border-radius:20px;overflow:hidden;background:var(--surface-soft);border:1px solid var(--border);display:flex;flex-direction:column;}
+  @media(min-width:640px){.promo-banner{flex-direction:row;align-items:stretch;}}
+  .promo-banner-img{width:100%;max-height:220px;object-fit:cover;display:block;}
+  @media(min-width:640px){.promo-banner-img{width:38%;max-height:none;}}
+  .promo-banner-body{padding:22px 24px;display:flex;flex-direction:column;justify-content:center;gap:8px;}
+  .promo-banner-title{font-family:'League Spartan',sans-serif;font-size:20px;font-weight:800;color:var(--primary-deep);}
+  .promo-banner-text{color:var(--ink-soft);font-size:13.5px;line-height:1.5;}
+  .btn-promo{align-self:flex-start;margin-top:6px;background:var(--primary);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;}
+
+  .section-block{padding:8px 20px 34px;}
+  .section-heading{font-family:'League Spartan',sans-serif;font-size:19px;font-weight:800;color:var(--primary-deep);margin-bottom:14px;}
+  .testimonial-row{display:grid;grid-template-columns:1fr;gap:12px;}
+  @media(min-width:640px){.testimonial-row{grid-template-columns:repeat(2,1fr);}}
+  @media(min-width:980px){.testimonial-row{grid-template-columns:repeat(3,1fr);}}
+  .testimonial-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;font-size:13px;color:var(--ink);line-height:1.5;}
+  .testimonial-card p{margin:0;}
+  .testimonial-name{margin-top:10px;font-size:11.5px;color:var(--ink-soft);font-weight:700;}
+  .newsletter-block{text-align:center;background:var(--surface-soft);border-radius:20px;margin:0 20px 34px;padding:30px 20px;}
+  .newsletter-block .section-heading{margin-bottom:8px;}
+  .newsletter-text{color:var(--ink-soft);font-size:13.5px;margin-bottom:16px;}
+  .foot-social{display:flex;flex-direction:column;gap:3px;margin-top:6px;}
 </style>
 </head>
 <body>
@@ -118,12 +141,30 @@ const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa inte
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
 function catIcon(cat){ const i = state.settings.categories.indexOf(cat); return ICONS[(i<0?0:i) % ICONS.length]; }
 
+const DEFAULT_SECTIONS = [
+  {key:"hero", label:"Mensaje de bienvenida", visible:true},
+  {key:"categories", label:"Categorías principales", visible:true},
+  {key:"promoBanner", label:"Banner promocional", visible:false},
+  {key:"featured", label:"Productos destacados", visible:false},
+  {key:"grid", label:"Catálogo completo", visible:true},
+  {key:"testimonials", label:"Testimonios", visible:false},
+  {key:"newsletter", label:"Contacto directo por WhatsApp", visible:false},
+  {key:"footer", label:"Pie de página", visible:true},
+];
 const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
+  sections: JSON.parse(JSON.stringify(DEFAULT_SECTIONS)),
+  headerSubtitle:"Discreto · Confidencial · A domicilio",
+  showHeaderSubtitle:true,
+  promoBanner:{title:"", text:"", image:"", buttonText:"", buttonLink:""},
+  featuredProductIds:[],
+  testimonials:[],
+  socialInstagram:"", socialFacebook:"", contactEmail:"",
+  customCss:"",
 };
 
 let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false };
@@ -137,11 +178,17 @@ async function loadData(){
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
+    if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
+    if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
+    if(!state.settings.testimonials) state.settings.testimonials = [];
   }catch(e){
     console.error(e);
     state.products = []; state.settings = {...DEFAULT_SETTINGS}; state.loadError = true;
   }
   state.loaded = true; render();
+  const cssTag = document.getElementById('custom-css-injected');
+  if(cssTag) cssTag.textContent = state.settings.customCss || '';
   trackVisit();
 }
 function trackVisit(){
@@ -188,8 +235,8 @@ function productImageHtml(p){
 }
 
 function renderStore(){
-  const cats = ["Todos", ...state.settings.categories];
-  const filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>p.cat===state.activeCat);
+  const sections = (state.settings.sections||[]).filter(s=>s.visible);
+  const body = sections.map(s => SECTION_RENDERERS[s.key] ? SECTION_RENDERERS[s.key]() : '').join('');
   return `
   <div class="app">
     <div class="topbar">
@@ -200,24 +247,68 @@ function renderStore(){
       </div>
       <div class="topbar-title">
         <div class="brand-name">${state.settings.storeName}</div>
-        <div class="brand-sub">Discreto · Confidencial · A domicilio</div>
+        ${state.settings.showHeaderSubtitle!==false ? `<div class="brand-sub">${state.settings.headerSubtitle||'Discreto · Confidencial · A domicilio'}</div>` : ''}
       </div>
       <button class="cart-btn" onclick="state.cartOpen=true;render()">Carrito ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}</button>
     </div>
-    <div class="hero">
-      <div class="hero-inner">
-        <h1>${state.settings.heroTitle}</h1>
-        <p>${state.settings.heroSubtitle}</p>
-        <div class="hero-tags">
-          <span class="tag">Empaque 100% discreto</span>
-          <span class="tag">Pago contra entrega</span>
-          <span class="tag">${state.settings.schedule}</span>
-        </div>
+    ${state.loadError ? `<div class="note-box" style="margin:14px 20px 0;">No pudimos conectar con el servidor, intenta recargar la página.</div>` : ''}
+    ${body}
+  </div>
+  <div class="overlay ${state.cartOpen||state.checkoutOpen?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;render()"></div>
+  <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
+  <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
+  `;
+}
+
+function renderHeroSection(){
+  return `
+  <div class="hero">
+    <div class="hero-inner">
+      <h1>${state.settings.heroTitle}</h1>
+      <p>${state.settings.heroSubtitle}</p>
+      <div class="hero-tags">
+        <span class="tag">Empaque 100% discreto</span>
+        <span class="tag">Pago contra entrega</span>
+        <span class="tag">${state.settings.schedule}</span>
       </div>
     </div>
-    ${state.loadError ? `<div class="note-box" style="margin:0 20px 10px;">No pudimos conectar con el servidor, intenta recargar la página.</div>` : ''}
-    <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}</div>
-    ${filtered.length ? `<div class="grid">${filtered.map(p=>`
+  </div>`;
+}
+function renderCategoriesSection(){
+  const cats = ["Todos", ...state.settings.categories];
+  return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}</div>`;
+}
+function renderPromoBannerSection(){
+  const p = state.settings.promoBanner;
+  if(!p || (!p.title && !p.text && !p.image)) return '';
+  return `
+  <div class="promo-banner">
+    ${p.image ? `<img class="promo-banner-img" src="${p.image}">` : ''}
+    <div class="promo-banner-body">
+      ${p.title ? `<div class="promo-banner-title">${p.title}</div>` : ''}
+      ${p.text ? `<div class="promo-banner-text">${p.text}</div>` : ''}
+      ${p.buttonText ? `<button class="btn-promo" onclick="state.activeCat='${(p.buttonLink||'Todos').replace(/'/g,"\\'")}';render();document.querySelector('.grid,.empty-state')?.scrollIntoView({behavior:'smooth'});">${p.buttonText}</button>` : ''}
+    </div>
+  </div>`;
+}
+function renderFeaturedSection(){
+  const ids = state.settings.featuredProductIds||[];
+  const items = state.products.filter(p=>ids.includes(p.id));
+  if(!items.length) return '';
+  return `
+  <div class="section-block">
+    <div class="section-heading">Destacados</div>
+    <div class="grid">${items.map(p=>renderProductCard(p)).join('')}</div>
+  </div>`;
+}
+function renderGridSection(){
+  const filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>p.cat===state.activeCat);
+  return filtered.length
+    ? `<div class="grid">${filtered.map(p=>renderProductCard(p)).join('')}</div>`
+    : `<div class="empty-state">No hay productos en esta categoría todavía.</div>`;
+}
+function renderProductCard(p){
+  return `
       <div class="card">
         <div class="card-image-wrap">
           ${productImageHtml(p)}
@@ -229,18 +320,54 @@ function renderStore(){
           <div class="card-name">${p.name}</div>
           <div class="card-price">${money(p.price)}</div>
         </div>
-      </div>`).join('')}</div>` : `<div class="empty-state">No hay productos en esta categoría todavía.</div>`}
-    <div class="site-foot">
-      <div><strong>${state.settings.storeName}</strong></div>
-      <div>${state.settings.schedule}</div>
-      <div>Pedidos por catálogo con entrega a domicilio y pago contra entrega.</div>
-    </div>
-  </div>
-  <div class="overlay ${state.cartOpen||state.checkoutOpen?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;render()"></div>
-  <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
-  <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
-  `;
+      </div>`;
 }
+function renderTestimonialsSection(){
+  const list = state.settings.testimonials||[];
+  if(!list.length) return '';
+  return `
+  <div class="section-block">
+    <div class="section-heading">Lo que dicen nuestros clientes</div>
+    <div class="testimonial-row">
+      ${list.map(t=>`<div class="testimonial-card"><p>"${t.text}"</p>${t.name?`<div class="testimonial-name">— ${t.name}</div>`:''}</div>`).join('')}
+    </div>
+  </div>`;
+}
+function renderNewsletterSection(){
+  if(!state.settings.whatsapp) return '';
+  const num = state.settings.whatsapp.replace(/\D/g,'');
+  return `
+  <div class="newsletter-block">
+    <div class="section-heading">¿Tienes dudas?</div>
+    <div class="newsletter-text">Escríbenos directo por WhatsApp, con toda confianza.</div>
+    <a class="btn-primary" style="display:inline-block;width:auto;padding:12px 22px;text-decoration:none;" href="https://wa.me/${num}" target="_blank">Escribir por WhatsApp</a>
+  </div>`;
+}
+function renderFooterSection(){
+  const s = state.settings;
+  return `
+  <div class="site-foot">
+    <div><strong>${s.storeName}</strong></div>
+    <div>${s.schedule}</div>
+    <div>Pedidos por catálogo con entrega a domicilio y pago contra entrega.</div>
+    ${(s.socialInstagram||s.socialFacebook||s.contactEmail) ? `<div class="foot-social">
+      ${s.socialInstagram?`<div>Instagram: ${s.socialInstagram}</div>`:''}
+      ${s.socialFacebook?`<div>Facebook: ${s.socialFacebook}</div>`:''}
+      ${s.contactEmail?`<div>${s.contactEmail}</div>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+const SECTION_RENDERERS = {
+  hero: renderHeroSection,
+  categories: renderCategoriesSection,
+  promoBanner: renderPromoBannerSection,
+  featured: renderFeaturedSection,
+  grid: renderGridSection,
+  testimonials: renderTestimonialsSection,
+  newsletter: renderNewsletterSection,
+  footer: renderFooterSection,
+};
 
 function renderCartDrawer(){
   const entries = Object.entries(state.cart);
