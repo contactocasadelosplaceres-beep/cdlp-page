@@ -21,12 +21,12 @@
   a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;}
   .app{max-width:1160px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
 
-  .topbar{position:sticky;top:0;z-index:30;background:var(--primary-deep);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 6px 20px -12px rgba(0,0,0,0.4);}
-  .brand{display:flex;align-items:center;gap:10px;}
-  .brand-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--rose),#F6A030);flex-shrink:0;}
+  .topbar{position:sticky;top:0;z-index:30;background:var(--primary-deep);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px -12px rgba(0,0,0,0.4);}
+  .brand{display:flex;align-items:center;gap:10px;text-align:left;}
+  .brand-mark{width:36px;height:36px;border-radius:10px;flex-shrink:0;object-fit:contain;display:block;}
   .brand-name{font-family:'League Spartan',sans-serif;font-size:17px;font-weight:700;line-height:1.1;}
   .brand-sub{font-size:11px;color:#e9c9dc;letter-spacing:0.02em;}
-  .cart-btn{position:relative;background:rgba(255,255,255,0.14);color:#fff;padding:9px 15px;border-radius:var(--radius-pill);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;}
+  .cart-btn{position:absolute;right:20px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.14);color:#fff;padding:9px 15px;border-radius:var(--radius-pill);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;}
   .cart-count{background:#F6A030;color:#3a2200;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 4px;}
 
   .hero{position:relative;padding:40px 20px 26px;background:linear-gradient(180deg,var(--primary-deep) 0%,var(--primary-deep) 55%,var(--bg) 55%);}
@@ -192,7 +192,7 @@ function renderStore(){
   <div class="app">
     <div class="topbar">
       <div class="brand">
-        <div class="brand-mark"></div>
+        <img class="brand-mark" src="assets/logo.png" alt="Logo de ${state.settings.storeName}">
         <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Discreto · Confidencial · A domicilio</div></div>
       </div>
       <button class="cart-btn" onclick="state.cartOpen=true;render()">Carrito ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}</button>
