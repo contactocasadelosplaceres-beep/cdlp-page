@@ -153,6 +153,14 @@ const auth = firebase.auth();
 
 const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
+const NEEDS = [
+  {key:'para-mi', label:'Para mí'},
+  {key:'para-pareja', label:'Para mi pareja'},
+  {key:'para-ella', label:'Para ella'},
+  {key:'para-el', label:'Para él'},
+  {key:'compartir-pareja', label:'Para compartir en pareja'},
+  {key:'empezando', label:'Estoy empezando'},
+];
 const STATUS_FLOW = ["Nuevo","Preparando","En camino","Entregado","Cancelado"];
 const STATUS_COLOR = {"Nuevo":"#BC355C","Preparando":"#F6A030","En camino":"#1AA0B2","Entregado":"#6E9E1A","Cancelado":"#8a6b78"};
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
@@ -281,7 +289,7 @@ function handleLogout(){ auth.signOut(); state.loaded=false; }
 /* ============== PRODUCTOS ============== */
 async function saveProduct(p){
   if(!state.settings.categories.includes(p.cat)){ state.settings.categories.push(p.cat); await saveSettings(); }
-  const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:p.images||[]};
+  const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[]};
   try{
     if(p.id){
       await db.collection('products').doc(p.id).set(payload);
@@ -1241,12 +1249,26 @@ function renderProductModal(){
       </div>
       <div class="form-field"><label>Existencias</label><input id="pf-stock" type="number" value="${p.stock??''}"></div>
       <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc">${p.desc||''}</textarea></div>
+      <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${NEEDS.map(n=>`
+            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--surface-soft);padding:8px 11px;border-radius:9px;cursor:pointer;">
+              <input type="checkbox" value="${n.key}" ${(p.needs||[]).includes(n.key)?'checked':''} onchange="toggleProductNeed('${n.key}',this.checked)">
+              ${n.label}
+            </label>`).join('')}
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.productModal=null;render()">Cancelar</button>
         <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')">Guardar</button>
       </div>
     </div>
   </div>`;
+}
+function toggleProductNeed(key, checked){
+  if(!state.productModal.needs) state.productModal.needs = [];
+  if(checked){ if(!state.productModal.needs.includes(key)) state.productModal.needs.push(key); }
+  else{ state.productModal.needs = state.productModal.needs.filter(k=>k!==key); }
 }
 function handleSaveProduct(existingId){
   const name = document.getElementById('pf-name').value.trim();
@@ -1255,7 +1277,7 @@ function handleSaveProduct(existingId){
   const stock = Number(document.getElementById('pf-stock').value)||0;
   const desc = document.getElementById('pf-desc').value.trim();
   if(!name){ showToast('Ponle un nombre al producto'); return; }
-  saveProduct({id: existingId||null, name, cat, price, stock, desc, images: state.productModal.images||[]});
+  saveProduct({id: existingId||null, name, cat, price, stock, desc, images: state.productModal.images||[], needs: state.productModal.needs||[]});
 }
 
 function renderCropModal(){

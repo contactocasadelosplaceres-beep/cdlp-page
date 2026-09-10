@@ -90,6 +90,7 @@
   .needs-row::-webkit-scrollbar{display:none;}
   .need-pill{flex-shrink:0;background:var(--surface);border:1px solid var(--border);color:var(--primary-deep);padding:12px 18px;min-height:44px;display:inline-flex;align-items:center;border-radius:var(--radius-pill);font-size:13.5px;font-weight:600;text-decoration:none;}
   .need-pill:hover{border-color:var(--primary);}
+  .need-pill.active{background:var(--primary);color:#fff;border-color:var(--primary);}
 
   /* ===== GENERIC SECTION ===== */
   .section-block{padding:32px 20px 6px;}
@@ -259,6 +260,14 @@ const db = firebase.firestore();
 const PALETTE = ["#BC355C","#993477","#20B7CA","#0A4A5B","#ED7578","#5C1F49","#F6A030","#7AB71A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const ICONS = ["✦","●","◐","▲","♥","◆","■","◯","✧","✺","❖","✤"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
+const NEEDS = [
+  {key:'para-mi', label:'Para mí'},
+  {key:'para-pareja', label:'Para mi pareja'},
+  {key:'para-ella', label:'Para ella'},
+  {key:'para-el', label:'Para él'},
+  {key:'compartir-pareja', label:'Para compartir en pareja'},
+  {key:'empezando', label:'Estoy empezando'},
+];
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
 function catIcon(cat){ const i = state.settings.categories.indexOf(cat); return ICONS[(i<0?0:i) % ICONS.length]; }
 
@@ -288,7 +297,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false };
 
 async function loadData(){
   try{
@@ -335,8 +344,9 @@ function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta;
 function removeFromCart(id){ delete state.cart[id]; render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
-function goToCatalog(cat){ state.activeCat=cat||'Todos'; state.searchQuery=''; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
+function goToCatalog(cat){ state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function filterByNeed(key){ state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
 
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
@@ -431,19 +441,11 @@ function renderTrustBar(){
 
 /* ============== QUÉ ESTÁS BUSCANDO (fixed, va directo a WhatsApp con intención) ============== */
 function renderNeedsSection(){
-  const needs = [
-    {label:'Para mí', msg:'Hola, estoy buscando algo para mí, ¿me pueden recomendar?'},
-    {label:'Para mi pareja', msg:'Hola, busco algo para mi pareja, ¿me pueden recomendar?'},
-    {label:'Para ella', msg:'Hola, busco un producto para ella, ¿me pueden recomendar?'},
-    {label:'Para él', msg:'Hola, busco un producto para él, ¿me pueden recomendar?'},
-    {label:'Para compartir en pareja', msg:'Hola, busco algo para compartir en pareja, ¿me pueden recomendar?'},
-    {label:'Estoy empezando', msg:'Hola, es mi primera vez comprando este tipo de productos, ¿me pueden ayudar a elegir?'},
-  ];
   return `
   <div class="needs-block">
     <div class="section-heading">¿Qué estás buscando?</div>
-    <div class="section-sub" style="margin-bottom:14px;">Cuéntanos qué necesitas y te ayudamos a elegir por WhatsApp.</div>
-    <div class="needs-row">${needs.map(n=>`<a class="need-pill" href="${waLink(n.msg)}" target="_blank">${n.label}</a>`).join('')}</div>
+    <div class="section-sub" style="margin-bottom:14px;">Elige una opción y te mostramos productos pensados para eso.</div>
+    <div class="needs-row">${NEEDS.map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
   </div>`;
 }
 
@@ -477,7 +479,7 @@ function renderFirstTimeSection(){
 /* ============== CATEGORIES ============== */
 function renderCategoriesSection(){
   const cats = ["Todos", ...state.settings.categories];
-  return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c&&!state.searchQuery?'active':''}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>`;
+  return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c&&!state.searchQuery&&!state.activeNeed?'active':''}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>`;
 }
 
 /* ============== PROMO BANNER ============== */
@@ -521,19 +523,26 @@ function renderKitsSection(){
 /* ============== CATÁLOGO COMPLETO ============== */
 function renderGridSection(){
   let filtered = state.products;
+  let heading = 'Catálogo completo';
+  let emptyMsg = `No encontramos productos que coincidan. Prueba con otra búsqueda o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   if(state.searchQuery.trim()){
     const q = state.searchQuery.trim().toLowerCase();
     filtered = filtered.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q));
+    heading = `Resultados para "${state.searchQuery.trim()}"`;
+  } else if(state.activeNeed){
+    const need = NEEDS.find(n=>n.key===state.activeNeed);
+    filtered = filtered.filter(p=>(p.needs||[]).includes(state.activeNeed));
+    heading = need ? need.label : 'Catálogo completo';
+    emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   } else if(state.activeCat!=="Todos"){
     filtered = filtered.filter(p=>p.cat===state.activeCat);
   }
-  const heading = state.searchQuery.trim() ? `Resultados para "${state.searchQuery.trim()}"` : 'Catálogo completo';
   return `
   <div id="catalogo" class="section-block" style="padding-top:10px;">
     <div class="section-heading" style="margin-bottom:14px;">${heading}</div>
     ${filtered.length
       ? `<div class="grid">${filtered.map(p=>renderProductCard(p)).join('')}</div>`
-      : `<div class="empty-state">No encontramos productos que coincidan. Prueba con otra búsqueda o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.</div>`}
+      : `<div class="empty-state">${emptyMsg}</div>`}
   </div>`;
 }
 
