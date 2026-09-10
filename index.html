@@ -111,6 +111,7 @@
   @media(min-width:980px){.grid{grid-template-columns:repeat(4,1fr);}}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:visible;display:flex;flex-direction:column;transition:transform .15s ease;cursor:pointer;}
   .card:active{transform:scale(0.98);}
+  .card-media{position:relative;}
   .card-image-wrap{position:relative;aspect-ratio:4/5;overflow:hidden;border-radius:var(--radius-card) var(--radius-card) 0 0;background:linear-gradient(135deg,var(--surface-soft),var(--border));}
   .card-image-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
   .card-image-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:38px;color:#fff;}
@@ -647,11 +648,13 @@ function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
   return `
       <div class="card" onclick="openProductDetail('${p.id}')">
-        <div class="card-image-wrap">
-          ${productImageHtml(p)}
-          <div class="badge-row">
-            ${isBest ? `<span class="badge badge-best">Más vendido</span>` : ''}
-            ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
+        <div class="card-media">
+          <div class="card-image-wrap">
+            ${productImageHtml(p)}
+            <div class="badge-row">
+              ${isBest ? `<span class="badge badge-best">Más vendido</span>` : ''}
+              ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
+            </div>
           </div>
           <button class="fab-add" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();addToCart('${p.id}')">+</button>
         </div>
