@@ -21,7 +21,7 @@
   html{overflow-x:hidden;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
   h1,h2,h3,.display{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
-  a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;background:none;touch-action:manipulation;}
+  a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;touch-action:manipulation;text-align:inherit;}
   a{touch-action:manipulation;}
   img{max-width:100%;}
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
@@ -31,7 +31,7 @@
   /* ===== HEADER ===== */
   .topbar{position:sticky;top:0;z-index:30;background:var(--primary-deep);color:#fff;box-shadow:0 6px 20px -12px rgba(0,0,0,0.4);}
   .topbar-main{padding:12px 16px;display:flex;align-items:center;gap:12px;}
-  .brand{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+  .brand{display:flex;align-items:center;gap:9px;flex-shrink:0;padding:0;margin:0;}
   .brand-mark-img{width:32px;height:32px;border-radius:9px;object-fit:cover;flex-shrink:0;display:block;}
   .brand-mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--rose),var(--amber));flex-shrink:0;display:none;}
   .brand-text{line-height:1.15;}
@@ -344,6 +344,12 @@ function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta;
 function removeFromCart(id){ delete state.cart[id]; render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
+function goToFeatured(){
+  const el = document.getElementById('destacados');
+  if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); }
+  else { goToCatalog('Todos'); }
+}
+function goHome(){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; render(); window.scrollTo({top:0, behavior:'smooth'}); }
 function goToCatalog(cat){ state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
 function filterByNeed(key){ state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
 function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
@@ -383,7 +389,7 @@ function renderHeader(){
   const cats = state.settings.categories||[];
   return `
     <div class="topbar-main">
-      <div class="brand">
+      <button class="brand" onclick="goHome()" aria-label="Ir al inicio">
         <img class="brand-mark-img" src="assets/LOGO.png" alt="Logo"
              onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
         <div class="brand-mark"></div>
@@ -391,9 +397,9 @@ function renderHeader(){
           <div class="brand-name">${state.settings.storeName}</div>
           ${state.settings.showHeaderSubtitle!==false ? `<div class="brand-sub">${state.settings.headerSubtitle||'Discreto · Confidencial · A domicilio'}</div>` : ''}
         </div>
-      </div>
+      </button>
       <nav class="header-nav">
-        <a onclick="scrollToId('destacados')">Más vendidos</a>
+        <a onclick="goToFeatured()">Más vendidos</a>
         ${cats.slice(0,6).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </nav>
       <div class="header-actions">
@@ -419,7 +425,7 @@ function renderHeroSection(){
       <h1>${state.settings.heroTitle}</h1>
       <p>${state.settings.heroSubtitle}</p>
       <div class="hero-actions">
-        <button class="hero-btn-primary" onclick="scrollToId('destacados')">Ver más vendidos</button>
+        <button class="hero-btn-primary" onclick="goToFeatured()">Ver más vendidos</button>
         <button class="hero-btn-ghost" onclick="goToCatalog('Todos')">Conocer el catálogo</button>
         <a class="hero-btn-wa" href="${waLink('Hola, quiero conocer más de su catálogo.')}" target="_blank">Hablar por WhatsApp →</a>
       </div>
@@ -626,7 +632,7 @@ function renderFooterSection(){
       </div>
       <div class="foot-col">
         <h4>Explora</h4>
-        <a onclick="scrollToId('destacados')">Más vendidos</a>
+        <a onclick="goToFeatured()">Más vendidos</a>
         <a onclick="goToCatalog('Todos')">Catálogo completo</a>
         ${s.categories.slice(0,4).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </div>
