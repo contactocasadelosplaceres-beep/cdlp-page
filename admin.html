@@ -958,7 +958,10 @@ function renderAsistenteIA(){
 
 /* ============== DISEÑO (secciones de la página de inicio) ============== */
 const DESIGN_SUBPANELS = [
+  {key:"brand", icon:"🏷", label:"Nombre y marca de la tienda"},
+  {key:"hero", icon:"👋", label:"Mensaje de bienvenida"},
   {key:"header", icon:"↑", label:"Encabezado"},
+  {key:"categories", icon:"📂", label:"Categorías principales"},
   {key:"promo", icon:"🖼", label:"Banner promocional"},
   {key:"featured", icon:"⭐", label:"Productos destacados"},
   {key:"testimonials", icon:"💬", label:"Testimonios"},
@@ -970,6 +973,7 @@ let sectionDragIdx = null;
 function renderDiseno(){
   if(state.designSubpanel) return renderDesignSubpanel(state.designSubpanel);
   return `
+    <div class="note-box" style="margin-bottom:16px;">Desde aquí configuras toda la apariencia de tu tienda: marca, textos, categorías, banners, destacados, testimonios y pie de página.</div>
     <div class="panel">
       <div class="panel-title">Secciones de la página de inicio</div>
       <div class="panel-sub">Actívalas, ocúltalas y ordénalas (arrastra o usa las flechas). Se reflejan en tu tienda en cuanto las cambias.</div>
@@ -1026,10 +1030,59 @@ function sectionDrop(e, idx){
 function renderDesignSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.designSubpanel=null;render()">‹ Volver a Diseño</button>`;
   const map = {
-    header: renderHeaderSubpanel, promo: renderPromoSubpanel, featured: renderFeaturedSubpanel,
+    brand: renderBrandSubpanel, hero: renderHeroSubpanel, header: renderHeaderSubpanel,
+    categories: renderCategoriesSubpanel, promo: renderPromoSubpanel, featured: renderFeaturedSubpanel,
     testimonials: renderTestimonialsSubpanel, footer: renderFooterSubpanel, css: renderCssSubpanel,
   };
   return back + (map[key] ? map[key]() : '');
+}
+
+function renderBrandSubpanel(){
+  const s = state.settings;
+  return `
+  <div class="panel">
+    <div class="panel-title">Nombre y marca de la tienda</div>
+    <div class="panel-sub">Se muestra en el encabezado, el pie de página y el título del navegador.</div>
+    <div class="form-field"><label>Nombre de la tienda</label><input id="brand-name" value="${s.storeName}"></div>
+    <div class="note-box">El logo se toma del archivo <code>assets/LOGO.png</code> de tu proyecto. Para cambiarlo, reemplaza ese archivo en tu carpeta y súbelo de nuevo a tu repositorio.</div>
+    <button class="btn-primary" onclick="saveBrandSettings()">Guardar</button>
+  </div>`;
+}
+function saveBrandSettings(){
+  const val = document.getElementById('brand-name').value.trim() || DEFAULT_SETTINGS.storeName;
+  saveSettingsForm({ storeName: val });
+}
+
+function renderHeroSubpanel(){
+  const s = state.settings;
+  return `
+  <div class="panel">
+    <div class="panel-title">Mensaje de bienvenida</div>
+    <div class="panel-sub">El título y texto grandes que ven tus clientes justo al entrar a la tienda. Actívalo u ocúltalo desde "Secciones de la página de inicio".</div>
+    <div class="form-field"><label>Título principal</label><input id="hero-title" value="${s.heroTitle}"></div>
+    <div class="form-field"><label>Subtítulo</label><textarea id="hero-sub">${s.heroSubtitle}</textarea></div>
+    <button class="btn-primary" onclick="saveHeroSettings()">Guardar</button>
+  </div>`;
+}
+function saveHeroSettings(){
+  saveSettingsForm({
+    heroTitle: document.getElementById('hero-title').value.trim() || DEFAULT_SETTINGS.heroTitle,
+    heroSubtitle: document.getElementById('hero-sub').value.trim() || DEFAULT_SETTINGS.heroSubtitle,
+  });
+}
+
+function renderCategoriesSubpanel(){
+  const s = state.settings;
+  return `
+  <div class="panel">
+    <div class="panel-title">Categorías del catálogo</div>
+    <div class="panel-sub">Aparecen como chips filtrables debajo del mensaje de bienvenida y en el menú del encabezado.</div>
+    <div>${s.categories.map(c=>`<span class="cat-manage-chip">${c}<button onclick="removeCategory('${c.replace(/'/g,"\\'")}')">✕</button></span>`).join('')}</div>
+    <div class="two-col" style="margin-top:8px;">
+      <input id="new-cat-input" placeholder="Nueva categoría" value="${state.newCatInput}" oninput="state.newCatInput=this.value">
+      <button class="btn-outline" onclick="addCategory()">+ Agregar categoría</button>
+    </div>
+  </div>`;
 }
 
 function renderHeaderSubpanel(){
@@ -1183,27 +1236,16 @@ function saveCustomCss(){
 function renderConfig(){
   const s = state.settings;
   return `
-    <div class="panel-title" style="margin-bottom:12px;">Marca y textos — se reflejan en ambas plataformas</div>
-    <div class="form-field"><label>Nombre de la tienda</label><input id="set-name" value="${s.storeName}"></div>
-    <div class="form-field"><label>Título principal (tienda)</label><input id="set-hero-title" value="${s.heroTitle}"></div>
-    <div class="form-field"><label>Subtítulo (tienda)</label><textarea id="set-hero-sub">${s.heroSubtitle}</textarea></div>
+    <div class="panel-title" style="margin-bottom:12px;">Datos operativos</div>
+    <div class="note-box">Para configurar el nombre de la tienda, el mensaje de bienvenida, las categorías, el banner o el pie de página, ve a la pestaña <strong>Diseño</strong>.</div>
     <div class="form-field"><label>WhatsApp para confirmaciones (con código de país)</label><input id="set-wa" value="${s.whatsapp}"></div>
     <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}"></div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
     <div class="note-box" style="margin-top:14px;">Para agregar más administradores o cambiar tu contraseña, hazlo desde la consola de Firebase → Authentication → Users.</div>
-    <div class="panel-title" style="margin:26px 0 12px;">Categorías del catálogo</div>
-    <div>${s.categories.map(c=>`<span class="cat-manage-chip">${c}<button onclick="removeCategory('${c.replace(/'/g,"\\'")}')">✕</button></span>`).join('')}</div>
-    <div class="two-col" style="margin-top:8px;">
-      <input id="new-cat-input" placeholder="Nueva categoría" value="${state.newCatInput}" oninput="state.newCatInput=this.value">
-      <button class="btn-outline" onclick="addCategory()">+ Agregar categoría</button>
-    </div>
   `;
 }
 function handleSaveSettings(){
   saveSettingsForm({
-    storeName: document.getElementById('set-name').value.trim() || DEFAULT_SETTINGS.storeName,
-    heroTitle: document.getElementById('set-hero-title').value.trim() || DEFAULT_SETTINGS.heroTitle,
-    heroSubtitle: document.getElementById('set-hero-sub').value.trim() || DEFAULT_SETTINGS.heroSubtitle,
     whatsapp: document.getElementById('set-wa').value.trim(),
     schedule: document.getElementById('set-sched').value.trim(),
   });
