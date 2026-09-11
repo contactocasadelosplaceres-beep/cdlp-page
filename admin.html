@@ -240,7 +240,7 @@ let state = {
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
-  auditCenter:"", auditSearch:"", auditCounts:{}, auditNotes:"",
+  auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
 
@@ -1372,7 +1372,11 @@ async function commitAudit(applyAdjustment){
 }
 function renderAuditorias(){
   const q = (state.auditSearch||'').trim().toLowerCase();
-  const candidates = state.auditCenter && q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  let auditFiltered = state.auditCenter ? state.products : [];
+  if(state.auditCategory && state.auditCategory!=='Todas') auditFiltered = auditFiltered.filter(p=>p.cat===state.auditCategory);
+  if(q) auditFiltered = auditFiltered.filter(p=>(p.name||'').toLowerCase().includes(q));
+  const candidates = auditFiltered.slice(0, state.auditListLimit);
+  const hasMoreCandidates = auditFiltered.length > candidates.length;
   const rows = auditDiffRows();
   const totalDiffs = rows.filter(r=>r.diff!==0).length;
   return `
@@ -1380,26 +1384,35 @@ function renderAuditorias(){
       <div class="panel-title">Nueva auditoría de inventario</div>
       <div class="note-box">Cuenta físicamente los productos que quieras revisar en un centro y anota lo que encontraste. No necesitas contar todo el catálogo — puedes hacer auditorías parciales (por categoría, por sospecha de faltante, etc.). Al final decides si ajustas el inventario del sistema a lo contado, o solo dejas el registro para revisarlo después.</div>
       <div class="form-field"><label>Centro a auditar</label>
-        <select onchange="state.auditCenter=this.value;state.auditCounts={};render()">
+        <select onchange="state.auditCenter=this.value;state.auditCounts={};state.auditListLimit=20;render()">
           <option value="">Selecciona...</option>
           ${state.centers.filter(c=>c.active).map(c=>`<option value="${c.id}" ${state.auditCenter===c.id?'selected':''}>${c.name}</option>`).join('')}
         </select>
       </div>
       ${state.auditCenter ? `
-        <div class="form-field"><label>Buscar producto para contar</label>
-          <input id="audit-search-input" placeholder="Nombre del producto..." value="${state.auditSearch}" oninput="onAuditSearchInput(this.value)">
+        <div class="two-col" style="align-items:end;">
+          <div class="form-field"><label>Buscar producto para contar</label>
+            <input id="audit-search-input" placeholder="Nombre del producto..." value="${state.auditSearch}" oninput="onAuditSearchInput(this.value)">
+          </div>
+          <div class="form-field"><label>Categoría</label>
+            <select onchange="state.auditCategory=this.value;state.auditListLimit=20;render()">
+              <option ${state.auditCategory==='Todas'?'selected':''}>Todas</option>
+              ${state.settings.categories.map(c=>`<option ${state.auditCategory===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
         </div>
         ${candidates.length>0 ? `
-          <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;">
+          <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
             ${candidates.map(p=>`
               <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
                 ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-                <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
+                <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
                 <input type="number" min="0" placeholder="Conteo" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
               </div>
             `).join('')}
           </div>
-        ` : ''}
+          ${hasMoreCandidates ? `<div style="text-align:center;margin-bottom:14px;"><button class="btn-outline" onclick="state.auditListLimit+=20;render()">Ver más productos</button></div>` : ''}
+        ` : `<div class="empty-state" style="margin-bottom:14px;">No hay productos que coincidan con este filtro.</div>`}
         ${rows.length>0 ? `
           <div class="panel-title" style="margin-bottom:10px;">Productos contados (${rows.length}) ${totalDiffs>0?`· <span style="color:var(--rose);">${totalDiffs} con diferencia</span>`:'· sin diferencias'}</div>
           ${rows.map(r=>`
@@ -1439,6 +1452,7 @@ function renderAuditorias(){
 }
 function onAuditSearchInput(v){
   state.auditSearch = v;
+  state.auditListLimit = 20;
   render();
   const i = document.getElementById('audit-search-input');
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
