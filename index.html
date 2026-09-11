@@ -734,7 +734,6 @@ function renderGridSection(){
     ${filtered.length
       ? `<div class="grid">${shown.map(p=>renderProductCard(p)).join('')}</div>
          ${hasMore ? `
-           <div id="grid-load-more-sentinel" style="height:1px;"></div>
            <div style="text-align:center;padding:18px 0 6px;">
              <button class="hero-btn-ghost" onclick="loadMoreProducts()">Ver más productos</button>
            </div>
@@ -743,16 +742,7 @@ function renderGridSection(){
   </div>`;
 }
 const GRID_PAGE_SIZE = 20;
-function loadMoreProducts(){ state.gridRenderLimit += GRID_PAGE_SIZE; render(); setupGridInfiniteScroll(); }
-function setupGridInfiniteScroll(){
-  const sentinel = document.getElementById('grid-load-more-sentinel');
-  if(!sentinel || !window.IntersectionObserver) return;
-  if(window._gridObserver) window._gridObserver.disconnect();
-  window._gridObserver = new IntersectionObserver(entries=>{
-    if(entries[0].isIntersecting){ loadMoreProducts(); }
-  }, {rootMargin:'400px'});
-  window._gridObserver.observe(sentinel);
-}
+function loadMoreProducts(){ state.gridRenderLimit += GRID_PAGE_SIZE; render(); }
 
 function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
@@ -972,7 +962,6 @@ function render(){
   root.innerHTML = state.orderPlaced ? renderSuccess() : renderStore();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   adjustTopbarSpacer();
-  setupGridInfiniteScroll();
 }
 function adjustTopbarSpacer(){
   const bar = document.querySelector('.topbar');
