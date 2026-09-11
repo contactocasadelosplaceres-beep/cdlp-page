@@ -331,6 +331,39 @@ async function deleteCashierDoc(id){ try{ await db.collection('cashiers').doc(id
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : 'Sin folio'; }
+async function getNextOrderNumber(){
+  const counterRef = db.collection('counters').doc('orders');
+  try{
+    return await db.runTransaction(async (tx)=>{
+      const snap = await tx.get(counterRef);
+      const current = snap.exists ? (snap.data().next || 1) : 1;
+      tx.set(counterRef, {next: current + 1}, {merge:true});
+      return current;
+    });
+  }catch(e){
+    console.error('No se pudo generar el folio', e);
+    return null;
+  }
+}
+async function assignFolioToOrder(id, source){
+  const orderNumber = await getNextOrderNumber();
+  if(!orderNumber){ showToast('No se pudo generar el folio, intenta de nuevo'); return; }
+  try{
+    await db.collection(source==='pos'?'sales':'orders').doc(id).update({orderNumber});
+    const o = state.orders.find(x=>x.id===id); if(o) o.orderNumber = orderNumber;
+    showToast(`Folio ${formatFolio(orderNumber)} asignado`); render();
+  }catch(e){ console.error(e); showToast('No se pudo asignar el folio'); }
+}
+async function deleteOrder(id, source){
+  const o = state.orders.find(x=>x.id===id);
+  const label = o ? `${formatFolio(o.orderNumber)} — ${o.customer||'este pedido'}` : 'este pedido';
+  if(!confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)) return;
+  try{
+    await db.collection(source==='pos'?'sales':'orders').doc(id).delete();
+    state.orders = state.orders.filter(x=>x.id!==id);
+    showToast('Pedido eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar el pedido'); }
+}
 function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function showToast(msg){
   const t=document.getElementById('toast'); if(!t) return;
@@ -1002,7 +1035,9 @@ function renderOrderRow(o){
           <div class="order-actions-menu">
             ${STATUS_FLOW.map(s=>`<button class="${o.status===s?'active-status':''}" onclick="state.orderActionsMenu=null;updateOrderStatus('${o.id}','${s}')">${o.status===s?'✓ ':''}${s}</button>`).join('')}
             <hr>
+            ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
+            <button style="color:var(--rose);" onclick="state.orderActionsMenu=null;deleteOrder('${o.id}','${o.source}')">Eliminar</button>
           </div>
         ` : ''}
       </td>
