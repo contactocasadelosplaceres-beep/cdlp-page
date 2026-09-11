@@ -343,7 +343,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:24 };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:24, submittingOrder:false };
 
 async function loadData(){
   try{
@@ -436,8 +436,8 @@ async function submitOrder(formData){
   const orderNumber = await getNextOrderNumber();
   const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo" };
   try{ await db.collection('orders').add(order); }
-  catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); return; }
-  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; render();
+  catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); state.submittingOrder=false; render(); return; }
+  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; render();
 
   const lines = items.map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('%0A');
   const msg = `Hola, quiero confirmar mi pedido:%0A${lines}%0A%0ATotal: ${money(order.total)}%0ANombre: ${formData.name}%0ADirección: ${formData.address}%0APago contra entrega.`;
@@ -447,6 +447,7 @@ async function submitOrder(formData){
   }
 }
 function handleCheckoutSubmit(){
+  if(state.submittingOrder) return; // evita doble envío si tocan el botón varias veces
   const name = document.getElementById('ck-name').value.trim();
   const phone = document.getElementById('ck-phone').value.trim();
   const address = document.getElementById('ck-address').value.trim();
@@ -455,6 +456,7 @@ function handleCheckoutSubmit(){
   if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
   if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
   else{ clearCustomerProfile(); }
+  state.submittingOrder = true; render();
   submitOrder({name,phone,address,notes});
 }
 
@@ -907,7 +909,7 @@ function renderCheckoutDrawer(){
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
-      <button class="btn-primary" onclick="handleCheckoutSubmit()">Confirmar pedido</button>
+      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':'Confirmar pedido'}</button>
       <button class="btn-secondary" onclick="state.checkoutOpen=false;state.cartOpen=true;render()">Volver al carrito</button>
     </div>`;
 }
