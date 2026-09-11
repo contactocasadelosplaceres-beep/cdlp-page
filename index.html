@@ -18,8 +18,8 @@
     --border: #EBD9D3; --radius-card: 16px; --radius-pill: 999px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html{overflow-x:hidden;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+  html{}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
   h1,h2,h3,.display{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
   a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;text-align:inherit;touch-action:manipulation;}
   a{touch-action:manipulation;}
@@ -501,7 +501,7 @@ function renderHeader(){
   return `
     <div class="topbar-main">
       <button class="brand" onclick="goHome()" aria-label="Ir al inicio">
-        <img class="brand-mark-img" src="assets/LOGO.png" alt="Logo"
+        <img class="brand-mark-img" src="assets/logo.png" alt="Logo"
              onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
         <div class="brand-mark"></div>
         <div class="brand-text">
@@ -665,6 +665,7 @@ function renderGridSection(){
 
 function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
+  const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
   return `
       <div class="card" onclick="openProductDetail('${p.id}')">
         <div class="card-media">
@@ -680,7 +681,7 @@ function renderProductCard(p, forceBest){
         <div class="card-body">
           <div class="card-cat">${p.cat}</div>
           <div class="card-name">${p.name}</div>
-          ${p.desc ? `<div class="card-desc">${p.desc}</div>` : ''}
+          ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
           <div class="card-price">${money(p.price)}</div>
         </div>
       </div>`;
@@ -835,7 +836,7 @@ function renderSuccess(){
 function renderStore(){
   const order = ['hero','featured','categories','promoBanner','grid','testimonials','newsletter','footer'];
   const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
-  const after = { hero: ['trust','needs'], featured: ['firsttime'], testimonials: ['discretion'] };
+  const after = { hero: ['trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
   const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
 
   let body = '';
