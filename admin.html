@@ -922,8 +922,7 @@ function renderPedidos(){
               `}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-              ${isPos ? `<span class="row-sub" style="align-self:center;">Venta ya completada en el Punto de Venta</span>` :
-                STATUS_FLOW.map(s=>`<button class="icon-btn" style="width:auto;padding:6px 11px;font-size:12px;${o.status===s?`background:${STATUS_COLOR[s]};color:#fff;`:''}" onclick="event.stopPropagation();updateOrderStatus('${o.id}','${s}')">${s}</button>`).join('')}
+              ${STATUS_FLOW.map(s=>`<button class="icon-btn" style="width:auto;padding:6px 11px;font-size:12px;${o.status===s?`background:${STATUS_COLOR[s]};color:#fff;`:''}" onclick="event.stopPropagation();updateOrderStatus('${o.id}','${s}')">${s}</button>`).join('')}
               <button class="icon-btn" style="width:auto;padding:6px 11px;font-size:12px;" onclick="event.stopPropagation();toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
             </div>
           ` : ''}
