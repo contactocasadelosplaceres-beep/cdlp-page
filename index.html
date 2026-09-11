@@ -281,6 +281,24 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// Folio consecutivo compartido con el Punto de Venta: cada pedido/venta obtiene
+// un número único e incremental (#0001, #0002, ...) sin importar de dónde venga.
+async function getNextOrderNumber(){
+  const counterRef = db.collection('counters').doc('orders');
+  try{
+    return await db.runTransaction(async (tx)=>{
+      const snap = await tx.get(counterRef);
+      const current = snap.exists ? (snap.data().next || 1) : 1;
+      tx.set(counterRef, {next: current + 1}, {merge:true});
+      return current;
+    });
+  }catch(e){
+    console.error('No se pudo generar el folio', e);
+    return null;
+  }
+}
+function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : ''; }
+
 const PALETTE = ["#BC355C","#993477","#20B7CA","#0A4A5B","#ED7578","#5C1F49","#F6A030","#7AB71A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const ICONS = ["✦","●","◐","▲","♥","◆","■","◯","✧","✺","❖","✤"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
@@ -321,7 +339,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0 };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null };
 
 async function loadData(){
   try{
@@ -403,10 +421,11 @@ function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.a
 
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
-  const order = { date:new Date().toISOString(), customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo" };
+  const orderNumber = await getNextOrderNumber();
+  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo" };
   try{ await db.collection('orders').add(order); }
   catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); return; }
-  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; render();
+  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; render();
 
   const lines = items.map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('%0A');
   const msg = `Hola, quiero confirmar mi pedido:%0A${lines}%0A%0ATotal: ${money(order.total)}%0ANombre: ${formData.name}%0ADirección: ${formData.address}%0APago contra entrega.`;
@@ -807,6 +826,7 @@ function renderSuccess(){
   return `<div class="success-screen"><div class="success-card">
     <div class="mark">✓</div>
     <h2>¡Pedido recibido!</h2>
+    ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin-bottom:4px;">Pedido ${formatFolio(state.lastOrderNumber)}</div>` : ''}
     <p>Te contactaremos por WhatsApp para confirmar tu pedido y coordinar la entrega. Pago contra entrega, empaque discreto.</p>
     <button class="btn-primary" style="width:auto;display:inline-block;padding:13px 22px;" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>
   </div></div>`;
