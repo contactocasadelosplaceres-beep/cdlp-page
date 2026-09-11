@@ -239,7 +239,8 @@ let state = {
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
-  centers:[], transfers:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
+  centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
+  auditCenter:"", auditSearch:"", auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
 
@@ -260,7 +261,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -269,6 +270,7 @@ async function loadData(){
       db.collection('settings').doc('ai').get(),
       db.collection('distributionCenters').get(),
       db.collection('transfers').orderBy('date','desc').limit(200).get(),
+      db.collection('audits').orderBy('date','desc').limit(100).get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -297,6 +299,7 @@ async function loadData(){
       state.centers = [{id:ref.id, name:'Principal', isDefault:true, active:true}];
     }
     state.transfers = transfersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.audits = auditsSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
     // Migración automática: cualquier producto que todavía no tenga inventario
     // repartido por centro, se le asigna TODO su stock actual al centro Principal.
@@ -314,7 +317,7 @@ async function loadData(){
   }catch(e){
     console.error(e);
     state.products = []; state.orders = []; state.visits = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
-    state.centers = []; state.transfers = [];
+    state.centers = []; state.transfers = []; state.audits = [];
     showToast('No se pudo cargar todo desde el servidor');
   }
   state.loaded = true; render();
@@ -1180,10 +1183,12 @@ function renderCentros(){
       <button class="admin-tab ${sub==='centros'?'active':''}" onclick="state.centersSubview='centros';render()">Centros</button>
       <button class="admin-tab ${sub==='transferencias'?'active':''}" onclick="state.centersSubview='transferencias';render()">Transferencias</button>
       <button class="admin-tab ${sub==='inventario'?'active':''}" onclick="state.centersSubview='inventario';render()">Inventario por centro</button>
+      <button class="admin-tab ${sub==='auditorias'?'active':''}" onclick="state.centersSubview='auditorias';render()">Auditorías</button>
     </div>
     ${sub==='centros' ? renderCentrosList() : ''}
     ${sub==='transferencias' ? renderTransferencias() : ''}
     ${sub==='inventario' ? renderInventarioPorCentro() : ''}
+    ${sub==='auditorias' ? renderAuditorias() : ''}
     ${state.centerModal ? renderCenterModal() : ''}
   `;
 }
@@ -1316,6 +1321,127 @@ function renderInventarioPorCentro(){
     </div>
     ${filtered.length>150 ? `<div class="note-box" style="margin-top:10px;">Mostrando los primeros 150 resultados. Usa el buscador para encontrar un producto específico.</div>` : ''}
   `;
+}
+
+/* ============== AUDITORÍAS DE INVENTARIO ============== */
+function setAuditCount(pid, value){
+  const v = value.trim();
+  if(v===''){ delete state.auditCounts[pid]; }
+  else{ state.auditCounts[pid] = Math.max(0, Number(v)||0); }
+}
+function auditDiffRows(){
+  if(!state.auditCenter) return [];
+  return Object.entries(state.auditCounts).map(([pid,counted])=>{
+    const p = state.products.find(x=>x.id===pid);
+    if(!p) return null;
+    const system = centerStock(p, state.auditCenter);
+    return {pid, name:p.name, system, counted, diff: counted - system};
+  }).filter(Boolean);
+}
+async function commitAudit(applyAdjustment){
+  if(!state.auditCenter){ showToast('Elige el centro que estás auditando'); return; }
+  const rows = auditDiffRows();
+  if(rows.length===0){ showToast('Cuenta al menos un producto antes de guardar'); return; }
+  const center = state.centers.find(c=>c.id===state.auditCenter);
+  const auditDoc = {
+    date: new Date().toISOString(), centerId: state.auditCenter, centerName: center.name,
+    items: rows.map(r=>({productId:r.pid, name:r.name, systemQty:r.system, countedQty:r.counted, diff:r.diff})),
+    notes: state.auditNotes.trim(), applied: applyAdjustment,
+  };
+  try{
+    const ref = db.collection('audits').doc();
+    if(applyAdjustment){
+      const batch = db.batch();
+      rows.forEach(r=>{
+        const p = state.products.find(x=>x.id===r.pid);
+        if(!p) return;
+        if(!p.stockByCenter) p.stockByCenter = {};
+        p.stockByCenter[state.auditCenter] = r.counted;
+        p.stock = totalStock(p);
+        batch.update(db.collection('products').doc(r.pid), {stockByCenter:p.stockByCenter, stock:p.stock});
+      });
+      batch.set(ref, auditDoc);
+      await batch.commit();
+    }else{
+      await ref.set(auditDoc);
+    }
+    state.audits.unshift({id:ref.id, ...auditDoc});
+    state.auditCounts = {}; state.auditNotes=''; state.auditSearch='';
+    showToast(applyAdjustment ? 'Auditoría guardada y inventario ajustado' : 'Auditoría guardada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo guardar la auditoría'); }
+}
+function renderAuditorias(){
+  const q = (state.auditSearch||'').trim().toLowerCase();
+  const candidates = state.auditCenter && q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  const rows = auditDiffRows();
+  const totalDiffs = rows.filter(r=>r.diff!==0).length;
+  return `
+    <div class="panel">
+      <div class="panel-title">Nueva auditoría de inventario</div>
+      <div class="note-box">Cuenta físicamente los productos que quieras revisar en un centro y anota lo que encontraste. No necesitas contar todo el catálogo — puedes hacer auditorías parciales (por categoría, por sospecha de faltante, etc.). Al final decides si ajustas el inventario del sistema a lo contado, o solo dejas el registro para revisarlo después.</div>
+      <div class="form-field"><label>Centro a auditar</label>
+        <select onchange="state.auditCenter=this.value;state.auditCounts={};render()">
+          <option value="">Selecciona...</option>
+          ${state.centers.filter(c=>c.active).map(c=>`<option value="${c.id}" ${state.auditCenter===c.id?'selected':''}>${c.name}</option>`).join('')}
+        </select>
+      </div>
+      ${state.auditCenter ? `
+        <div class="form-field"><label>Buscar producto para contar</label>
+          <input id="audit-search-input" placeholder="Nombre del producto..." value="${state.auditSearch}" oninput="onAuditSearchInput(this.value)">
+        </div>
+        ${candidates.length>0 ? `
+          <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;">
+            ${candidates.map(p=>`
+              <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
+                ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+                <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
+                <input type="number" min="0" placeholder="Conteo" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        ${rows.length>0 ? `
+          <div class="panel-title" style="margin-bottom:10px;">Productos contados (${rows.length}) ${totalDiffs>0?`· <span style="color:var(--rose);">${totalDiffs} con diferencia</span>`:'· sin diferencias'}</div>
+          ${rows.map(r=>`
+            <div class="hbar-row" style="align-items:center;">
+              <div class="hbar-label" style="width:auto;flex:1;">${r.name}</div>
+              <div style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">Sistema: ${r.system} · Contado: ${r.counted}</div>
+              <div class="hbar-val" style="color:${r.diff===0?'var(--green)':'var(--rose)'};font-weight:800;">${r.diff>0?'+':''}${r.diff}</div>
+            </div>
+          `).join('')}
+          <div class="form-field" style="margin-top:12px;"><label>Notas (opcional)</label><input value="${state.auditNotes}" oninput="state.auditNotes=this.value" placeholder="Turno, responsable, motivo de la auditoría..."></div>
+          <div class="modal-actions" style="margin-top:6px;">
+            <button class="btn-cancel" onclick="commitAudit(false)">Guardar solo como registro</button>
+            <button class="btn-primary" onclick="if(confirm('Esto va a cambiar el inventario del sistema para que coincida con lo contado. ¿Continuar?'))commitAudit(true)">Guardar y ajustar inventario</button>
+          </div>
+        ` : `<div class="empty-state">Busca productos arriba y anota su conteo físico.</div>`}
+      ` : ''}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Historial de auditorías</div>
+      ${state.audits.length===0 ? `<div class="empty-state">Aún no se ha hecho ninguna auditoría.</div>` :
+        state.audits.map(a=>{
+          const diffCount = (a.items||[]).filter(it=>it.diff!==0).length;
+          return `
+          <div class="list-row" style="flex-direction:column;align-items:stretch;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div class="row-title">${a.centerName}</div>
+              <span class="status-badge" style="background:${a.applied?'var(--green)':'var(--navy)'};">${a.applied?'Inventario ajustado':'Solo registro'}</span>
+            </div>
+            <div class="row-sub">${new Date(a.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${(a.items||[]).length} productos contados · ${diffCount>0?`${diffCount} con diferencia`:'sin diferencias'}${a.notes?` · ${a.notes}`:''}</div>
+            <div class="order-detail" style="margin-top:8px;">
+              ${(a.items||[]).map(it=>`<div><span>${it.name}</span><span style="color:${it.diff===0?'var(--ink-soft)':'var(--rose)'};">Sistema ${it.systemQty} · Contado ${it.countedQty} (${it.diff>0?'+':''}${it.diff})</span></div>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+    </div>
+  `;
+}
+function onAuditSearchInput(v){
+  state.auditSearch = v;
+  render();
+  const i = document.getElementById('audit-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 
 function renderAsistenteIA(){
