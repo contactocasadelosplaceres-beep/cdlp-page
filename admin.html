@@ -95,6 +95,34 @@
   .order-detail{background:var(--bg);border-radius:10px;padding:12px;margin-top:8px;font-size:12.5px;}
   .order-detail div{display:flex;justify-content:space-between;padding:3px 0;gap:10px;}
   .status-filter{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;}
+
+  /* ===== TABLA DE PEDIDOS ===== */
+  .orders-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:14px;}
+  .orders-table{width:100%;border-collapse:collapse;font-size:13px;min-width:860px;}
+  .orders-table th{text-align:left;padding:12px 14px;background:var(--bg);color:var(--ink-soft);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;border-bottom:1px solid var(--border);}
+  .orders-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top;white-space:nowrap;}
+  .orders-table tr:last-child td{border-bottom:none;}
+  .orders-table tr.archived-row{opacity:.6;}
+  .order-folio{font-weight:800;color:var(--primary-deep);}
+  .order-date-main{font-weight:600;}
+  .order-date-sub{font-size:11px;color:var(--ink-soft);}
+  .order-source-tag{font-size:11px;color:var(--ink-soft);white-space:nowrap;}
+  .order-products-toggle{display:flex;align-items:center;gap:4px;color:var(--primary);font-weight:700;cursor:pointer;background:none;border:none;font-size:13px;padding:0;}
+  .order-products-toggle .chev{transition:transform .15s ease;}
+  .order-products-toggle.open .chev{transform:rotate(180deg);}
+  .order-pay-pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--green);background:#EAF3D8;padding:4px 9px;border-radius:var(--radius-pill);white-space:nowrap;}
+  .order-ship-sub{font-size:11px;color:var(--ink-soft);margin-top:3px;white-space:normal;max-width:180px;}
+  .order-actions-cell{position:relative;text-align:right;}
+  .order-actions-btn{width:30px;height:30px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;}
+  .order-actions-menu{position:absolute;top:36px;right:0;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 28px -10px rgba(43,22,32,0.28);z-index:20;min-width:170px;padding:6px;white-space:nowrap;}
+  .order-actions-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 10px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink);}
+  .order-actions-menu button:hover{background:var(--surface-soft);}
+  .order-actions-menu button.active-status{color:var(--primary-deep);font-weight:800;}
+  .order-actions-menu hr{border:none;border-top:1px solid var(--border);margin:5px 0;}
+  .order-actions-overlay{position:fixed;inset:0;z-index:19;}
+  .products-detail-row td{background:var(--bg);padding:10px 14px;white-space:normal;}
+  .products-detail-row .pd-line{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;}
+  .products-detail-row .pd-extra{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);padding:3px 0;border-top:1px dashed var(--border);margin-top:4px;}
   .status-filter button{flex-shrink:0;padding:7px 13px;border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--ink-soft);font-size:12px;font-weight:700;}
   .status-filter button.active{background:var(--primary);color:#fff;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
@@ -207,7 +235,7 @@ const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-son
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   products:[], orders:[], visits:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
-  adminTab:"resumen", productModal:null, orderDetail:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
+  adminTab:"resumen", productModal:null, orderDetail:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
@@ -896,39 +924,74 @@ function renderPedidos(){
       <button class="${state.orderSourceFilter==='pos'?'active':''}" onclick="state.orderSourceFilter='pos';render()">🧾 Punto de venta</button>
     </div>
     <div class="status-filter">${filters.map(f=>`<button class="${state.orderStatusFilter===f?'active':''}" onclick="state.orderStatusFilter='${f}';render()">${f}</button>`).join('')}</div>
-    ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` :
-      shown.map(o=>{
-        const open = state.orderDetail===o.id;
-        const isPos = o.source==='pos';
-        return `
-        <div class="list-row" style="flex-direction:column;align-items:stretch;">
-          <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="state.orderDetail=state.orderDetail==='${o.id}'?null:'${o.id}';render()">
-            <div class="row-main">
-              <div class="row-title">${formatFolio(o.orderNumber)} ${o.customer||(isPos?'Venta en tienda física':'Cliente')}</div>
-              <div class="row-sub">${isPos?'🧾 Punto de venta':'🛍️ Tienda online'} · ${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${money(o.total)}</div>
-            </div>
-            <span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'}">${o.status||'—'}</span>
-          </div>
-          ${open ? `
-            <div class="order-detail">
-              ${(o.items||[]).map(it=>`<div><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
-              ${isPos ? `
-                <div><span>Atendió</span><span>${o.cashierName||'—'}</span></div>
-                <div><span>Método de pago</span><span>${o.paymentMethod||'—'}</span></div>
-              ` : `
-                <div><span>Teléfono</span><span>${o.phone||'—'}</span></div>
-                <div><span>Dirección</span><span style="text-align:right;">${o.address||'—'}</span></div>
-                ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
-              `}
-            </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-              ${STATUS_FLOW.map(s=>`<button class="icon-btn" style="width:auto;padding:6px 11px;font-size:12px;${o.status===s?`background:${STATUS_COLOR[s]};color:#fff;`:''}" onclick="event.stopPropagation();updateOrderStatus('${o.id}','${s}')">${s}</button>`).join('')}
-              <button class="icon-btn" style="width:auto;padding:6px 11px;font-size:12px;" onclick="event.stopPropagation();toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
-            </div>
-          ` : ''}
-        </div>`;
-      }).join('')}
+    ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` : `
+    <div class="orders-table-wrap">
+      <table class="orders-table">
+        <thead><tr>
+          <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Productos</th><th>Pago</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${shown.map(o=>renderOrderRow(o)).join('')}
+        </tbody>
+      </table>
+    </div>`}
   `;
+}
+function renderOrderRow(o){
+  const isPos = o.source==='pos';
+  const productsOpen = state.orderDetail===o.id;
+  const menuOpen = state.orderActionsMenu===o.id;
+  const itemCount = (o.items||[]).reduce((s,it)=>s+it.qty,0);
+  const shipLabel = isPos ? 'Retirada' : (o.status==='Entregado' ? 'Entregada' : o.status==='Cancelado' ? 'Cancelada' : 'Por enviar');
+  const shipSub = isPos ? 'Retirado en Punto de Venta' : (o.address || '—');
+  const payLabel = isPos ? (o.paymentMethod||'—') : 'Contra entrega';
+  let rows = `
+    <tr class="${o.archived?'archived-row':''}">
+      <td><span class="order-folio">${formatFolio(o.orderNumber)}</span></td>
+      <td>
+        <div class="order-date-main">${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}</div>
+        <div class="order-date-sub">${new Date(o.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
+      </td>
+      <td>
+        <div>${o.customer || (isPos?'Venta en tienda física':'Cliente')}</div>
+        <div class="order-source-tag">${isPos?`🧾 ${o.cashierName||'Punto de venta'}`:'🛍️ Tienda online'}</div>
+      </td>
+      <td><strong>${money(o.total)}</strong></td>
+      <td>
+        <button class="order-products-toggle ${productsOpen?'open':''}" onclick="state.orderDetail=state.orderDetail==='${o.id}'?null:'${o.id}';render()">
+          ${itemCount} unid. <span class="chev">▾</span>
+        </button>
+      </td>
+      <td><span class="order-pay-pill">$ ${payLabel}</span></td>
+      <td>
+        <span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'}">${o.status||'—'}</span>
+        <div class="order-ship-sub">${shipSub}</div>
+      </td>
+      <td class="order-actions-cell">
+        ${menuOpen ? `<div class="order-actions-overlay" onclick="state.orderActionsMenu=null;render()"></div>` : ''}
+        <button class="order-actions-btn" onclick="event.stopPropagation();state.orderActionsMenu=state.orderActionsMenu==='${o.id}'?null:'${o.id}';render()">⋮</button>
+        ${menuOpen ? `
+          <div class="order-actions-menu">
+            ${STATUS_FLOW.map(s=>`<button class="${o.status===s?'active-status':''}" onclick="state.orderActionsMenu=null;updateOrderStatus('${o.id}','${s}')">${o.status===s?'✓ ':''}${s}</button>`).join('')}
+            <hr>
+            <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
+          </div>
+        ` : ''}
+      </td>
+    </tr>`;
+  if(productsOpen){
+    rows += `
+    <tr class="products-detail-row"><td colspan="8">
+      ${(o.items||[]).map(it=>`<div class="pd-line"><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+      ${isPos
+        ? `<div class="pd-extra"><span>Método de pago</span><span>${o.paymentMethod||'—'}</span></div>`
+        : `<div class="pd-extra"><span>Teléfono</span><span>${o.phone||'—'}</span></div>
+           <div class="pd-extra"><span>Dirección</span><span>${o.address||'—'}</span></div>
+           ${o.notes?`<div class="pd-extra"><span>Notas</span><span>${o.notes}</span></div>`:''}`
+      }
+    </td></tr>`;
+  }
+  return rows;
 }
 
 function renderCajeros(){
