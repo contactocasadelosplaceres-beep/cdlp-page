@@ -209,7 +209,7 @@ let state = {
   products:[], orders:[], visits:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   adminTab:"resumen", productModal:null, orderDetail:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
-  cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false,
+  cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
 };
 
@@ -822,13 +822,21 @@ function renderBarChart(data, isMoney){
 }
 
 function renderProductos(){
+  const q = (state.productSearch||'').trim().toLowerCase();
+  const filtered = q
+    ? state.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q))
+    : state.products;
   return `
     <div class="toolbar">
       <button class="btn-add-new" onclick="state.productModal={images:[]};render()">+ Nuevo producto</button>
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
     </div>
-    <div class="panel-title" style="margin-bottom:12px;">Catálogo (${state.products.length})</div>
-    ${state.products.map(p=>`
+    <div class="form-field" style="max-width:420px;">
+      <input id="product-search-input" type="search" placeholder="Buscar por nombre o categoría..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
+    </div>
+    <div class="panel-title" style="margin-bottom:12px;">Catálogo (${filtered.length}${q?` de ${state.products.length}`:''})</div>
+    ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan con "${state.productSearch}".</div>` :
+      filtered.map(p=>`
       <div class="list-row">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)} · stock: ${p.stock} · ${(p.images||[]).length} foto(s)</div></div>
@@ -839,6 +847,12 @@ function renderProductos(){
       </div>
     `).join('')}
   `;
+}
+function onProductSearchInput(v){
+  state.productSearch = v;
+  render();
+  const i = document.getElementById('product-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 
 function renderImportModal(){
