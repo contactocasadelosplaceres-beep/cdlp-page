@@ -48,8 +48,8 @@
   .header-actions{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0;}
   .icon-btn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;flex-shrink:0;}
   .icon-btn:hover{background:rgba(255,255,255,0.12);}
-  .cart-btn{position:relative;background:rgba(255,255,255,0.14);color:#fff;padding:10px 16px;min-height:44px;border-radius:var(--radius-pill);font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:6px;flex-shrink:0;}
-  .cart-count{background:var(--amber);color:#3a2200;font-size:10.5px;font-weight:700;min-width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 4px;}
+  .cart-btn{position:relative;background:rgba(255,255,255,0.14);color:#fff;width:44px;height:44px;border-radius:50%;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .cart-count{position:absolute;top:2px;right:2px;background:var(--amber);color:#3a2200;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 3px;border:2px solid var(--primary-deep);}
   .search-bar{overflow:hidden;max-height:0;transition:max-height .2s ease;}
   .search-bar.open{max-height:60px;}
   .search-bar-inner{padding:0 16px 12px;}
@@ -59,7 +59,7 @@
     .topbar-main{padding:10px 12px;gap:8px;}
     .brand-name{font-size:14px;}
     .brand-sub{display:none;}
-    .cart-btn{padding:9px 12px;font-size:12.5px;}
+    .cart-btn{width:40px;height:40px;}
     .icon-btn{width:40px;height:40px;}
   }
 
@@ -113,7 +113,7 @@
   @media(min-width:400px){.grid{gap:16px;padding:16px 20px 8px;}}
   @media(min-width:720px){.grid{grid-template-columns:repeat(3,1fr);}}
   @media(min-width:980px){.grid{grid-template-columns:repeat(4,1fr);}}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:visible;display:flex;flex-direction:column;transition:transform .15s ease;cursor:pointer;}
+  .card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:visible;display:flex;flex-direction:column;transition:transform .15s ease;cursor:pointer;}
   .card:active{transform:scale(0.98);}
   .card-media{position:relative;}
   .card-image-wrap{position:relative;aspect-ratio:4/5;overflow:hidden;border-radius:var(--radius-card) var(--radius-card) 0 0;background:linear-gradient(135deg,var(--surface-soft),var(--border));}
@@ -126,8 +126,8 @@
   .fab-add{position:absolute;bottom:-18px;right:10px;width:42px;height:42px;border-radius:50%;background:var(--primary);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -6px rgba(110,33,89,0.55);}
   .fab-add:disabled{opacity:.4;}
   .card-body{padding:24px 12px 14px;display:flex;flex-direction:column;gap:4px;flex:1;}
-  .card-cat{font-size:10.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
-  .card-name{font-size:14px;font-weight:700;line-height:1.25;font-family:'League Spartan',sans-serif;}
+  .card-cat{min-width:0;font-size:10.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
+  .card-name{min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:14px;font-weight:700;line-height:1.25;font-family:'League Spartan',sans-serif;}
   .card-desc{font-size:12px;color:var(--ink-soft);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .card-price{font-weight:800;color:var(--primary-deep);font-size:15px;margin-top:2px;}
   .empty-state{padding:50px 20px;text-align:center;color:var(--ink-soft);}
@@ -343,12 +343,12 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:24 };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:24 };
 
 async function loadData(){
   try{
     const [prodSnap, setSnap] = await Promise.all([
-      db.collection('products').get(),
+      db.collection('products').orderBy('name').limit(40).get(),
       db.collection('settings').doc('store').get(),
     ]);
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -366,6 +366,14 @@ async function loadData(){
   const cssTag = document.getElementById('custom-css-injected');
   if(cssTag) cssTag.textContent = state.settings.customCss || '';
   trackVisit();
+  // En segundo plano, sin bloquear la primera pantalla: trae el resto del catálogo
+  // completo para que la búsqueda y los filtros funcionen sobre todos los productos.
+  if(!state.loadError){
+    db.collection('products').orderBy('name').get().then(fullSnap=>{
+      state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()}));
+      render();
+    }).catch(e=>console.error('No se pudo completar el catálogo en segundo plano', e));
+  }
 }
 function trackVisit(){
   try{ db.collection('visits').add({date: new Date().toISOString()}); }catch(e){ /* silencioso */ }
@@ -443,8 +451,55 @@ function handleCheckoutSubmit(){
   const phone = document.getElementById('ck-phone').value.trim();
   const address = document.getElementById('ck-address').value.trim();
   const notes = document.getElementById('ck-notes').value.trim();
+  const remember = document.getElementById('ck-remember').checked;
   if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
+  if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
+  else{ clearCustomerProfile(); }
   submitOrder({name,phone,address,notes});
+}
+
+/* ============== PERFIL DEL CLIENTE (guardado en este celular) ============== */
+const PROFILE_KEY = 'cdlp_customer_profile';
+function loadCustomerProfile(){
+  try{ const raw = localStorage.getItem(PROFILE_KEY); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function saveCustomerProfile(p){
+  try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); }catch(e){ /* almacenamiento no disponible, se ignora */ }
+}
+function clearCustomerProfile(){
+  try{ localStorage.removeItem(PROFILE_KEY); }catch(e){}
+}
+function openProfile(){ state.profileOpen = true; render(); }
+function closeProfile(){ state.profileOpen = false; render(); }
+function handleSaveProfile(){
+  const name = document.getElementById('pf-cli-name').value.trim();
+  const phone = document.getElementById('pf-cli-phone').value.trim();
+  const address = document.getElementById('pf-cli-address').value.trim();
+  if(!name || !phone){ showToast('Ponle al menos tu nombre y teléfono'); return; }
+  saveCustomerProfile({name, phone, address, notes:'', remember:true});
+  showToast('Tus datos quedaron guardados en este celular');
+  closeProfile();
+}
+function handleForgetProfile(){
+  clearCustomerProfile();
+  showToast('Se borraron tus datos guardados');
+  render();
+}
+function renderProfileDrawer(){
+  const p = loadCustomerProfile() || {};
+  return `
+    <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" onclick="closeProfile()">✕</button></div>
+    <div class="drawer-body">
+      <div class="note-box">Guarda tus datos en este celular para que tus próximos pedidos sean más rápidos. No se comparten con nadie más, ni requieren contraseña — solo quedan en este dispositivo.</div>
+      <div class="form-field"><label>Nombre completo</label><input id="pf-cli-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="pf-cli-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-field"><label>Dirección de entrega</label><textarea id="pf-cli-address" placeholder="Calle, número, colonia, referencias">${p.address||''}</textarea></div>
+    </div>
+    <div class="drawer-foot">
+      <button class="btn-primary" onclick="handleSaveProfile()">Guardar mis datos</button>
+      ${p.name ? `<button class="btn-secondary" onclick="handleForgetProfile()">Olvidar mis datos en este celular</button>` : ''}
+    </div>`;
 }
 
 function renderProductDetailDrawer(){
@@ -518,10 +573,16 @@ function renderHeader(){
         ${cats.slice(0,6).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </nav>
       <div class="header-actions">
+        <button class="icon-btn" onclick="openProfile()" aria-label="Mi perfil">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="${loadCustomerProfile()?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+        </button>
         <a class="icon-btn" href="${waLink('Hola, tengo una pregunta.')}" target="_blank" aria-label="WhatsApp">
           <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
         </a>
-        <button class="cart-btn" onclick="state.cartOpen=true;render()">Carrito ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}</button>
+        <button class="cart-btn" onclick="state.cartOpen=true;render()" aria-label="Carrito">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}
+        </button>
       </div>
     </div>
     <div class="search-bar open" id="search-bar-mobile">
@@ -830,14 +891,19 @@ function renderCartDrawer(){
 }
 
 function renderCheckoutDrawer(){
+  const p = loadCustomerProfile() || {};
   return `
     <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">✕</button></div>
     <div class="drawer-body">
       <div class="note-box">Pago contra entrega. Tu pedido llega en empaque neutro, sin ningún logo visible.</div>
-      <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" placeholder="33 1234 5678"></div>
-      <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" placeholder="Calle, número, colonia, referencias"></textarea></div>
-      <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..."></textarea></div>
+      <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" placeholder="Calle, número, colonia, referencias">${p.address||''}</textarea></div>
+      <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra...">${p.notes||''}</textarea></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-top:-4px;">
+        <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''} style="width:16px;height:16px;">
+        Recordar mis datos en este celular para la próxima compra
+      </label>
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
@@ -885,10 +951,11 @@ function renderStore(){
     </div>
     <button class="mobile-cart-bar-btn" onclick="state.cartOpen=true;render()">Ver carrito</button>
   </div>
-  <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;closeProductDetail();"></div>
+  <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId||state.profileOpen?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;state.profileOpen=false;closeProductDetail();"></div>
   <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
   <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
   <div class="drawer drawer-detail ${state.detailProductId?'open':''}">${state.detailProductId ? renderProductDetailDrawer() : ''}</div>
+  <div class="drawer ${state.profileOpen?'open':''}">${state.profileOpen ? renderProfileDrawer() : ''}</div>
   `;
 }
 
