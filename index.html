@@ -343,7 +343,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:24, submittingOrder:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false };
 
 async function loadData(){
   try{
@@ -427,9 +427,9 @@ function detailTouchEnd(e){
   if(Math.abs(delta) < 40) return;
   if(delta < 0) detailNextImage(); else detailPrevImage();
 }
-function goToCatalog(cat){ state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=24; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function filterByNeed(key){ state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=24; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=24; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
+function goToCatalog(cat){ state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function filterByNeed(key){ state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
 
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
@@ -721,6 +721,11 @@ function renderGridSection(){
   } else if(state.activeCat!=="Todos"){
     filtered = filtered.filter(p=>p.cat===state.activeCat);
   }
+  // Los productos agotados se muestran hasta el final, sin alterar el orden entre sí.
+  filtered = filtered
+    .map((p,i)=>({p,i}))
+    .sort((a,b)=> (a.p.stock<=0)-(b.p.stock<=0) || a.i-b.i)
+    .map(x=>x.p);
   const shown = filtered.slice(0, state.gridRenderLimit);
   const hasMore = filtered.length > shown.length;
   return `
@@ -737,7 +742,7 @@ function renderGridSection(){
       : `<div class="empty-state">${emptyMsg}</div>`}
   </div>`;
 }
-const GRID_PAGE_SIZE = 24;
+const GRID_PAGE_SIZE = 20;
 function loadMoreProducts(){ state.gridRenderLimit += GRID_PAGE_SIZE; render(); setupGridInfiniteScroll(); }
 function setupGridInfiniteScroll(){
   const sentinel = document.getElementById('grid-load-more-sentinel');
