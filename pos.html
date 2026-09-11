@@ -112,22 +112,35 @@ const PAY_METHODS = ["Efectivo","Tarjeta","Transferencia"];
 
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
-  loaded:false, products:[], categories:[], cashiers:[],
+  loaded:false, products:[], categories:[], cashiers:[], centers:[], activeCenter:null,
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
   activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo",
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, sending:false,
 };
+function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
 async function loadData(){
   try{
-    const [prodSnap, setSnap, cashiersSnap] = await Promise.all([
+    const [prodSnap, setSnap, cashiersSnap, centersSnap] = await Promise.all([
       db.collection('products').get(),
       db.collection('settings').doc('store').get(),
       db.collection('cashiers').get(),
+      db.collection('distributionCenters').get(),
     ]);
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
+    state.centers = centersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
+    if(state.centers.length===0){
+      const ref = await db.collection('distributionCenters').add({name:'Principal', isDefault:true, active:true, createdAt:new Date().toISOString()});
+      state.centers = [{id:ref.id, name:'Principal', isDefault:true, active:true}];
+    }
+    // Si este dispositivo ya tenía un centro elegido y sigue activo, se retoma solo.
+    const savedCenterId = localStorage.getItem('cdlp_pos_center');
+    if(savedCenterId){
+      const match = state.centers.find(c=>c.id===savedCenterId);
+      if(match) state.activeCenter = match;
+    }
   }catch(e){ console.error(e); showToast('No se pudo cargar la información'); }
   state.loaded = true; render();
 }
@@ -161,12 +174,20 @@ function confirmCashierPin(){
   else{ state.pinError='PIN incorrecto'; state.pinInput=''; render(); }
 }
 function changeCashier(){ state.activeCashier=null; state.pinConfirmed=false; state.cart={}; render(); }
+function selectCenter(id){
+  const c = state.centers.find(x=>x.id===id); if(!c) return;
+  state.activeCenter = c; state.cart={};
+  try{ localStorage.setItem('cdlp_pos_center', c.id); }catch(e){}
+  render();
+}
+function changeCenter(){ state.activeCenter=null; state.cart={}; render(); }
 
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
 function cartTotal(){ return Object.entries(state.cart).reduce((s,[id,qty])=>{const p=state.products.find(x=>x.id===id);return s+(p?p.price*qty:0);},0); }
 function addToCart(id){
   const p = state.products.find(x=>x.id===id);
-  if(!p || p.stock<=(state.cart[id]||0)){ showToast('Sin existencias suficientes'); return; }
+  const available = centerStock(p, state.activeCenter.id);
+  if(!p || available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
   state.cart[id]=(state.cart[id]||0)+1; render();
 }
 function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
@@ -174,19 +195,22 @@ function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta;
 async function chargeSale(){
   if(cartCount()===0) return;
   state.sending = true; render();
+  const centerId = state.activeCenter.id;
   const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
   const total = items.reduce((s,it)=>s+it.price*it.qty,0);
   try{
     const orderNumber = await getNextOrderNumber();
     await Promise.all(items.map(it=>{
       const p = state.products.find(x=>x.id===it.id);
-      const newStock = Math.max(0, p.stock - it.qty);
-      p.stock = newStock;
-      return db.collection('products').doc(it.id).update({stock: newStock});
+      if(!p.stockByCenter) p.stockByCenter = {};
+      p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) - it.qty);
+      p.stock = Math.max(0, (p.stock||0) - it.qty);
+      return db.collection('products').doc(it.id).update({stockByCenter: p.stockByCenter, stock: p.stock});
     }));
     await db.collection('sales').add({
       date: new Date().toISOString(), orderNumber, source:"pos",
       cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
+      centerId, centerName: state.activeCenter.name,
       items, total, paymentMethod: state.payMethod,
     });
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.cart = {}; state.saleDone = true;
@@ -236,6 +260,23 @@ function renderPinScreen(){
   </div></div>`;
 }
 
+function renderCenterSelect(){
+  if(state.centers.length===0){
+    return `<div class="select-screen"><div class="card">
+      <h2>Sin centros configurados</h2>
+      <p>Ve al panel de administración → pestaña Centros, y crea al menos uno.</p>
+      <button class="btn-primary" onclick="handleLogout()">Cerrar sesión</button>
+    </div></div>`;
+  }
+  return `<div class="select-screen"><div class="card">
+    <h2>¿Desde qué centro vas a trabajar?</h2>
+    <p>El inventario y las ventas se descuentan de este centro. Este celular/terminal recordará tu elección.</p>
+    <div class="cashier-list">
+      ${state.centers.map(c=>`<button class="cashier-item" onclick="selectCenter('${c.id}')">${c.name}${c.isDefault?' (Principal)':''}</button>`).join('')}
+    </div>
+  </div></div>`;
+}
+
 function renderPOS(){
   const cats = ["Todos", ...state.categories];
   let filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>p.cat===state.activeCat);
@@ -244,8 +285,9 @@ function renderPOS(){
   return `
   <div class="app">
     <div class="top">
-      <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta</div></div>
+      <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · 📍 ${state.activeCenter.name}</div></div>
       <div style="display:flex;gap:8px;">
+        <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
         <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
       </div>
@@ -261,7 +303,7 @@ function renderPOS(){
             ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="prod-name">${p.name}</div>
             <div class="prod-price">${money(p.price)}</div>
-            <div class="prod-stock">Stock: ${p.stock}</div>
+            <div class="prod-stock">Stock en ${state.activeCenter.name}: ${centerStock(p, state.activeCenter.id)}</div>
           </div>
         `).join('')}
       </div>
@@ -305,6 +347,7 @@ function render(){
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando…</div>`; return; }
   if(!state.activeCashier){ root.innerHTML = renderCashierSelect(); }
   else if(!state.pinConfirmed){ root.innerHTML = renderPinScreen(); }
+  else if(!state.activeCenter){ root.innerHTML = renderCenterSelect(); }
   else{ root.innerHTML = state.saleDone ? renderReceipt() : renderPOS(); }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
 }

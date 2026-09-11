@@ -239,6 +239,8 @@ let state = {
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
+  centers:[], transfers:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
+  transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -258,13 +260,15 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
       db.collection('visits').orderBy('date','desc').limit(3000).get(),
       db.collection('cashiers').get(),
       db.collection('settings').doc('ai').get(),
+      db.collection('distributionCenters').get(),
+      db.collection('transfers').orderBy('date','desc').limit(200).get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -285,9 +289,32 @@ async function loadData(){
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
+
+    // Centros de distribución: si no existe ninguno, se crea "Principal" automáticamente.
+    state.centers = centersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    if(state.centers.length===0){
+      const ref = await db.collection('distributionCenters').add({name:'Principal', isDefault:true, active:true, createdAt:new Date().toISOString()});
+      state.centers = [{id:ref.id, name:'Principal', isDefault:true, active:true}];
+    }
+    state.transfers = transfersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+
+    // Migración automática: cualquier producto que todavía no tenga inventario
+    // repartido por centro, se le asigna TODO su stock actual al centro Principal.
+    const principal = state.centers.find(c=>c.isDefault) || state.centers[0];
+    const migrationBatch = db.batch();
+    let needsMigration = false;
+    state.products.forEach(p=>{
+      if(!p.stockByCenter){
+        p.stockByCenter = { [principal.id]: p.stock||0 };
+        migrationBatch.update(db.collection('products').doc(p.id), {stockByCenter: p.stockByCenter});
+        needsMigration = true;
+      }
+    });
+    if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
     state.products = []; state.orders = []; state.visits = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
+    state.centers = []; state.transfers = [];
     showToast('No se pudo cargar todo desde el servidor');
   }
   state.loaded = true; render();
@@ -326,7 +353,7 @@ function handleLogout(){ auth.signOut(); state.loaded=false; }
 /* ============== PRODUCTOS ============== */
 async function saveProduct(p){
   if(!state.settings.categories.includes(p.cat)){ state.settings.categories.push(p.cat); await saveSettings(); }
-  const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[]};
+  const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[], stockByCenter:p.stockByCenter||{}};
   try{
     if(p.id){
       await db.collection('products').doc(p.id).set(payload);
@@ -708,7 +735,7 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','diseño','asistente ia','configuración'].map(t=>`
+      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','centros','diseño','asistente ia','configuración'].map(t=>`
         <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
@@ -719,6 +746,7 @@ function renderAdmin(){
       ${state.adminTab==='productos' ? renderProductos() : ''}
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
+      ${state.adminTab==='centros' ? renderCentros() : ''}
       ${state.adminTab==='diseño' ? renderDiseno() : ''}
       ${state.adminTab==='asistente ia' ? renderAsistenteIA() : ''}
       ${state.adminTab==='configuración' ? renderConfig() : ''}
@@ -1027,6 +1055,226 @@ function renderCashierModal(){
       </div>
     </div>
   </div>`;
+}
+
+/* ============== CENTROS DE DISTRIBUCIÓN ============== */
+function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
+function totalStock(p){ return p.stockByCenter ? Object.values(p.stockByCenter).reduce((s,n)=>s+(n||0),0) : (p.stock||0); }
+
+async function saveCenterDoc(c){
+  if(c.id){ await db.collection('distributionCenters').doc(c.id).set({name:c.name, isDefault:!!c.isDefault, active:c.active}); }
+  else{ const ref = await db.collection('distributionCenters').add({name:c.name, isDefault:false, active:true, createdAt:new Date().toISOString()}); c.id = ref.id; }
+}
+async function addCenter(){
+  const name = state.newCenterInput.trim();
+  if(!name){ showToast('Ponle un nombre al centro'); return; }
+  const c = {name, isDefault:false, active:true};
+  await saveCenterDoc(c);
+  state.centers.push(c);
+  state.newCenterInput='';
+  showToast('Centro agregado'); render();
+}
+async function toggleCenterActive(id){
+  const c = state.centers.find(x=>x.id===id); if(!c) return;
+  c.active = !c.active; await saveCenterDoc(c); render();
+}
+function openCenterModal(id){ const c = state.centers.find(x=>x.id===id); state.centerModal = {...c}; render(); }
+async function saveCenterModal(){
+  const name = document.getElementById('center-name-input').value.trim();
+  if(!name){ showToast('Ponle un nombre al centro'); return; }
+  const c = state.centers.find(x=>x.id===state.centerModal.id);
+  c.name = name;
+  await saveCenterDoc(c);
+  state.centerModal = null; showToast('Centro actualizado'); render();
+}
+
+async function commitTransfer(){
+  const items = Object.entries(state.transferCart).filter(([id,qty])=>qty>0);
+  if(!state.transferFrom || !state.transferTo){ showToast('Elige centro de origen y destino'); return; }
+  if(state.transferFrom === state.transferTo){ showToast('El origen y destino deben ser distintos'); return; }
+  if(items.length===0){ showToast('Agrega al menos un producto a transferir'); return; }
+
+  const fromCenter = state.centers.find(c=>c.id===state.transferFrom);
+  const toCenter = state.centers.find(c=>c.id===state.transferTo);
+  const batch = db.batch();
+  const transferItems = [];
+  for(const [pid, qty] of items){
+    const p = state.products.find(x=>x.id===pid);
+    if(!p) continue;
+    const available = centerStock(p, state.transferFrom);
+    if(qty > available){ showToast(`No hay suficiente stock de "${p.name}" en ${fromCenter.name} (disponible: ${available})`); return; }
+  }
+  items.forEach(([pid, qty])=>{
+    const p = state.products.find(x=>x.id===pid);
+    if(!p) return;
+    if(!p.stockByCenter) p.stockByCenter = {};
+    p.stockByCenter[state.transferFrom] = (p.stockByCenter[state.transferFrom]||0) - qty;
+    p.stockByCenter[state.transferTo] = (p.stockByCenter[state.transferTo]||0) + qty;
+    batch.update(db.collection('products').doc(pid), {stockByCenter: p.stockByCenter});
+    transferItems.push({productId:pid, name:p.name, qty});
+  });
+  const transferDoc = {
+    date: new Date().toISOString(), fromCenterId: state.transferFrom, fromCenterName: fromCenter.name,
+    toCenterId: state.transferTo, toCenterName: toCenter.name, items: transferItems, notes: state.transferNotes.trim(),
+  };
+  try{
+    const ref = db.collection('transfers').doc();
+    batch.set(ref, transferDoc);
+    await batch.commit();
+    state.transfers.unshift({id:ref.id, ...transferDoc});
+    state.transferCart = {}; state.transferNotes=''; state.transferProductSearch='';
+    showToast('Transferencia realizada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo completar la transferencia'); }
+}
+function setTransferQty(pid, qty){
+  qty = Math.max(0, Number(qty)||0);
+  if(qty===0) delete state.transferCart[pid]; else state.transferCart[pid] = qty;
+  render();
+}
+
+function renderCentros(){
+  const sub = state.centersSubview || 'centros';
+  return `
+    <div class="admin-tabs" style="padding:0 0 14px;border-bottom:none;">
+      <button class="admin-tab ${sub==='centros'?'active':''}" onclick="state.centersSubview='centros';render()">Centros</button>
+      <button class="admin-tab ${sub==='transferencias'?'active':''}" onclick="state.centersSubview='transferencias';render()">Transferencias</button>
+      <button class="admin-tab ${sub==='inventario'?'active':''}" onclick="state.centersSubview='inventario';render()">Inventario por centro</button>
+    </div>
+    ${sub==='centros' ? renderCentrosList() : ''}
+    ${sub==='transferencias' ? renderTransferencias() : ''}
+    ${sub==='inventario' ? renderInventarioPorCentro() : ''}
+    ${state.centerModal ? renderCenterModal() : ''}
+  `;
+}
+function renderCentrosList(){
+  return `
+    <div class="note-box">El centro marcado como <strong>Principal</strong> es donde vive todo tu inventario actual. Agrega más centros (sucursales, bodegas) cuando los necesites — el inventario nuevo empieza en 0 en cada uno hasta que hagas una transferencia.</div>
+    ${state.centers.map(c=>`
+      <div class="list-row">
+        <div class="row-main">
+          <div class="row-title">${c.name} ${c.isDefault?'<span class="status-badge" style="background:var(--navy);">Principal</span>':''}</div>
+          <div class="row-sub">${c.active?'Activo':'Inactivo'} · ${state.products.filter(p=>centerStock(p,c.id)>0).length} productos con stock aquí</div>
+        </div>
+        <div class="row-actions">
+          <button class="icon-btn" onclick="openCenterModal('${c.id}')">✎</button>
+          ${!c.isDefault ? `<button class="icon-btn" onclick="toggleCenterActive('${c.id}')">${c.active?'⏸':'▶'}</button>` : ''}
+        </div>
+      </div>
+    `).join('')}
+    <div class="two-col" style="margin-top:14px;">
+      <input placeholder="Nombre del nuevo centro (ej. Sucursal Guadalajara)" value="${state.newCenterInput}" oninput="state.newCenterInput=this.value">
+      <button class="btn-outline" onclick="addCenter()">+ Agregar centro</button>
+    </div>
+  `;
+}
+function renderCenterModal(){
+  const c = state.centerModal;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.centerModal=null;render();}">
+    <div class="modal">
+      <h3>Editar centro</h3>
+      <div class="form-field"><label>Nombre</label><input id="center-name-input" value="${c.name||''}"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.centerModal=null;render()">Cancelar</button>
+        <button class="btn-primary" onclick="saveCenterModal()">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTransferencias(){
+  const activeCenters = state.centers.filter(c=>c.active);
+  const q = (state.transferProductSearch||'').trim().toLowerCase();
+  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,12) : [];
+  const cartItems = Object.entries(state.transferCart);
+  return `
+    <div class="panel">
+      <div class="panel-title">Nueva transferencia</div>
+      <div class="two-col">
+        <div class="form-field"><label>Desde</label>
+          <select onchange="state.transferFrom=this.value;render()">
+            <option value="">Selecciona...</option>
+            ${activeCenters.map(c=>`<option value="${c.id}" ${state.transferFrom===c.id?'selected':''}>${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field"><label>Hacia</label>
+          <select onchange="state.transferTo=this.value;render()">
+            <option value="">Selecciona...</option>
+            ${activeCenters.map(c=>`<option value="${c.id}" ${state.transferTo===c.id?'selected':''}>${c.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-field"><label>Buscar producto para agregar</label>
+        <input placeholder="Nombre del producto..." value="${state.transferProductSearch}" oninput="state.transferProductSearch=this.value;render()">
+      </div>
+      ${candidates.length>0 ? `
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;">
+          ${candidates.map(p=>`
+            <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
+              ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${state.transferFrom?`Disponible en origen: ${centerStock(p,state.transferFrom)}`:'Elige el centro de origen primero'}</div></div>
+              <button class="icon-btn" onclick="setTransferQty('${p.id}', (state.transferCart['${p.id}']||0)+1)">+</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+      ${cartItems.length>0 ? `
+        <div class="panel-title" style="margin-bottom:10px;">Productos a transferir</div>
+        ${cartItems.map(([pid,qty])=>{
+          const p = state.products.find(x=>x.id===pid); if(!p) return '';
+          return `<div class="list-row">
+            <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Disponible en origen: ${state.transferFrom?centerStock(p,state.transferFrom):'—'}</div></div>
+            <input type="number" min="0" value="${qty}" style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setTransferQty('${pid}', this.value)">
+          </div>`;
+        }).join('')}
+      ` : `<div class="empty-state">Busca productos arriba y agrégalos con el botón +.</div>`}
+      <div class="form-field" style="margin-top:12px;"><label>Notas (opcional)</label><input value="${state.transferNotes}" oninput="state.transferNotes=this.value" placeholder="Motivo, referencia, etc."></div>
+      <button class="btn-primary" onclick="commitTransfer()">Confirmar transferencia</button>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Historial de transferencias</div>
+      ${state.transfers.length===0 ? `<div class="empty-state">Aún no se ha hecho ninguna transferencia.</div>` :
+        state.transfers.map(t=>`
+          <div class="list-row" style="flex-direction:column;align-items:stretch;">
+            <div class="row-title">${t.fromCenterName} → ${t.toCenterName}</div>
+            <div class="row-sub">${new Date(t.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${(t.items||[]).reduce((s,it)=>s+it.qty,0)} unidades${t.notes?` · ${t.notes}`:''}</div>
+            <div class="order-detail" style="margin-top:8px;">
+              ${(t.items||[]).map(it=>`<div><span>${it.name}</span><span>${it.qty} u.</span></div>`).join('')}
+            </div>
+          </div>
+        `).join('')}
+    </div>
+  `;
+}
+
+function renderInventarioPorCentro(){
+  const q = (state.productSearch||'').trim().toLowerCase();
+  const filtered = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)) : state.products;
+  const activeCenters = state.centers.filter(c=>c.active);
+  return `
+    <div class="form-field" style="max-width:420px;">
+      <input placeholder="Buscar producto..." value="${state.productSearch}" oninput="state.productSearch=this.value;render()">
+    </div>
+    <div class="orders-table-wrap">
+      <table class="orders-table">
+        <thead><tr>
+          <th>Producto</th>
+          ${activeCenters.map(c=>`<th>${c.name}</th>`).join('')}
+          <th>Total</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.slice(0,150).map(p=>`
+            <tr>
+              <td>${p.name}</td>
+              ${activeCenters.map(c=>`<td>${centerStock(p,c.id)}</td>`).join('')}
+              <td><strong>${totalStock(p)}</strong></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${filtered.length>150 ? `<div class="note-box" style="margin-top:10px;">Mostrando los primeros 150 resultados. Usa el buscador para encontrar un producto específico.</div>` : ''}
+  `;
 }
 
 function renderAsistenteIA(){
@@ -1390,7 +1638,17 @@ function renderProductModal(){
         <div class="form-field"><label>Categoría</label><select id="pf-cat">${state.settings.categories.map(c=>`<option ${p.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div class="form-field"><label>Precio (MXN)</label><input id="pf-price" type="number" value="${p.price||''}"></div>
       </div>
-      <div class="form-field"><label>Existencias</label><input id="pf-stock" type="number" value="${p.stock??''}"></div>
+      <div class="form-field"><label>Existencias por centro de distribución</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${state.centers.filter(c=>c.active).map(c=>`
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="flex:1;font-size:13px;font-weight:600;">${c.name}${c.isDefault?' <span style="color:var(--ink-soft);font-weight:400;">(Principal)</span>':''}</div>
+              <input type="number" min="0" style="width:90px;padding:9px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${(p.stockByCenter&&p.stockByCenter[c.id])||0}" onchange="setProductCenterStock('${c.id}', this.value)">
+            </div>
+          `).join('')}
+        </div>
+        <div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Total: <strong id="pf-stock-total">${Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0)}</strong> unidades (se suma automáticamente)</div>
+      </div>
       <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc">${p.desc||''}</textarea></div>
       <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -1413,14 +1671,21 @@ function toggleProductNeed(key, checked){
   if(checked){ if(!state.productModal.needs.includes(key)) state.productModal.needs.push(key); }
   else{ state.productModal.needs = state.productModal.needs.filter(k=>k!==key); }
 }
+function setProductCenterStock(centerId, value){
+  if(!state.productModal.stockByCenter) state.productModal.stockByCenter = {};
+  state.productModal.stockByCenter[centerId] = Math.max(0, Number(value)||0);
+  const totalEl = document.getElementById('pf-stock-total');
+  if(totalEl) totalEl.textContent = Object.values(state.productModal.stockByCenter).reduce((s,n)=>s+(n||0),0);
+}
 function handleSaveProduct(existingId){
   const name = document.getElementById('pf-name').value.trim();
   const cat = document.getElementById('pf-cat').value;
   const price = Number(document.getElementById('pf-price').value)||0;
-  const stock = Number(document.getElementById('pf-stock').value)||0;
   const desc = document.getElementById('pf-desc').value.trim();
   if(!name){ showToast('Ponle un nombre al producto'); return; }
-  saveProduct({id: existingId||null, name, cat, price, stock, desc, images: state.productModal.images||[], needs: state.productModal.needs||[]});
+  const stockByCenter = state.productModal.stockByCenter || {};
+  const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
+  saveProduct({id: existingId||null, name, cat, price, stock, stockByCenter, desc, images: state.productModal.images||[], needs: state.productModal.needs||[]});
 }
 
 function renderCropModal(){
