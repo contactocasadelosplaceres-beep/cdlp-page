@@ -940,7 +940,7 @@ function renderProductos(){
 function onProductSearchInput(v){
   state.productSearch = v;
   render();
-  const i = document.getElementById('product-search-input');
+  const i = document.getElementById('product-search-input') || document.getElementById('inventario-search-input');
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 
@@ -1161,6 +1161,12 @@ async function commitTransfer(){
     showToast('Transferencia realizada'); render();
   }catch(e){ console.error(e); showToast('No se pudo completar la transferencia'); }
 }
+function onTransferSearchInput(v){
+  state.transferProductSearch = v;
+  render();
+  const i = document.getElementById('transfer-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
 function setTransferQty(pid, qty){
   qty = Math.max(0, Number(qty)||0);
   if(qty===0) delete state.transferCart[pid]; else state.transferCart[pid] = qty;
@@ -1240,7 +1246,7 @@ function renderTransferencias(){
         </div>
       </div>
       <div class="form-field"><label>Buscar producto para agregar</label>
-        <input placeholder="Nombre del producto..." value="${state.transferProductSearch}" oninput="state.transferProductSearch=this.value;render()">
+        <input id="transfer-search-input" placeholder="Nombre del producto..." value="${state.transferProductSearch}" oninput="onTransferSearchInput(this.value)">
       </div>
       ${candidates.length>0 ? `
         <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;">
@@ -1288,7 +1294,7 @@ function renderInventarioPorCentro(){
   const activeCenters = state.centers.filter(c=>c.active);
   return `
     <div class="form-field" style="max-width:420px;">
-      <input placeholder="Buscar producto..." value="${state.productSearch}" oninput="state.productSearch=this.value;render()">
+      <input id="inventario-search-input" placeholder="Buscar producto..." value="${state.productSearch}" oninput="onProductSearchInput(this.value)">
     </div>
     <div class="orders-table-wrap">
       <table class="orders-table">
