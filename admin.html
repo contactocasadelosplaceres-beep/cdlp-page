@@ -232,6 +232,7 @@ const DEFAULT_SETTINGS = {
   socialInstagram:"", socialFacebook:"", contactEmail:"",
   customCss:"",
   storeAddress:"", deliveryWhatsapp:"523413292207",
+  wholesaleTiers:[],
 };
 const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-sonnet-5", systemPrompt:"Eres un asistente que ayuda a la tienda a redactar respuestas para clientes y a analizar su catálogo." };
 
@@ -243,6 +244,7 @@ let state = {
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
+  wholesaleModal:null, wholesaleProductSearch:"",
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
@@ -282,7 +284,7 @@ async function loadData(){
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
     if(!state.settings.testimonials) state.settings.testimonials = [];
-    // Pedidos de la tienda (index.html) y ventas del Punto de Venta (pos.html) se
+    if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
     // unen en una sola lista, ordenada por fecha, para verlos juntos en "Pedidos".
     const tiendaOrders = ordersSnap.docs.map(d=>({id:d.id, source:'tienda', archived:false, ...d.data()}));
     const posOrders = salesSnap.docs.map(d=>({
@@ -869,7 +871,7 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','centros','diseño','asistente ia','configuración'].map(t=>`
+      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','centros','mayoreo','diseño','asistente ia','configuración'].map(t=>`
         <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
@@ -881,6 +883,7 @@ function renderAdmin(){
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
       ${state.adminTab==='centros' ? renderCentros() : ''}
+      ${state.adminTab==='mayoreo' ? renderMayoreo() : ''}
       ${state.adminTab==='diseño' ? renderDiseno() : ''}
       ${state.adminTab==='asistente ia' ? renderAsistenteIA() : ''}
       ${state.adminTab==='configuración' ? renderConfig() : ''}
@@ -1277,6 +1280,150 @@ function setTransferQty(pid, qty){
   qty = Math.max(0, Number(qty)||0);
   if(qty===0) delete state.transferCart[pid]; else state.transferCart[pid] = qty;
   render();
+}
+
+/* ============== MAYOREO (tablas de precios por volumen) ============== */
+function genWholesaleCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+function openWholesaleModal(id){
+  const t = id ? {...state.settings.wholesaleTiers.find(x=>x.id===id)} : {
+    id: uid('wt_'), name:'', discountPercent:10, scope:'all', categories:[], productIds:[],
+    minType:'amount', minValue:0, code: genWholesaleCode(), active:true,
+  };
+  state.wholesaleModal = t; state.wholesaleProductSearch=''; render();
+}
+function closeWholesaleModal(){ state.wholesaleModal=null; render(); }
+function toggleWholesaleCategory(cat, checked){
+  const t = state.wholesaleModal;
+  if(checked){ if(!t.categories.includes(cat)) t.categories.push(cat); }
+  else{ t.categories = t.categories.filter(c=>c!==cat); }
+}
+function toggleWholesaleProduct(pid, checked){
+  const t = state.wholesaleModal;
+  if(checked){ if(!t.productIds.includes(pid)) t.productIds.push(pid); }
+  else{ t.productIds = t.productIds.filter(id=>id!==pid); }
+}
+async function saveWholesaleTier(){
+  const t = state.wholesaleModal;
+  const name = document.getElementById('wt-name').value.trim();
+  const discountPercent = Number(document.getElementById('wt-discount').value)||0;
+  const scope = document.getElementById('wt-scope').value;
+  const minType = document.getElementById('wt-mintype').value;
+  const minValue = Number(document.getElementById('wt-minvalue').value)||0;
+  const code = document.getElementById('wt-code').value.trim().toUpperCase();
+  if(!name){ showToast('Ponle un nombre a la tabla de precios'); return; }
+  if(!code){ showToast('Necesita un código de acceso'); return; }
+  const others = state.settings.wholesaleTiers.filter(x=>x.id!==t.id);
+  if(others.some(x=>x.code===code)){ showToast('Ese código ya lo usa otra tabla, elige otro'); return; }
+  const updated = {...t, name, discountPercent, scope, minType, minValue, code};
+  const idx = state.settings.wholesaleTiers.findIndex(x=>x.id===t.id);
+  if(idx>=0) state.settings.wholesaleTiers[idx] = updated;
+  else state.settings.wholesaleTiers.push(updated);
+  await saveSettings();
+  state.wholesaleModal=null; showToast('Tabla de precios guardada'); render();
+}
+async function deleteWholesaleTier(id){
+  if(!confirm('¿Eliminar esta tabla de precios de mayoreo?')) return;
+  state.settings.wholesaleTiers = state.settings.wholesaleTiers.filter(x=>x.id!==id);
+  await saveSettings(); showToast('Eliminada'); render();
+}
+async function toggleWholesaleActive(id){
+  const t = state.settings.wholesaleTiers.find(x=>x.id===id); if(!t) return;
+  t.active = !t.active; await saveSettings(); render();
+}
+function wholesaleLink(code){
+  return `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html?mayoreo=${code}`;
+}
+function copyWholesaleLink(code){
+  navigator.clipboard.writeText(wholesaleLink(code)).then(()=>showToast('Enlace copiado')).catch(()=>showToast('No se pudo copiar, cópialo manualmente'));
+}
+function renderMayoreo(){
+  const tiers = state.settings.wholesaleTiers||[];
+  return `
+    <div class="note-box">Crea tablas de precios de mayoreo: elige a qué aplica el descuento (toda la tienda, categorías o productos específicos) y qué compra mínima se necesita (por monto o por cantidad de piezas). Comparte el enlace o código con tus clientes mayoristas — al abrirlo una vez, su celular recuerda el descuento en sus próximas visitas.</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="openWholesaleModal(null)">+ Nueva tabla de precios</button>
+    ${tiers.length===0 ? `<div class="empty-state">Aún no has creado ninguna tabla de mayoreo.</div>` :
+      tiers.map(t=>`
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="row-title">${t.name} <span class="status-badge" style="background:${t.active?'var(--green)':'#8a6b78'};">${t.active?'Activa':'Inactiva'}</span></div>
+            <div class="row-actions">
+              <button class="icon-btn" onclick="toggleWholesaleActive('${t.id}')">${t.active?'⏸':'▶'}</button>
+              <button class="icon-btn" onclick="openWholesaleModal('${t.id}')">✎</button>
+              <button class="icon-btn danger" onclick="deleteWholesaleTier('${t.id}')">🗑</button>
+            </div>
+          </div>
+          <div class="row-sub">${t.discountPercent}% de descuento · ${t.scope==='all'?'Toda la tienda':t.scope==='categories'?`Categorías: ${(t.categories||[]).join(', ')||'—'}`:`${(t.productIds||[]).length} producto(s) seleccionado(s)`} · Mínimo: ${t.minType==='amount'?money(t.minValue):`${t.minValue} pieza(s)`}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <input readonly value="${wholesaleLink(t.code)}" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:11.5px;color:var(--ink-soft);">
+            <button class="btn-outline" style="padding:8px 12px;white-space:nowrap;" onclick="copyWholesaleLink('${t.code}')">Copiar enlace</button>
+          </div>
+          <div class="row-sub" style="margin-top:4px;">Código: <strong>${t.code}</strong></div>
+        </div>
+      `).join('')}
+    ${state.wholesaleModal ? renderWholesaleModal() : ''}
+  `;
+}
+function renderWholesaleModal(){
+  const t = state.wholesaleModal;
+  const q = (state.wholesaleProductSearch||'').trim().toLowerCase();
+  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){closeWholesaleModal();}">
+    <div class="modal" style="max-width:520px;">
+      <h3>${t.name?'Editar':'Nueva'} tabla de precios de mayoreo</h3>
+      <div class="form-field"><label>Nombre</label><input id="wt-name" value="${t.name||''}" placeholder="Ej. Mayoristas chicos"></div>
+      <div class="two-col">
+        <div class="form-field"><label>Descuento (%)</label><input id="wt-discount" type="number" value="${t.discountPercent}"></div>
+        <div class="form-field"><label>Código de acceso</label><input id="wt-code" value="${t.code}" style="text-transform:uppercase;"></div>
+      </div>
+      <div class="form-field"><label>¿A qué aplica el descuento?</label>
+        <select id="wt-scope" onchange="state.wholesaleModal.scope=this.value;render()">
+          <option value="all" ${t.scope==='all'?'selected':''}>Toda la tienda</option>
+          <option value="categories" ${t.scope==='categories'?'selected':''}>Categorías específicas</option>
+          <option value="products" ${t.scope==='products'?'selected':''}>Productos específicos</option>
+        </select>
+      </div>
+      ${t.scope==='categories' ? `
+        <div class="form-field"><label>Categorías incluidas</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;">
+            ${state.settings.categories.map(c=>`
+              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+                <input type="checkbox" value="${c}" ${(t.categories||[]).includes(c)?'checked':''} onchange="toggleWholesaleCategory('${c.replace(/'/g,"\\'")}',this.checked)">
+                ${c}
+              </label>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${t.scope==='products' ? `
+        <div class="form-field"><label>Buscar productos para incluir</label>
+          <input placeholder="Nombre del producto..." value="${state.wholesaleProductSearch}" oninput="state.wholesaleProductSearch=this.value;render()">
+        </div>
+        ${candidates.length>0 ? `
+          <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+            ${candidates.map(p=>`
+              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
+                <input type="checkbox" ${(t.productIds||[]).includes(p.id)?'checked':''} onchange="toggleWholesaleProduct('${p.id}',this.checked)">
+                <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div></div>
+              </label>`).join('')}
+          </div>
+        ` : ''}
+        <div class="panel-sub">${(t.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
+      ` : ''}
+      <div class="two-col" style="margin-top:10px;">
+        <div class="form-field"><label>Compra mínima por</label>
+          <select id="wt-mintype">
+            <option value="amount" ${t.minType==='amount'?'selected':''}>Monto ($)</option>
+            <option value="qty" ${t.minType==='qty'?'selected':''}>Cantidad de piezas</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Valor mínimo</label><input id="wt-minvalue" type="number" value="${t.minValue}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeWholesaleModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveWholesaleTier()">Guardar</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderCentros(){
