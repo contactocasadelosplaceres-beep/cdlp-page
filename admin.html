@@ -486,7 +486,7 @@ async function saveProduct(p){
   state.productModal=null; showToast('Producto guardado'); render();
 }
 async function regenerateAllSKUs(){
-  showToast('Generando SKU nuevos, un momento...');
+  showToast('Generando SKU nuevos para todos, un momento...');
   const usedSkus = new Set();
   const batch = db.batch();
   state.products.forEach(p=>{
@@ -499,6 +499,24 @@ async function regenerateAllSKUs(){
   try{
     await batch.commit();
     showToast(`${state.products.length} SKU regenerados`); render();
+  }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
+}
+async function generateMissingSKUs(){
+  const missing = state.products.filter(p=>!p.sku);
+  if(missing.length===0){ showToast('Todos tus productos ya tienen SKU'); return; }
+  showToast(`Generando SKU para ${missing.length} producto(s)...`);
+  const usedSkus = new Set(state.products.filter(p=>p.sku).map(p=>p.sku));
+  const batch = db.batch();
+  missing.forEach(p=>{
+    let sku;
+    do{ sku = generateSKU(p); }while(usedSkus.has(sku));
+    usedSkus.add(sku);
+    p.sku = sku;
+    batch.update(db.collection('products').doc(p.id), {sku});
+  });
+  try{
+    await batch.commit();
+    showToast(`${missing.length} SKU generados`); render();
   }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
 }
 async function deleteProduct(id){
@@ -1022,9 +1040,10 @@ function renderProductos(){
     : state.products;
   return `
     <div class="toolbar">
-      <button class="btn-add-new" onclick="state.productModal={images:[]};render()">+ Nuevo producto</button>
+      <button class="btn-add-new" onclick="state.productModal={images:[], sku:generateSKU({})};render()">+ Nuevo producto</button>
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
-      <button class="btn-outline" onclick="if(confirm('Esto reemplaza el SKU de TODOS tus productos por uno nuevo, incluso si ya tenían uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
+      <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
+      <button class="btn-outline" onclick="if(confirm('Esto borra y reemplaza el SKU de TODOS tus productos, incluso los que ya tienen uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
     </div>
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
