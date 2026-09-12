@@ -344,8 +344,9 @@ async function saveOrderArchived(orderId,archived,source){ try{ await db.collect
 async function saveSettings(){ try{ await db.collection('settings').doc('store').set(state.settings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración'); } }
 async function saveAiSettingsDoc(){ try{ await db.collection('settings').doc('ai').set(state.aiSettings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración de IA'); } }
 async function saveCashierDoc(c){
-  if(c.id){ await db.collection('cashiers').doc(c.id).set({name:c.name, pin:c.pin, active:c.active}); }
-  else{ const ref = await db.collection('cashiers').add({name:c.name, pin:c.pin, active:true}); c.id = ref.id; }
+  const payload = {name:c.name, pin:c.pin||'', active:c.active, email:c.email||'', role:c.role||'cajero', notify:c.notify||{}};
+  if(c.id){ await db.collection('cashiers').doc(c.id).set(payload); }
+  else{ const ref = await db.collection('cashiers').add(payload); c.id = ref.id; }
 }
 async function deleteCashierDoc(id){ try{ await db.collection('cashiers').doc(id).delete(); }catch(e){ console.error(e); } }
 
@@ -540,17 +541,21 @@ async function updateOrderStatus(id,status){ const o=state.orders.find(x=>x.id==
 async function toggleArchiveOrder(id,archived){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); showToast(archived?'Pedido archivado':'Pedido restaurado'); render(); }
 async function saveSettingsForm(s){ state.settings={...state.settings,...s}; await saveSettings(); showToast('Configuración guardada'); render(); }
 
-/* ============== CAJEROS ============== */
+/* ============== USUARIOS Y NOTIFICACIONES (antes "Cajeros") ============== */
 async function saveCashierForm(){
   const name = document.getElementById('cash-name').value.trim();
+  const email = document.getElementById('cash-email').value.trim();
+  const role = document.getElementById('cash-role').value;
   const pin = document.getElementById('cash-pin').value.trim();
-  if(!name || !pin){ showToast('Ponle nombre y PIN al cajero'); return; }
+  if(!name){ showToast('Ponle un nombre'); return; }
+  if(role==='cajero' && !pin){ showToast('Los cajeros necesitan un PIN para el Punto de Venta'); return; }
+  const notify = state.cashierModal.notify || {};
   const existing = state.cashierModal.id ? state.cashiers.find(c=>c.id===state.cashierModal.id) : null;
-  const c = existing ? {...existing, name, pin} : {name, pin, active:true};
+  const c = existing ? {...existing, name, email, role, pin, notify} : {name, email, role, pin, notify, active:true};
   await saveCashierDoc(c);
   if(!existing) state.cashiers.push(c);
-  else{ existing.name=name; existing.pin=pin; }
-  state.cashierModal=null; showToast('Cajero guardado'); render();
+  else Object.assign(existing, {name, email, role, pin, notify});
+  state.cashierModal=null; showToast('Guardado'); render();
 }
 async function toggleCashierActive(id){
   const c = state.cashiers.find(x=>x.id===id); if(!c) return;
@@ -902,7 +907,7 @@ function renderAdmin(){
     </div>
     <div class="admin-tabs">
       ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','cupones','promociones','diseño','asistente ia','configuración'].map(t=>`
-        <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
+        <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t==='cajeros'?'Usuarios':t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
     <div class="admin-body">
@@ -1201,32 +1206,63 @@ function renderOrderRow(o){
 }
 
 function renderCajeros(){
+  const ROLE_LABEL = {cajero:'Cajero', administrador:'Administrador'};
+  const NOTIF_LABEL = {ventas:'Ventas', pedidos:'Pedidos', stockBajo:'Stock bajo'};
   return `
-    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.cashierModal={};render()">+ Nuevo cajero</button>
-    <div class="panel-title" style="margin-bottom:12px;">Cajeros (${state.cashiers.length})</div>
-    ${state.cashiers.length===0 ? `<div class="empty-state">Aún no has agregado cajeros.</div>` :
+    <div class="note-box">Aquí administras a las personas que trabajan contigo: cajeros que usan el Punto de Venta con su PIN, y quién debería enterarse de qué (ventas nuevas, pedidos, stock bajo). Crear una cuenta nueva con acceso total al panel todavía se hace desde la consola de Firebase — aquí solo la dejas registrada para tener todo en un solo lugar.</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.cashierModal={role:'cajero',notify:{}};render()">+ Agregar</button>
+    <div class="panel-title" style="margin-bottom:12px;">Usuarios (${state.cashiers.length})</div>
+    ${state.cashiers.length===0 ? `<div class="empty-state">Aún no has agregado a nadie.</div>` :
       state.cashiers.map(c=>`
-        <div class="list-row">
-          <div class="row-main"><div class="row-title">${c.name}</div><div class="row-sub">PIN: ${c.pin} · ${c.active?'Activo':'Inactivo'}</div></div>
-          <div class="row-actions">
-            <button class="icon-btn" onclick="toggleCashierActive('${c.id}')">${c.active?'⏸':'▶'}</button>
-            <button class="icon-btn" onclick='state.cashierModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(c))}"));render()'>✎</button>
-            <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este cajero?'))deleteCashier('${c.id}')">🗑</button>
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="row-title">${c.name} ${!c.active?'<span class="status-badge" style="background:#8a6b78;">Inactivo</span>':''}</div>
+            <div class="row-actions">
+              <button class="icon-btn" onclick="toggleCashierActive('${c.id}')">${c.active?'⏸':'▶'}</button>
+              <button class="icon-btn" onclick='state.cashierModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(c))}"));render()'>✎</button>
+              <button class="icon-btn danger" onclick="if(confirm('¿Eliminar a este usuario?'))deleteCashier('${c.id}')">🗑</button>
+            </div>
+          </div>
+          <div class="row-sub">${c.email||'Sin email'} · PIN: ${c.pin||'—'}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+            <span class="status-badge" style="background:var(--primary);">${ROLE_LABEL[c.role]||'Cajero'}</span>
+            ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--teal);">${NOTIF_LABEL[k]||k}</span>`).join('')}
           </div>
         </div>
       `).join('')
     }
-    <div class="note-box" style="margin-top:14px;">Estos cajeros inician sesión con su PIN dentro del Punto de venta, para que cada venta quede identificada con quién la hizo. El acceso al Punto de venta en sí sigue protegido con tu inicio de sesión de administrador.</div>
   `;
+}
+function toggleCashierNotify(key, checked){
+  if(!state.cashierModal.notify) state.cashierModal.notify = {};
+  state.cashierModal.notify[key] = checked;
 }
 function renderCashierModal(){
   const c = state.cashierModal;
+  const NOTIF_OPTIONS = [{key:'ventas',label:'Ventas nuevas (Punto de Venta)'},{key:'pedidos',label:'Pedidos nuevos (tienda online)'},{key:'stockBajo',label:'Alertas de stock bajo'}];
   return `
   <div class="modal-overlay" onclick="if(event.target===this){state.cashierModal=null;render();}">
     <div class="modal">
-      <h3>${c.id?'Editar cajero':'Nuevo cajero'}</h3>
+      <h3>${c.id?'Editar usuario':'Nuevo usuario'}</h3>
       <div class="form-field"><label>Nombre</label><input id="cash-name" value="${c.name||''}"></div>
-      <div class="form-field"><label>PIN (4 dígitos)</label><input id="cash-pin" maxlength="6" value="${c.pin||''}"></div>
+      <div class="form-field"><label>Email (opcional)</label><input id="cash-email" type="email" value="${c.email||''}"></div>
+      <div class="form-field"><label>Permisos</label>
+        <select id="cash-role">
+          <option value="cajero" ${c.role!=='administrador'?'selected':''}>Cajero (solo Punto de Venta)</option>
+          <option value="administrador" ${c.role==='administrador'?'selected':''}>Administrador (acceso total al panel)</option>
+        </select>
+      </div>
+      <div class="form-field"><label>PIN para el Punto de Venta (4 dígitos)</label><input id="cash-pin" maxlength="6" value="${c.pin||''}"></div>
+      <div class="form-field"><label>Notificaciones</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${NOTIF_OPTIONS.map(n=>`
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:9px 12px;border-radius:9px;cursor:pointer;">
+              <input type="checkbox" ${c.notify&&c.notify[n.key]?'checked':''} onchange="toggleCashierNotify('${n.key}',this.checked)">
+              ${n.label}
+            </label>`).join('')}
+        </div>
+      </div>
+      <div class="note-box" style="margin-top:4px;">Las notificaciones se envían por el robot de WhatsApp/Slack que configuramos aparte (activo cuando retomes ese pendiente) — aquí solo defines quién debe recibir cuáles.</div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.cashierModal=null;render()">Cancelar</button>
         <button class="btn-primary" onclick="saveCashierForm()">Guardar</button>
