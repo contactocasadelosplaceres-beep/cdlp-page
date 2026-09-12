@@ -343,7 +343,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false };
 
 async function loadData(){
   try{
@@ -351,7 +351,7 @@ async function loadData(){
       db.collection('products').orderBy('name').limit(40).get(),
       db.collection('settings').doc('store').get(),
     ]);
-    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
     state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
@@ -370,7 +370,7 @@ async function loadData(){
   // completo para que la búsqueda y los filtros funcionen sobre todos los productos.
   if(!state.loadError){
     db.collection('products').orderBy('name').get().then(fullSnap=>{
-      state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()}));
+      state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
       render();
     }).catch(e=>console.error('No se pudo completar el catálogo en segundo plano', e));
   }
@@ -380,22 +380,47 @@ function trackVisit(){
 }
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+function effectivePrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price; }
+function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
+function parseCartKey(key){
+  const parts = key.split('::');
+  const p = state.products.find(x=>x.id===parts[0]);
+  const v = (parts[1] && p) ? (p.variants||[]).find(x=>x.id===parts[1]) : null;
+  return {p, v};
+}
+function itemStock(p, v){ return v ? (v.stock||0) : (p ? p.stock : 0); }
+function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
 function showToast(msg){
   const t = document.getElementById('toast'); if(!t) return;
   t.textContent = msg; t.classList.add('show');
   clearTimeout(window._toastTimer); window._toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
 }
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
-function cartTotal(){ return Object.entries(state.cart).reduce((s,[id,qty])=>{const p=state.products.find(x=>x.id===id);return s+(p?p.price*qty:0);},0); }
+function cartTotal(){
+  return Object.entries(state.cart).reduce((s,[key,qty])=>{
+    const {p,v} = parseCartKey(key);
+    if(!p) return s;
+    const price = v ? (v.priceOverride>0 ? v.priceOverride : effectivePrice(p)) : effectivePrice(p);
+    return s + price*qty;
+  }, 0);
+}
 function waLink(msg){ const num=(state.settings.whatsapp||'').replace(/\D/g,''); return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`; }
 
-function addToCart(id){
+function addToCart(id, variantId){
   const p = state.products.find(x=>x.id===id);
-  if(!p || p.stock<=0){ showToast('Sin existencias'); return; }
-  state.cart[id]=(state.cart[id]||0)+1; showToast('Agregado al carrito'); render();
+  if(!p){ return; }
+  if(p.variantGroups && p.variantGroups.length && !variantId){
+    openProductDetail(id); return; // necesita elegir variante primero
+  }
+  const v = variantId ? (p.variants||[]).find(x=>x.id===variantId) : null;
+  const key = cartKey(id, variantId);
+  const available = itemStock(p, v);
+  if(available<=0 || available<=(state.cart[key]||0)){ showToast('Sin existencias'); return; }
+  state.cart[key]=(state.cart[key]||0)+1; showToast('Agregado al carrito'); render();
 }
-function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
-function removeFromCart(id){ delete state.cart[id]; render(); }
+function changeQty(key,delta){ const cur=state.cart[key]||0; const next=cur+delta; if(next<=0) delete state.cart[key]; else state.cart[key]=next; render(); }
+function removeFromCart(key){ delete state.cart[key]; render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
 function goHome(){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; render(); window.scrollTo({top:0, behavior:'smooth'}); }
@@ -404,8 +429,19 @@ function goToFeatured(){
   if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); }
   else { goToCatalog('Todos'); }
 }
-function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex=0; render(); }
+function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={}; render(); }
 function closeProductDetail(){ state.detailProductId=null; render(); }
+function selectVariantOption(groupName, value){
+  state.detailSelectedVariant[groupName] = value;
+  render();
+}
+function findMatchingVariant(p){
+  if(!p.variantGroups || !p.variantGroups.length) return null;
+  const sel = state.detailSelectedVariant;
+  const complete = p.variantGroups.every(g=>sel[g.name]);
+  if(!complete) return null;
+  return (p.variants||[]).find(v=>p.variantGroups.every(g=>v.combo[g.name]===sel[g.name])) || null;
+}
 function setDetailImage(idx){ state.detailImageIndex=idx; render(); }
 function detailPrevImage(){
   const p = state.products.find(x=>x.id===state.detailProductId); if(!p) return;
@@ -432,7 +468,11 @@ function filterByNeed(key){ state.activeNeed=key; state.activeCat='Todos'; state
 function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
 
 async function submitOrder(formData){
-  const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
+  const items = Object.entries(state.cart).map(([key,qty])=>{
+    const {p,v} = parseCartKey(key);
+    const price = v && v.priceOverride>0 ? v.priceOverride : effectivePrice(p);
+    return {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
+  });
   const orderNumber = await getNextOrderNumber();
   const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo" };
   try{ await db.collection('orders').add(order); }
@@ -509,7 +549,13 @@ function renderProductDetailDrawer(){
   if(!p) return '';
   const images = (p.images && p.images.length) ? p.images : null;
   const idx = Math.min(state.detailImageIndex, images ? images.length-1 : 0);
-  const qty = state.cart[p.id] || 0;
+  const hasVariants = p.variantGroups && p.variantGroups.length>0;
+  const matchedVariant = findMatchingVariant(p);
+  const key = cartKey(p.id, matchedVariant ? matchedVariant.id : null);
+  const qty = state.cart[key] || 0;
+  const stockLeft = itemStock(p, matchedVariant);
+  const price = matchedVariant && matchedVariant.priceOverride>0 ? matchedVariant.priceOverride : effectivePrice(p);
+  const needsSelection = hasVariants && !matchedVariant;
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><button class="close-x" onclick="closeProductDetail()">✕</button></div>
     <div class="drawer-body" style="padding:0;">
@@ -528,23 +574,37 @@ function renderProductDetailDrawer(){
           ${images.map((src,i)=>`<button class="detail-thumb ${i===idx?'active':''}" onclick="setDetailImage(${i})"><img src="${src}" alt=""></button>`).join('')}
         </div>` : ''}
       <div class="detail-info">
-        <div class="detail-cat">${p.cat}</div>
+        <div class="detail-cat">${productCats(p).join(' · ')}</div>
         <div class="detail-name">${p.name}</div>
-        <div class="detail-price">${money(p.price)}</div>
-        <div class="detail-stock">${p.stock<=0 ? 'Agotado' : p.stock<=3 ? `Últimas piezas (${p.stock})` : 'Disponible'}</div>
+        <div class="detail-price">${p.promoPrice>0 && p.promoPrice<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
+        ${!needsSelection ? `<div class="detail-stock">${stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible'}</div>` : ''}
+        ${hasVariants ? `
+          <div style="margin:10px 0;">
+            ${p.variantGroups.map(g=>`
+              <div style="margin-bottom:10px;">
+                <div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;">${g.name}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                  ${g.values.map(v=>`<button class="cat-chip ${state.detailSelectedVariant[g.name]===v?'active':''}" onclick="selectVariantOption('${g.name.replace(/'/g,"\\'")}','${v.replace(/'/g,"\\'")}')">${v}</button>`).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
         ${p.desc ? `<div class="detail-desc">${p.desc}</div>` : ''}
       </div>
     </div>
     <div class="drawer-foot">
-      ${qty>0 ? `
+      ${needsSelection ? `
+        <button class="btn-primary" disabled style="opacity:.5">Elige ${p.variantGroups.map(g=>g.name).join(' y ')}</button>
+      ` : qty>0 ? `
         <div class="detail-qty-row">
-          <button class="qty-btn" onclick="changeQty('${p.id}',-1)">−</button>
+          <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
           <div class="qty-val">${qty} en tu carrito</div>
-          <button class="qty-btn" ${p.stock<=qty?'disabled style="opacity:.4"':''} onclick="changeQty('${p.id}',1)">+</button>
+          <button class="qty-btn" ${stockLeft<=qty?'disabled style="opacity:.4"':''} onclick="changeQty('${key}',1)">+</button>
         </div>
         <button class="btn-primary" onclick="closeProductDetail();state.cartOpen=true;render()">Ver carrito</button>
       ` : `
-        <button class="btn-primary" ${p.stock<=0?'disabled style="opacity:.5"':''} onclick="addToCart('${p.id}')">${p.stock<=0?'Agotado':'Agregar al carrito · '+money(p.price)}</button>
+        <button class="btn-primary" ${stockLeft<=0?'disabled style="opacity:.5"':''} onclick="addToCart('${p.id}'${matchedVariant?`,'${matchedVariant.id}'`:''})">${stockLeft<=0?'Agotado':'Agregar al carrito · '+money(price)}</button>
       `}
     </div>`;
 }
@@ -719,7 +779,7 @@ function renderGridSection(){
     heading = need ? need.label : 'Catálogo completo';
     emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   } else if(state.activeCat!=="Todos"){
-    filtered = filtered.filter(p=>p.cat===state.activeCat);
+    filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
   }
   // Los productos agotados se muestran hasta el final, sin alterar el orden entre sí.
   filtered = filtered
@@ -747,6 +807,8 @@ function loadMoreProducts(){ state.gridRenderLimit += GRID_PAGE_SIZE; render(); 
 function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
+  const hasVariants = p.variantGroups && p.variantGroups.length>0;
+  const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
   return `
       <div class="card" onclick="openProductDetail('${p.id}')">
         <div class="card-media">
@@ -754,16 +816,17 @@ function renderProductCard(p, forceBest){
             ${productImageHtml(p)}
             <div class="badge-row">
               ${isBest ? `<span class="badge badge-best">Más vendido</span>` : ''}
+              ${hasPromo ? `<span class="badge badge-best" style="background:var(--rose);">Oferta</span>` : ''}
               ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
             </div>
           </div>
-          <button class="fab-add" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();addToCart('${p.id}')">+</button>
+          <button class="fab-add" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();${hasVariants?`openProductDetail('${p.id}')`:`addToCart('${p.id}')`}">+</button>
         </div>
         <div class="card-body">
-          <div class="card-cat">${p.cat}</div>
+          <div class="card-cat">${productCats(p).join(', ')}</div>
           <div class="card-name">${p.name}</div>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
-          <div class="card-price">${money(p.price)}</div>
+          <div class="card-price">${hasPromo ? `<s style="color:var(--ink-soft);font-weight:600;font-size:12px;margin-right:5px;">${money(p.price)}</s>${money(p.promoPrice)}` : money(p.price)}</div>
         </div>
       </div>`;
 }
@@ -866,17 +929,17 @@ function renderCartDrawer(){
     <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" onclick="state.cartOpen=false;render()">✕</button></div>
     <div class="drawer-body">
       ${entries.length===0 ? `<div class="empty-state">Tu carrito está vacío.</div>` :
-        entries.map(([id,qty])=>{const p=state.products.find(x=>x.id===id); if(!p) return ''; return `
+        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price = v && v.priceOverride>0 ? v.priceOverride : effectivePrice(p); return `
           <div class="cart-item">
             ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${p.images[0]}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="cart-item-info">
-              <div class="cart-item-name">${p.name}</div>
-              <div class="cart-item-price">${money(p.price)} c/u</div>
+              <div class="cart-item-name">${p.name}${v?` <span style="color:var(--ink-soft);font-weight:600;">(${variantLabel(v)})</span>`:''}</div>
+              <div class="cart-item-price">${money(price)} c/u</div>
               <div class="qty-row">
-                <button class="qty-btn" onclick="changeQty('${id}',-1)">−</button>
+                <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
                 <div class="qty-val">${qty}</div>
-                <button class="qty-btn" onclick="changeQty('${id}',1)">+</button>
-                <a class="remove-link" onclick="removeFromCart('${id}')">Quitar</a>
+                <button class="qty-btn" onclick="changeQty('${key}',1)">+</button>
+                <a class="remove-link" onclick="removeFromCart('${key}')">Quitar</a>
               </div>
             </div>
           </div>`;}).join('')}

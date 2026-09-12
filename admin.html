@@ -463,8 +463,15 @@ function handleLogout(){ auth.signOut(); state.loaded=false; }
 
 /* ============== PRODUCTOS ============== */
 async function saveProduct(p){
-  if(!state.settings.categories.includes(p.cat)){ state.settings.categories.push(p.cat); await saveSettings(); }
-  const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[], stockByCenter:p.stockByCenter||{}};
+  const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
+  if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
+  const payload = {
+    name:p.name, sku:p.sku||'', cat:p.cat, categories:p.categories||[p.cat],
+    price:p.price, promoPrice:p.promoPrice||0, cost:p.cost||0,
+    stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[],
+    stockByCenter:p.stockByCenter||{}, hidden: !!p.hidden,
+    variantGroups: p.variantGroups||[], variants: p.variants||[],
+  };
   try{
     if(p.id){
       await db.collection('products').doc(p.id).set(payload);
@@ -475,6 +482,22 @@ async function saveProduct(p){
     }
   }catch(e){ console.error(e); showToast('No se pudo guardar (revisa el tamaño de las imágenes)'); return; }
   state.productModal=null; showToast('Producto guardado'); render();
+}
+async function regenerateAllSKUs(){
+  showToast('Generando SKU nuevos, un momento...');
+  const usedSkus = new Set();
+  const batch = db.batch();
+  state.products.forEach(p=>{
+    let sku;
+    do{ sku = generateSKU(p); }while(usedSkus.has(sku));
+    usedSkus.add(sku);
+    p.sku = sku;
+    batch.update(db.collection('products').doc(p.id), {sku});
+  });
+  try{
+    await batch.commit();
+    showToast(`${state.products.length} SKU regenerados`); render();
+  }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
 }
 async function deleteProduct(id){
   state.products = state.products.filter(x=>x.id!==id);
@@ -992,22 +1015,26 @@ function renderBarChart(data, isMoney){
 function renderProductos(){
   const q = (state.productSearch||'').trim().toLowerCase();
   const filtered = q
-    ? state.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q))
+    ? state.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q))
     : state.products;
   return `
     <div class="toolbar">
       <button class="btn-add-new" onclick="state.productModal={images:[]};render()">+ Nuevo producto</button>
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
+      <button class="btn-outline" onclick="if(confirm('Esto reemplaza el SKU de TODOS tus productos por uno nuevo, incluso si ya tenían uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
     </div>
     <div class="form-field" style="max-width:420px;">
-      <input id="product-search-input" type="search" placeholder="Buscar por nombre o categoría..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
+      <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
     </div>
     <div class="panel-title" style="margin-bottom:12px;">Catálogo (${filtered.length}${q?` de ${state.products.length}`:''})</div>
     ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan con "${state.productSearch}".</div>` :
       filtered.map(p=>`
-      <div class="list-row">
+      <div class="list-row" style="${p.hidden?'opacity:.55;':''}">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-        <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)} · stock: ${p.stock} · ${(p.images||[]).length} foto(s)</div></div>
+        <div class="row-main">
+          <div class="row-title">${p.name} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
+          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · stock: ${p.stock} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
+        </div>
         <div class="row-actions">
           <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>✎</button>
           <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">🗑</button>
@@ -1875,10 +1902,22 @@ async function removeCategory(cat){
 
 function renderProductModal(){
   const p = state.productModal; const isNew = !p.id;
+  const price = Number(p.price)||0;
+  const promo = Number(p.promoPrice)||0;
+  const cost = Number(p.cost)||0;
+  const effective = promo>0 ? promo : price;
+  const margin = effective>0 ? Math.round(((effective-cost)/effective)*1000)/10 : 0;
+  const profit = Math.round((effective-cost)*100)/100;
   return `
   <div class="modal-overlay" onclick="if(event.target===this){state.productModal=null;render();}">
     <div class="modal">
       <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
+        <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''}>
+        Ocultar este producto del catálogo público (sigue existiendo, solo no se muestra en la tienda)
+      </label>
+
       <div class="form-field"><label>Imágenes (máx. 5) — la primera es la portada</label>
         <div class="img-thumbs">
           ${(p.images||[]).map((src,idx)=>`
@@ -1894,11 +1933,41 @@ function renderProductModal(){
         </div>
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
       </div>
+
       <div class="form-field"><label>Nombre</label><input id="pf-name" value="${p.name||''}"></div>
+
       <div class="two-col">
-        <div class="form-field"><label>Categoría</label><select id="pf-cat">${state.settings.categories.map(c=>`<option ${p.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
-        <div class="form-field"><label>Precio (MXN)</label><input id="pf-price" type="number" value="${p.price||''}"></div>
+        <div class="form-field"><label>SKU</label>
+          <div style="display:flex;gap:6px;">
+            <input id="pf-sku" value="${p.sku||''}" style="flex:1;">
+            <button class="btn-outline" style="padding:0 12px;white-space:nowrap;" onclick="regenerateSKU()">Generar</button>
+          </div>
+        </div>
+        <div class="form-field"><label>Categorías</label>
+          <div style="max-height:110px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;">
+            ${state.settings.categories.map(c=>`
+              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+                <input type="checkbox" value="${c}" ${(p.categories||[p.cat]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}',this.checked)">
+                ${c}
+              </label>`).join('')}
+          </div>
+        </div>
       </div>
+
+      <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
+        <div class="panel-title" style="margin-bottom:12px;">Precios</div>
+        <div class="two-col">
+          <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" value="${p.price||''}" oninput="updatePriceCalc()"></div>
+          <div class="form-field"><label>Precio promocional</label><input id="pf-promo" type="number" value="${p.promoPrice||''}" placeholder="0.00" oninput="updatePriceCalc()"></div>
+        </div>
+        <div class="form-field"><label>Costo</label><input id="pf-cost" type="number" value="${p.cost||''}" oninput="updatePriceCalc()"></div>
+        <div class="panel-sub" style="margin-bottom:0;">Es de uso interno, tus clientes no lo verán en la tienda.</div>
+        <div class="two-col" style="margin-top:10px;">
+          <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="font-size:16px;color:var(--primary-deep);">${margin}%</strong></div>
+          <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="font-size:16px;color:var(--green);">${money(profit)}</strong></div>
+        </div>
+      </div>
+
       <div class="form-field"><label>Existencias por centro de distribución</label>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${state.centers.filter(c=>c.active).map(c=>`
@@ -1910,7 +1979,9 @@ function renderProductModal(){
         </div>
         <div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Total: <strong id="pf-stock-total">${Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0)}</strong> unidades (se suma automáticamente)</div>
       </div>
+
       <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc">${p.desc||''}</textarea></div>
+
       <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           ${NEEDS.map(n=>`
@@ -1920,6 +1991,9 @@ function renderProductModal(){
             </label>`).join('')}
         </div>
       </div>
+
+      ${renderVariantsEditor(p)}
+
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.productModal=null;render()">Cancelar</button>
         <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')">Guardar</button>
@@ -1932,21 +2006,126 @@ function toggleProductNeed(key, checked){
   if(checked){ if(!state.productModal.needs.includes(key)) state.productModal.needs.push(key); }
   else{ state.productModal.needs = state.productModal.needs.filter(k=>k!==key); }
 }
+function toggleProductCategory(cat, checked){
+  const p = state.productModal;
+  if(!p.categories) p.categories = p.cat ? [p.cat] : [];
+  if(checked){ if(!p.categories.includes(cat)) p.categories.push(cat); }
+  else{ p.categories = p.categories.filter(c=>c!==cat); }
+}
 function setProductCenterStock(centerId, value){
   if(!state.productModal.stockByCenter) state.productModal.stockByCenter = {};
   state.productModal.stockByCenter[centerId] = Math.max(0, Number(value)||0);
   const totalEl = document.getElementById('pf-stock-total');
   if(totalEl) totalEl.textContent = Object.values(state.productModal.stockByCenter).reduce((s,n)=>s+(n||0),0);
 }
+function updatePriceCalc(){
+  const price = Number(document.getElementById('pf-price').value)||0;
+  const promo = Number(document.getElementById('pf-promo').value)||0;
+  const cost = Number(document.getElementById('pf-cost').value)||0;
+  const effective = promo>0 ? promo : price;
+  const margin = effective>0 ? Math.round(((effective-cost)/effective)*1000)/10 : 0;
+  const profit = Math.round((effective-cost)*100)/100;
+  const marginEl = document.getElementById('pf-margin'); if(marginEl) marginEl.textContent = margin+'%';
+  const profitEl = document.getElementById('pf-profit'); if(profitEl) profitEl.textContent = money(profit);
+}
+function generateSKU(product){
+  const catPart = ((product.categories&&product.categories[0])||product.cat||'GEN').toUpperCase().replace(/[^A-Z]/g,'').slice(0,3) || 'GEN';
+  const namePart = (product.name||'PROD').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4) || 'PROD';
+  const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+  return `${catPart}-${namePart}-${rand}`;
+}
+function regenerateSKU(){
+  const name = document.getElementById('pf-name').value.trim();
+  document.getElementById('pf-sku').value = generateSKU({name, categories: state.productModal.categories, cat: state.productModal.cat});
+}
+
+/* ---- Variantes ---- */
+function renderVariantsEditor(p){
+  const groups = p.variantGroups || [];
+  const variants = p.variants || [];
+  return `
+    <div class="panel" style="background:var(--bg);">
+      <div class="panel-title" style="margin-bottom:4px;">Variantes</div>
+      <div class="panel-sub">Combina diferentes propiedades de tu producto. Ejemplo: color + talla.</div>
+      ${groups.map((g,idx)=>`
+        <div class="two-col" style="margin-bottom:8px;">
+          <input placeholder="Nombre (ej. Color)" value="${g.name||''}" onchange="setVariantGroupName(${idx}, this.value)">
+          <input placeholder="Valores separados por coma (ej. Rojo, Azul)" value="${(g.values||[]).join(', ')}" onchange="setVariantGroupValues(${idx}, this.value)">
+        </div>
+        <div style="text-align:right;margin-top:-4px;margin-bottom:10px;"><button class="icon-btn danger" style="width:auto;padding:4px 10px;font-size:11px;" onclick="removeVariantGroup(${idx})">Quitar grupo</button></div>
+      `).join('')}
+      <div class="two-col" style="margin-bottom:10px;">
+        <button class="btn-outline" onclick="addVariantGroup()">+ Agregar grupo de variante</button>
+        <button class="btn-primary" onclick="generateVariantCombos()">Generar variantes</button>
+      </div>
+      ${variants.length>0 ? `
+        <div class="panel-title" style="font-size:12.5px;margin:12px 0 8px;">Combinaciones (${variants.length})</div>
+        ${variants.map(v=>`
+          <div class="list-row" style="align-items:center;">
+            <div class="row-main"><div class="row-title">${Object.entries(v.combo||{}).map(([k,val])=>`${k}: ${val}`).join(' · ')}</div></div>
+            <input placeholder="SKU" value="${v.sku||''}" style="width:130px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;" onchange="setVariantField('${v.id}','sku',this.value)">
+            <input type="number" min="0" placeholder="Stock" value="${v.stock||0}" style="width:75px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;text-align:center;" onchange="setVariantField('${v.id}','stock',this.value)">
+          </div>
+        `).join('')}
+      ` : ''}
+    </div>`;
+}
+function addVariantGroup(){
+  if(!state.productModal.variantGroups) state.productModal.variantGroups = [];
+  state.productModal.variantGroups.push({name:'', values:[]});
+  render();
+}
+function setVariantGroupName(idx, value){ state.productModal.variantGroups[idx].name = value.trim(); }
+function setVariantGroupValues(idx, value){
+  state.productModal.variantGroups[idx].values = value.split(',').map(v=>v.trim()).filter(Boolean);
+}
+function removeVariantGroup(idx){
+  state.productModal.variantGroups.splice(idx,1);
+  render();
+}
+function generateVariantCombos(){
+  const groups = (state.productModal.variantGroups||[]).filter(g=>g.name && g.values && g.values.length);
+  if(groups.length===0){ showToast('Agrega al menos un grupo con nombre y valores'); return; }
+  let combos = [{}];
+  groups.forEach(g=>{
+    const next = [];
+    combos.forEach(c=>{ g.values.forEach(v=>{ next.push({...c, [g.name]: v}); }); });
+    combos = next;
+  });
+  const existing = state.productModal.variants || [];
+  const keyOf = combo => JSON.stringify(Object.entries(combo).sort());
+  const existingByKey = {}; existing.forEach(v=>{ existingByKey[keyOf(v.combo)] = v; });
+  state.productModal.variants = combos.map(combo=>{
+    const key = keyOf(combo);
+    if(existingByKey[key]) return existingByKey[key];
+    return { id: uid('var_'), combo, sku:'', stock:0 };
+  });
+  showToast(`${combos.length} variante(s) generada(s)`);
+  render();
+}
+function setVariantField(variantId, field, value){
+  const v = (state.productModal.variants||[]).find(x=>x.id===variantId);
+  if(!v) return;
+  v[field] = field==='stock' ? Math.max(0, Number(value)||0) : value;
+}
 function handleSaveProduct(existingId){
   const name = document.getElementById('pf-name').value.trim();
-  const cat = document.getElementById('pf-cat').value;
+  const sku = document.getElementById('pf-sku').value.trim();
   const price = Number(document.getElementById('pf-price').value)||0;
+  const promoPrice = Number(document.getElementById('pf-promo').value)||0;
+  const cost = Number(document.getElementById('pf-cost').value)||0;
   const desc = document.getElementById('pf-desc').value.trim();
+  const hidden = document.getElementById('pf-hidden').checked;
   if(!name){ showToast('Ponle un nombre al producto'); return; }
+  const categories = (state.productModal.categories && state.productModal.categories.length) ? state.productModal.categories : [state.settings.categories[0]];
+  const cat = categories[0];
   const stockByCenter = state.productModal.stockByCenter || {};
   const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
-  saveProduct({id: existingId||null, name, cat, price, stock, stockByCenter, desc, images: state.productModal.images||[], needs: state.productModal.needs||[]});
+  saveProduct({
+    id: existingId||null, name, sku, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
+    hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
+    variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
+  });
 }
 
 function renderCropModal(){
