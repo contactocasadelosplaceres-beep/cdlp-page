@@ -115,7 +115,7 @@ let state = {
   loaded:false, products:[], categories:[], cashiers:[], centers:[], activeCenter:null,
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
   activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo",
-  saleDone:false, lastSaleTotal:0, lastOrderNumber:null, sending:false,
+  saleDone:false, lastSaleTotal:0, lastOrderNumber:null, sending:false, variantPickerProduct:null,
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -183,12 +183,34 @@ function selectCenter(id){
 function changeCenter(){ state.activeCenter=null; state.cart={}; render(); }
 
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
-function cartTotal(){ return Object.entries(state.cart).reduce((s,[id,qty])=>{const p=state.products.find(x=>x.id===id);return s+(p?p.price*qty:0);},0); }
+function effectivePrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price; }
+function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
+function parseCartKey(key){
+  const parts = key.split('::');
+  const p = state.products.find(x=>x.id===parts[0]);
+  const v = (parts[1] && p) ? (p.variants||[]).find(x=>x.id===parts[1]) : null;
+  return {p, v};
+}
+function itemPrice(p, v){ return v && v.priceOverride>0 ? v.priceOverride : effectivePrice(p); }
+function itemStockPOS(p, v){ return v ? (v.stock||0) : centerStock(p, state.activeCenter.id); }
+function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
+function cartTotal(){ return Object.entries(state.cart).reduce((s,[key,qty])=>{const {p,v}=parseCartKey(key); return s+(p?itemPrice(p,v)*qty:0);},0); }
 function addToCart(id){
   const p = state.products.find(x=>x.id===id);
+  if(!p) return;
+  if(p.variantGroups && p.variantGroups.length){ state.variantPickerProduct = id; render(); return; }
   const available = centerStock(p, state.activeCenter.id);
-  if(!p || available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
+  if(available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
   state.cart[id]=(state.cart[id]||0)+1; render();
+}
+function pickVariant(variantId){
+  const p = state.products.find(x=>x.id===state.variantPickerProduct);
+  const v = (p.variants||[]).find(x=>x.id===variantId);
+  const key = cartKey(p.id, variantId);
+  if(itemStockPOS(p,v)<=(state.cart[key]||0)){ showToast('Sin existencias suficientes de esta variante'); return; }
+  state.cart[key] = (state.cart[key]||0)+1;
+  state.variantPickerProduct = null;
+  render();
 }
 function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
 
@@ -196,12 +218,21 @@ async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
   state.sending = true; render();
   const centerId = state.activeCenter.id;
-  const items = Object.entries(state.cart).map(([id,qty])=>{const p=state.products.find(x=>x.id===id);return {id,name:p.name,price:p.price,qty};});
+  const items = Object.entries(state.cart).map(([key,qty])=>{
+    const {p,v} = parseCartKey(key);
+    return {id:p.id, variantId: v?v.id:null, name: p.name+(v?` (${variantLabel(v)})`:''), price:itemPrice(p,v), qty};
+  });
   const total = items.reduce((s,it)=>s+it.price*it.qty,0);
   try{
     const orderNumber = await getNextOrderNumber();
     await Promise.all(items.map(it=>{
       const p = state.products.find(x=>x.id===it.id);
+      if(it.variantId){
+        const v = (p.variants||[]).find(x=>x.id===it.variantId);
+        v.stock = Math.max(0, (v.stock||0) - it.qty);
+        p.stock = Math.max(0, (p.stock||0) - it.qty);
+        return db.collection('products').doc(it.id).update({variants: p.variants, stock: p.stock});
+      }
       if(!p.stockByCenter) p.stockByCenter = {};
       p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) - it.qty);
       p.stock = Math.max(0, (p.stock||0) - it.qty);
@@ -220,6 +251,24 @@ async function chargeSale(){
   state.sending = false; render();
 }
 function newSale(){ state.saleDone=false; render(); }
+function renderVariantPickerModal(){
+  const p = state.products.find(x=>x.id===state.variantPickerProduct);
+  if(!p) return '';
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.variantPickerProduct=null;render();}">
+    <div class="modal" style="max-width:380px;">
+      <h3>${p.name}</h3>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:12px;">Elige la variante</p>
+      ${(p.variants||[]).map(v=>`
+        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" ${v.stock<=0?'disabled style="opacity:.4"':''} onclick="pickVariant('${v.id}')">
+          <span>${variantLabel(v)}</span>
+          <span style="font-size:12px;color:var(--ink-soft);">${v.stock<=0?'Agotado':`Stock: ${v.stock}`}</span>
+        </button>
+      `).join('')}
+      <button class="pill-btn" style="width:100%;background:var(--surface-soft);color:var(--ink-soft);margin-top:4px;" onclick="state.variantPickerProduct=null;render()">Cancelar</button>
+    </div>
+  </div>`;
+}
 
 function renderLogin(){
   return `
@@ -279,7 +328,7 @@ function renderCenterSelect(){
 
 function renderPOS(){
   const cats = ["Todos", ...state.categories];
-  let filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>p.cat===state.activeCat);
+  let filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
   if(state.search.trim()) filtered = filtered.filter(p=>p.name.toLowerCase().includes(state.search.trim().toLowerCase()));
   const entries = Object.entries(state.cart);
   return `
@@ -298,27 +347,30 @@ function renderPOS(){
         <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}</div>
       </div>
       <div class="prod-grid">
-        ${filtered.map(p=>`
+        ${filtered.map(p=>{
+          const hasVariants = p.variantGroups && p.variantGroups.length>0;
+          const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
+          return `
           <div class="prod-card" onclick="addToCart('${p.id}')">
             ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
-            <div class="prod-name">${p.name}</div>
-            <div class="prod-price">${money(p.price)}</div>
-            <div class="prod-stock">Stock en ${state.activeCenter.name}: ${centerStock(p, state.activeCenter.id)}</div>
-          </div>
-        `).join('')}
+            <div class="prod-name">${p.name}${hasVariants?' 🔀':''}</div>
+            <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)}</div>
+            <div class="prod-stock">${hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${centerStock(p, state.activeCenter.id)}`}</div>
+          </div>`;
+        }).join('')}
       </div>
     </div>
     <div class="sale-panel">
       <div class="sale-head"><h3>Venta actual (${cartCount()})</h3></div>
       <div class="sale-items">
         ${entries.length===0 ? `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>` :
-          entries.map(([id,qty])=>{const p=state.products.find(x=>x.id===id); if(!p) return ''; return `
+          entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price=itemPrice(p,v); return `
             <div class="sale-item">
-              <div class="name">${p.name}</div>
-              <button class="qty-btn" onclick="changeQty('${id}',-1)">−</button>
+              <div class="name">${p.name}${v?` <span style="color:var(--ink-soft);">(${variantLabel(v)})</span>`:''}</div>
+              <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
               <div>${qty}</div>
-              <button class="qty-btn" onclick="changeQty('${id}',1)">+</button>
-              <div style="width:70px;text-align:right;font-weight:600;">${money(p.price*qty)}</div>
+              <button class="qty-btn" onclick="changeQty('${key}',1)">+</button>
+              <div style="width:70px;text-align:right;font-weight:600;">${money(price*qty)}</div>
             </div>`;}).join('')}
       </div>
       <div class="sale-foot">
@@ -327,7 +379,8 @@ function renderPOS(){
         <button class="btn-primary" ${entries.length===0||state.sending?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(cartTotal())}</button>
       </div>
     </div>
-  </div>`;
+  </div>
+  ${state.variantPickerProduct ? renderVariantPickerModal() : ''}`;
 }
 
 function renderReceipt(){
