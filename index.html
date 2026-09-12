@@ -343,7 +343,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"" };
 
 async function loadData(){
   try{
@@ -359,6 +359,7 @@ async function loadData(){
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
     if(!state.settings.testimonials) state.settings.testimonials = [];
     if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
+    if(!state.settings.coupons) state.settings.coupons = [];
   }catch(e){
     console.error(e);
     state.products = []; state.settings = {...DEFAULT_SETTINGS}; state.loadError = true;
@@ -444,6 +445,40 @@ function applyWholesaleCodeManually(){
   try{ localStorage.setItem(WHOLESALE_KEY, tier.code); }catch(e){}
   showToast(`Modo mayoreo activado: ${tier.name}`); render();
 }
+
+/* ============== CUPONES DE DESCUENTO ============== */
+function isCouponEligible(p, coupon){
+  if(coupon.scope==='all') return true;
+  if(coupon.scope==='categories') return productCats(p).some(c=>(coupon.categories||[]).includes(c));
+  if(coupon.scope==='products') return (coupon.productIds||[]).includes(p.id);
+  return false;
+}
+function cartHasCouponEligibleItem(coupon){
+  return Object.keys(state.cart).some(key=>{ const {p}=parseCartKey(key); return p && isCouponEligible(p, coupon); });
+}
+async function applyCouponCode(){
+  const code = (state.couponInput||'').trim().toUpperCase();
+  state.couponError = '';
+  if(!code){ return; }
+  const coupon = (state.settings.coupons||[]).find(c=>c.code===code);
+  if(!coupon || !coupon.active){ state.couponError = 'Código no válido'; render(); return; }
+  const now = new Date();
+  if(coupon.startDate && now < new Date(coupon.startDate)){ state.couponError = 'Este cupón todavía no está vigente'; render(); return; }
+  if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ state.couponError = 'Este cupón ya venció'; render(); return; }
+  if(!cartHasCouponEligibleItem(coupon)){ state.couponError = 'Este cupón no aplica a los productos de tu carrito'; render(); return; }
+  if(coupon.maxUses>0){
+    try{
+      const used = await db.collection('couponUsage').where('code','==',code).get();
+      if(used.size >= coupon.maxUses){ state.couponError = 'Este cupón ya alcanzó su límite de usos'; render(); return; }
+    }catch(e){ console.error(e); }
+  }
+  state.appliedCoupon = coupon; state.couponInput = ''; showToast(`Cupón ${code} aplicado`); render();
+}
+function removeCoupon(){ state.appliedCoupon=null; state.couponError=''; render(); }
+function couponDiscountedPrice(p, price){
+  if(!state.appliedCoupon || !isCouponEligible(p, state.appliedCoupon)) return price;
+  return Math.round(price*(1-state.appliedCoupon.discountPercent/100)*100)/100;
+}
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
 function parseCartKey(key){
@@ -464,7 +499,8 @@ function cartTotal(){
   return Object.entries(state.cart).reduce((s,[key,qty])=>{
     const {p,v} = parseCartKey(key);
     if(!p) return s;
-    const price = v ? (v.priceOverride>0 ? v.priceOverride : effectivePrice(p)) : finalPrice(p);
+    let price = v ? (v.priceOverride>0 ? v.priceOverride : effectivePrice(p)) : finalPrice(p);
+    price = couponDiscountedPrice(p, price);
     return s + price*qty;
   }, 0);
 }
@@ -533,14 +569,19 @@ function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.a
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
-    const price = v && v.priceOverride>0 ? v.priceOverride : finalPrice(p);
+    let price = v && v.priceOverride>0 ? v.priceOverride : finalPrice(p);
+    price = couponDiscountedPrice(p, price);
     return {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
   });
   const orderNumber = await getNextOrderNumber();
-  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo" };
+  const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
+  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
   try{ await db.collection('orders').add(order); }
   catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); state.submittingOrder=false; render(); return; }
-  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; render();
+  if(couponCode){
+    try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString()}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+  }
+  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; render();
 
   const lines = items.map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('%0A');
   const msg = `Hola, quiero confirmar mi pedido:%0A${lines}%0A%0ATotal: ${money(order.total)}%0ANombre: ${formData.name}%0ADirección: ${formData.address}%0APago contra entrega.`;
@@ -1019,12 +1060,12 @@ function renderCartDrawer(){
     <div class="drawer-body">
       ${tier ? renderWholesaleBanner(tier) : ''}
       ${entries.length===0 ? `<div class="empty-state">Tu carrito está vacío.</div>` :
-        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price = v && v.priceOverride>0 ? v.priceOverride : finalPrice(p); return `
+        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const basePrice = v && v.priceOverride>0 ? v.priceOverride : finalPrice(p); const price = couponDiscountedPrice(p, basePrice); return `
           <div class="cart-item">
             ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${p.images[0]}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="cart-item-info">
               <div class="cart-item-name">${p.name}${v?` <span style="color:var(--ink-soft);font-weight:600;">(${variantLabel(v)})</span>`:''}</div>
-              <div class="cart-item-price">${money(price)} c/u</div>
+              <div class="cart-item-price">${price<basePrice?`<s style="color:var(--ink-soft);">${money(basePrice)}</s> `:''}${money(price)} c/u</div>
               <div class="qty-row">
                 <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
                 <div class="qty-val">${qty}</div>
@@ -1033,6 +1074,23 @@ function renderCartDrawer(){
               </div>
             </div>
           </div>`;}).join('')}
+      ${entries.length>0 ? `
+        <div class="form-field" style="margin-top:14px;">
+          <label>¿Tienes un código de descuento?</label>
+          ${state.appliedCoupon ? `
+            <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;display:flex;justify-content:space-between;align-items:center;">
+              <span>✓ ${state.appliedCoupon.code} (${state.appliedCoupon.discountPercent}% OFF)</span>
+              <a style="color:var(--rose);font-weight:700;cursor:pointer;" onclick="removeCoupon()">Quitar</a>
+            </div>
+          ` : `
+            <div style="display:flex;gap:6px;">
+              <input id="coupon-input" value="${state.couponInput}" oninput="state.couponInput=this.value" placeholder="Ej. VERANO20" style="flex:1;text-transform:uppercase;" onkeydown="if(event.key==='Enter')applyCouponCode()">
+              <button class="btn-outline" style="padding:0 14px;" onclick="applyCouponCode()">Aplicar</button>
+            </div>
+            ${state.couponError ? `<div style="color:var(--rose);font-size:12px;margin-top:6px;">${state.couponError}</div>` : ''}
+          `}
+        </div>
+      ` : ''}
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>

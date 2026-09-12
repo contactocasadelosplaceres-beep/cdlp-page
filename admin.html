@@ -233,6 +233,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
   storeAddress:"", deliveryWhatsapp:"523413292207",
   wholesaleTiers:[],
+  coupons:[],
 };
 const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-sonnet-5", systemPrompt:"Eres un asistente que ayuda a la tienda a redactar respuestas para clientes y a analizar su catálogo." };
 
@@ -247,6 +248,7 @@ let state = {
   wholesaleModal:null, wholesaleProductSearch:"",
   customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas"},
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
+  couponModal:null, couponProductSearch:"", couponUsage:[],
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
@@ -268,7 +270,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -279,6 +281,7 @@ async function loadData(){
       db.collection('transfers').orderBy('date','desc').limit(200).get(),
       db.collection('audits').orderBy('date','desc').limit(100).get(),
       db.collection('customers').get(),
+      db.collection('couponUsage').get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -288,6 +291,7 @@ async function loadData(){
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
     if(!state.settings.testimonials) state.settings.testimonials = [];
     if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
+    if(!state.settings.coupons) state.settings.coupons = [];
     // unen en una sola lista, ordenada por fecha, para verlos juntos en "Pedidos".
     const tiendaOrders = ordersSnap.docs.map(d=>({id:d.id, source:'tienda', archived:false, ...d.data()}));
     const posOrders = salesSnap.docs.map(d=>({
@@ -309,6 +313,7 @@ async function loadData(){
     state.transfers = transfersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.audits = auditsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.customers = customersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.couponUsage = couponUsageSnap.docs.map(d=>d.data());
 
     // Migración automática: cualquier producto que todavía no tenga inventario
     // repartido por centro, se le asigna TODO su stock actual al centro Principal.
@@ -326,7 +331,7 @@ async function loadData(){
   }catch(e){
     console.error(e);
     state.products = []; state.orders = []; state.visits = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
-    state.centers = []; state.transfers = []; state.audits = []; state.customers = [];
+    state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     showToast('No se pudo cargar todo desde el servidor');
   }
   state.loaded = true; render();
@@ -893,7 +898,7 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','diseño','asistente ia','configuración'].map(t=>`
+      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','cupones','diseño','asistente ia','configuración'].map(t=>`
         <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
@@ -907,6 +912,7 @@ function renderAdmin(){
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
       ${state.adminTab==='centros' ? renderCentros() : ''}
       ${state.adminTab==='mayoreo' ? renderMayoreo() : ''}
+      ${state.adminTab==='cupones' ? renderCupones() : ''}
       ${state.adminTab==='diseño' ? renderDiseno() : ''}
       ${state.adminTab==='asistente ia' ? renderAsistenteIA() : ''}
       ${state.adminTab==='configuración' ? renderConfig() : ''}
@@ -1678,6 +1684,143 @@ function renderWholesaleModal(){
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeWholesaleModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveWholesaleTier()">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============== CUPONES DE DESCUENTO ============== */
+function openCouponModal(id){
+  const c = id ? {...state.settings.coupons.find(x=>x.id===id)} : {
+    id: uid('cp_'), code:'', discountPercent:10, scope:'all', categories:[], productIds:[],
+    startDate:'', endDate:'', maxUses:0, active:true,
+  };
+  state.couponModal = c; state.couponProductSearch=''; render();
+}
+function closeCouponModal(){ state.couponModal=null; render(); }
+function toggleCouponCategory(cat, checked){
+  const c = state.couponModal;
+  if(checked){ if(!c.categories.includes(cat)) c.categories.push(cat); }
+  else{ c.categories = c.categories.filter(x=>x!==cat); }
+}
+function toggleCouponProduct(pid, checked){
+  const c = state.couponModal;
+  if(checked){ if(!c.productIds.includes(pid)) c.productIds.push(pid); }
+  else{ c.productIds = c.productIds.filter(id=>id!==pid); }
+}
+async function saveCoupon(){
+  const c = state.couponModal;
+  const code = document.getElementById('cp-code').value.trim().toUpperCase();
+  const discountPercent = Number(document.getElementById('cp-discount').value)||0;
+  const scope = document.getElementById('cp-scope').value;
+  const startDate = document.getElementById('cp-start').value;
+  const endDate = document.getElementById('cp-end').value;
+  const maxUses = Number(document.getElementById('cp-maxuses').value)||0;
+  if(!code){ showToast('Ponle un código al cupón'); return; }
+  const others = state.settings.coupons.filter(x=>x.id!==c.id);
+  if(others.some(x=>x.code===code)){ showToast('Ese código ya existe, elige otro'); return; }
+  const updated = {...c, code, discountPercent, scope, startDate, endDate, maxUses};
+  const idx = state.settings.coupons.findIndex(x=>x.id===c.id);
+  if(idx>=0) state.settings.coupons[idx] = updated;
+  else state.settings.coupons.push(updated);
+  await saveSettings();
+  state.couponModal=null; showToast('Cupón guardado'); render();
+}
+async function deleteCoupon(id){
+  if(!confirm('¿Eliminar este cupón?')) return;
+  state.settings.coupons = state.settings.coupons.filter(x=>x.id!==id);
+  await saveSettings(); showToast('Eliminado'); render();
+}
+async function toggleCouponActive(id){
+  const c = state.settings.coupons.find(x=>x.id===id); if(!c) return;
+  c.active = !c.active; await saveSettings(); render();
+}
+function couponUsedCount(code){ return state.couponUsage.filter(u=>u.code===code).length; }
+function couponStatusLabel(c){
+  if(!c.active) return {text:'Desactivado', color:'#8a6b78'};
+  const now = new Date();
+  if(c.startDate && now < new Date(c.startDate)) return {text:'Programado', color:'var(--amber)'};
+  if(c.endDate && now > new Date(c.endDate+'T23:59:59')) return {text:'Vencido', color:'#8a6b78'};
+  if(c.maxUses>0 && couponUsedCount(c.code)>=c.maxUses) return {text:'Agotado', color:'#8a6b78'};
+  return {text:'Activado', color:'var(--green)'};
+}
+function renderCupones(){
+  const coupons = state.settings.coupons||[];
+  return `
+    <div class="note-box">Crea códigos de descuento para que tus clientes los usen al finalizar su compra. Puedes limitarlos a ciertos productos o categorías, ponerles fecha de vigencia, y un número máximo de usos.</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="openCouponModal(null)">+ Crear cupón</button>
+    ${coupons.length===0 ? `<div class="empty-state">Aún no has creado ningún cupón.</div>` :
+      coupons.map(c=>{ const st = couponStatusLabel(c); return `
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="row-title">${c.code} <span class="status-badge" style="background:${st.color};">${st.text}</span></div>
+            <div class="row-actions">
+              <button class="icon-btn" onclick="toggleCouponActive('${c.id}')">${c.active?'⏸':'▶'}</button>
+              <button class="icon-btn" onclick="openCouponModal('${c.id}')">✎</button>
+              <button class="icon-btn danger" onclick="deleteCoupon('${c.id}')">🗑</button>
+            </div>
+          </div>
+          <div class="row-sub">${c.discountPercent}% de descuento · ${c.scope==='all'?'Toda la tienda':c.scope==='categories'?`Categorías: ${(c.categories||[]).join(', ')||'—'}`:`${(c.productIds||[]).length} producto(s)`}</div>
+          <div class="row-sub">Vigencia: ${c.startDate||c.endDate?`${c.startDate||'sin inicio'} — ${c.endDate||'sin fin'}`:'Indeterminada'} · Usos: ${couponUsedCount(c.code)}${c.maxUses>0?` de ${c.maxUses}`:' (ilimitado)'}</div>
+        </div>
+      `;}).join('')}
+    ${state.couponModal ? renderCouponModal() : ''}
+  `;
+}
+function renderCouponModal(){
+  const c = state.couponModal;
+  const q = (state.couponProductSearch||'').trim().toLowerCase();
+  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){closeCouponModal();}">
+    <div class="modal" style="max-width:520px;">
+      <h3>${c.code?'Editar':'Nuevo'} cupón</h3>
+      <div class="two-col">
+        <div class="form-field"><label>Código</label><input id="cp-code" value="${c.code||''}" style="text-transform:uppercase;" placeholder="Ej. VERANO20"></div>
+        <div class="form-field"><label>Descuento (%)</label><input id="cp-discount" type="number" value="${c.discountPercent}"></div>
+      </div>
+      <div class="form-field"><label>¿A qué aplica?</label>
+        <select id="cp-scope" onchange="state.couponModal.scope=this.value;render()">
+          <option value="all" ${c.scope==='all'?'selected':''}>Toda la tienda</option>
+          <option value="categories" ${c.scope==='categories'?'selected':''}>Categorías específicas</option>
+          <option value="products" ${c.scope==='products'?'selected':''}>Productos específicos</option>
+        </select>
+      </div>
+      ${c.scope==='categories' ? `
+        <div class="form-field"><label>Categorías incluidas</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;">
+            ${state.settings.categories.map(cat=>`
+              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+                <input type="checkbox" value="${cat}" ${(c.categories||[]).includes(cat)?'checked':''} onchange="toggleCouponCategory('${cat.replace(/'/g,"\\'")}',this.checked)">
+                ${cat}
+              </label>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${c.scope==='products' ? `
+        <div class="form-field"><label>Buscar productos para incluir</label>
+          <input placeholder="Nombre del producto..." value="${state.couponProductSearch}" oninput="state.couponProductSearch=this.value;render()">
+        </div>
+        ${candidates.length>0 ? `
+          <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+            ${candidates.map(p=>`
+              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
+                <input type="checkbox" ${(c.productIds||[]).includes(p.id)?'checked':''} onchange="toggleCouponProduct('${p.id}',this.checked)">
+                <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div></div>
+              </label>`).join('')}
+          </div>
+        ` : ''}
+        <div class="panel-sub">${(c.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
+      ` : ''}
+      <div class="two-col" style="margin-top:10px;">
+        <div class="form-field"><label>Vigente desde (opcional)</label><input id="cp-start" type="date" value="${c.startDate||''}"></div>
+        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="cp-end" type="date" value="${c.endDate||''}"></div>
+      </div>
+      <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" value="${c.maxUses||0}"></div>
+      ${couponUsedCount(c.code)>0 ? `<div class="panel-sub">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeCouponModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveCoupon()">Guardar</button>
       </div>
     </div>
   </div>`;
