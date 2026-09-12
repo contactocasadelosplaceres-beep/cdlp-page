@@ -245,6 +245,8 @@ let state = {
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   wholesaleModal:null, wholesaleProductSearch:"",
+  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas"},
+  customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
@@ -266,7 +268,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -276,6 +278,7 @@ async function loadData(){
       db.collection('distributionCenters').get(),
       db.collection('transfers').orderBy('date','desc').limit(200).get(),
       db.collection('audits').orderBy('date','desc').limit(100).get(),
+      db.collection('customers').get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -305,6 +308,7 @@ async function loadData(){
     }
     state.transfers = transfersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.audits = auditsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.customers = customersSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
     // Migración automática: cualquier producto que todavía no tenga inventario
     // repartido por centro, se le asigna TODO su stock actual al centro Principal.
@@ -322,7 +326,7 @@ async function loadData(){
   }catch(e){
     console.error(e);
     state.products = []; state.orders = []; state.visits = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
-    state.centers = []; state.transfers = []; state.audits = [];
+    state.centers = []; state.transfers = []; state.audits = []; state.customers = [];
     showToast('No se pudo cargar todo desde el servidor');
   }
   state.loaded = true; render();
@@ -889,7 +893,7 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','cajeros','centros','mayoreo','diseño','asistente ia','configuración'].map(t=>`
+      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','diseño','asistente ia','configuración'].map(t=>`
         <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
@@ -899,6 +903,7 @@ function renderAdmin(){
       ${state.adminTab==='tráfico' ? renderTrafico() : ''}
       ${state.adminTab==='productos' ? renderProductos() : ''}
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
+      ${state.adminTab==='clientes' ? renderClientes() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
       ${state.adminTab==='centros' ? renderCentros() : ''}
       ${state.adminTab==='mayoreo' ? renderMayoreo() : ''}
@@ -1299,6 +1304,239 @@ function setTransferQty(pid, qty){
   qty = Math.max(0, Number(qty)||0);
   if(qty===0) delete state.transferCart[pid]; else state.transferCart[pid] = qty;
   render();
+}
+
+/* ============== CLIENTES ============== */
+function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
+function computeCustomersList(){
+  const byPhone = {};
+  // 1) Se arman automáticamente a partir de los pedidos de la tienda (index.html).
+  state.orders.filter(o=>o.source!=='pos' && o.phone).forEach(o=>{
+    const key = normalizePhone(o.phone);
+    if(!key) return;
+    if(!byPhone[key]){
+      byPhone[key] = { id:key, name:o.customer||'Sin nombre', phone:o.phone, email:'', city:'', state:'', country:'', notes:'',
+        createdAt:null, purchases:[], totalSpent:0, isManual:false, manualId:null };
+    }
+    const c = byPhone[key];
+    if(new Date(o.date) > new Date(c.lastDate||0)){ c.name = o.customer||c.name; c.lastDate = o.date; c.lastFolio = o.orderNumber; }
+    if(o.status!=='Cancelado'){ c.totalSpent += (o.total||0); c.purchases.push(o); }
+  });
+  // 2) Se combinan con los perfiles que tú creas/editas a mano (colección "customers").
+  state.customers.forEach(m=>{
+    const key = m.phone ? normalizePhone(m.phone) : `manual_${m.id}`;
+    if(byPhone[key]){
+      Object.assign(byPhone[key], { name:m.name||byPhone[key].name, email:m.email||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'', createdAt:m.createdAt||null, isManual:true, manualId:m.id });
+    }else{
+      byPhone[key] = { id:key, name:m.name||'Sin nombre', phone:m.phone||'', email:m.email||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'',
+        createdAt:m.createdAt||null, purchases:[], totalSpent:0, isManual:true, manualId:m.id };
+    }
+  });
+  return Object.values(byPhone).map(c=>({
+    ...c,
+    purchaseCount: c.purchases.length,
+    registeredAt: c.createdAt || c.lastDate || null,
+  })).sort((a,b)=>b.totalSpent-a.totalSpent);
+}
+function filteredCustomers(){
+  let list = computeCustomersList();
+  const q = (state.customerSearch||'').trim().toLowerCase();
+  if(q) list = list.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q));
+  const f = state.customerFilters;
+  if(f.country!=='Todos') list = list.filter(c=>(c.country||'—')===f.country);
+  if(f.state!=='Todos') list = list.filter(c=>(c.state||'—')===f.state);
+  if(f.city!=='Todos') list = list.filter(c=>(c.city||'—')===f.city);
+  if(f.regDate!=='Todas'){
+    const days = {'Último día':1,'Últimos 7 días':7,'Últimos 30 días':30}[f.regDate];
+    if(days){ const cutoff = Date.now()-days*86400000; list = list.filter(c=>c.registeredAt && new Date(c.registeredAt).getTime()>=cutoff); }
+  }
+  return list;
+}
+function distinctCustomerValues(field){
+  const vals = new Set(computeCustomersList().map(c=>c[field]||'—'));
+  return Array.from(vals).sort();
+}
+function openCustomerModal(manualId){
+  if(manualId){ state.customerModal = {...state.customers.find(c=>c.id===manualId)}; }
+  else{ state.customerModal = { name:'', phone:'', email:'', city:'', state:'', country:'', notes:'' }; }
+  render();
+}
+function closeCustomerModal(){ state.customerModal=null; render(); }
+async function saveCustomerModal(){
+  const name = document.getElementById('cm-name').value.trim();
+  const phone = document.getElementById('cm-phone').value.trim();
+  const email = document.getElementById('cm-email').value.trim();
+  const city = document.getElementById('cm-city').value.trim();
+  const stateField = document.getElementById('cm-state').value.trim();
+  const country = document.getElementById('cm-country').value.trim();
+  const notes = document.getElementById('cm-notes').value.trim();
+  if(!name){ showToast('Ponle un nombre al cliente'); return; }
+  const payload = { name, phone, email, city, state:stateField, country, notes };
+  try{
+    if(state.customerModal.id){
+      payload.createdAt = state.customerModal.createdAt || new Date().toISOString();
+      await db.collection('customers').doc(state.customerModal.id).set(payload);
+      const idx = state.customers.findIndex(c=>c.id===state.customerModal.id);
+      state.customers[idx] = {id:state.customerModal.id, ...payload};
+    }else{
+      payload.createdAt = new Date().toISOString();
+      const ref = await db.collection('customers').add(payload);
+      state.customers.push({id:ref.id, ...payload});
+    }
+    state.customerModal=null; showToast('Cliente guardado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo guardar el cliente'); }
+}
+async function deleteCustomerProfile(id){
+  if(!confirm('¿Eliminar este perfil de cliente? (su historial de compras no se borra, solo el perfil manual)')) return;
+  try{
+    await db.collection('customers').doc(id).delete();
+    state.customers = state.customers.filter(c=>c.id!==id);
+    showToast('Perfil eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar'); }
+}
+function exportCustomersCSV(){
+  const list = filteredCustomers();
+  const rows = [['nombre','telefono','email','ciudad','estado','pais','ultima_compra','total_consumido','numero_de_compras','notas']];
+  list.forEach(c=>rows.push([c.name, c.phone, c.email, c.city, c.state, c.country, c.lastFolio?`#${String(c.lastFolio).padStart(4,'0')}`:'', c.totalSpent, c.purchaseCount, c.notes||'']));
+  const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='clientes.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+function parseCustomerCSV(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) return [];
+  const header = lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/"/g,''));
+  const idx = (name)=>header.findIndex(h=>h.includes(name));
+  const iName=idx('nombre'), iPhone=idx('telefono'), iEmail=idx('email')>=0?idx('email'):idx('correo'), iCity=idx('ciudad'), iState=idx('estado'), iCountry=idx('pais'), iNotes=idx('notas');
+  return lines.slice(1).map(line=>{
+    const cols = line.match(/(".*?"|[^,]+)(?=,|$)/g)||[];
+    const clean = i => i>=0 && cols[i] ? cols[i].replace(/^"|"$/g,'').replace(/""/g,'"').trim() : '';
+    return { name:clean(iName), phone:clean(iPhone), email:clean(iEmail), city:clean(iCity), state:clean(iState), country:clean(iCountry), notes:clean(iNotes) };
+  }).filter(r=>r.name);
+}
+function handleCustomerImportFile(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{ state.customerImportText = e.target.result; state.customerImportPreview = parseCustomerCSV(state.customerImportText); render(); };
+  reader.readAsText(file);
+}
+function handleCustomerImportTextChange(val){
+  state.customerImportText = val;
+  state.customerImportPreview = parseCustomerCSV(val);
+  render();
+}
+async function commitCustomerImport(){
+  if(state.customerImportPreview.length===0){ showToast('No hay clientes para importar'); return; }
+  try{
+    const batch = db.batch();
+    state.customerImportPreview.forEach(row=>{
+      const existing = row.phone ? state.customers.find(c=>normalizePhone(c.phone)===normalizePhone(row.phone)) : null;
+      const payload = {name:row.name, phone:row.phone||'', email:row.email||'', city:row.city||'', state:row.state||'', country:row.country||'', notes:row.notes||'', createdAt: existing?existing.createdAt:new Date().toISOString()};
+      const ref = existing ? db.collection('customers').doc(existing.id) : db.collection('customers').doc();
+      batch.set(ref, payload);
+      if(existing) Object.assign(existing, payload); else state.customers.push({id:ref.id, ...payload});
+    });
+    await batch.commit();
+    state.customerImportOpen=false; state.customerImportPreview=[]; state.customerImportText='';
+    showToast('Clientes importados'); render();
+  }catch(e){ console.error(e); showToast('Ocurrió un error al importar'); }
+}
+function renderClientes(){
+  const list = filteredCustomers();
+  return `
+    <div class="toolbar">
+      <button class="btn-add-new" onclick="openCustomerModal(null)">+ Agregar nuevo cliente</button>
+      <button class="btn-outline" onclick="state.customerImportOpen=true;render()">Importar</button>
+      <button class="btn-outline" onclick="exportCustomersCSV()">Exportar</button>
+    </div>
+    <div class="two-col" style="margin-bottom:12px;">
+      <input placeholder="Buscar por nombre, teléfono o email..." value="${state.customerSearch}" oninput="state.customerSearch=this.value;render()">
+      <select onchange="state.customerFilters.regDate=this.value;render()">
+        ${['Todas','Último día','Últimos 7 días','Últimos 30 días'].map(d=>`<option ${state.customerFilters.regDate===d?'selected':''}>${d}</option>`).join('')}
+      </select>
+    </div>
+    <div class="two-col" style="margin-bottom:16px;">
+      <select onchange="state.customerFilters.country=this.value;render()">
+        <option>Todos</option>${distinctCustomerValues('country').map(v=>`<option ${state.customerFilters.country===v?'selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="state.customerFilters.state=this.value;render()">
+        <option>Todos</option>${distinctCustomerValues('state').map(v=>`<option ${state.customerFilters.state===v?'selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-field" style="max-width:50%;margin-bottom:16px;">
+      <select onchange="state.customerFilters.city=this.value;render()">
+        <option>Todos</option>${distinctCustomerValues('city').map(v=>`<option ${state.customerFilters.city===v?'selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="panel-title" style="margin-bottom:12px;">Clientes (${list.length})</div>
+    ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan.</div>` :
+      list.map(c=>`
+        <div class="list-row">
+          <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
+            <div class="row-title">${c.name}${c.isManual?'':' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(automático)</span>'}</div>
+            <div class="row-sub">${c.lastFolio?`Última compra: #${String(c.lastFolio).padStart(4,'0')} · `:'Sin compras · '}${c.purchaseCount} compra(s)</div>
+          </div>
+          <div style="text-align:right;margin-right:10px;">
+            <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
+          </div>
+          <div class="row-actions">
+            ${c.phone ? `<a class="icon-btn" href="https://wa.me/${normalizePhone(c.phone)}" target="_blank" title="WhatsApp">
+              <svg width="15" height="15" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
+            </a>` : ''}
+            ${c.isManual ? `<button class="icon-btn danger" onclick="event.stopPropagation();deleteCustomerProfile('${c.manualId}')">🗑</button>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    ${state.customerModal ? renderCustomerModal() : ''}
+    ${state.customerImportOpen ? renderCustomerImportModal() : ''}
+  `;
+}
+function renderCustomerModal(){
+  const c = state.customerModal;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){closeCustomerModal();}">
+    <div class="modal">
+      <h3>${c.id?'Editar cliente':'Nuevo cliente'}</h3>
+      <div class="form-field"><label>Nombre</label><input id="cm-name" value="${c.name||''}"></div>
+      <div class="two-col">
+        <div class="form-field"><label>Teléfono / WhatsApp</label><input id="cm-phone" value="${c.phone||''}"></div>
+        <div class="form-field"><label>Email</label><input id="cm-email" value="${c.email||''}"></div>
+      </div>
+      <div class="two-col">
+        <div class="form-field"><label>Ciudad</label><input id="cm-city" value="${c.city||''}"></div>
+        <div class="form-field"><label>Estado</label><input id="cm-state" value="${c.state||''}"></div>
+      </div>
+      <div class="form-field"><label>País</label><input id="cm-country" value="${c.country||''}"></div>
+      <div class="form-field"><label>Notas</label><textarea id="cm-notes">${c.notes||''}</textarea></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeCustomerModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveCustomerModal()">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderCustomerImportModal(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.customerImportOpen=false;state.customerImportPreview=[];state.customerImportText='';render();}">
+    <div class="modal">
+      <h3>Importar clientes</h3>
+      <div class="note-box">Sube un <strong>CSV</strong> o pega el contenido con columnas: nombre, telefono, email, ciudad, estado, pais, notas (encabezado obligatorio, ese orden no importa).</div>
+      <div class="import-drop">
+        Selecciona tu archivo .csv<br>
+        <input type="file" accept=".csv,.txt" onchange="handleCustomerImportFile(this)">
+      </div>
+      <div class="form-field"><label>O pega aquí el contenido</label>
+        <textarea style="min-height:110px;" oninput="handleCustomerImportTextChange(this.value)">${state.customerImportText}</textarea>
+      </div>
+      ${state.customerImportPreview.length>0 ? `<div class="preview-count">${state.customerImportPreview.length} cliente(s) detectado(s).</div>` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.customerImportOpen=false;state.customerImportPreview=[];state.customerImportText='';render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitCustomerImport()">Importar</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* ============== MAYOREO (tablas de precios por volumen) ============== */
