@@ -1397,7 +1397,7 @@ async function deleteCustomerProfile(id){
 function exportCustomersCSV(){
   const list = filteredCustomers();
   const rows = [['nombre','telefono','email','ciudad','estado','pais','ultima_compra','total_consumido','numero_de_compras','notas']];
-  list.forEach(c=>rows.push([c.name, c.phone, c.email, c.city, c.state, c.country, c.lastFolio?`#${String(c.lastFolio).padStart(4,'0')}`:'', c.totalSpent, c.purchaseCount, c.notes||'']));
+  list.forEach(c=>rows.push([c.name, c.phone, c.email, c.city, c.state, c.country, c.lastDate?new Date(c.lastDate).toLocaleDateString('es-MX'):'', c.totalSpent, c.purchaseCount, c.notes||'']));
   const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -1476,7 +1476,7 @@ function renderClientes(){
         <div class="list-row">
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
             <div class="row-title">${c.name}${c.isManual?'':' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(automático)</span>'}</div>
-            <div class="row-sub">${c.lastFolio?`Última compra: #${String(c.lastFolio).padStart(4,'0')} · `:'Sin compras · '}${c.purchaseCount} compra(s)</div>
+            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · `:'Sin compras · '}${c.purchaseCount} compra(s)</div>
           </div>
           <div style="text-align:right;margin-right:10px;">
             <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
