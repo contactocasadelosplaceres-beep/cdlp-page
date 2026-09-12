@@ -360,6 +360,7 @@ async function loadData(){
     if(!state.settings.testimonials) state.settings.testimonials = [];
     if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
     if(!state.settings.coupons) state.settings.coupons = [];
+    if(!state.settings.promotions) state.settings.promotions = [];
   }catch(e){
     console.error(e);
     state.products = []; state.settings = {...DEFAULT_SETTINGS}; state.loadError = true;
@@ -479,6 +480,99 @@ function couponDiscountedPrice(p, price){
   if(!state.appliedCoupon || !isCouponEligible(p, state.appliedCoupon)) return price;
   return Math.round(price*(1-state.appliedCoupon.discountPercent/100)*100)/100;
 }
+
+/* ============== PROMOCIONES AUTOMÁTICAS ============== */
+function activePromotions(){
+  const now = new Date();
+  return (state.settings.promotions||[]).filter(promo=>{
+    if(!promo.active) return false;
+    if(promo.startDate && now < new Date(promo.startDate)) return false;
+    if(promo.endDate && now > new Date(promo.endDate+'T23:59:59')) return false;
+    return true;
+  });
+}
+function isPromoScopeEligible(p, promo){
+  if(promo.scope==='all') return true;
+  if(promo.scope==='categories') return productCats(p).some(c=>(promo.categories||[]).includes(c));
+  if(promo.scope==='products') return (promo.productIds||[]).includes(p.id);
+  return false;
+}
+function cartEligibleQtyAndAmount(promo){
+  let qty=0, amount=0;
+  Object.entries(state.cart).forEach(([key,q])=>{
+    const {p} = parseCartKey(key);
+    if(p && isPromoScopeEligible(p, promo)){ qty+=q; amount += finalPrice(p)*q; }
+  });
+  return {qty, amount};
+}
+// Precio por unidad después de aplicar la MEJOR promoción automática disponible
+// (nunca se combinan varias entre sí: siempre se usa la que más le convenga al cliente).
+function automaticDiscountedPrice(p){
+  let best = finalPrice(p); // ya incluye precio promocional del producto y mayoreo (si está desbloqueado)
+  activePromotions().forEach(promo=>{
+    if(promo.type==='cart_discount' && isPromoScopeEligible(p, promo)){
+      const {amount} = cartEligibleQtyAndAmount(promo);
+      if(amount >= (promo.minAmount||0)){
+        const candidate = Math.round(p.price*(1-promo.discountPercent/100)*100)/100;
+        if(candidate < best) best = candidate;
+      }
+    }
+    if(promo.type==='progressive' && isPromoScopeEligible(p, promo)){
+      const {qty} = cartEligibleQtyAndAmount(promo);
+      const applicable = (promo.tiers||[]).filter(t=>qty>=t.minQty).sort((a,b)=>b.discountPercent-a.discountPercent);
+      if(applicable.length){
+        const candidate = Math.round(p.price*(1-applicable[0].discountPercent/100)*100)/100;
+        if(candidate < best) best = candidate;
+      }
+    }
+    if(promo.type==='cross_sell' && promo.discountProductId===p.id){
+      const hasTrigger = Object.keys(state.cart).some(key=>{ const {p:pp}=parseCartKey(key); return pp && pp.id===promo.triggerProductId; });
+      if(hasTrigger){
+        const candidate = Math.round(p.price*(1-promo.discountPercent/100)*100)/100;
+        if(candidate < best) best = candidate;
+      }
+    }
+  });
+  return best;
+}
+// "Lleva X y paga Y": junta las unidades elegibles de todo el carrito, y hace gratis
+// las más baratas de cada grupo completo de X unidades.
+function buyXPayYAdjustment(){
+  let discount = 0;
+  activePromotions().filter(promo=>promo.type==='buyxpayy').forEach(promo=>{
+    const units = [];
+    Object.entries(state.cart).forEach(([key,q])=>{
+      const {p} = parseCartKey(key);
+      if(p && isPromoScopeEligible(p, promo)){
+        const unitPrice = automaticDiscountedPrice(p);
+        for(let i=0;i<q;i++) units.push(unitPrice);
+      }
+    });
+    if(units.length < promo.buyQty) return;
+    units.sort((a,b)=>a-b);
+    const freeCount = Math.floor(units.length/promo.buyQty) * (promo.buyQty-promo.payQty);
+    for(let i=0;i<freeCount;i++) discount += units[i];
+  });
+  return discount;
+}
+function cartSubtotalBeforeGift(){
+  let s = 0;
+  Object.entries(state.cart).forEach(([key,qty])=>{
+    const {p,v} = parseCartKey(key);
+    if(!p) return;
+    let price = v ? (v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p)) : automaticDiscountedPrice(p);
+    price = couponDiscountedPrice(p, price);
+    s += price*qty;
+  });
+  return Math.max(0, s - buyXPayYAdjustment());
+}
+function activeGift(){
+  const subtotal = cartSubtotalBeforeGift();
+  const gift = activePromotions().find(promo=>promo.type==='gift' && subtotal >= (promo.minAmount||0));
+  if(!gift) return null;
+  const product = state.products.find(p=>p.id===gift.giftProductId);
+  return product ? {promo:gift, product} : null;
+}
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
 function parseCartKey(key){
@@ -496,13 +590,16 @@ function showToast(msg){
 }
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
 function cartTotal(){
-  return Object.entries(state.cart).reduce((s,[key,qty])=>{
+  let total = 0;
+  Object.entries(state.cart).forEach(([key,qty])=>{
     const {p,v} = parseCartKey(key);
-    if(!p) return s;
-    let price = v ? (v.priceOverride>0 ? v.priceOverride : effectivePrice(p)) : finalPrice(p);
+    if(!p) return;
+    let price = v ? (v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p)) : automaticDiscountedPrice(p);
     price = couponDiscountedPrice(p, price);
-    return s + price*qty;
-  }, 0);
+    total += price*qty;
+  });
+  total -= buyXPayYAdjustment();
+  return Math.max(0, total);
 }
 function waLink(msg){ const num=(state.settings.whatsapp||'').replace(/\D/g,''); return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`; }
 
@@ -569,10 +666,18 @@ function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.a
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
-    let price = v && v.priceOverride>0 ? v.priceOverride : finalPrice(p);
+    let price = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p);
     price = couponDiscountedPrice(p, price);
     return {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
   });
+  const buyXPayYSavings = buyXPayYAdjustment();
+  if(buyXPayYSavings>0){
+    items.push({id:'promo_buyxpayy', name:'Promoción (lleva X y paga Y)', price:-buyXPayYSavings, qty:1});
+  }
+  const gift = activeGift();
+  if(gift){
+    items.push({id:gift.product.id, name:`${gift.product.name} (regalo)`, price:0, qty:1});
+  }
   const orderNumber = await getNextOrderNumber();
   const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
   const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
@@ -671,7 +776,7 @@ function renderProductDetailDrawer(){
   const key = cartKey(p.id, matchedVariant ? matchedVariant.id : null);
   const qty = state.cart[key] || 0;
   const stockLeft = itemStock(p, matchedVariant);
-  const price = matchedVariant && matchedVariant.priceOverride>0 ? matchedVariant.priceOverride : finalPrice(p);
+  const price = matchedVariant && matchedVariant.priceOverride>0 ? matchedVariant.priceOverride : automaticDiscountedPrice(p);
   const needsSelection = hasVariants && !matchedVariant;
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><button class="close-x" onclick="closeProductDetail()">✕</button></div>
@@ -947,7 +1052,7 @@ function renderProductCard(p, forceBest){
           <div class="card-cat">${productCats(p).join(', ')}</div>
           <div class="card-name">${p.name}</div>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
-          <div class="card-price">${wholesaleUnlocked ? money(finalPrice(p)) : hasPromo ? `<s style="color:var(--ink-soft);font-weight:600;font-size:12px;margin-right:5px;">${money(p.price)}</s>${money(p.promoPrice)}` : money(p.price)}</div>
+          <div class="card-price">${automaticDiscountedPrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:12px;margin-right:5px;">${money(p.price)}</s>${money(automaticDiscountedPrice(p))}` : money(p.price)}</div>
         </div>
       </div>`;
 }
@@ -1055,12 +1160,14 @@ function renderWholesaleBanner(tier){
 function renderCartDrawer(){
   const entries = Object.entries(state.cart);
   const tier = activeWholesaleTier();
+  const buyXPayYSavings = buyXPayYAdjustment();
+  const gift = activeGift();
   return `
     <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" onclick="state.cartOpen=false;render()">✕</button></div>
     <div class="drawer-body">
       ${tier ? renderWholesaleBanner(tier) : ''}
       ${entries.length===0 ? `<div class="empty-state">Tu carrito está vacío.</div>` :
-        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const basePrice = v && v.priceOverride>0 ? v.priceOverride : finalPrice(p); const price = couponDiscountedPrice(p, basePrice); return `
+        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const basePrice = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p); const price = couponDiscountedPrice(p, basePrice); return `
           <div class="cart-item">
             ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${p.images[0]}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="cart-item-info">
@@ -1074,6 +1181,8 @@ function renderCartDrawer(){
               </div>
             </div>
           </div>`;}).join('')}
+      ${buyXPayYSavings>0 ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">✓ Promoción aplicada: ahorras ${money(buyXPayYSavings)}</div>` : ''}
+      ${gift ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">🎁 ¡Llevas de regalo: ${gift.product.name}!</div>` : ''}
       ${entries.length>0 ? `
         <div class="form-field" style="margin-top:14px;">
           <label>¿Tienes un código de descuento?</label>

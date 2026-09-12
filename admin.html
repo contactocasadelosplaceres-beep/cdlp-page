@@ -234,6 +234,7 @@ const DEFAULT_SETTINGS = {
   storeAddress:"", deliveryWhatsapp:"523413292207",
   wholesaleTiers:[],
   coupons:[],
+  promotions:[],
 };
 const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-sonnet-5", systemPrompt:"Eres un asistente que ayuda a la tienda a redactar respuestas para clientes y a analizar su catálogo." };
 
@@ -249,6 +250,7 @@ let state = {
   customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas"},
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   couponModal:null, couponProductSearch:"", couponUsage:[],
+  promoModal:null, promoProductSearch:"", promoProductSearch2:"",
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
 };
@@ -292,6 +294,7 @@ async function loadData(){
     if(!state.settings.testimonials) state.settings.testimonials = [];
     if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
     if(!state.settings.coupons) state.settings.coupons = [];
+    if(!state.settings.promotions) state.settings.promotions = [];
     // unen en una sola lista, ordenada por fecha, para verlos juntos en "Pedidos".
     const tiendaOrders = ordersSnap.docs.map(d=>({id:d.id, source:'tienda', archived:false, ...d.data()}));
     const posOrders = salesSnap.docs.map(d=>({
@@ -898,7 +901,7 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','cupones','diseño','asistente ia','configuración'].map(t=>`
+      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','cupones','promociones','diseño','asistente ia','configuración'].map(t=>`
         <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
@@ -913,6 +916,7 @@ function renderAdmin(){
       ${state.adminTab==='centros' ? renderCentros() : ''}
       ${state.adminTab==='mayoreo' ? renderMayoreo() : ''}
       ${state.adminTab==='cupones' ? renderCupones() : ''}
+      ${state.adminTab==='promociones' ? renderPromociones() : ''}
       ${state.adminTab==='diseño' ? renderDiseno() : ''}
       ${state.adminTab==='asistente ia' ? renderAsistenteIA() : ''}
       ${state.adminTab==='configuración' ? renderConfig() : ''}
@@ -1821,6 +1825,255 @@ function renderCouponModal(){
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCouponModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveCoupon()">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============== PROMOCIONES ============== */
+const PROMO_TYPES = {
+  buyxpayy: 'Lleva X y paga Y (2x1, 3x2, etc.)',
+  progressive: 'Descuento progresivo por cantidad',
+  cart_discount: 'Descuento automático en el carrito',
+  gift: 'Regalo automático en el carrito',
+  cross_sell: 'Cross selling (descuento al comprar dos productos juntos)',
+};
+function openPromoModal(id){
+  const p = id ? JSON.parse(JSON.stringify(state.settings.promotions.find(x=>x.id===id))) : {
+    id: uid('pr_'), name:'', type:'buyxpayy', scope:'all', categories:[], productIds:[],
+    startDate:'', endDate:'', active:true,
+    buyQty:3, payQty:2,
+    tiers:[{minQty:3, discountPercent:10},{minQty:5, discountPercent:15}],
+    discountPercent:10, minAmount:0,
+    giftProductId:'',
+    triggerProductId:'', discountProductId:'',
+  };
+  state.promoModal = p; state.promoProductSearch=''; state.promoProductSearch2=''; render();
+}
+function closePromoModal(){ state.promoModal=null; render(); }
+function togglePromoCategory(cat, checked){
+  const p = state.promoModal;
+  if(checked){ if(!p.categories.includes(cat)) p.categories.push(cat); }
+  else{ p.categories = p.categories.filter(c=>c!==cat); }
+}
+function togglePromoProduct(pid, checked){
+  const p = state.promoModal;
+  if(checked){ if(!p.productIds.includes(pid)) p.productIds.push(pid); }
+  else{ p.productIds = p.productIds.filter(id=>id!==pid); }
+}
+function addPromoTier(){ state.promoModal.tiers.push({minQty:0, discountPercent:0}); render(); }
+function removePromoTier(idx){ state.promoModal.tiers.splice(idx,1); render(); }
+function setPromoTier(idx, field, value){ state.promoModal.tiers[idx][field] = Number(value)||0; }
+async function savePromotion(){
+  const p = state.promoModal;
+  const name = document.getElementById('pr-name').value.trim();
+  const type = document.getElementById('pr-type').value;
+  const startDate = document.getElementById('pr-start').value;
+  const endDate = document.getElementById('pr-end').value;
+  if(!name){ showToast('Ponle un nombre a la promoción'); return; }
+  let updated = {...p, name, type, startDate, endDate};
+  if(type==='all_scope_needed_placeholder'){} // no-op, kept for clarity
+  if(['buyxpayy','progressive','cart_discount'].includes(type)){
+    updated.scope = document.getElementById('pr-scope').value;
+  }
+  if(type==='buyxpayy'){
+    updated.buyQty = Number(document.getElementById('pr-buyqty').value)||1;
+    updated.payQty = Number(document.getElementById('pr-payqty').value)||1;
+    if(updated.payQty >= updated.buyQty){ showToast('"Pagas" debe ser menor que "Llevas"'); return; }
+  }
+  if(type==='cart_discount'){
+    updated.discountPercent = Number(document.getElementById('pr-discount').value)||0;
+    updated.minAmount = Number(document.getElementById('pr-minamount').value)||0;
+  }
+  if(type==='gift'){
+    updated.minAmount = Number(document.getElementById('pr-gift-minamount').value)||0;
+    if(!updated.giftProductId){ showToast('Elige el producto de regalo'); return; }
+  }
+  if(type==='cross_sell'){
+    updated.discountPercent = Number(document.getElementById('pr-cross-discount').value)||0;
+    if(!updated.triggerProductId || !updated.discountProductId){ showToast('Elige los dos productos'); return; }
+  }
+  const idx = state.settings.promotions.findIndex(x=>x.id===p.id);
+  if(idx>=0) state.settings.promotions[idx] = updated;
+  else state.settings.promotions.push(updated);
+  await saveSettings();
+  state.promoModal=null; showToast('Promoción guardada'); render();
+}
+async function deletePromotion(id){
+  if(!confirm('¿Eliminar esta promoción?')) return;
+  state.settings.promotions = state.settings.promotions.filter(x=>x.id!==id);
+  await saveSettings(); showToast('Eliminada'); render();
+}
+async function togglePromoActive(id){
+  const p = state.settings.promotions.find(x=>x.id===id); if(!p) return;
+  p.active = !p.active; await saveSettings(); render();
+}
+function promoSummary(p){
+  if(p.type==='buyxpayy') return `Lleva ${p.buyQty} y paga ${p.payQty}`;
+  if(p.type==='progressive') return (p.tiers||[]).map(t=>`${t.minQty}+: ${t.discountPercent}%`).join(' · ');
+  if(p.type==='cart_discount') return `${p.discountPercent}% de descuento${p.minAmount>0?` desde ${money(p.minAmount)}`:''}`;
+  if(p.type==='gift'){ const g = state.products.find(x=>x.id===p.giftProductId); return `Regalo: ${g?g.name:'—'}${p.minAmount>0?` desde ${money(p.minAmount)}`:''}`; }
+  if(p.type==='cross_sell'){ const a=state.products.find(x=>x.id===p.triggerProductId), b=state.products.find(x=>x.id===p.discountProductId); return `${a?a.name:'—'} + ${b?b.name:'—'}: ${p.discountPercent}% en el segundo`; }
+  return '';
+}
+function renderPromociones(){
+  const promos = state.settings.promotions||[];
+  return `
+    <div class="note-box">Crea promociones automáticas — se aplican solas cuando el cliente cumple la condición, sin necesidad de código. (Para descuentos que necesitan un código, ve a la pestaña Cupones. Para el precio tachado de un producto individual, edítalo directo en Productos.)</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="openPromoModal(null)">+ Nueva promoción</button>
+    ${promos.length===0 ? `<div class="empty-state">Aún no has creado ninguna promoción.</div>` :
+      promos.map(p=>`
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="row-title">${p.name} <span class="status-badge" style="background:${p.active?'var(--green)':'#8a6b78'};">${p.active?'Activa':'Inactiva'}</span></div>
+            <div class="row-actions">
+              <button class="icon-btn" onclick="togglePromoActive('${p.id}')">${p.active?'⏸':'▶'}</button>
+              <button class="icon-btn" onclick="openPromoModal('${p.id}')">✎</button>
+              <button class="icon-btn danger" onclick="deletePromotion('${p.id}')">🗑</button>
+            </div>
+          </div>
+          <div class="row-sub">${PROMO_TYPES[p.type]}</div>
+          <div class="row-sub">${promoSummary(p)}</div>
+        </div>
+      `).join('')}
+    ${state.promoModal ? renderPromoModal() : ''}
+  `;
+}
+function renderPromoScopePicker(p){
+  const q = (state.promoProductSearch||'').trim().toLowerCase();
+  const candidates = q ? state.products.filter(x=>(x.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  return `
+    <div class="form-field"><label>¿A qué productos aplica?</label>
+      <select id="pr-scope" onchange="state.promoModal.scope=this.value;render()">
+        <option value="all" ${p.scope==='all'?'selected':''}>Toda la tienda</option>
+        <option value="categories" ${p.scope==='categories'?'selected':''}>Categorías específicas</option>
+        <option value="products" ${p.scope==='products'?'selected':''}>Productos específicos</option>
+      </select>
+    </div>
+    ${p.scope==='categories' ? `
+      <div class="form-field"><label>Categorías incluidas</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;">
+          ${state.settings.categories.map(c=>`
+            <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+              <input type="checkbox" value="${c}" ${(p.categories||[]).includes(c)?'checked':''} onchange="togglePromoCategory('${c.replace(/'/g,"\\'")}',this.checked)">
+              ${c}
+            </label>`).join('')}
+        </div>
+      </div>
+    ` : ''}
+    ${p.scope==='products' ? `
+      <div class="form-field"><label>Buscar productos</label>
+        <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
+      </div>
+      ${candidates.length>0 ? `
+        <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+          ${candidates.map(pr=>`
+            <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
+              <input type="checkbox" ${(p.productIds||[]).includes(pr.id)?'checked':''} onchange="togglePromoProduct('${pr.id}',this.checked)">
+              <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
+            </label>`).join('')}
+        </div>
+      ` : ''}
+      <div class="panel-sub">${(p.productIds||[]).length} producto(s) seleccionado(s).</div>
+    ` : ''}
+  `;
+}
+function renderPromoModal(){
+  const p = state.promoModal;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){closePromoModal();}">
+    <div class="modal" style="max-width:560px;">
+      <h3>${p.name?'Editar':'Nueva'} promoción</h3>
+      <div class="form-field"><label>Nombre (uso interno, no lo ven tus clientes)</label><input id="pr-name" value="${p.name||''}"></div>
+      <div class="form-field"><label>Tipo de descuento</label>
+        <select id="pr-type" onchange="state.promoModal.type=this.value;render()">
+          ${Object.entries(PROMO_TYPES).map(([k,v])=>`<option value="${k}" ${p.type===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+
+      ${p.type==='buyxpayy' ? `
+        <div class="two-col">
+          <div class="form-field"><label>Llevando (unidades)</label><input id="pr-buyqty" type="number" value="${p.buyQty}"></div>
+          <div class="form-field"><label>Pagas (unidades)</label><input id="pr-payqty" type="number" value="${p.payQty}"></div>
+        </div>
+        ${renderPromoScopePicker(p)}
+      ` : ''}
+
+      ${p.type==='progressive' ? `
+        <div class="form-field"><label>Escalones (a partir de cuántas piezas, qué % de descuento)</label>
+          ${(p.tiers||[]).map((t,idx)=>`
+            <div class="two-col" style="margin-bottom:8px;">
+              <input type="number" placeholder="Desde X piezas" value="${t.minQty}" onchange="setPromoTier(${idx},'minQty',this.value)">
+              <input type="number" placeholder="% descuento" value="${t.discountPercent}" onchange="setPromoTier(${idx},'discountPercent',this.value)">
+            </div>
+          `).join('')}
+          <button class="btn-outline" onclick="addPromoTier()">+ Agregar escalón</button>
+        </div>
+        ${renderPromoScopePicker(p)}
+      ` : ''}
+
+      ${p.type==='cart_discount' ? `
+        <div class="two-col">
+          <div class="form-field"><label>Descuento (%)</label><input id="pr-discount" type="number" value="${p.discountPercent}"></div>
+          <div class="form-field"><label>Compra mínima ($, 0 = sin mínimo)</label><input id="pr-minamount" type="number" value="${p.minAmount}"></div>
+        </div>
+        ${renderPromoScopePicker(p)}
+      ` : ''}
+
+      ${p.type==='gift' ? `
+        <div class="form-field"><label>Compra mínima para el regalo ($)</label><input id="pr-gift-minamount" type="number" value="${p.minAmount}"></div>
+        <div class="form-field"><label>Buscar producto de regalo</label>
+          <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
+        </div>
+        ${(state.promoProductSearch||'').trim() ? `
+          <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+            ${state.products.filter(x=>(x.name||'').toLowerCase().includes(state.promoProductSearch.trim().toLowerCase())).slice(0,15).map(pr=>`
+              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
+                <input type="radio" name="pr-gift-radio" ${p.giftProductId===pr.id?'checked':''} onchange="state.promoModal.giftProductId='${pr.id}'">
+                <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
+              </label>`).join('')}
+          </div>
+        ` : ''}
+        <div class="panel-sub">Regalo elegido: ${p.giftProductId ? (state.products.find(x=>x.id===p.giftProductId)||{}).name || '—' : 'ninguno'}</div>
+      ` : ''}
+
+      ${p.type==='cross_sell' ? `
+        <div class="form-field"><label>Descuento (%) sobre el segundo producto</label><input id="pr-cross-discount" type="number" value="${p.discountPercent}"></div>
+        <div class="form-field"><label>Buscar producto A (el que dispara la promo)</label>
+          <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
+        </div>
+        ${(state.promoProductSearch||'').trim() ? `
+          <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+            ${state.products.filter(x=>(x.name||'').toLowerCase().includes(state.promoProductSearch.trim().toLowerCase())).slice(0,10).map(pr=>`
+              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
+                <input type="radio" name="pr-trigger-radio" ${p.triggerProductId===pr.id?'checked':''} onchange="state.promoModal.triggerProductId='${pr.id}'">
+                <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
+              </label>`).join('')}
+          </div>
+        ` : ''}
+        <div class="panel-sub" style="margin-bottom:10px;">Producto A: ${p.triggerProductId ? (state.products.find(x=>x.id===p.triggerProductId)||{}).name || '—' : 'ninguno'}</div>
+        <div class="form-field"><label>Buscar producto B (el que recibe el descuento)</label>
+          <input placeholder="Nombre del producto..." value="${state.promoProductSearch2}" oninput="state.promoProductSearch2=this.value;render()">
+        </div>
+        ${(state.promoProductSearch2||'').trim() ? `
+          <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+            ${state.products.filter(x=>(x.name||'').toLowerCase().includes(state.promoProductSearch2.trim().toLowerCase())).slice(0,10).map(pr=>`
+              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
+                <input type="radio" name="pr-discountprod-radio" ${p.discountProductId===pr.id?'checked':''} onchange="state.promoModal.discountProductId='${pr.id}'">
+                <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
+              </label>`).join('')}
+          </div>
+        ` : ''}
+        <div class="panel-sub">Producto B: ${p.discountProductId ? (state.products.find(x=>x.id===p.discountProductId)||{}).name || '—' : 'ninguno'}</div>
+      ` : ''}
+
+      <div class="two-col" style="margin-top:10px;">
+        <div class="form-field"><label>Vigente desde (opcional)</label><input id="pr-start" type="date" value="${p.startDate||''}"></div>
+        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="pr-end" type="date" value="${p.endDate||''}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closePromoModal()">Cancelar</button>
+        <button class="btn-primary" onclick="savePromotion()">Guardar</button>
       </div>
     </div>
   </div>`;
