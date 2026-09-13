@@ -348,7 +348,7 @@ async function saveCashierDoc(c){
   if(c.id){ await db.collection('cashiers').doc(c.id).set(payload); }
   else{ const ref = await db.collection('cashiers').add(payload); c.id = ref.id; }
 }
-async function deleteCashierDoc(id){ try{ await db.collection('cashiers').doc(id).delete(); }catch(e){ console.error(e); } }
+async function deleteCashierDoc(id){ await db.collection('cashiers').doc(id).delete(); }
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : 'Sin folio'; }
@@ -545,9 +545,14 @@ async function generateMissingSKUs(){
   }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
 }
 async function deleteProduct(id){
-  state.products = state.products.filter(x=>x.id!==id);
-  try{ await db.collection('products').doc(id).delete(); }catch(e){ console.error(e); }
-  showToast('Producto eliminado'); render();
+  try{
+    await db.collection('products').doc(id).delete();
+    state.products = state.products.filter(x=>x.id!==id);
+    showToast('Producto eliminado'); render();
+  }catch(e){
+    console.error(e);
+    showToast('No se pudo eliminar: ' + (e.message||'error desconocido'));
+  }
 }
 async function updateOrderStatus(id,status){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.status=status; await saveOrdersStatus(id,status,o.source); render(); }
 async function toggleArchiveOrder(id,archived){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); showToast(archived?'Pedido archivado':'Pedido restaurado'); render(); }
@@ -574,8 +579,11 @@ async function toggleCashierActive(id){
   c.active = !c.active; await saveCashierDoc(c); render();
 }
 async function deleteCashier(id){
-  state.cashiers = state.cashiers.filter(c=>c.id!==id);
-  await deleteCashierDoc(id); showToast('Cajero eliminado'); render();
+  try{
+    await deleteCashierDoc(id);
+    state.cashiers = state.cashiers.filter(c=>c.id!==id);
+    showToast('Eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
 }
 
 /* ============== ASISTENTE IA ============== */
@@ -1638,8 +1646,13 @@ async function saveWholesaleTier(){
 }
 async function deleteWholesaleTier(id){
   if(!confirm('¿Eliminar esta tabla de precios de mayoreo?')) return;
-  state.settings.wholesaleTiers = state.settings.wholesaleTiers.filter(x=>x.id!==id);
-  await saveSettings(); showToast('Eliminada'); render();
+  const backup = state.settings.wholesaleTiers;
+  const updated = backup.filter(x=>x.id!==id);
+  try{
+    await db.collection('settings').doc('store').update({wholesaleTiers: updated});
+    state.settings.wholesaleTiers = updated;
+    showToast('Eliminada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
 }
 async function toggleWholesaleActive(id){
   const t = state.settings.wholesaleTiers.find(x=>x.id===id); if(!t) return;
@@ -1780,8 +1793,12 @@ async function saveCoupon(){
 }
 async function deleteCoupon(id){
   if(!confirm('¿Eliminar este cupón?')) return;
-  state.settings.coupons = state.settings.coupons.filter(x=>x.id!==id);
-  await saveSettings(); showToast('Eliminado'); render();
+  const updated = state.settings.coupons.filter(x=>x.id!==id);
+  try{
+    await db.collection('settings').doc('store').update({coupons: updated});
+    state.settings.coupons = updated;
+    showToast('Eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
 }
 async function toggleCouponActive(id){
   const c = state.settings.coupons.find(x=>x.id===id); if(!c) return;
@@ -1949,8 +1966,12 @@ async function savePromotion(){
 }
 async function deletePromotion(id){
   if(!confirm('¿Eliminar esta promoción?')) return;
-  state.settings.promotions = state.settings.promotions.filter(x=>x.id!==id);
-  await saveSettings(); showToast('Eliminada'); render();
+  const updated = state.settings.promotions.filter(x=>x.id!==id);
+  try{
+    await db.collection('settings').doc('store').update({promotions: updated});
+    state.settings.promotions = updated;
+    showToast('Eliminada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
 }
 async function togglePromoActive(id){
   const p = state.settings.promotions.find(x=>x.id===id); if(!p) return;
