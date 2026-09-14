@@ -194,6 +194,11 @@ const NEEDS = [
 const STATUS_FLOW = ["Nuevo","Preparando","En camino","Entregado","Cancelado"];
 const STATUS_COLOR = {"Nuevo":"#BC355C","Preparando":"#F6A030","En camino":"#1AA0B2","Entregado":"#6E9E1A","Cancelado":"#8a6b78"};
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
+function cashDiffLabel(diff){
+  diff = diff||0;
+  if(diff===0) return 'Exacto';
+  return diff>0 ? `Sobrante ${money(diff)}` : `Faltante ${money(Math.abs(diff))}`;
+}
 
 const DEFAULT_PRODUCTS = [
   {name:"Set de dilatadores progresivos",cat:"Dilatadores",price:520,stock:8,desc:"Set de silicona médica, 5 tallas progresivas.",images:[]},
@@ -253,6 +258,7 @@ let state = {
   promoModal:null, promoProductSearch:"", promoProductSearch2:"",
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
+  cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -272,7 +278,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -284,6 +290,7 @@ async function loadData(){
       db.collection('audits').orderBy('date','desc').limit(100).get(),
       db.collection('customers').get(),
       db.collection('couponUsage').get(),
+      db.collection('cashRegisters').orderBy('openedAt','desc').limit(300).get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -317,6 +324,7 @@ async function loadData(){
     state.audits = auditsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.customers = customersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.couponUsage = couponUsageSnap.docs.map(d=>d.data());
+    state.cashRegisters = cashRegistersSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
     // Migración automática: cualquier producto que todavía no tenga inventario
     // repartido por centro, se le asigna TODO su stock actual al centro Principal.
@@ -335,6 +343,7 @@ async function loadData(){
     console.error(e);
     state.products = []; state.orders = []; state.visits = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
+    state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
   }
   state.loaded = true; render();
@@ -926,7 +935,7 @@ function renderAdmin(){
       </div>
     </div>
     <div class="admin-tabs">
-      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','centros','mayoreo','cupones','promociones','diseño','asistente ia','configuración'].map(t=>`
+      ${['resumen','métricas','tráfico','productos','pedidos','clientes','cajeros','caja','centros','mayoreo','cupones','promociones','diseño','asistente ia','configuración'].map(t=>`
         <button class="admin-tab ${state.adminTab===t?'active':''}" onclick="state.adminTab='${t}';state.designSubpanel=null;render()">${t==='cajeros'?'Usuarios':t[0].toUpperCase()+t.slice(1)}</button>
       `).join('')}
     </div>
@@ -938,6 +947,7 @@ function renderAdmin(){
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='clientes' ? renderClientes() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
+      ${state.adminTab==='caja' ? renderCaja() : ''}
       ${state.adminTab==='centros' ? renderCentros() : ''}
       ${state.adminTab==='mayoreo' ? renderMayoreo() : ''}
       ${state.adminTab==='cupones' ? renderCupones() : ''}
@@ -2146,6 +2156,110 @@ function renderPromoModal(){
       </div>
     </div>
   </div>`;
+}
+
+/* ============== CAJA (aperturas/cierres del Punto de Venta) ============== */
+function renderCaja(){
+  const regs = state.cashRegisters;
+  const centerNames = ['Todos', ...state.centers.map(c=>c.name)];
+  let filtered = regs;
+  if(state.cajaFilter==='abiertas') filtered = filtered.filter(r=>r.status==='abierta');
+  else if(state.cajaFilter==='cerradas') filtered = filtered.filter(r=>r.status==='cerrada');
+  if(state.cajaCenterFilter!=='Todos') filtered = filtered.filter(r=>r.centerName===state.cajaCenterFilter);
+  const abiertas = regs.filter(r=>r.status==='abierta').length;
+  const cerradas = regs.filter(r=>r.status==='cerrada');
+  const conDiferencia = cerradas.filter(r=>Math.abs(r.difference||0)>0).length;
+  return `
+  <div class="panel">
+    <div class="panel-title">Cortes de caja</div>
+    <div class="panel-sub">Aperturas y cierres del Punto de Venta, por cajero y centro de distribución.</div>
+    <div class="stat-grid" style="margin-bottom:18px;">
+      <div class="stat-card"><div class="stat-label">Cajas abiertas ahora</div><div class="stat-value">${abiertas}</div></div>
+      <div class="stat-card"><div class="stat-label">Cortes registrados</div><div class="stat-value">${regs.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Cortes con diferencia</div><div class="stat-value">${conDiferencia}</div></div>
+    </div>
+    <div class="toolbar" style="align-items:center;">
+      <div class="status-filter" style="margin-bottom:0;">
+        ${[['todas','Todas'],['abiertas','Abiertas'],['cerradas','Cerradas']].map(([k,label])=>`<button class="${state.cajaFilter===k?'active':''}" onclick="state.cajaFilter='${k}';render()">${label}</button>`).join('')}
+      </div>
+      <select onchange="state.cajaCenterFilter=this.value;render()" style="padding:9px 12px;border-radius:10px;border:1px solid var(--border);font-size:12.5px;background:var(--bg);">
+        ${centerNames.map(c=>`<option value="${c}" ${state.cajaCenterFilter===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+    ${filtered.length===0 ? `<div class="empty-state">No hay cortes de caja con ese filtro.</div>` : filtered.map(r=>`
+      <div class="list-row" style="cursor:pointer;" onclick="state.cajaDetail='${r.id}';render()">
+        <div class="row-main">
+          <div class="row-title">${r.cashierName} · ${r.centerName}</div>
+          <div class="row-sub">Apertura: ${new Date(r.openedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}${r.closedAt?` · Cierre: ${new Date(r.closedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}</div>
+          ${r.status==='cerrada' ? `<div class="row-sub">Ventas: ${money(r.totalSales||0)} · <strong style="color:${(r.difference||0)===0?'var(--green)':((r.difference||0)>0?'var(--amber)':'var(--rose)')}">${cashDiffLabel(r.difference)}</strong></div>` : `<div class="row-sub">Fondo inicial: ${money(r.openingAmount||0)}</div>`}
+        </div>
+        <span class="status-badge" style="background:${r.status==='abierta'?'var(--teal)':'var(--green)'}">${r.status==='abierta'?'Abierta':'Cerrada'}</span>
+      </div>
+    `).join('')}
+  </div>
+  ${state.cajaDetail ? renderCajaDetailModal() : ''}
+  `;
+}
+function renderCajaDetailModal(){
+  const r = state.cashRegisters.find(x=>x.id===state.cajaDetail);
+  if(!r) return '';
+  const movs = r.movements||[];
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.cajaDetail=null;render();}">
+    <div class="modal" style="max-width:480px;">
+      <h3>${r.cashierName} · ${r.centerName}</h3>
+      <div class="panel-sub" style="margin:-8px 0 14px;">Apertura: ${new Date(r.openedAt).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="order-detail" style="margin-bottom:14px;">
+        <div><span>Fondo inicial</span><span>${money(r.openingAmount||0)}</span></div>
+        ${r.status==='cerrada' ? `
+          ${Object.keys(r.salesByPayment||{}).map(m=>`<div><span>Ventas en ${m}</span><span>${money(r.salesByPayment[m])}</span></div>`).join('')}
+          <div><span>Total de ventas</span><span>${money(r.totalSales||0)}</span></div>
+          <div><span>Ingresos de caja</span><span>${money(r.cashIngresos||0)}</span></div>
+          <div><span>Retiros de caja</span><span>-${money(r.cashRetiros||0)}</span></div>
+          <div><span>Efectivo esperado</span><span>${money(r.expectedCash||0)}</span></div>
+          <div><span>Efectivo contado</span><span>${money(r.countedCash||0)}</span></div>
+          <div style="font-weight:800;"><span>Diferencia</span><span style="color:${(r.difference||0)===0?'var(--green)':((r.difference||0)>0?'var(--amber)':'var(--rose)')}">${cashDiffLabel(r.difference)}</span></div>
+          ${r.closingNotes?`<div><span>Notas</span><span style="text-align:right;">${r.closingNotes}</span></div>`:''}
+        ` : `<div style="color:var(--ink-soft);padding-top:4px;">Esta caja sigue abierta.</div>`}
+      </div>
+      ${movs.length ? `
+        <div class="row-title" style="margin-bottom:8px;">Movimientos (${movs.length})</div>
+        <div style="max-height:150px;overflow-y:auto;margin-bottom:14px;">
+          ${movs.map(m=>`<div class="order-detail" style="margin-bottom:6px;"><div><span>${m.type==='retiro'?'↓ Retiro':'↑ Ingreso'}${m.note?` — ${m.note}`:''}</span><span>${m.type==='retiro'?'-':''}${money(m.amount)}</span></div></div>`).join('')}
+        </div>` : ''}
+      ${r.status==='abierta' ? `<button class="btn-primary" style="background:var(--rose);margin-bottom:14px;" onclick="adminForceCloseCash('${r.id}')">Cerrar caja manualmente</button>` : ''}
+      <div class="modal-actions"><button class="btn-cancel" onclick="state.cajaDetail=null;render()">Cerrar</button></div>
+    </div>
+  </div>`;
+}
+async function adminForceCloseCash(id){
+  const r = state.cashRegisters.find(x=>x.id===id); if(!r) return;
+  if(!confirm(`¿Cerrar manualmente la caja de ${r.cashierName} en ${r.centerName}?\n\nÚsalo solo si el cajero no pudo cerrarla desde el Punto de Venta (por ejemplo, olvidó hacerlo o el dispositivo se perdió).`)) return;
+  try{
+    const snap = await db.collection('sales').where('cashRegisterId','==', id).get();
+    const sales = snap.docs.map(d=>d.data());
+    const byPayment = {};
+    sales.forEach(s=>{ const m = s.paymentMethod||'Efectivo'; byPayment[m]=(byPayment[m]||0)+(s.total||0); });
+    const total = sales.reduce((s,x)=>s+(x.total||0),0);
+    const movs = r.movements||[];
+    const ingresos = movs.filter(m=>m.type==='ingreso').reduce((s,m)=>s+m.amount,0);
+    const retiros = movs.filter(m=>m.type==='retiro').reduce((s,m)=>s+m.amount,0);
+    const expectedCash = (r.openingAmount||0) + (byPayment['Efectivo']||0) + ingresos - retiros;
+    const countedInput = prompt(`Efectivo esperado: ${money(expectedCash)}\n\nEscribe el efectivo contado físicamente (o deja este mismo número si no se pudo contar):`, String(Math.round(expectedCash)));
+    if(countedInput===null) return;
+    const counted = Number(countedInput);
+    if(isNaN(counted) || counted<0){ showToast('Monto inválido, no se cerró la caja'); return; }
+    const payload = {
+      status:'cerrada', closedAt: new Date().toISOString(),
+      salesCount: sales.length, totalSales: total, salesByPayment: byPayment,
+      cashIngresos: ingresos, cashRetiros: retiros,
+      expectedCash, countedCash: counted, difference: counted-expectedCash,
+      closingNotes: 'Cerrada manualmente desde el panel de administración.',
+    };
+    await db.collection('cashRegisters').doc(id).update(payload);
+    Object.assign(r, payload);
+    showToast('Caja cerrada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); }
 }
 
 function renderCentros(){

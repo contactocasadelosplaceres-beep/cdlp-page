@@ -32,6 +32,15 @@
   .card input.pin{text-align:center;letter-spacing:6px;font-size:20px;}
   .err{color:var(--rose);font-size:12px;margin-bottom:8px;min-height:14px;}
   .btn-primary{width:100%;background:var(--rose);color:#fff;padding:13px;border-radius:12px;font-size:14.5px;font-weight:600;}
+  .btn-secondary{width:100%;background:var(--surface-soft);color:var(--ink-soft);padding:12px;border-radius:12px;font-size:13.5px;font-weight:600;margin-top:8px;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(43,22,32,0.5);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
+  @media(min-width:600px){.modal-overlay{align-items:center;}}
+  .modal{background:#fff;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:20px;}
+  @media(min-width:600px){.modal{border-radius:16px;}}
+  .modal h3{font-size:17px;color:var(--primary-deep);margin-bottom:6px;font-weight:700;}
+  .order-detail{background:var(--bg);border-radius:10px;padding:12px;font-size:12.5px;}
+  .order-detail div{display:flex;justify-content:space-between;padding:3px 0;gap:10px;}
+  .field-input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;font-size:14px;}
   .cashier-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
   .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px;border-radius:12px;font-size:14.5px;font-weight:600;}
 
@@ -116,6 +125,11 @@ let state = {
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
   activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo",
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, sending:false, variantPickerProduct:null,
+  // Apertura/cierre de caja: la caja pertenece a la combinación cajero + centro.
+  activeCashRegister:null, cashRegisterChecked:false, cashRegisterLoading:false,
+  openingAmountInput:"", openingError:"", openingSubmitting:false,
+  cashPanelOpen:false, movementModalOpen:false, movementType:"retiro", movementAmount:"", movementNote:"", movementError:"",
+  closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"",
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -166,21 +180,207 @@ async function handleLogin(){
   try{ await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword); }
   catch(e){ state.loginError='Correo o contraseña incorrectos'; render(); }
 }
-function handleLogout(){ auth.signOut(); state.loaded=false; state.activeCashier=null; }
+function handleLogout(){
+  auth.signOut(); state.loaded=false; state.activeCashier=null; state.pinConfirmed=false;
+  state.activeCashRegister=null; state.cashRegisterChecked=false;
+}
 
 function selectCashier(c){ state.activeCashier = c; state.pinInput=''; state.pinError=''; state.pinConfirmed=false; render(); }
 function confirmCashierPin(){
   if(state.pinInput === state.activeCashier.pin){ state.pinConfirmed=true; state.pinInput=''; state.pinError=''; render(); }
   else{ state.pinError='PIN incorrecto'; state.pinInput=''; render(); }
 }
-function changeCashier(){ state.activeCashier=null; state.pinConfirmed=false; state.cart={}; render(); }
+function changeCashier(){
+  state.activeCashier=null; state.pinConfirmed=false; state.cart={};
+  state.activeCashRegister=null; state.cashRegisterChecked=false;
+  render();
+}
 function selectCenter(id){
   const c = state.centers.find(x=>x.id===id); if(!c) return;
   state.activeCenter = c; state.cart={};
+  state.activeCashRegister=null; state.cashRegisterChecked=false;
   try{ localStorage.setItem('cdlp_pos_center', c.id); }catch(e){}
   render();
 }
-function changeCenter(){ state.activeCenter=null; state.cart={}; render(); }
+function changeCenter(){
+  state.activeCenter=null; state.cart={};
+  state.activeCashRegister=null; state.cashRegisterChecked=false;
+  render();
+}
+
+/* ============== APERTURA / CIERRE DE CAJA ==============
+   La caja pertenece a la combinación cajero + centro: si el mismo cajero vuelve
+   a entrar al mismo centro más tarde (incluso desde otro dispositivo), retoma la
+   caja que dejó abierta, junto con sus movimientos. */
+async function loadCashRegister(){
+  state.cashRegisterLoading = true;
+  try{
+    const snap = await db.collection('cashRegisters')
+      .where('cashierId','==', state.activeCashier.id)
+      .where('centerId','==', state.activeCenter.id)
+      .where('status','==','abierta')
+      .limit(1).get();
+    state.activeCashRegister = snap.empty ? null : {id:snap.docs[0].id, ...snap.docs[0].data()};
+  }catch(e){ console.error(e); showToast('No se pudo verificar la caja'); state.activeCashRegister=null; }
+  state.cashRegisterChecked = true; state.cashRegisterLoading = false; render();
+}
+async function openCashRegister(){
+  if(state.openingSubmitting) return;
+  const amount = Number(state.openingAmountInput);
+  if(state.openingAmountInput.trim()==='' || isNaN(amount) || amount<0){ state.openingError='Ingresa un monto válido'; render(); return; }
+  state.openingSubmitting = true; state.openingError=''; render();
+  const payload = {
+    cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
+    centerId: state.activeCenter.id, centerName: state.activeCenter.name,
+    openedAt: new Date().toISOString(), openingAmount: amount,
+    status: 'abierta', movements: [],
+  };
+  try{
+    const ref = await db.collection('cashRegisters').add(payload);
+    state.activeCashRegister = {id:ref.id, ...payload};
+    state.openingAmountInput='';
+    showToast('Caja abierta');
+  }catch(e){ console.error(e); showToast('No se pudo abrir la caja'); }
+  state.openingSubmitting = false; render();
+}
+function renderCashOpenScreen(){
+  return `<div class="select-screen"><div class="card">
+    <h2>Abrir caja</h2>
+    <p>${state.activeCashier.name} · ${state.activeCenter.name}<br>Registra el fondo inicial en efectivo con el que empiezas el turno.</p>
+    <input class="field-input" type="number" inputmode="decimal" placeholder="Fondo inicial (efectivo)" value="${state.openingAmountInput}" oninput="state.openingAmountInput=this.value" onkeydown="if(event.key==='Enter')openCashRegister()">
+    <div class="err">${state.openingError||''}</div>
+    <button class="btn-primary" ${state.openingSubmitting?'disabled style="opacity:.5"':''} onclick="openCashRegister()">${state.openingSubmitting?'Abriendo…':'Abrir caja'}</button>
+    <button class="btn-secondary" onclick="changeCashier()">Cambiar cajero</button>
+  </div></div>`;
+}
+
+async function saveCashMovement(){
+  const amount = Number(state.movementAmount);
+  if(state.movementAmount.trim()==='' || isNaN(amount) || amount<=0){ state.movementError='Ingresa un monto válido'; render(); return; }
+  const mov = {type: state.movementType, amount, note: state.movementNote.trim(), date: new Date().toISOString()};
+  try{
+    await db.collection('cashRegisters').doc(state.activeCashRegister.id).update({
+      movements: firebase.firestore.FieldValue.arrayUnion(mov)
+    });
+    if(!state.activeCashRegister.movements) state.activeCashRegister.movements=[];
+    state.activeCashRegister.movements.push(mov);
+    state.movementModalOpen=false; state.movementAmount=''; state.movementNote=''; state.movementError='';
+    showToast(state.movementType==='retiro'?'Retiro registrado':'Ingreso registrado');
+  }catch(e){ console.error(e); showToast('No se pudo registrar el movimiento'); }
+  render();
+}
+function renderCashPanelModal(){
+  const cr = state.activeCashRegister;
+  const movs = cr.movements||[];
+  const totalRetiros = movs.filter(m=>m.type==='retiro').reduce((s,m)=>s+m.amount,0);
+  const totalIngresos = movs.filter(m=>m.type==='ingreso').reduce((s,m)=>s+m.amount,0);
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.cashPanelOpen=false;render();}">
+    <div class="modal">
+      <h3>Caja · ${cr.centerName}</h3>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">Abierta por ${cr.cashierName} desde ${new Date(cr.openedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</p>
+      <div class="order-detail" style="margin-bottom:12px;">
+        <div><span>Fondo inicial</span><span>${money(cr.openingAmount)}</span></div>
+        <div><span>Ingresos registrados</span><span>${money(totalIngresos)}</span></div>
+        <div><span>Retiros registrados</span><span>-${money(totalRetiros)}</span></div>
+      </div>
+      ${movs.length ? `
+        <div style="max-height:150px;overflow-y:auto;margin-bottom:14px;">
+          ${movs.slice().reverse().map(m=>`
+            <div class="sale-item" style="font-size:12px;padding:6px 0;">
+              <div class="name">${m.type==='retiro'?'↓ Retiro':'↑ Ingreso'}${m.note?` — ${m.note}`:''}</div>
+              <div style="font-weight:700;">${m.type==='retiro'?'-':''}${money(m.amount)}</div>
+            </div>`).join('')}
+        </div>` : ''}
+      <button class="btn-primary" style="margin-bottom:8px;" onclick="state.cashPanelOpen=false;state.movementModalOpen=true;render()">Registrar retiro / ingreso</button>
+      <button class="btn-primary" style="background:var(--navy);margin-bottom:0;" onclick="state.cashPanelOpen=false;openCashClose()">Cerrar caja</button>
+      <button class="btn-secondary" onclick="state.cashPanelOpen=false;render()">Cerrar</button>
+    </div>
+  </div>`;
+}
+function renderMovementModal(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.movementModalOpen=false;render();}">
+    <div class="modal" style="max-width:360px;">
+      <h3>Registrar movimiento</h3>
+      <div class="pay-row" style="margin:14px 0 12px;">
+        <button class="pay-btn ${state.movementType==='retiro'?'active':''}" onclick="state.movementType='retiro';render()">Retiro</button>
+        <button class="pay-btn ${state.movementType==='ingreso'?'active':''}" onclick="state.movementType='ingreso';render()">Ingreso</button>
+      </div>
+      <input class="field-input" type="number" inputmode="decimal" placeholder="Monto" value="${state.movementAmount}" oninput="state.movementAmount=this.value">
+      <input class="field-input" type="text" placeholder="Motivo (opcional)" value="${state.movementNote}" oninput="state.movementNote=this.value">
+      <div class="err">${state.movementError||''}</div>
+      <button class="btn-primary" onclick="saveCashMovement()">Guardar</button>
+      <button class="btn-secondary" onclick="state.movementModalOpen=false;render()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+async function openCashClose(){
+  state.closingLoading = true; render();
+  try{
+    const snap = await db.collection('sales').where('cashRegisterId','==', state.activeCashRegister.id).get();
+    const sales = snap.docs.map(d=>d.data());
+    const byPayment = {};
+    PAY_METHODS.forEach(m=>byPayment[m]=0);
+    let total=0;
+    sales.forEach(s=>{ const m = byPayment.hasOwnProperty(s.paymentMethod) ? s.paymentMethod : 'Efectivo'; byPayment[m]=(byPayment[m]||0)+(s.total||0); total+=s.total||0; });
+    const movs = state.activeCashRegister.movements||[];
+    const ingresos = movs.filter(m=>m.type==='ingreso').reduce((s,m)=>s+m.amount,0);
+    const retiros = movs.filter(m=>m.type==='retiro').reduce((s,m)=>s+m.amount,0);
+    const expectedCash = (state.activeCashRegister.openingAmount||0) + (byPayment['Efectivo']||0) + ingresos - retiros;
+    state.closingSummary = { salesCount: sales.length, total, byPayment, ingresos, retiros, expectedCash };
+    state.closingCountedCash=''; state.closingNotes=''; state.closingError='';
+    state.closingOpen = true;
+  }catch(e){ console.error(e); showToast('No se pudo preparar el cierre de caja'); }
+  state.closingLoading=false; render();
+}
+function renderCashCloseScreen(){
+  const s = state.closingSummary, cr = state.activeCashRegister;
+  if(!s) return `<div class="loading-screen">Preparando cierre…</div>`;
+  const hasCounted = state.closingCountedCash.trim()!=='';
+  const counted = Number(state.closingCountedCash)||0;
+  const diff = hasCounted ? (counted - s.expectedCash) : null;
+  return `<div class="receipt-screen"><div class="receipt-card" style="max-width:400px;text-align:left;">
+    <h2 style="text-align:center;margin-bottom:14px;">Cerrar caja</h2>
+    <div class="order-detail" style="margin-bottom:12px;">
+      <div><span>Cajero</span><span>${cr.cashierName}</span></div>
+      <div><span>Centro</span><span>${cr.centerName}</span></div>
+      <div><span>Fondo inicial</span><span>${money(cr.openingAmount)}</span></div>
+      ${PAY_METHODS.map(m=>`<div><span>Ventas en ${m}</span><span>${money(s.byPayment[m]||0)}</span></div>`).join('')}
+      <div><span>Ingresos de caja</span><span>${money(s.ingresos)}</span></div>
+      <div><span>Retiros de caja</span><span>-${money(s.retiros)}</span></div>
+      <div style="font-weight:800;border-top:1px dashed var(--border);margin-top:6px;padding-top:6px;"><span>Efectivo esperado</span><span>${money(s.expectedCash)}</span></div>
+    </div>
+    <input class="field-input" type="number" inputmode="decimal" placeholder="Efectivo contado" value="${state.closingCountedCash}" oninput="state.closingCountedCash=this.value">
+    ${diff!==null ? `<div style="text-align:center;font-weight:700;margin:-4px 0 10px;color:${diff===0?'var(--green)':(diff>0?'var(--amber)':'var(--rose)')};">${diff===0?'Cuadra exacto':(diff>0?`Sobrante de ${money(diff)}`:`Faltante de ${money(Math.abs(diff))}`)}</div>` : ''}
+    <input class="field-input" type="text" placeholder="Notas (opcional)" value="${state.closingNotes}" oninput="state.closingNotes=this.value">
+    <div class="err">${state.closingError||''}</div>
+    <button class="btn-primary" onclick="confirmCashClose()">Confirmar cierre</button>
+    <button class="btn-secondary" onclick="state.closingOpen=false;render()">Cancelar</button>
+  </div></div>`;
+}
+async function confirmCashClose(){
+  if(state.closingCountedCash.trim()===''){ state.closingError='Ingresa el efectivo contado'; render(); return; }
+  const counted = Number(state.closingCountedCash);
+  if(isNaN(counted) || counted<0){ state.closingError='Monto inválido'; render(); return; }
+  const s = state.closingSummary;
+  const diff = counted - s.expectedCash;
+  const payload = {
+    status:'cerrada', closedAt: new Date().toISOString(),
+    salesCount: s.salesCount, totalSales: s.total, salesByPayment: s.byPayment,
+    cashIngresos: s.ingresos, cashRetiros: s.retiros,
+    expectedCash: s.expectedCash, countedCash: counted, difference: diff,
+    closingNotes: state.closingNotes.trim(),
+  };
+  try{
+    await db.collection('cashRegisters').doc(state.activeCashRegister.id).update(payload);
+  }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); return; }
+  showToast('Caja cerrada');
+  state.activeCashRegister=null; state.cashRegisterChecked=false; state.closingOpen=false; state.closingSummary=null;
+  state.activeCashier=null; state.pinConfirmed=false; state.cart={};
+  render();
+}
 
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
 function effectivePrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price; }
@@ -216,6 +416,7 @@ function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta;
 
 async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
+  if(!state.activeCashRegister){ showToast('Abre la caja antes de vender'); return; }
   state.sending = true; render();
   const centerId = state.activeCenter.id;
   const items = Object.entries(state.cart).map(([key,qty])=>{
@@ -242,6 +443,7 @@ async function chargeSale(){
       date: new Date().toISOString(), orderNumber, source:"pos",
       cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
       centerId, centerName: state.activeCenter.name,
+      cashRegisterId: state.activeCashRegister.id,
       items, total, paymentMethod: state.payMethod,
     });
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.cart = {}; state.saleDone = true;
@@ -335,7 +537,8 @@ function renderPOS(){
   <div class="app">
     <div class="top">
       <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · 📍 ${state.activeCenter.name}</div></div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+        <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">💰 Caja</button>
         <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
         <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
@@ -401,7 +604,17 @@ function render(){
   if(!state.activeCashier){ root.innerHTML = renderCashierSelect(); }
   else if(!state.pinConfirmed){ root.innerHTML = renderPinScreen(); }
   else if(!state.activeCenter){ root.innerHTML = renderCenterSelect(); }
-  else{ root.innerHTML = state.saleDone ? renderReceipt() : renderPOS(); }
+  else if(!state.cashRegisterChecked){
+    if(!state.cashRegisterLoading) loadCashRegister();
+    root.innerHTML = `<div class="loading-screen">Verificando caja…</div>`;
+  }
+  else if(!state.activeCashRegister){ root.innerHTML = renderCashOpenScreen(); }
+  else{
+    let html = state.saleDone ? renderReceipt() : (state.closingLoading ? `<div class="loading-screen">Preparando cierre…</div>` : (state.closingOpen ? renderCashCloseScreen() : renderPOS()));
+    if(state.cashPanelOpen) html += renderCashPanelModal();
+    if(state.movementModalOpen) html += renderMovementModal();
+    root.innerHTML = html;
+  }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
 }
 render();
