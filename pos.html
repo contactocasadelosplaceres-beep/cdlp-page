@@ -11,75 +11,94 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg:#FBF5F2; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
-    --primary:#6E2159; --primary-deep:#4A1642; --rose:#BC355C; --amber:#F6A030;
-    --green:#6E9E1A; --navy:#0A4A5B; --border:#EBD9D3; --radius-pill:999px;
+    --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
+    --primary:#993477; --primary-deep:#5C1F49; --rose:#BC355C; --coral:#ED7578; --amber:#F6A030;
+    --green:#7AB71A; --teal:#20B7CA; --navy:#0A4A5B; --border:#EBD9D3;
+    --radius-sm:10px; --radius-md:14px; --radius-lg:18px; --radius-pill:999px;
+    --shadow-sm:0 2px 8px -4px rgba(43,22,32,0.16);
+    --shadow-md:0 12px 28px -12px rgba(43,22,32,0.22);
+    --shadow-lg:0 24px 48px -20px rgba(43,22,32,0.30);
   }
-  *{box-sizing:border-box;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
   h1,h2,h3{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
-  button{font-family:inherit;cursor:pointer;border:none;} input,select{font-family:inherit;}
+  button{font-family:inherit;cursor:pointer;border:none;touch-action:manipulation;} input,select{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
   .app{max-width:1100px;margin:0 auto;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;}
-  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
-  .top .brand{font-size:15.5px;font-weight:600;font-family:'League Spartan',sans-serif;}
+  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 16px -10px rgba(0,0,0,0.5);position:relative;z-index:5;}
+  .top .brand{font-size:15.5px;font-weight:700;font-family:'League Spartan',sans-serif;letter-spacing:0.01em;}
   .top .sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
-  .pill-btn{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;border-radius:var(--radius-pill);color:#fff;}
-  .login-screen,.select-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--primary-deep);padding:20px;}
-  .card{background:#fff;border-radius:18px;padding:30px 26px;max-width:360px;width:100%;text-align:center;}
-  .card h2{color:var(--primary-deep);font-size:19px;margin-bottom:6px;}
-  .card p{color:var(--ink-soft);font-size:12.5px;margin-bottom:16px;}
-  .card input{width:100%;font-size:14px;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;}
-  .card input.pin{text-align:center;letter-spacing:6px;font-size:20px;}
-  .err{color:var(--rose);font-size:12px;margin-bottom:8px;min-height:14px;}
-  .btn-primary{width:100%;background:var(--rose);color:#fff;padding:13px;border-radius:12px;font-size:14.5px;font-weight:600;}
-  .btn-secondary{width:100%;background:var(--surface-soft);color:var(--ink-soft);padding:12px;border-radius:12px;font-size:13.5px;font-weight:600;margin-top:8px;}
-  .modal-overlay{position:fixed;inset:0;background:rgba(43,22,32,0.5);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
+  .pill-btn{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;border-radius:var(--radius-pill);color:#fff;font-weight:600;transition:background .15s ease;}
+  .pill-btn:hover{background:rgba(255,255,255,0.22);}
+  .login-screen,.select-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden;
+    background:radial-gradient(1200px 600px at 15% -10%, rgba(237,117,120,0.35), transparent 60%),
+               radial-gradient(900px 500px at 110% 110%, rgba(32,183,202,0.22), transparent 55%),
+               linear-gradient(160deg,var(--primary-deep),#3a1332 72%);}
+  .card{position:relative;background:#fff;border-radius:var(--radius-lg);padding:32px 26px;max-width:360px;width:100%;text-align:center;box-shadow:var(--shadow-lg);}
+  .card h2{color:var(--primary-deep);font-size:20px;margin-bottom:6px;font-weight:700;}
+  .card p{color:var(--ink-soft);font-size:12.5px;margin-bottom:16px;line-height:1.5;}
+  .card input{width:100%;font-size:16px;padding:12px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);margin-bottom:10px;transition:border-color .15s ease;background:var(--bg);}
+  .card input:focus{border-color:var(--primary);outline:none;}
+  .card input.pin{text-align:center;letter-spacing:8px;font-size:22px;font-weight:700;}
+  .err{color:var(--rose);font-size:12px;margin-bottom:8px;min-height:14px;font-weight:600;}
+  .btn-primary{width:100%;background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:13px;border-radius:var(--radius-md);font-size:14.5px;font-weight:700;box-shadow:0 10px 20px -10px rgba(188,53,92,0.55);transition:transform .12s ease,box-shadow .12s ease,opacity .12s ease;}
+  .btn-primary:active{transform:scale(0.98);box-shadow:0 4px 10px -6px rgba(188,53,92,0.5);}
+  .btn-primary:disabled{opacity:.45;box-shadow:none;}
+  .btn-secondary{width:100%;background:var(--surface-soft);color:var(--ink-soft);padding:12px;border-radius:var(--radius-md);font-size:13.5px;font-weight:700;margin-top:8px;transition:background .15s ease;}
+  .btn-secondary:hover{background:#efd9d3;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(43,22,32,0.55);backdrop-filter:blur(1px);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
   @media(min-width:600px){.modal-overlay{align-items:center;}}
-  .modal{background:#fff;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:20px;}
-  @media(min-width:600px){.modal{border-radius:16px;}}
-  .modal h3{font-size:17px;color:var(--primary-deep);margin-bottom:6px;font-weight:700;}
-  .order-detail{background:var(--bg);border-radius:10px;padding:12px;font-size:12.5px;}
+  .modal{background:#fff;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:22px 20px;box-shadow:0 -20px 50px -20px rgba(43,22,32,0.35);}
+  @media(min-width:600px){.modal{border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);}}
+  .modal h3{font-size:17.5px;color:var(--primary-deep);margin-bottom:6px;font-weight:700;font-family:'League Spartan',sans-serif;}
+  .order-detail{background:var(--bg);border-radius:var(--radius-sm);padding:12px;font-size:12.5px;border:1px solid var(--border);}
   .order-detail div{display:flex;justify-content:space-between;padding:3px 0;gap:10px;}
-  .field-input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;font-size:14px;}
+  .field-input{width:100%;padding:12px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);margin-bottom:10px;font-size:16px;transition:border-color .15s ease;}
+  .field-input:focus{border-color:var(--primary);outline:none;}
   .cashier-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
-  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px;border-radius:12px;font-size:14.5px;font-weight:600;}
+  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px;border-radius:var(--radius-md);font-size:14.5px;font-weight:700;transition:background .15s ease,transform .1s ease;}
+  .cashier-item:active{transform:scale(0.98);}
 
   .pos-body{flex:1;min-height:0;display:flex;flex-direction:column;}
   .toolbar{padding:14px 16px 0;display:flex;flex-direction:column;gap:10px;}
-  .search-row input{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--border);font-size:14px;background:#fff;}
-  .cats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none;}
+  .search-row input{width:100%;padding:11px 14px;border-radius:var(--radius-md);border:1.5px solid var(--border);font-size:16px;background:#fff;transition:border-color .15s ease;}
+  .search-row input:focus{border-color:var(--primary);outline:none;}
+  .cats{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;}
   .cats::-webkit-scrollbar{display:none;}
-  .cat-chip{flex-shrink:0;padding:8px 14px;border-radius:var(--radius-pill);background:#fff;border:1px solid var(--border);color:var(--ink-soft);font-size:13px;font-weight:500;white-space:nowrap;}
-  .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+  .cat-chip{flex-shrink:0;padding:9px 15px;min-height:38px;display:inline-flex;align-items:center;border-radius:var(--radius-pill);background:#fff;border:1.5px solid var(--border);color:var(--ink-soft);font-size:13px;font-weight:600;white-space:nowrap;transition:all .15s ease;}
+  .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 6px 14px -8px rgba(153,52,119,0.55);}
   .layout{display:flex;flex:1;min-height:0;}
   .prod-grid{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 100px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start;}
   @media(min-width:600px){.prod-grid{grid-template-columns:repeat(3,1fr);}}
   @media(min-width:900px){.prod-grid{grid-template-columns:repeat(4,1fr);}}
-  .prod-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;}
-  .prod-card:active{transform:scale(0.97);}
+  .prod-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-sm);transition:transform .12s ease,box-shadow .12s ease;}
+  .prod-card:active{transform:scale(0.97);box-shadow:none;}
   .prod-swatch{width:100%;height:44px;border-radius:8px;}
   .prod-name{font-size:12.5px;font-weight:600;line-height:1.25;}
-  .prod-price{font-size:13px;font-weight:700;color:var(--primary-deep);}
+  .prod-price{font-size:13px;font-weight:800;color:var(--primary-deep);}
   .prod-stock{font-size:10.5px;color:var(--ink-soft);}
 
-  .sale-panel{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);max-height:60vh;display:flex;flex-direction:column;box-shadow:0 -8px 24px -12px rgba(0,0,0,0.15);}
-  .sale-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+  .sale-panel{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 -16px 40px -18px rgba(43,22,32,0.28);}
+  .sale-panel::before{content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);width:36px;height:4px;border-radius:3px;background:var(--border);}
+  .sale-head{padding:18px 16px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:relative;}
   .sale-items{overflow-y:auto;padding:8px 16px;flex:1;}
-  .sale-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .sale-item{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
   .sale-item .name{flex:1;}
-  .qty-btn{width:24px;height:24px;border-radius:6px;background:var(--surface-soft);color:var(--primary-deep);font-size:14px;}
-  .sale-foot{padding:12px 16px 16px;border-top:1px solid var(--border);}
-  .total-row{display:flex;justify-content:space-between;font-weight:700;color:var(--primary-deep);font-size:16px;margin-bottom:10px;}
-  .pay-row{display:flex;gap:8px;margin-bottom:10px;}
-  .pay-btn{flex:1;padding:10px;border-radius:10px;background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:600;}
-  .pay-btn.active{background:var(--primary);color:#fff;}
+  .qty-btn{width:26px;height:26px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:14px;font-weight:700;transition:background .12s ease;}
+  .qty-btn:hover{background:#efd9d3;}
+  .sale-foot{padding:12px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
+  .total-row{display:flex;justify-content:space-between;font-weight:800;color:var(--primary-deep);font-size:16.5px;margin-bottom:12px;}
+  .pay-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .pay-btn{flex:1;min-width:70px;padding:10px 6px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:700;transition:all .15s ease;}
+  .pay-btn.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
   .empty-cart{padding:30px;text-align:center;color:var(--ink-soft);font-size:13px;}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
-  .receipt-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-  .receipt-card{background:#fff;border-radius:18px;padding:30px 26px;max-width:340px;text-align:center;}
-  .receipt-card .mark{width:52px;height:52px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px;}
+  .receipt-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(1000px 560px at 50% -10%, rgba(122,183,26,0.12), transparent 60%),var(--bg);}
+  .receipt-card{background:#fff;border-radius:var(--radius-lg);padding:32px 26px;max-width:340px;text-align:center;box-shadow:var(--shadow-lg);}
+  .receipt-card .mark{width:56px;height:56px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 14px;box-shadow:0 10px 22px -10px rgba(122,183,26,0.55);}
 </style>
 </head>
 <body>
@@ -177,6 +196,21 @@ async function loadData(){
   state.loaded = true; render();
 }
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+function icon(name, size){
+  size = size || 15;
+  const P = {
+    x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+    'map-pin':'<path d="M12 21s7-6.8 7-12a7 7 0 1 0-14 0c0 5.2 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/>',
+    wallet:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/><path d="M6 10v4M18 10v4"/>',
+    layers:'<path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 12l10 5 10-5"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/>',
+    percent:'<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="17.5" r="2.2"/>',
+    'file-text':'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/>',
+  };
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
+}
+
 function onPosSearchInput(v){
   state.search = v;
   render();
@@ -751,9 +785,9 @@ function renderPOS(){
   return `
   <div class="app">
     <div class="top">
-      <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · 📍 ${state.activeCenter.name}</div></div>
+      <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-        <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">💰 Caja</button>
+        <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
         <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
         <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
@@ -771,7 +805,7 @@ function renderPOS(){
           return `
           <div class="prod-card" onclick="addToCart('${p.id}')">
             ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
-            <div class="prod-name">${p.name}${hasVariants?' 🔀':''}</div>
+            <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
             <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)}</div>
             <div class="prod-stock">${hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${centerStock(p, state.activeCenter.id)}`}</div>
           </div>`;
@@ -781,9 +815,9 @@ function renderPOS(){
     <div class="sale-panel">
       <div class="sale-head"><h3>Venta actual (${cartCount()})</h3></div>
       <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;">
-        <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="openCustomerPicker()">👤 ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
-        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="openDiscountModal()">💲 ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>
-        <button class="cat-chip ${state.saleNotes?'active':''}" onclick="openNotesModal()">📝 ${state.saleNotes?'Notas ✓':'Notas'}</button>
+        <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="openCustomerPicker()">${icon('user')} ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
+        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="openDiscountModal()">${icon('percent')} ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>
+        <button class="cat-chip ${state.saleNotes?'active':''}" onclick="openNotesModal()">${icon('file-text')} ${state.saleNotes?'Notas '+icon('check',12):'Notas'}</button>
       </div>
       <div class="sale-items">
         ${entries.length===0 ? `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>` :
@@ -828,7 +862,7 @@ function renderSplitPaymentInputs(){
 }
 function renderReceipt(){
   return `<div class="receipt-screen"><div class="receipt-card">
-    <div class="mark">✓</div>
+    <div class="mark">${icon('check',26)}</div>
     <h2>Venta registrada</h2>
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : ''}
     <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>${(state.lastPayments&&state.lastPayments.length>1) ? `Pago dividido: ${state.lastPayments.map(p=>`${p.method} ${money(p.amount)}`).join(' · ')}` : `Método: ${(state.lastPayments&&state.lastPayments[0]&&state.lastPayments[0].method)||state.payMethod}`}<br>Atendió: ${state.activeCashier.name}</p>

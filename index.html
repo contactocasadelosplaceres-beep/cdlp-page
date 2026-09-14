@@ -18,7 +18,10 @@
     --ink: #2B1620; --ink-soft: #6E5560;
     --primary: #993477; --primary-deep: #5C1F49; --rose: #BC355C;
     --coral: #ED7578; --amber: #F6A030; --green: #7AB71A; --teal: #20B7CA; --navy: #0A4A5B;
-    --border: #EBD9D3; --radius-card: 16px; --radius-pill: 999px;
+    --border: #EBD9D3; --radius-card: 16px; --radius-sm:10px; --radius-md:14px; --radius-lg:20px; --radius-pill: 999px;
+    --shadow-sm:0 2px 10px -6px rgba(43,22,32,0.18);
+    --shadow-md:0 16px 32px -16px rgba(74,22,66,0.28);
+    --shadow-lg:0 28px 56px -24px rgba(74,22,66,0.38);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html{overflow-x:hidden;width:100%;}
@@ -70,7 +73,8 @@
   .hero h1{font-size:27px;font-weight:800;color:var(--primary-deep);max-width:480px;line-height:1.14;}
   .hero p{margin-top:10px;color:var(--ink-soft);max-width:460px;font-size:14.5px;line-height:1.55;}
   .hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
-  .hero-btn-primary{background:var(--rose);color:#fff;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;}
+  .hero-btn-primary{background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:12px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;box-shadow:0 10px 22px -10px rgba(188,53,92,0.5);transition:transform .12s ease;}
+  .hero-btn-primary:active{transform:scale(0.97);}
   .hero-btn-ghost{background:var(--surface-soft);color:var(--primary-deep);padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;}
   .hero-btn-wa{color:var(--green);padding:12px 6px;font-size:13.5px;font-weight:700;display:inline-flex;align-items:center;gap:6px;text-decoration:none;}
   @media(max-width:359px){
@@ -113,7 +117,8 @@
   @media(min-width:400px){.grid{gap:16px;padding:16px 20px 8px;}}
   @media(min-width:720px){.grid{grid-template-columns:repeat(3,1fr);}}
   @media(min-width:980px){.grid{grid-template-columns:repeat(4,1fr);}}
-  .card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:visible;display:flex;flex-direction:column;transition:transform .15s ease;cursor:pointer;}
+  .card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);overflow:visible;display:flex;flex-direction:column;transition:transform .15s ease,box-shadow .15s ease;cursor:pointer;}
+  .card:hover{box-shadow:var(--shadow-sm);}
   .card:active{transform:scale(0.98);}
   .card-media{position:relative;}
   .card-image-wrap{position:relative;aspect-ratio:4/5;overflow:hidden;border-radius:var(--radius-card) var(--radius-card) 0 0;background:linear-gradient(135deg,var(--surface-soft),var(--border));}
@@ -146,7 +151,7 @@
   .promo-banner-body{padding:22px 24px;display:flex;flex-direction:column;justify-content:center;gap:8px;}
   .promo-banner-title{font-family:'League Spartan',sans-serif;font-size:20px;font-weight:800;color:var(--rose);}
   .promo-banner-text{color:var(--ink-soft);font-size:13.5px;line-height:1.5;}
-  .btn-promo{align-self:flex-start;margin-top:6px;background:var(--rose);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;}
+  .btn-promo{align-self:flex-start;margin-top:6px;background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:10px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;box-shadow:0 8px 18px -10px rgba(188,53,92,0.5);}
 
   /* ===== KITS ===== */
   .kits-row{display:grid;grid-template-columns:1fr;gap:14px;padding:16px 20px 8px;}
@@ -158,7 +163,8 @@
   .kit-name{font-weight:700;font-size:14px;font-family:'League Spartan',sans-serif;}
   .kit-desc{font-size:12px;color:var(--ink-soft);margin-top:2px;}
   .kit-price{font-weight:800;color:var(--primary-deep);font-size:14.5px;margin-top:6px;}
-  .kit-add{background:var(--primary);color:#fff;padding:9px 14px;border-radius:10px;font-size:12.5px;font-weight:700;flex-shrink:0;}
+  .kit-add{background:var(--primary);color:#fff;padding:9px 14px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:700;flex-shrink:0;transition:transform .12s ease;}
+  .kit-add:active{transform:scale(0.95);}
 
   /* ===== TESTIMONIALS ===== */
   .rating-line{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;}
@@ -231,14 +237,16 @@
   .remove-link{font-size:11.5px;color:var(--rose);margin-left:auto;font-weight:600;padding:8px 0 8px 8px;}
   .drawer-foot{padding:16px 20px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
   .total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:800;margin-bottom:12px;color:var(--primary-deep);}
-  .btn-primary{width:100%;background:var(--rose);color:#fff;padding:14px;min-height:48px;border-radius:12px;font-size:14.5px;font-weight:700;display:block;text-align:center;text-decoration:none;}
-  .btn-secondary{width:100%;background:var(--surface-soft);color:var(--primary-deep);padding:14px;min-height:48px;border-radius:12px;font-size:14px;font-weight:700;margin-top:8px;}
+  .btn-primary{width:100%;background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:14px;min-height:48px;border-radius:var(--radius-sm);font-size:14.5px;font-weight:700;display:block;text-align:center;text-decoration:none;box-shadow:0 10px 22px -10px rgba(188,53,92,0.5);transition:transform .12s ease,opacity .12s ease;}
+  .btn-primary:active{transform:scale(0.98);}
+  .btn-secondary{width:100%;background:var(--surface-soft);color:var(--primary-deep);padding:14px;min-height:48px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;margin-top:8px;transition:background .15s ease;}
+  .btn-secondary:hover{background:#efd9d3;}
   .form-field{margin-bottom:12px;}
   .form-field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:5px;}
   .form-field input,.form-field textarea{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);font-size:16px;font-family:inherit;background:var(--bg);color:var(--ink);}
   .form-field textarea{resize:vertical;min-height:60px;}
   .note-box{background:var(--surface-soft);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;text-align:center;padding:20px;}
   .success-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -253,7 +261,7 @@
   .mobile-cart-bar-info{display:flex;flex-direction:column;line-height:1.25;}
   .mobile-cart-bar-count{font-size:11px;color:#e9c9dc;}
   .mobile-cart-bar-total{font-size:16px;font-weight:800;}
-  .mobile-cart-bar-btn{background:var(--rose);color:#fff;padding:12px 20px;min-height:44px;border-radius:var(--radius-pill);font-size:13.5px;font-weight:700;flex-shrink:0;}
+  .mobile-cart-bar-btn{background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:12px 20px;min-height:44px;border-radius:var(--radius-pill);font-size:13.5px;font-weight:700;flex-shrink:0;box-shadow:0 8px 18px -8px rgba(0,0,0,0.35);}
   .mobile-cart-spacer{height:0;}
   .mobile-cart-spacer.show{height:74px;}
   @media(min-width:640px){.mobile-cart-bar{display:none!important;}.mobile-cart-spacer{display:none;}}
@@ -387,6 +395,21 @@ function trackVisit(){
 }
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+function icon(name, size){
+  size = size || 16;
+  const P = {
+    x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+    check:'<path d="M20 6 9 17l-5-5"/>',
+    shield:'<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3Z"/>',
+    package:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
+    banknote:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/><path d="M6 10v4M18 10v4"/>',
+    home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+    'message-circle':'<path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.4 0-2.7-.3-3.9-.9L3 21l1.4-4.9A8.5 8.5 0 1 1 21 12Z"/>',
+    gift:'<rect x="3" y="8" width="18" height="13" rx="1"/><path d="M12 8v13"/><path d="M3 12h18"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  };
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
+}
+
 function effectivePrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price; }
 
 /* ============== MAYOREO ============== */
@@ -743,7 +766,7 @@ function renderProfileDrawer(){
   const p = loadCustomerProfile() || {};
   const tier = activeWholesaleTier();
   return `
-    <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" onclick="closeProfile()">✕</button></div>
+    <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" onclick="closeProfile()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">Guarda tus datos en este celular para que tus próximos pedidos sean más rápidos. No se comparten con nadie más, ni requieren contraseña — solo quedan en este dispositivo.</div>
       <div class="form-field"><label>Nombre completo</label><input id="pf-cli-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
@@ -752,7 +775,7 @@ function renderProfileDrawer(){
       <div class="form-field" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
         <label>Código de mayoreo</label>
         ${tier ? `
-          <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">✓ Activo: ${tier.name} (${tier.discountPercent}% de descuento)</div>
+          <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Activo: ${tier.name} (${tier.discountPercent}% de descuento)</div>
           <button class="btn-secondary" onclick="clearWholesaleCode()">Desactivar mayoreo</button>
         ` : `
           <div style="display:flex;gap:6px;">
@@ -781,7 +804,7 @@ function renderProductDetailDrawer(){
   const price = matchedVariant && matchedVariant.priceOverride>0 ? matchedVariant.priceOverride : automaticDiscountedPrice(p);
   const needsSelection = hasVariants && !matchedVariant;
   return `
-    <div class="drawer-head"><h2>Detalle del producto</h2><button class="close-x" onclick="closeProductDetail()">✕</button></div>
+    <div class="drawer-head"><h2>Detalle del producto</h2><button class="close-x" onclick="closeProductDetail()">${icon('x')}</button></div>
     <div class="drawer-body" style="padding:0;">
       <div class="detail-main-img-wrap" ontouchstart="detailTouchStart(event)" ontouchend="detailTouchEnd(event)">
         ${images
@@ -898,11 +921,11 @@ function renderHeroSection(){
 /* ============== TRUST BAR (fixed) ============== */
 function renderTrustBar(){
   const items = [
-    {ic:'🔒', label:'Compra segura'},
-    {ic:'📦', label:'Empaque discreto'},
-    {ic:'💵', label:'Pago contra entrega'},
-    {ic:'🏠', label:'Entrega a domicilio'},
-    {ic:'💬', label:'Atención personalizada'},
+    {ic:icon('shield'), label:'Compra segura'},
+    {ic:icon('package'), label:'Empaque discreto'},
+    {ic:icon('banknote'), label:'Pago contra entrega'},
+    {ic:icon('home'), label:'Entrega a domicilio'},
+    {ic:icon('message-circle'), label:'Atención personalizada'},
   ];
   return `<div class="trust-bar">${items.map(i=>`<div class="trust-item"><span class="ic">${i.ic}</span>${i.label}</div>`).join('')}</div>`;
 }
@@ -1086,10 +1109,10 @@ function renderDiscretionSection(){
       <h3>Tu privacidad es nuestra prioridad.</h3>
       <p>Preparamos tus pedidos con discreción para que puedas comprar con total tranquilidad, de principio a fin.</p>
       <div class="discretion-grid">
-        <div class="discretion-item"><span class="ic">📦</span>Empaque discreto, sin logos visibles</div>
-        <div class="discretion-item"><span class="ic">🏠</span>Entrega directa a domicilio</div>
-        <div class="discretion-item"><span class="ic">💬</span>Atención privada por WhatsApp</div>
-        <div class="discretion-item"><span class="ic">💵</span>Pago contra entrega</div>
+        <div class="discretion-item"><span class="ic">${icon('package',20)}</span>Empaque discreto, sin logos visibles</div>
+        <div class="discretion-item"><span class="ic">${icon('home',20)}</span>Entrega directa a domicilio</div>
+        <div class="discretion-item"><span class="ic">${icon('message-circle',20)}</span>Atención privada por WhatsApp</div>
+        <div class="discretion-item"><span class="ic">${icon('banknote',20)}</span>Pago contra entrega</div>
       </div>
     </div>
   </div>`;
@@ -1154,7 +1177,7 @@ function sectionVisible(key){
 function renderWholesaleBanner(tier){
   const progress = wholesaleCartProgress(tier);
   if(progress.unlocked){
-    return `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">✓ Precio de mayoreo activo: ${tier.discountPercent}% de descuento (${tier.name})</div>`;
+    return `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Precio de mayoreo activo: ${tier.discountPercent}% de descuento (${tier.name})</div>`;
   }
   const missing = tier.minType==='amount' ? money(progress.needed-progress.current) : `${progress.needed-progress.current} pieza(s)`;
   return `<div class="note-box">Agrega <strong>${missing}</strong> más en productos participantes para desbloquear ${tier.discountPercent}% de descuento de mayoreo (${tier.name}).</div>`;
@@ -1165,7 +1188,7 @@ function renderCartDrawer(){
   const buyXPayYSavings = buyXPayYAdjustment();
   const gift = activeGift();
   return `
-    <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" onclick="state.cartOpen=false;render()">✕</button></div>
+    <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" onclick="state.cartOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       ${tier ? renderWholesaleBanner(tier) : ''}
       ${entries.length===0 ? `<div class="empty-state">Tu carrito está vacío.</div>` :
@@ -1183,14 +1206,14 @@ function renderCartDrawer(){
               </div>
             </div>
           </div>`;}).join('')}
-      ${buyXPayYSavings>0 ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">✓ Promoción aplicada: ahorras ${money(buyXPayYSavings)}</div>` : ''}
-      ${gift ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">🎁 ¡Llevas de regalo: ${gift.product.name}!</div>` : ''}
+      ${buyXPayYSavings>0 ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Promoción aplicada: ahorras ${money(buyXPayYSavings)}</div>` : ''}
+      ${gift ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('gift')} ¡Llevas de regalo: ${gift.product.name}!</div>` : ''}
       ${entries.length>0 ? `
         <div class="form-field" style="margin-top:14px;">
           <label>¿Tienes un código de descuento?</label>
           ${state.appliedCoupon ? `
             <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;display:flex;justify-content:space-between;align-items:center;">
-              <span>✓ ${state.appliedCoupon.code} (${state.appliedCoupon.discountPercent}% OFF)</span>
+              <span>${icon('check')} ${state.appliedCoupon.code} (${state.appliedCoupon.discountPercent}% OFF)</span>
               <a style="color:var(--rose);font-weight:700;cursor:pointer;" onclick="removeCoupon()">Quitar</a>
             </div>
           ` : `
@@ -1212,7 +1235,7 @@ function renderCartDrawer(){
 function renderCheckoutDrawer(){
   const p = loadCustomerProfile() || {};
   return `
-    <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">✕</button></div>
+    <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">Pago contra entrega. Tu pedido llega en empaque neutro, sin ningún logo visible.</div>
       <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
@@ -1233,7 +1256,7 @@ function renderCheckoutDrawer(){
 
 function renderSuccess(){
   return `<div class="success-screen"><div class="success-card">
-    <div class="mark">✓</div>
+    <div class="mark">${icon('check',26)}</div>
     <h2>¡Pedido recibido!</h2>
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin-bottom:4px;">Pedido ${formatFolio(state.lastOrderNumber)}</div>` : ''}
     <p>Te contactaremos por WhatsApp para confirmar tu pedido y coordinar la entrega. Pago contra entrega, empaque discreto.</p>
