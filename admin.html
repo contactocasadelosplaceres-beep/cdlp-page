@@ -369,6 +369,18 @@ async function saveCashierDoc(c){
 async function deleteCashierDoc(id){ await db.collection('cashiers').doc(id).delete(); }
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+const PAY_METHODS = ["Efectivo","Tarjeta","Transferencia"];
+// Desglose de pago de una venta: usa "payments" (ventas divididas, o registradas después de
+// este cambio) y cae de vuelta a "paymentMethod" para ventas guardadas antes de este cambio.
+function salePayments(s){
+  if(s.payments && s.payments.length) return s.payments;
+  return [{method: s.paymentMethod || 'Efectivo', amount: s.total||0}];
+}
+function paymentMethodLabel(o){
+  const pays = salePayments(o);
+  if(pays.length>1) return 'Dividido: ' + pays.map(p=>`${p.method} ${money(p.amount)}`).join(' · ');
+  return pays[0].method;
+}
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : 'Sin folio'; }
 async function getNextOrderNumber(){
   const counterRef = db.collection('counters').doc('orders');
@@ -577,7 +589,7 @@ function renderOrderDetailModal(){
         <div class="order-detail" style="margin-bottom:14px;">
           <div><span>Atendió</span><span>${o.cashierName||'—'}</span></div>
           <div><span>Centro</span><span>${o.centerName||'—'}</span></div>
-          <div><span>Método de pago</span><span>${o.paymentMethod||'—'}</span></div>
+          <div><span>Método de pago</span><span>${paymentMethodLabel(o)}</span></div>
           ${o.customerName?`<div><span>Cliente</span><span>${o.customerName}${o.customerPhone?` · ${o.customerPhone}`:''}</span></div>`:''}
           ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
         </div>
@@ -1985,7 +1997,7 @@ function renderOrderRow(o){
   const itemCount = (o.items||[]).reduce((s,it)=>s+it.qty,0);
   const shipLabel = isPos ? 'Retirada' : (o.status==='Entregado' ? 'Entregada' : o.status==='Cancelado' ? 'Cancelada' : 'Por enviar');
   const shipSub = isPos ? 'Retirado en Punto de Venta' : (o.address || '—');
-  const payLabel = isPos ? (o.paymentMethod||'—') : 'Contra entrega';
+  const payLabel = isPos ? paymentMethodLabel(o) : 'Contra entrega';
   let rows = `
     <tr class="${o.archived?'archived-row':''}">
       <td><button class="order-folio-btn" onclick="event.stopPropagation();openOrderDetailModal('${o.id}')">${formatFolio(o.orderNumber)}</button></td>
@@ -2027,7 +2039,7 @@ function renderOrderRow(o){
     <tr class="products-detail-row"><td colspan="8">
       ${(o.items||[]).map(it=>`<div class="pd-line"><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
       ${isPos
-        ? `<div class="pd-extra"><span>Método de pago</span><span>${o.paymentMethod||'—'}</span></div>`
+        ? `<div class="pd-extra"><span>Método de pago</span><span>${paymentMethodLabel(o)}</span></div>`
         : `<div class="pd-extra"><span>Teléfono</span><span>${o.phone||'—'}</span></div>
            <div class="pd-extra"><span>Dirección</span><span>${o.address||'—'}</span></div>
            ${o.notes?`<div class="pd-extra"><span>Notas</span><span>${o.notes}</span></div>`:''}`
@@ -3065,7 +3077,12 @@ async function adminForceCloseCash(id){
     const snap = await db.collection('sales').where('cashRegisterId','==', id).get();
     const sales = snap.docs.map(d=>d.data());
     const byPayment = {};
-    sales.forEach(s=>{ const m = s.paymentMethod||'Efectivo'; byPayment[m]=(byPayment[m]||0)+(s.total||0); });
+    sales.forEach(s=>{
+      salePayments(s).forEach(pm=>{
+        const m = pm.method||'Efectivo';
+        byPayment[m]=(byPayment[m]||0)+(pm.amount||0);
+      });
+    });
     const total = sales.reduce((s,x)=>s+(x.total||0),0);
     const movs = r.movements||[];
     const ingresos = movs.filter(m=>m.type==='ingreso').reduce((s,m)=>s+m.amount,0);
