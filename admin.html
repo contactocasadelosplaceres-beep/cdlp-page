@@ -254,7 +254,7 @@ let state = {
   variantImportOpen:false, variantImport:null,
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   productCatFilter:"Todas", productNeedFilter:"Todas",
-  needsManageOpen:false, newNeedInput:"",
+  needsManageOpen:false, newNeedInput:"", catManageOpen:false, catImportOpen:false, catImport:null,
   catAssignOpen:false, catAssignSearch:"", needAssignOpen:false, needAssignSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
@@ -1112,6 +1112,7 @@ function renderAdmin(){
   ${state.importOpen ? renderImportModal() : ''}
   ${state.descImportOpen ? renderDescImportModal() : ''}
   ${state.variantImportOpen ? renderVariantImportModal() : ''}
+  ${state.catImportOpen ? renderCategoryImportModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
@@ -1373,6 +1374,26 @@ function renderNeedsManagePanel(){
       </div>
     </div>`;
 }
+function renderCategoriesManagePanel(){
+  const cats = state.settings.categories || [];
+  return `
+    <div class="panel" style="background:var(--bg);margin-bottom:14px;">
+      <div class="panel-title" style="font-size:13px;margin-bottom:2px;">Editar categorías</div>
+      <div class="panel-sub" style="margin-top:0;">Estas categorías aparecen como filtro en tu tienda pública y en el menú del encabezado. Puedes cambiar el nombre, el orden, agregar nuevas o borrarlas.</div>
+      ${cats.map((c,idx)=>`
+        <div class="list-row" style="margin-bottom:6px;">
+          <button class="icon-btn" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},-1)">↑</button>
+          <button class="icon-btn" ${idx===cats.length-1?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},1)">↓</button>
+          <input value="${c.replace(/"/g,'&quot;')}" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;" onchange="renameCategory('${c.replace(/'/g,"\\'")}',this.value)">
+          <button class="icon-btn danger" onclick="removeCategory('${c.replace(/'/g,"\\'")}')">🗑</button>
+        </div>
+      `).join('')}
+      <div class="two-col" style="margin-top:8px;">
+        <input id="new-cat-input-productos" placeholder="Nueva categoría" value="${(state.newCatInput||'').replace(/"/g,'&quot;')}" oninput="state.newCatInput=this.value">
+        <button class="btn-outline" onclick="addCategory()">+ Agregar categoría</button>
+      </div>
+    </div>`;
+}
 function renderProductos(){
   const q = (state.productSearch||'').trim().toLowerCase();
   const catFilter = state.productCatFilter || 'Todas';
@@ -1404,9 +1425,12 @@ function renderProductos(){
       <button class="${needFilter==='Todas'?'active':''}" onclick="state.productNeedFilter='Todas';render()">Todos</button>
       ${needsList.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';render()">${n.label}</button>`).join('')}
     </div>
-    <div style="margin-bottom:12px;">
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.catManageOpen=!state.catManageOpen;render()">${state.catManageOpen?'Ocultar edición de categorías':'✎ Editar categorías'}</button>
       <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.needsManageOpen=!state.needsManageOpen;render()">${state.needsManageOpen?'Ocultar edición de etiquetas':'✎ Editar etiquetas "para quién"'}</button>
+      <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.catImportOpen=true;render()">Importar categorías (Tiendanube)</button>
     </div>
+    ${state.catManageOpen ? renderCategoriesManagePanel() : ''}
     ${state.needsManageOpen ? renderNeedsManagePanel() : ''}
     ${catFilter!=='Todas' ? renderTagAssignPanel('cat', catFilter, catFilter) : ''}
     ${needFilter!=='Todas' ? renderTagAssignPanel('need', needFilter, (needsList.find(n=>n.key===needFilter)||{}).label || needFilter) : ''}
@@ -1771,6 +1795,155 @@ function renderVariantImportModal(){
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.variantImportOpen=false;state.variantImport=null;render()">Cancelar</button>
         <button class="btn-primary" style="flex:1;" onclick="commitVariantImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============== IMPORTAR CATEGORÍAS DESDE TIENDANUBE ============== */
+// El CSV de Tiendanube trae la columna "Categorías" (varias separadas por coma) repetida en
+// todas las filas de un mismo producto (identificado por "Identificador de URL"); solo hace
+// falta leerla de cualquiera de esas filas.
+function parseTiendanubeCategorias(text){
+  const rows = parseCSV(text);
+  if(!rows.length) return null;
+  const header = rows[0].map(h=>h.trim().toLowerCase());
+  const idxSlug = header.indexOf('identificador de url');
+  const idxName = header.indexOf('nombre');
+  const idxCat = header.findIndex(h=>h.includes('categor'));
+  if(idxName<0 || idxCat<0) return null;
+  const bySlug = {};
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    const slug = idxSlug>=0 ? (row[idxSlug]||'').trim() : String(i);
+    if(!bySlug[slug]) bySlug[slug] = {name:'', cats:''};
+    const name = (row[idxName]||'').trim();
+    if(name) bySlug[slug].name = name;
+    const catVal = (row[idxCat]||'').trim();
+    if(catVal) bySlug[slug].cats = catVal;
+  }
+  const out = [];
+  Object.values(bySlug).forEach(g=>{
+    if(!g.name || !g.cats) return;
+    const categories = g.cats.split(',').map(c=>c.trim()).filter(Boolean);
+    if(categories.length) out.push({name:g.name, categories});
+  });
+  return out;
+}
+function buildCategoryImportPreview(csvRows){
+  const byNorm = {};
+  state.products.forEach(p=>{ const key = normName(p.name); (byNorm[key]=byNorm[key]||[]).push(p); });
+  const matched = [], unmatched = [], ambiguous = [];
+  const newCategoryNames = new Set();
+  csvRows.forEach(row=>{
+    const key = normName(row.name);
+    const candidates = byNorm[key];
+    if(!candidates || candidates.length===0){ unmatched.push(row.name); return; }
+    if(candidates.length>1){ ambiguous.push(row.name); return; }
+    const p = candidates[0];
+    const current = (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[]));
+    const same = current.length===row.categories.length && current.every(c=>row.categories.includes(c));
+    if(same) return;
+    row.categories.forEach(c=>{ if(!state.settings.categories.includes(c)) newCategoryNames.add(c); });
+    matched.push({ productId:p.id, productName:p.name, currentCategories:current, newCategories:row.categories, checked:true });
+  });
+  return {matched, unmatched, ambiguous, newCategoryNames:Array.from(newCategoryNames)};
+}
+function handleCategoryImportFile(input){
+  const file = input.files[0]; if(!file) return;
+  const fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const csvRows = parseTiendanubeCategorias(e.target.result);
+    if(csvRows===null){ showToast('No se encontraron las columnas "Nombre" y "Categorías" en ese archivo'); return; }
+    state.catImport = {fileName, ...buildCategoryImportPreview(csvRows)};
+    render();
+  };
+  reader.readAsText(file);
+}
+function toggleCategoryImportRow(idx){
+  if(!state.catImport || !state.catImport.matched[idx]) return;
+  state.catImport.matched[idx].checked = !state.catImport.matched[idx].checked;
+  render();
+}
+function toggleCategoryImportAll(checked){
+  if(!state.catImport) return;
+  state.catImport.matched.forEach(r=>r.checked=checked);
+  render();
+}
+async function commitCategoryImport(){
+  const ci = state.catImport;
+  if(!ci || !ci.matched) return;
+  const toApply = ci.matched.filter(r=>r.checked);
+  if(toApply.length===0){ showToast('No hay categorías seleccionadas'); return; }
+  try{
+    if(ci.newCategoryNames && ci.newCategoryNames.length){
+      const usedNames = new Set(toApply.flatMap(r=>r.newCategories));
+      ci.newCategoryNames.forEach(c=>{ if(usedNames.has(c) && !state.settings.categories.includes(c)) state.settings.categories.push(c); });
+      await saveSettings();
+    }
+    for(let i=0;i<toApply.length;i+=400){
+      const chunk = toApply.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(r=>batch.update(db.collection('products').doc(r.productId), {
+        categories: r.newCategories, cat: r.newCategories[0]
+      }));
+      await batch.commit();
+    }
+    toApply.forEach(r=>{
+      const p = state.products.find(x=>x.id===r.productId);
+      if(p){ p.categories = r.newCategories; p.cat = r.newCategories[0]; }
+    });
+    showToast(`${toApply.length} producto(s) actualizado(s) con su categoría`);
+    state.catImportOpen=false; state.catImport=null;
+    render();
+  }catch(e){ console.error(e); showToast('Ocurrió un error al actualizar: '+(e.message||'error desconocido')); }
+}
+function renderCategoryImportModal(){
+  const ci = state.catImport;
+  const matched = ci ? (ci.matched||[]) : [];
+  const checkedCount = matched.filter(r=>r.checked).length;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.catImportOpen=false;state.catImport=null;render();}">
+    <div class="modal" style="max-width:720px;">
+      <h3>Importar categorías desde Tiendanube</h3>
+      <div class="note-box">Sube el mismo CSV de exportación de Tiendanube. Lee la columna "Categorías" (pueden ser varias separadas por coma) y la compara con la categoría que tiene cada producto ahora mismo. Se empareja por nombre de producto igual que los otros importadores. Cualquier categoría del CSV que no exista todavía en tu tienda se agrega automáticamente.</div>
+      <div class="import-drop">
+        Selecciona tu archivo .csv<br>
+        <input type="file" accept=".csv,.txt" onchange="handleCategoryImportFile(this)">
+      </div>
+      ${ci && ci.fileName ? `<div class="preview-count">Archivo: ${escDescHtml(ci.fileName)}</div>` : ''}
+      ${ci ? `
+        <div class="preview-count">
+          ${matched.length} producto(s) con categoría distinta a la del CSV (${checkedCount} seleccionado${checkedCount===1?'':'s'} para actualizar).
+          ${ci.newCategoryNames.length ? `<br>Categorías nuevas que se agregarán: ${ci.newCategoryNames.map(c=>escDescHtml(c)).join(', ')}.` : ''}
+          ${ci.unmatched.length ? `<br>${ci.unmatched.length} nombre(s) del CSV no se encontraron en tu catálogo.` : ''}
+          ${ci.ambiguous.length ? `<br>${ci.ambiguous.length} nombre(s) coinciden con más de un producto y se omitieron.` : ''}
+        </div>
+        ${matched.length>0 ? `
+        <div style="margin:6px 0;">
+          <label style="font-size:13px;"><input type="checkbox" ${checkedCount===matched.length?'checked':''} onchange="toggleCategoryImportAll(this.checked)"> Seleccionar todos</label>
+        </div>
+        <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+          ${matched.map((r,idx)=>`
+            <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;">
+                <input type="checkbox" ${r.checked?'checked':''} onchange="toggleCategoryImportRow(${idx})" style="margin-top:3px;">
+                <div style="flex:1;">
+                  <div style="font-weight:700;">${escDescHtml(r.productName)}</div>
+                  <div style="color:var(--ink-soft);font-size:12px;margin-top:2px;">
+                    ${r.currentCategories.length?escDescHtml(r.currentCategories.join(', ')):'<em>sin categoría</em>'} → <strong>${escDescHtml(r.newCategories.join(', '))}</strong>
+                  </div>
+                </div>
+              </label>
+            </div>
+          `).join('')}
+        </div>` : ''}
+        ${ci.unmatched.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ver nombres no encontrados (${ci.unmatched.length})</summary><div style="font-size:12px;max-height:150px;overflow-y:auto;color:var(--ink-soft);margin-top:6px;">${ci.unmatched.map(n=>escDescHtml(n)).join('<br>')}</div></details>` : ''}
+      ` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.catImportOpen=false;state.catImport=null;render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitCategoryImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
       </div>
     </div>
   </div>`;
@@ -3531,9 +3704,58 @@ async function addCategory(){
   await saveSettings(); showToast('Categoría agregada'); render();
 }
 async function removeCategory(cat){
-  if(state.products.some(p=>p.cat===cat)){ showToast('Hay productos en esta categoría; reasígnalos antes de quitarla'); return; }
-  state.settings.categories = state.settings.categories.filter(c=>c!==cat);
+  const affected = state.products.filter(p=>(p.categories&&p.categories.includes(cat)) || p.cat===cat);
+  if(affected.length>0 && !confirm(`${affected.length} producto(s) tienen esta categoría asignada. Si continúas, se les asignará otra categoría automáticamente. ¿Continuar?`)) return;
+  try{
+    if(affected.length>0){
+      const fallback = state.settings.categories.find(c=>c!==cat) || 'Otros';
+      for(let i=0;i<affected.length;i+=400){
+        const chunk = affected.slice(i,i+400);
+        const batch = db.batch();
+        chunk.forEach(p=>{
+          let categories = (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).filter(c=>c!==cat);
+          if(categories.length===0) categories = [fallback];
+          p.categories = categories;
+          if(p.cat===cat) p.cat = categories[0];
+          batch.update(db.collection('products').doc(p.id), {categories:p.categories, cat:p.cat});
+        });
+        await batch.commit();
+      }
+    }
+    state.settings.categories = state.settings.categories.filter(c=>c!==cat);
+    if(state.productCatFilter===cat) state.productCatFilter='Todas';
+    await saveSettings(); showToast('Categoría eliminada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar la categoría'); }
+}
+async function moveCategory(idx,dir){
+  const arr = state.settings.categories;
+  const j = idx+dir; if(j<0||j>=arr.length) return;
+  [arr[idx],arr[j]] = [arr[j],arr[idx]];
   await saveSettings(); render();
+}
+async function renameCategory(oldName, newLabel){
+  const val = (newLabel||'').trim();
+  if(!val || val===oldName){ render(); return; }
+  if(state.settings.categories.includes(val)){ showToast('Ya existe una categoría con ese nombre'); render(); return; }
+  const idx = state.settings.categories.indexOf(oldName);
+  if(idx<0) return;
+  try{
+    state.settings.categories[idx] = val;
+    const affected = state.products.filter(p=>(p.categories&&p.categories.includes(oldName)) || p.cat===oldName);
+    for(let i=0;i<affected.length;i+=400){
+      const chunk = affected.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(p=>{
+        let categories = (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).map(c=>c===oldName?val:c);
+        p.categories = categories;
+        if(p.cat===oldName) p.cat = val;
+        batch.update(db.collection('products').doc(p.id), {categories:p.categories, cat:p.cat});
+      });
+      await batch.commit();
+    }
+    if(state.productCatFilter===oldName) state.productCatFilter = val;
+    await saveSettings(); showToast('Categoría renombrada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo renombrar la categoría'); }
 }
 
 function renderProductModal(){
