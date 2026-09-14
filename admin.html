@@ -184,7 +184,7 @@ const auth = firebase.auth();
 
 const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
-const NEEDS = [
+const DEFAULT_NEEDS = [
   {key:'para-mi', label:'Para mí'},
   {key:'para-pareja', label:'Para mi pareja'},
   {key:'para-ella', label:'Para ella'},
@@ -229,6 +229,7 @@ const DEFAULT_SETTINGS = {
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
+  needs: JSON.parse(JSON.stringify(DEFAULT_NEEDS)),
   sections: JSON.parse(JSON.stringify(DEFAULT_SECTIONS)),
   headerSubtitle:"Discreto · Confidencial · A domicilio",
   showHeaderSubtitle:true,
@@ -253,6 +254,8 @@ let state = {
   variantImportOpen:false, variantImport:null,
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   productCatFilter:"Todas", productNeedFilter:"Todas",
+  needsManageOpen:false, newNeedInput:"",
+  catAssignOpen:false, catAssignSearch:"", needAssignOpen:false, needAssignSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   wholesaleModal:null, wholesaleProductSearch:"",
@@ -300,6 +303,7 @@ async function loadData(){
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
@@ -1232,10 +1236,148 @@ function renderBarChart(data, isMoney){
     </div>`).join('')}</div>`;
 }
 
+function productHasTag(p, kind, value){
+  if(kind==='cat') return (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(value);
+  return (p.needs||[]).includes(value);
+}
+async function addProductTag(productId, kind, value){
+  const p = state.products.find(x=>x.id===productId); if(!p) return;
+  try{
+    if(kind==='cat'){
+      const categories = (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[]));
+      if(categories.includes(value)){ showToast('Ya estaba en esa categoría'); return; }
+      categories.push(value);
+      p.categories = categories;
+      await db.collection('products').doc(productId).update({categories});
+    }else{
+      const needs = p.needs||[];
+      if(needs.includes(value)){ showToast('Ya tenía esa etiqueta'); return; }
+      needs.push(value);
+      p.needs = needs;
+      await db.collection('products').doc(productId).update({needs});
+    }
+    showToast('Producto agregado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo agregar'); }
+}
+async function removeProductTag(productId, kind, value){
+  const p = state.products.find(x=>x.id===productId); if(!p) return;
+  try{
+    if(kind==='cat'){
+      let categories = (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).filter(c=>c!==value);
+      if(categories.length===0){
+        const fallback = state.settings.categories.find(c=>c!==value) || value;
+        categories = [fallback];
+      }
+      p.categories = categories;
+      if(p.cat===value) p.cat = categories[0];
+      await db.collection('products').doc(productId).update({categories, cat:p.cat});
+    }else{
+      const needs = (p.needs||[]).filter(n=>n!==value);
+      p.needs = needs;
+      await db.collection('products').doc(productId).update({needs});
+    }
+    showToast('Producto quitado de este filtro'); render();
+  }catch(e){ console.error(e); showToast('No se pudo quitar'); }
+}
+function renderTagAssignPanel(kind, value, label){
+  const openKey = kind==='cat' ? 'catAssignOpen' : 'needAssignOpen';
+  const searchKey = kind==='cat' ? 'catAssignSearch' : 'needAssignSearch';
+  const q = (state[searchKey]||'').trim().toLowerCase();
+  const candidates = q ? state.products.filter(p=>!productHasTag(p,kind,value) && (p.name||'').toLowerCase().includes(q)).slice(0,30) : [];
+  return `
+    <div style="margin-bottom:10px;">
+      <button class="btn-outline" style="font-size:12px;padding:7px 12px;" onclick="state.${openKey}=!state.${openKey};render()">${state[openKey]?'Ocultar buscador':'+ Agregar productos a'} "${label}"</button>
+      ${state[openKey] ? `
+        <div class="panel" style="margin-top:8px;background:var(--bg);">
+          <input placeholder="Buscar producto por nombre..." value="${(state[searchKey]||'').replace(/"/g,'&quot;')}" oninput="state.${searchKey}=this.value;render()">
+          ${q ? (candidates.length ? `
+            <div style="max-height:220px;overflow-y:auto;margin-top:8px;">
+              ${candidates.map(p=>`
+                <div class="list-row" style="margin:0 0 6px;">
+                  <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div></div>
+                  <button class="btn-outline" style="font-size:12px;padding:6px 10px;" onclick="addProductTag('${p.id}','${kind}','${value.replace(/'/g,"\\'")}')">+ Agregar</button>
+                </div>
+              `).join('')}
+            </div>
+          ` : `<div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Sin resultados, o ya están todos en "${label}".</div>`) : ''}
+        </div>
+      ` : ''}
+    </div>`;
+}
+function slugifyNeedKey(label){
+  const base = (label||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  return base || uid('need-');
+}
+async function addNeed(){
+  const label = (state.newNeedInput||'').trim();
+  if(!label){ showToast('Ponle un nombre a la etiqueta'); return; }
+  if(!state.settings.needs) state.settings.needs = [];
+  let key = slugifyNeedKey(label);
+  const existingKeys = new Set(state.settings.needs.map(n=>n.key));
+  if(existingKeys.has(key)) key = key + '-' + uid('').slice(-4);
+  state.settings.needs.push({key, label});
+  state.newNeedInput = '';
+  await saveSettings(); showToast('Etiqueta agregada'); render();
+}
+async function moveNeed(idx,dir){
+  const arr = state.settings.needs;
+  const j = idx+dir; if(j<0||j>=arr.length) return;
+  [arr[idx],arr[j]] = [arr[j],arr[idx]];
+  await saveSettings(); render();
+}
+async function renameNeed(key, newLabel){
+  const n = (state.settings.needs||[]).find(x=>x.key===key); if(!n) return;
+  const val = newLabel.trim();
+  if(!val){ render(); return; }
+  n.label = val;
+  await saveSettings(); showToast('Etiqueta actualizada'); render();
+}
+async function removeNeed(key){
+  const count = state.products.filter(p=>(p.needs||[]).includes(key)).length;
+  if(count>0 && !confirm(`${count} producto(s) tienen esta etiqueta asignada. Si continúas, se la vamos a quitar de esos productos. ¿Continuar?`)) return;
+  try{
+    if(count>0){
+      const affected = state.products.filter(p=>(p.needs||[]).includes(key));
+      for(let i=0;i<affected.length;i+=400){
+        const chunk = affected.slice(i,i+400);
+        const batch = db.batch();
+        chunk.forEach(p=>{
+          p.needs = (p.needs||[]).filter(k=>k!==key);
+          batch.update(db.collection('products').doc(p.id), {needs:p.needs});
+        });
+        await batch.commit();
+      }
+    }
+    state.settings.needs = (state.settings.needs||[]).filter(n=>n.key!==key);
+    if(state.productNeedFilter===key) state.productNeedFilter='Todas';
+    await saveSettings(); showToast('Etiqueta eliminada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar la etiqueta'); }
+}
+function renderNeedsManagePanel(){
+  const needs = state.settings.needs || [];
+  return `
+    <div class="panel" style="background:var(--bg);margin-bottom:14px;">
+      <div class="panel-title" style="font-size:13px;margin-bottom:2px;">Editar etiquetas "¿para quién?"</div>
+      <div class="panel-sub" style="margin-top:0;">Estas mismas etiquetas aparecen como filtro en tu tienda pública. Puedes cambiar el nombre, el orden, agregar nuevas o borrarlas.</div>
+      ${needs.map((n,idx)=>`
+        <div class="list-row" style="margin-bottom:6px;">
+          <button class="icon-btn" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveNeed(${idx},-1)">↑</button>
+          <button class="icon-btn" ${idx===needs.length-1?'disabled style="opacity:.3;"':''} onclick="moveNeed(${idx},1)">↓</button>
+          <input value="${(n.label||'').replace(/"/g,'&quot;')}" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;" onchange="renameNeed('${n.key}',this.value)">
+          <button class="icon-btn danger" onclick="removeNeed('${n.key}')">🗑</button>
+        </div>
+      `).join('')}
+      <div class="two-col" style="margin-top:8px;">
+        <input id="new-need-input" placeholder="Nueva etiqueta (ej. Para regalar)" value="${(state.newNeedInput||'').replace(/"/g,'&quot;')}" oninput="state.newNeedInput=this.value">
+        <button class="btn-outline" onclick="addNeed()">+ Agregar etiqueta</button>
+      </div>
+    </div>`;
+}
 function renderProductos(){
   const q = (state.productSearch||'').trim().toLowerCase();
   const catFilter = state.productCatFilter || 'Todas';
   const needFilter = state.productNeedFilter || 'Todas';
+  const needsList = state.settings.needs || DEFAULT_NEEDS;
   let filtered = state.products;
   if(q) filtered = filtered.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
   if(catFilter!=='Todas') filtered = filtered.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
@@ -1258,10 +1400,16 @@ function renderProductos(){
       <button class="${catFilter==='Todas'?'active':''}" onclick="state.productCatFilter='Todas';render()">Todas las categorías</button>
       ${state.settings.categories.map(c=>`<button class="${catFilter===c?'active':''}" onclick="state.productCatFilter='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}
     </div>
-    <div class="status-filter">
+    <div class="status-filter" style="margin-bottom:6px;">
       <button class="${needFilter==='Todas'?'active':''}" onclick="state.productNeedFilter='Todas';render()">Todos</button>
-      ${NEEDS.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';render()">${n.label}</button>`).join('')}
+      ${needsList.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';render()">${n.label}</button>`).join('')}
     </div>
+    <div style="margin-bottom:12px;">
+      <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.needsManageOpen=!state.needsManageOpen;render()">${state.needsManageOpen?'Ocultar edición de etiquetas':'✎ Editar etiquetas "para quién"'}</button>
+    </div>
+    ${state.needsManageOpen ? renderNeedsManagePanel() : ''}
+    ${catFilter!=='Todas' ? renderTagAssignPanel('cat', catFilter, catFilter) : ''}
+    ${needFilter!=='Todas' ? renderTagAssignPanel('need', needFilter, (needsList.find(n=>n.key===needFilter)||{}).label || needFilter) : ''}
     <div class="panel-title" style="margin-bottom:12px;">Catálogo (${filtered.length}${filterCount?` de ${state.products.length}`:''})</div>
     ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan con este filtro${q?` ("${state.productSearch}")`:''}.</div>` :
       filtered.map(p=>`
@@ -1272,6 +1420,8 @@ function renderProductos(){
           <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · stock: ${p.stock} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
         </div>
         <div class="row-actions">
+          ${catFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de la categoría ${catFilter}" onclick="removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">🏷️✕</button>` : ''}
+          ${needFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de esta etiqueta" onclick="removeProductTag('${p.id}','need','${needFilter}')">💜✕</button>` : ''}
           <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>✎</button>
           <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">🗑</button>
         </div>
@@ -3470,7 +3620,7 @@ function renderProductModal(){
 
       <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          ${NEEDS.map(n=>`
+          ${(state.settings.needs||DEFAULT_NEEDS).map(n=>`
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--surface-soft);padding:8px 11px;border-radius:9px;cursor:pointer;">
               <input type="checkbox" value="${n.key}" ${(p.needs||[]).includes(n.key)?'checked':''} onchange="toggleProductNeed('${n.key}',this.checked)">
               ${n.label}
