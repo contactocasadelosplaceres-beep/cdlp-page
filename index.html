@@ -306,7 +306,7 @@ function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : ''; }
 const PALETTE = ["#BC355C","#993477","#20B7CA","#0A4A5B","#ED7578","#5C1F49","#F6A030","#7AB71A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const ICONS = ["✦","●","◐","▲","♥","◆","■","◯","✧","✺","❖","✤"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
-const NEEDS = [
+const DEFAULT_NEEDS = [
   {key:'para-mi', label:'Para mí'},
   {key:'para-pareja', label:'Para mi pareja'},
   {key:'para-ella', label:'Para ella'},
@@ -333,6 +333,7 @@ const DEFAULT_SETTINGS = {
   heroTitle:"Descubre nuevas formas de disfrutar.",
   heroSubtitle:"Explora nuestro catálogo, recibe tu pedido en la comodidad de tu casa y compra con total discreción.",
   categories:[...DEFAULT_CATEGORIES],
+  needs: JSON.parse(JSON.stringify(DEFAULT_NEEDS)),
   sections: JSON.parse(JSON.stringify(DEFAULT_SECTIONS)),
   headerSubtitle:"Discreto · Confidencial · A domicilio",
   showHeaderSubtitle:true,
@@ -354,6 +355,7 @@ async function loadData(){
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
     state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
@@ -911,7 +913,7 @@ function renderNeedsSection(){
   <div class="needs-block">
     <div class="section-heading">¿Qué estás buscando?</div>
     <div class="section-sub" style="margin-bottom:14px;">Elige una opción y te mostramos productos pensados para eso.</div>
-    <div class="needs-row">${NEEDS.map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
+    <div class="needs-row">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
   </div>`;
 }
 
@@ -996,7 +998,7 @@ function renderGridSection(){
     filtered = filtered.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q));
     heading = `Resultados para "${state.searchQuery.trim()}"`;
   } else if(state.activeNeed){
-    const need = NEEDS.find(n=>n.key===state.activeNeed);
+    const need = (state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===state.activeNeed);
     filtered = filtered.filter(p=>(p.needs||[]).includes(state.activeNeed));
     heading = need ? need.label : 'Catálogo completo';
     emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
