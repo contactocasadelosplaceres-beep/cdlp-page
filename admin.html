@@ -73,6 +73,7 @@
   .form-field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:5px;}
   .form-field input,.form-field textarea,.form-field select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:14px;background:var(--bg);color:var(--ink);}
   .form-field textarea{resize:vertical;min-height:60px;}
+  .field-input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:14px;background:var(--bg);color:var(--ink);margin-bottom:8px;}
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .note-box{background:var(--surface-soft);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
   .btn-primary{background:var(--rose);color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;font-weight:700;}
@@ -259,6 +260,7 @@ let state = {
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
   cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
+  orderDiscountEditing:false, orderDiscountAmountInput:"", orderDiscountReasonInput:"",
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -304,10 +306,10 @@ async function loadData(){
     if(!state.settings.promotions) state.settings.promotions = [];
     // unen en una sola lista, ordenada por fecha, para verlos juntos en "Pedidos".
     const tiendaOrders = ordersSnap.docs.map(d=>({id:d.id, source:'tienda', archived:false, ...d.data()}));
-    const posOrders = salesSnap.docs.map(d=>({
-      id:d.id, source:'pos', archived:false, status:'Entregado',
-      customer:'Venta en tienda física', ...d.data(),
-    }));
+    const posOrders = salesSnap.docs.map(d=>{
+      const data = d.data();
+      return { id:d.id, source:'pos', archived:false, status:'Entregado', customer: data.customerName || 'Venta en tienda física', ...data };
+    });
     state.orders = [...tiendaOrders, ...posOrders].sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.visits = visitsSnap.docs.map(d=>d.data());
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -396,8 +398,41 @@ async function deleteOrder(id, source){
 }
 
 /* ============== FICHA COMPLETA DEL PEDIDO + ENVÍO AL REPARTIDOR ============== */
-function openOrderDetailModal(id){ state.orderDetailModal = id; render(); }
-function closeOrderDetailModal(){ state.orderDetailModal = null; render(); }
+function openOrderDetailModal(id){ state.orderDetailModal = id; state.orderDiscountEditing=false; render(); }
+function closeOrderDetailModal(){ state.orderDetailModal = null; state.orderDiscountEditing=false; render(); }
+function startEditOrderDiscount(id){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  state.orderDiscountEditing = true;
+  state.orderDiscountAmountInput = o.manualDiscount ? String(o.manualDiscount.amount) : '';
+  state.orderDiscountReasonInput = o.manualDiscount ? o.manualDiscount.reason : '';
+  render();
+}
+async function saveOrderDiscount(id, source){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const amount = Number(state.orderDiscountAmountInput);
+  const reason = state.orderDiscountReasonInput.trim();
+  if(!state.orderDiscountAmountInput.trim() || isNaN(amount) || amount<=0){ showToast('Ingresa un monto válido'); return; }
+  if(!reason){ showToast('Escribe un motivo para el ajuste'); return; }
+  const subtotal = (o.subtotal!=null) ? o.subtotal : o.total;
+  const newTotal = Math.max(0, subtotal - amount);
+  const payload = { subtotal, manualDiscount:{amount, reason}, total:newTotal };
+  try{
+    await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
+    Object.assign(o, payload);
+    state.orderDiscountEditing = false;
+    showToast('Ajuste guardado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo guardar el ajuste'); }
+}
+async function removeOrderDiscount(id, source){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const restoredTotal = o.subtotal!=null ? o.subtotal : o.total;
+  const payload = { manualDiscount: firebase.firestore.FieldValue.delete(), total: restoredTotal };
+  try{
+    await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
+    delete o.manualDiscount; o.total = restoredTotal;
+    showToast('Ajuste eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar el ajuste'); }
+}
 function waLink(phone, text){
   const num = (phone||'').replace(/\D/g,'');
   return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
@@ -441,6 +476,28 @@ function renderOrderDetailModal(){
 
       <div class="order-detail" style="margin-bottom:14px;">
         ${(o.items||[]).map(it=>`<div><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+        ${o.manualDiscount ? `
+          <div style="border-top:1px dashed var(--border);margin-top:4px;padding-top:4px;"><span>Subtotal</span><span>${money(o.subtotal!=null?o.subtotal:o.total)}</span></div>
+          <div><span>Ajuste por envío</span><span>-${money(o.manualDiscount.amount)}</span></div>
+        ` : ''}
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+        <div class="row-title" style="margin-bottom:8px;">Ajuste por envío</div>
+        ${state.orderDiscountEditing ? `
+          <input class="field-input" type="number" inputmode="decimal" placeholder="Monto del ajuste" value="${state.orderDiscountAmountInput}" oninput="state.orderDiscountAmountInput=this.value">
+          <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.orderDiscountReasonInput}" oninput="state.orderDiscountReasonInput=this.value">
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" style="flex:1;" onclick="saveOrderDiscount('${o.id}','${o.source}')">Guardar</button>
+            <button class="btn-cancel" style="flex:1;padding:12px;border-radius:10px;" onclick="state.orderDiscountEditing=false;render()">Cancelar</button>
+          </div>
+        ` : (o.manualDiscount ? `
+          <div class="row-sub" style="margin-bottom:8px;">Motivo: ${o.manualDiscount.reason} · Monto: -${money(o.manualDiscount.amount)}</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" style="flex:1;" onclick="startEditOrderDiscount('${o.id}')">Editar</button>
+            <button class="icon-btn danger" onclick="removeOrderDiscount('${o.id}','${o.source}')">✕</button>
+          </div>
+        ` : `<button class="btn-outline" style="width:100%;" onclick="startEditOrderDiscount('${o.id}')">+ Agregar ajuste por envío</button>`)}
       </div>
 
       ${isPos ? `
@@ -448,6 +505,8 @@ function renderOrderDetailModal(){
           <div><span>Atendió</span><span>${o.cashierName||'—'}</span></div>
           <div><span>Centro</span><span>${o.centerName||'—'}</span></div>
           <div><span>Método de pago</span><span>${o.paymentMethod||'—'}</span></div>
+          ${o.customerName?`<div><span>Cliente</span><span>${o.customerName}${o.customerPhone?` · ${o.customerPhone}`:''}</span></div>`:''}
+          ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
         </div>
       ` : `
         <div class="order-detail" style="margin-bottom:14px;">
