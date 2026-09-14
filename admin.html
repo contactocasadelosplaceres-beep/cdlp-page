@@ -250,6 +250,7 @@ let state = {
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
   descImportOpen:false, descImport:null,
+  variantImportOpen:false, variantImport:null,
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
@@ -1105,6 +1106,7 @@ function renderAdmin(){
   ${state.productModal!==null ? renderProductModal() : ''}
   ${state.importOpen ? renderImportModal() : ''}
   ${state.descImportOpen ? renderDescImportModal() : ''}
+  ${state.variantImportOpen ? renderVariantImportModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
@@ -1242,6 +1244,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="if(confirm('Esto borra y reemplaza el SKU de TODOS tus productos, incluso los que ya tienen uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
       <button class="btn-outline" onclick="exportProductsCSV()">Exportar descripciones</button>
       <button class="btn-outline" onclick="state.descImportOpen=true;render()">Importar descripciones (Tiendanube)</button>
+      <button class="btn-outline" onclick="state.variantImportOpen=true;render()">Importar variantes (Tiendanube)</button>
     </div>
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
@@ -1437,6 +1440,174 @@ function renderDescImportModal(){
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.descImportOpen=false;state.descImport=null;render()">Cancelar</button>
         <button class="btn-primary" style="flex:1;" onclick="commitDescImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============== IMPORTAR VARIANTES DESDE TIENDANUBE ============== */
+// El CSV de Tiendanube trae una fila por variante (mismo "Identificador de URL" repetido);
+// solo la primera fila de cada producto trae "Nombre". Las columnas de propiedad (Talla, Color, etc.)
+// y las de stock por ubicación ("Stock (...)") varían de nombre, así que se detectan por encabezado.
+function parseTiendanubeVariantGroups(text){
+  const rows = parseCSV(text);
+  if(!rows.length) return null;
+  const header = rows[0].map(h=>h.trim().toLowerCase());
+  const idxSlug = header.indexOf('identificador de url');
+  const idxName = header.indexOf('nombre');
+  const idxPrecio = header.indexOf('precio');
+  const idxPromo = header.findIndex(h=>h.includes('precio promocional'));
+  const propPairs = [1,2,3].map(n=>({
+    nameIdx: header.indexOf(`nombre de propiedad ${n}`),
+    valueIdx: header.indexOf(`valor de propiedad ${n}`)
+  })).filter(p=>p.nameIdx>=0 && p.valueIdx>=0);
+  const stockIdxs = header.map((h,i)=>h.startsWith('stock (')?i:-1).filter(i=>i>=0);
+  if(idxSlug<0 || idxName<0 || !propPairs.length) return null;
+  const bySlug = {};
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    const slug = (row[idxSlug]||'').trim();
+    if(!slug) continue;
+    if(!bySlug[slug]) bySlug[slug] = {name:'', rows:[]};
+    const name = (row[idxName]||'').trim();
+    if(name) bySlug[slug].name = name;
+    bySlug[slug].rows.push(row);
+  }
+  const out = [];
+  Object.values(bySlug).forEach(g=>{
+    if(!g.name) return;
+    const rowCombos = g.rows.map(row=>{
+      const combo = {};
+      propPairs.forEach(p=>{
+        const pname = (row[p.nameIdx]||'').trim();
+        const pval = (row[p.valueIdx]||'').trim();
+        if(pname && pval) combo[pname] = pval;
+      });
+      const precio = Number((row[idxPrecio]||'').replace(/[^0-9.]/g,''))||0;
+      const promo = idxPromo>=0 ? (Number((row[idxPromo]||'').replace(/[^0-9.]/g,''))||0) : 0;
+      const stock = stockIdxs.reduce((s,idx)=>{ const raw=(row[idx]||'').trim(); const n=Number(raw); return s + (raw && !isNaN(n) ? n : 0); }, 0);
+      return { combo, price: promo>0?promo:precio, stock };
+    }).filter(v=>Object.keys(v.combo).length>0);
+    if(!rowCombos.length) return;
+    const groupNames = Array.from(new Set(rowCombos.flatMap(v=>Object.keys(v.combo))));
+    const groups = groupNames.map(gn=>{
+      const values = [];
+      rowCombos.forEach(v=>{ if(v.combo[gn] && !values.includes(v.combo[gn])) values.push(v.combo[gn]); });
+      return {name:gn, values};
+    });
+    out.push({name:g.name, groups, variants:rowCombos});
+  });
+  return out;
+}
+function buildVariantImportPreview(csvGroups){
+  const byNorm = {};
+  state.products.forEach(p=>{ const key = normName(p.name); (byNorm[key]=byNorm[key]||[]).push(p); });
+  const matched = [], unmatched = [], ambiguous = [];
+  csvGroups.forEach(g=>{
+    const key = normName(g.name);
+    const candidates = byNorm[key];
+    if(!candidates || candidates.length===0){ unmatched.push(g.name); return; }
+    if(candidates.length>1){ ambiguous.push(g.name); return; }
+    const p = candidates[0];
+    const variants = g.variants.map(v=>({ id: uid('var_'), combo:v.combo, sku:'', priceOverride:v.price, stock:v.stock }));
+    const totalStockSum = variants.reduce((s,v)=>s+(v.stock||0),0);
+    matched.push({
+      productId:p.id, productName:p.name, groups:g.groups, variants, totalStockSum,
+      alreadyHasVariants: !!(p.variants && p.variants.length),
+      checked: !(p.variants && p.variants.length)
+    });
+  });
+  return {matched, unmatched, ambiguous};
+}
+function handleVariantImportFile(input){
+  const file = input.files[0]; if(!file) return;
+  const fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const csvGroups = parseTiendanubeVariantGroups(e.target.result);
+    if(csvGroups===null){ showToast('No se encontraron las columnas de propiedades (Talla, Color, etc.) en ese archivo'); return; }
+    state.variantImport = {fileName, ...buildVariantImportPreview(csvGroups)};
+    render();
+  };
+  reader.readAsText(file);
+}
+function toggleVariantImportRow(idx){
+  if(!state.variantImport || !state.variantImport.matched[idx]) return;
+  state.variantImport.matched[idx].checked = !state.variantImport.matched[idx].checked;
+  render();
+}
+function toggleVariantImportAll(checked){
+  if(!state.variantImport) return;
+  state.variantImport.matched.forEach(r=>r.checked=checked);
+  render();
+}
+async function commitVariantImport(){
+  const vi = state.variantImport;
+  if(!vi || !vi.matched) return;
+  const toApply = vi.matched.filter(r=>r.checked);
+  if(toApply.length===0){ showToast('No hay variantes seleccionadas'); return; }
+  try{
+    for(let i=0;i<toApply.length;i+=400){
+      const chunk = toApply.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(r=>batch.update(db.collection('products').doc(r.productId), {
+        variantGroups: r.groups, variants: r.variants, stock: r.totalStockSum
+      }));
+      await batch.commit();
+    }
+    toApply.forEach(r=>{
+      const p = state.products.find(x=>x.id===r.productId);
+      if(p){ p.variantGroups = r.groups; p.variants = r.variants; p.stock = r.totalStockSum; }
+    });
+    showToast(`${toApply.length} producto(s) actualizado(s) con sus variantes`);
+    state.variantImportOpen=false; state.variantImport=null;
+    render();
+  }catch(e){ console.error(e); showToast('Ocurrió un error al actualizar: '+(e.message||'error desconocido')); }
+}
+function renderVariantImportModal(){
+  const vi = state.variantImport;
+  const matched = vi ? (vi.matched||[]) : [];
+  const checkedCount = matched.filter(r=>r.checked).length;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.variantImportOpen=false;state.variantImport=null;render();}">
+    <div class="modal" style="max-width:720px;">
+      <h3>Importar variantes desde Tiendanube</h3>
+      <div class="note-box">Sube el mismo CSV de exportación de Tiendanube. Detecta los productos con variantes (talla, color, etc.) por sus columnas de propiedad, y arma el precio y el stock de cada variante (sumando las columnas de stock por ubicación del CSV). Se empareja por nombre de producto igual que la importación de descripciones. Los productos que <strong>ya tienen variantes guardadas</strong> aparecen sin marcar por seguridad, para no sobrescribirlas sin que las revises.</div>
+      <div class="import-drop">
+        Selecciona tu archivo .csv<br>
+        <input type="file" accept=".csv,.txt" onchange="handleVariantImportFile(this)">
+      </div>
+      ${vi && vi.fileName ? `<div class="preview-count">Archivo: ${escDescHtml(vi.fileName)}</div>` : ''}
+      ${vi ? `
+        <div class="preview-count">
+          ${matched.length} producto(s) con variantes detectadas en el CSV (${checkedCount} seleccionado${checkedCount===1?'':'s'} para actualizar).
+          ${vi.unmatched.length ? `<br>${vi.unmatched.length} nombre(s) del CSV no se encontraron en tu catálogo.` : ''}
+          ${vi.ambiguous.length ? `<br>${vi.ambiguous.length} nombre(s) coinciden con más de un producto y se omitieron.` : ''}
+        </div>
+        ${matched.length>0 ? `
+        <div style="margin:6px 0;">
+          <label style="font-size:13px;"><input type="checkbox" ${checkedCount===matched.length?'checked':''} onchange="toggleVariantImportAll(this.checked)"> Seleccionar todos</label>
+        </div>
+        <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+          ${matched.map((r,idx)=>`
+            <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;">
+                <input type="checkbox" ${r.checked?'checked':''} onchange="toggleVariantImportRow(${idx})" style="margin-top:3px;">
+                <div style="flex:1;">
+                  <div style="font-weight:700;">${escDescHtml(r.productName)}${r.alreadyHasVariants?' <span style="color:#b5495b;">(ya tiene variantes guardadas)</span>':''}</div>
+                  <div style="color:var(--ink-soft);font-size:12px;margin-top:2px;">
+                    ${r.variants.map(v=>`${escDescHtml(Object.values(v.combo).join(' / '))}: ${money(v.priceOverride)}${v.stock?` · stock ${v.stock}`:' · sin stock'}`).join(' &nbsp;|&nbsp; ')}
+                  </div>
+                </div>
+              </label>
+            </div>
+          `).join('')}
+        </div>` : ''}
+        ${vi.unmatched.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ver nombres no encontrados (${vi.unmatched.length})</summary><div style="font-size:12px;max-height:150px;overflow-y:auto;color:var(--ink-soft);margin-top:6px;">${vi.unmatched.map(n=>escDescHtml(n)).join('<br>')}</div></details>` : ''}
+      ` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.variantImportOpen=false;state.variantImport=null;render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitVariantImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
       </div>
     </div>
   </div>`;
@@ -3365,8 +3536,9 @@ function renderVariantsEditor(p){
         ${variants.map(v=>`
           <div class="list-row" style="align-items:center;">
             <div class="row-main"><div class="row-title">${Object.entries(v.combo||{}).map(([k,val])=>`${k}: ${val}`).join(' · ')}</div></div>
-            <input placeholder="SKU" value="${v.sku||''}" style="width:130px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;" onchange="setVariantField('${v.id}','sku',this.value)">
-            <input type="number" min="0" placeholder="Stock" value="${v.stock||0}" style="width:75px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;text-align:center;" onchange="setVariantField('${v.id}','stock',this.value)">
+            <input placeholder="SKU" value="${v.sku||''}" style="width:110px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;" onchange="setVariantField('${v.id}','sku',this.value)">
+            <input type="number" min="0" placeholder="Precio (si es distinto)" value="${v.priceOverride||''}" style="width:110px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;text-align:center;" onchange="setVariantField('${v.id}','priceOverride',this.value)">
+            <input type="number" min="0" placeholder="Stock" value="${v.stock||0}" style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:12px;text-align:center;" onchange="setVariantField('${v.id}','stock',this.value)">
           </div>
         `).join('')}
       ` : ''}
@@ -3408,7 +3580,7 @@ function generateVariantCombos(){
 function setVariantField(variantId, field, value){
   const v = (state.productModal.variants||[]).find(x=>x.id===variantId);
   if(!v) return;
-  v[field] = field==='stock' ? Math.max(0, Number(value)||0) : value;
+  v[field] = (field==='stock'||field==='priceOverride') ? Math.max(0, Number(value)||0) : value;
 }
 function handleSaveProduct(existingId){
   const name = document.getElementById('pf-name').value.trim();
