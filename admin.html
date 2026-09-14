@@ -260,7 +260,7 @@ let state = {
   auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
   cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
-  orderDiscountEditing:false, orderDiscountAmountInput:"", orderDiscountReasonInput:"",
+  orderDiscountEditing:false, orderDiscountType:"fixed", orderDiscountValueInput:"", orderDiscountCouponInput:"", orderDiscountReasonInput:"",
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -400,22 +400,39 @@ async function deleteOrder(id, source){
 /* ============== FICHA COMPLETA DEL PEDIDO + ENVÍO AL REPARTIDOR ============== */
 function openOrderDetailModal(id){ state.orderDetailModal = id; state.orderDiscountEditing=false; render(); }
 function closeOrderDetailModal(){ state.orderDetailModal = null; state.orderDiscountEditing=false; render(); }
+function prodCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+function isCouponEligibleItem(prodCategories, prodId, coupon){
+  if(coupon.scope==='all') return true;
+  if(coupon.scope==='categories') return (prodCategories||[]).some(c=>(coupon.categories||[]).includes(c));
+  if(coupon.scope==='products') return (coupon.productIds||[]).includes(prodId);
+  return false;
+}
+function orderCouponEligibleItems(o, coupon){
+  return (o.items||[]).map(it=>({it, p: state.products.find(x=>x.id===it.id)})).filter(({p})=>p && isCouponEligibleItem(prodCats(p), p.id, coupon));
+}
+function orderCouponDiscountAmount(o, coupon){
+  return orderCouponEligibleItems(o, coupon).reduce((s,{it})=>s + Math.round(it.price*it.qty*(coupon.discountPercent/100)), 0);
+}
 function startEditOrderDiscount(id){
   const o = state.orders.find(x=>x.id===id); if(!o) return;
   state.orderDiscountEditing = true;
-  state.orderDiscountAmountInput = o.manualDiscount ? String(o.manualDiscount.amount) : '';
-  state.orderDiscountReasonInput = o.manualDiscount ? o.manualDiscount.reason : '';
+  state.orderDiscountType = o.manualDiscount ? (o.manualDiscount.type||'fixed') : 'fixed';
+  state.orderDiscountValueInput = o.manualDiscount && o.manualDiscount.type!=='coupon' ? String(o.manualDiscount.value!=null?o.manualDiscount.value:o.manualDiscount.amount) : '';
+  state.orderDiscountCouponInput = o.manualDiscount && o.manualDiscount.type==='coupon' ? (o.manualDiscount.code||'') : '';
+  state.orderDiscountReasonInput = o.manualDiscount ? (o.manualDiscount.reason||'') : '';
   render();
 }
 async function saveOrderDiscount(id, source){
   const o = state.orders.find(x=>x.id===id); if(!o) return;
-  const amount = Number(state.orderDiscountAmountInput);
+  const value = Number(state.orderDiscountValueInput);
   const reason = state.orderDiscountReasonInput.trim();
-  if(!state.orderDiscountAmountInput.trim() || isNaN(amount) || amount<=0){ showToast('Ingresa un monto válido'); return; }
+  if(!state.orderDiscountValueInput.trim() || isNaN(value) || value<=0){ showToast('Ingresa un monto válido'); return; }
+  if(state.orderDiscountType==='percent' && value>100){ showToast('El porcentaje no puede ser mayor a 100'); return; }
   if(!reason){ showToast('Escribe un motivo para el ajuste'); return; }
   const subtotal = (o.subtotal!=null) ? o.subtotal : o.total;
+  const amount = state.orderDiscountType==='percent' ? Math.round(subtotal*(value/100)) : Math.min(value, subtotal);
   const newTotal = Math.max(0, subtotal - amount);
-  const payload = { subtotal, manualDiscount:{amount, reason}, total:newTotal };
+  const payload = { subtotal, manualDiscount:{type: state.orderDiscountType, value, amount, reason}, total:newTotal };
   try{
     await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
     Object.assign(o, payload);
@@ -423,13 +440,47 @@ async function saveOrderDiscount(id, source){
     showToast('Ajuste guardado'); render();
   }catch(e){ console.error(e); showToast('No se pudo guardar el ajuste'); }
 }
+async function applyOrderCoupon(id, source){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const code = state.orderDiscountCouponInput.trim().toUpperCase();
+  if(!code){ showToast('Ingresa un código de cupón'); return; }
+  const coupon = (state.settings.coupons||[]).find(c=>c.code===code);
+  if(!coupon || !coupon.active){ showToast('Código no válido'); return; }
+  const now = new Date();
+  if(coupon.startDate && now < new Date(coupon.startDate)){ showToast('Este cupón todavía no está vigente'); return; }
+  if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ showToast('Este cupón ya venció'); return; }
+  const eligible = orderCouponEligibleItems(o, coupon);
+  if(eligible.length===0){ showToast('Este cupón no aplica a los productos de este pedido'); return; }
+  if(coupon.maxUses>0){
+    try{
+      const used = await db.collection('couponUsage').where('code','==',code).get();
+      if(used.size >= coupon.maxUses){ showToast('Este cupón ya alcanzó su límite de usos'); return; }
+    }catch(e){ console.error(e); }
+  }
+  const subtotal = (o.subtotal!=null) ? o.subtotal : o.total;
+  const amount = orderCouponDiscountAmount(o, coupon);
+  const newTotal = Math.max(0, subtotal - amount);
+  const reason = state.orderDiscountReasonInput.trim() || `Cupón ${code}`;
+  const payload = { subtotal, manualDiscount:{type:'coupon', code, amount, reason}, total:newTotal, couponCode: code };
+  try{
+    await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
+    Object.assign(o, payload);
+    try{
+      await db.collection('couponUsage').add({code, date:new Date().toISOString()});
+      state.couponUsage.push({code, date:new Date().toISOString()});
+    }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+    state.orderDiscountEditing = false;
+    showToast('Cupón aplicado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo aplicar el cupón'); }
+}
 async function removeOrderDiscount(id, source){
   const o = state.orders.find(x=>x.id===id); if(!o) return;
   const restoredTotal = o.subtotal!=null ? o.subtotal : o.total;
   const payload = { manualDiscount: firebase.firestore.FieldValue.delete(), total: restoredTotal };
+  if(o.couponCode) payload.couponCode = firebase.firestore.FieldValue.delete();
   try{
     await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
-    delete o.manualDiscount; o.total = restoredTotal;
+    delete o.manualDiscount; o.total = restoredTotal; delete o.couponCode;
     showToast('Ajuste eliminado'); render();
   }catch(e){ console.error(e); showToast('No se pudo eliminar el ajuste'); }
 }
@@ -478,26 +529,41 @@ function renderOrderDetailModal(){
         ${(o.items||[]).map(it=>`<div><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
         ${o.manualDiscount ? `
           <div style="border-top:1px dashed var(--border);margin-top:4px;padding-top:4px;"><span>Subtotal</span><span>${money(o.subtotal!=null?o.subtotal:o.total)}</span></div>
-          <div><span>Ajuste por envío</span><span>-${money(o.manualDiscount.amount)}</span></div>
+          <div><span>${o.manualDiscount.type==='coupon'?`Cupón ${o.manualDiscount.code}`:`Descuento${o.manualDiscount.type==='percent'?` (${o.manualDiscount.value}%)`:''}`}</span><span>-${money(o.manualDiscount.amount)}</span></div>
         ` : ''}
       </div>
 
       <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
-        <div class="row-title" style="margin-bottom:8px;">Ajuste por envío</div>
+        <div class="row-title" style="margin-bottom:8px;">Descuento</div>
         ${state.orderDiscountEditing ? `
-          <input class="field-input" type="number" inputmode="decimal" placeholder="Monto del ajuste" value="${state.orderDiscountAmountInput}" oninput="state.orderDiscountAmountInput=this.value">
-          <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.orderDiscountReasonInput}" oninput="state.orderDiscountReasonInput=this.value">
-          <div style="display:flex;gap:8px;">
-            <button class="btn-primary" style="flex:1;" onclick="saveOrderDiscount('${o.id}','${o.source}')">Guardar</button>
-            <button class="btn-cancel" style="flex:1;padding:12px;border-radius:10px;" onclick="state.orderDiscountEditing=false;render()">Cancelar</button>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <button class="btn-outline" style="flex:1;${state.orderDiscountType==='fixed'?'background:var(--primary);color:#fff;border-color:var(--primary);':''}" onclick="state.orderDiscountType='fixed';render()">Monto fijo</button>
+            <button class="btn-outline" style="flex:1;${state.orderDiscountType==='percent'?'background:var(--primary);color:#fff;border-color:var(--primary);':''}" onclick="state.orderDiscountType='percent';render()">Porcentaje</button>
+            <button class="btn-outline" style="flex:1;${state.orderDiscountType==='coupon'?'background:var(--primary);color:#fff;border-color:var(--primary);':''}" onclick="state.orderDiscountType='coupon';render()">Cupón</button>
           </div>
+          ${state.orderDiscountType==='coupon' ? `
+            <input class="field-input" style="text-transform:uppercase;" type="text" placeholder="Código de cupón" value="${state.orderDiscountCouponInput}" oninput="state.orderDiscountCouponInput=this.value">
+            <input class="field-input" type="text" placeholder="Nota (opcional)" value="${state.orderDiscountReasonInput}" oninput="state.orderDiscountReasonInput=this.value">
+            <div style="display:flex;gap:8px;">
+              <button class="btn-primary" style="flex:1;" onclick="applyOrderCoupon('${o.id}','${o.source}')">Aplicar cupón</button>
+              <button class="btn-cancel" style="flex:1;padding:12px;border-radius:10px;" onclick="state.orderDiscountEditing=false;render()">Cancelar</button>
+            </div>
+          ` : `
+            <input class="field-input" type="number" inputmode="decimal" placeholder="${state.orderDiscountType==='percent'?'Porcentaje (%)':'Monto del ajuste ($)'}" value="${state.orderDiscountValueInput}" oninput="state.orderDiscountValueInput=this.value">
+            ${state.orderDiscountValueInput ? `<div class="row-sub" style="margin:-4px 0 8px;">Descuento: ${money(state.orderDiscountType==='percent' ? Math.round((o.subtotal!=null?o.subtotal:o.total)*(Number(state.orderDiscountValueInput)||0)/100) : (Number(state.orderDiscountValueInput)||0))}</div>` : ''}
+            <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.orderDiscountReasonInput}" oninput="state.orderDiscountReasonInput=this.value">
+            <div style="display:flex;gap:8px;">
+              <button class="btn-primary" style="flex:1;" onclick="saveOrderDiscount('${o.id}','${o.source}')">Guardar</button>
+              <button class="btn-cancel" style="flex:1;padding:12px;border-radius:10px;" onclick="state.orderDiscountEditing=false;render()">Cancelar</button>
+            </div>
+          `}
         ` : (o.manualDiscount ? `
-          <div class="row-sub" style="margin-bottom:8px;">Motivo: ${o.manualDiscount.reason} · Monto: -${money(o.manualDiscount.amount)}</div>
+          <div class="row-sub" style="margin-bottom:8px;">${o.manualDiscount.type==='coupon'?`Cupón: ${o.manualDiscount.code}`:`Motivo: ${o.manualDiscount.reason}`} · Monto: -${money(o.manualDiscount.amount)}${o.manualDiscount.type==='percent'?` (${o.manualDiscount.value}%)`:''}</div>
           <div style="display:flex;gap:8px;">
             <button class="btn-outline" style="flex:1;" onclick="startEditOrderDiscount('${o.id}')">Editar</button>
             <button class="icon-btn danger" onclick="removeOrderDiscount('${o.id}','${o.source}')">✕</button>
           </div>
-        ` : `<button class="btn-outline" style="width:100%;" onclick="startEditOrderDiscount('${o.id}')">+ Agregar ajuste por envío</button>`)}
+        ` : `<button class="btn-outline" style="width:100%;" onclick="startEditOrderDiscount('${o.id}')">+ Agregar descuento</button>`)}
       </div>
 
       ${isPos ? `
@@ -1450,22 +1516,44 @@ function computeCustomersList(){
     const key = normalizePhone(o.phone);
     if(!key) return;
     if(!byPhone[key]){
-      byPhone[key] = { id:key, name:o.customer||'Sin nombre', phone:o.phone, email:'', city:'', state:'', country:'', notes:'',
+      byPhone[key] = { id:key, name:o.customer||'Sin nombre', phone:o.phone, email:'', address:'', city:'', state:'', country:'', notes:'',
         createdAt:null, purchases:[], totalSpent:0, isManual:false, manualId:null };
     }
     const c = byPhone[key];
-    if(new Date(o.date) > new Date(c.lastDate||0)){ c.name = o.customer||c.name; c.lastDate = o.date; c.lastFolio = o.orderNumber; }
+    // La dirección y el nombre se toman del pedido más reciente (es lo que el
+    // cliente escribió al pagar, así que es lo más actualizado que tenemos de él).
+    if(new Date(o.date) > new Date(c.lastDate||0)){ c.name = o.customer||c.name; c.address = o.address||c.address; c.lastDate = o.date; c.lastFolio = o.orderNumber; }
     if(o.status!=='Cancelado'){ c.totalSpent += (o.total||0); c.purchases.push(o); }
   });
   // 2) Se combinan con los perfiles que tú creas/editas a mano (colección "customers").
+  //    Si ya tienen dirección capturada a mano, esa manda sobre la del pedido.
   state.customers.forEach(m=>{
     const key = m.phone ? normalizePhone(m.phone) : `manual_${m.id}`;
     if(byPhone[key]){
-      Object.assign(byPhone[key], { name:m.name||byPhone[key].name, email:m.email||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'', createdAt:m.createdAt||null, isManual:true, manualId:m.id });
+      Object.assign(byPhone[key], { name:m.name||byPhone[key].name, email:m.email||'', address:m.address||byPhone[key].address||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'', createdAt:m.createdAt||null, isManual:true, manualId:m.id });
     }else{
-      byPhone[key] = { id:key, name:m.name||'Sin nombre', phone:m.phone||'', email:m.email||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'',
+      byPhone[key] = { id:key, name:m.name||'Sin nombre', phone:m.phone||'', email:m.email||'', address:m.address||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'',
         createdAt:m.createdAt||null, purchases:[], totalSpent:0, isManual:true, manualId:m.id };
     }
+  });
+  // 3) Se suman también las ventas del Punto de Venta que quedaron asociadas a un
+  // cliente de la lista (seleccionado desde pos.html), buscando su perfil por el
+  // mismo id de "customers" con el que ya se armó el punto 2.
+  const byManualId = {};
+  Object.entries(byPhone).forEach(([key,c])=>{ if(c.manualId) byManualId[c.manualId] = key; });
+  state.orders.filter(o=>o.source==='pos' && o.customerId).forEach(o=>{
+    let key = byManualId[o.customerId];
+    if(!key){
+      // El perfil pudo haberse borrado después de la venta; se conserva su historial igual.
+      key = `manual_${o.customerId}`;
+      if(!byPhone[key]){
+        byPhone[key] = { id:key, name:o.customerName||'Sin nombre', phone:o.customerPhone||'', email:'', address:'', city:'', state:'', country:'', notes:'',
+          createdAt:null, purchases:[], totalSpent:0, isManual:false, manualId:o.customerId };
+      }
+    }
+    const c = byPhone[key];
+    if(new Date(o.date) > new Date(c.lastDate||0)){ c.lastDate = o.date; c.lastFolio = o.orderNumber; }
+    c.totalSpent += (o.total||0); c.purchases.push(o);
   });
   return Object.values(byPhone).map(c=>({
     ...c,
@@ -1493,7 +1581,7 @@ function distinctCustomerValues(field){
 }
 function openCustomerModal(manualId){
   if(manualId){ state.customerModal = {...state.customers.find(c=>c.id===manualId)}; }
-  else{ state.customerModal = { name:'', phone:'', email:'', city:'', state:'', country:'', notes:'' }; }
+  else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'' }; }
   render();
 }
 function closeCustomerModal(){ state.customerModal=null; render(); }
@@ -1501,12 +1589,13 @@ async function saveCustomerModal(){
   const name = document.getElementById('cm-name').value.trim();
   const phone = document.getElementById('cm-phone').value.trim();
   const email = document.getElementById('cm-email').value.trim();
+  const address = document.getElementById('cm-address').value.trim();
   const city = document.getElementById('cm-city').value.trim();
   const stateField = document.getElementById('cm-state').value.trim();
   const country = document.getElementById('cm-country').value.trim();
   const notes = document.getElementById('cm-notes').value.trim();
   if(!name){ showToast('Ponle un nombre al cliente'); return; }
-  const payload = { name, phone, email, city, state:stateField, country, notes };
+  const payload = { name, phone, email, address, city, state:stateField, country, notes };
   try{
     if(state.customerModal.id){
       payload.createdAt = state.customerModal.createdAt || new Date().toISOString();
@@ -1531,8 +1620,8 @@ async function deleteCustomerProfile(id){
 }
 function exportCustomersCSV(){
   const list = filteredCustomers();
-  const rows = [['nombre','telefono','email','ciudad','estado','pais','ultima_compra','total_consumido','numero_de_compras','notas']];
-  list.forEach(c=>rows.push([c.name, c.phone, c.email, c.city, c.state, c.country, c.lastDate?new Date(c.lastDate).toLocaleDateString('es-MX'):'', c.totalSpent, c.purchaseCount, c.notes||'']));
+  const rows = [['nombre','telefono','email','direccion','ciudad','estado','pais','ultima_compra','total_consumido','numero_de_compras','notas']];
+  list.forEach(c=>rows.push([c.name, c.phone, c.email, c.address||'', c.city, c.state, c.country, c.lastDate?new Date(c.lastDate).toLocaleDateString('es-MX'):'', c.totalSpent, c.purchaseCount, c.notes||'']));
   const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -1544,11 +1633,11 @@ function parseCustomerCSV(text){
   if(!lines.length) return [];
   const header = lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/"/g,''));
   const idx = (name)=>header.findIndex(h=>h.includes(name));
-  const iName=idx('nombre'), iPhone=idx('telefono'), iEmail=idx('email')>=0?idx('email'):idx('correo'), iCity=idx('ciudad'), iState=idx('estado'), iCountry=idx('pais'), iNotes=idx('notas');
+  const iName=idx('nombre'), iPhone=idx('telefono'), iEmail=idx('email')>=0?idx('email'):idx('correo'), iAddress=idx('direcc'), iCity=idx('ciudad'), iState=idx('estado'), iCountry=idx('pais'), iNotes=idx('notas');
   return lines.slice(1).map(line=>{
     const cols = line.match(/(".*?"|[^,]+)(?=,|$)/g)||[];
     const clean = i => i>=0 && cols[i] ? cols[i].replace(/^"|"$/g,'').replace(/""/g,'"').trim() : '';
-    return { name:clean(iName), phone:clean(iPhone), email:clean(iEmail), city:clean(iCity), state:clean(iState), country:clean(iCountry), notes:clean(iNotes) };
+    return { name:clean(iName), phone:clean(iPhone), email:clean(iEmail), address:clean(iAddress), city:clean(iCity), state:clean(iState), country:clean(iCountry), notes:clean(iNotes) };
   }).filter(r=>r.name);
 }
 function handleCustomerImportFile(input){
@@ -1568,7 +1657,7 @@ async function commitCustomerImport(){
     const batch = db.batch();
     state.customerImportPreview.forEach(row=>{
       const existing = row.phone ? state.customers.find(c=>normalizePhone(c.phone)===normalizePhone(row.phone)) : null;
-      const payload = {name:row.name, phone:row.phone||'', email:row.email||'', city:row.city||'', state:row.state||'', country:row.country||'', notes:row.notes||'', createdAt: existing?existing.createdAt:new Date().toISOString()};
+      const payload = {name:row.name, phone:row.phone||'', email:row.email||'', address:row.address||'', city:row.city||'', state:row.state||'', country:row.country||'', notes:row.notes||'', createdAt: existing?existing.createdAt:new Date().toISOString()};
       const ref = existing ? db.collection('customers').doc(existing.id) : db.collection('customers').doc();
       batch.set(ref, payload);
       if(existing) Object.assign(existing, payload); else state.customers.push({id:ref.id, ...payload});
@@ -1639,6 +1728,7 @@ function renderCustomerModal(){
         <div class="form-field"><label>Teléfono / WhatsApp</label><input id="cm-phone" value="${c.phone||''}"></div>
         <div class="form-field"><label>Email</label><input id="cm-email" value="${c.email||''}"></div>
       </div>
+      <div class="form-field"><label>Dirección</label><textarea id="cm-address" placeholder="Calle, número, colonia, referencias">${c.address||''}</textarea></div>
       <div class="two-col">
         <div class="form-field"><label>Ciudad</label><input id="cm-city" value="${c.city||''}"></div>
         <div class="form-field"><label>Estado</label><input id="cm-state" value="${c.state||''}"></div>

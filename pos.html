@@ -121,7 +121,7 @@ const PAY_METHODS = ["Efectivo","Tarjeta","Transferencia"];
 
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
-  loaded:false, products:[], categories:[], cashiers:[], centers:[], activeCenter:null,
+  loaded:false, products:[], categories:[], coupons:[], cashiers:[], centers:[], activeCenter:null,
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
   activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo",
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, sending:false, variantPickerProduct:null,
@@ -132,8 +132,8 @@ let state = {
   closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"",
   // Cliente, ajuste por envío y notas de la venta actual.
   customers:[], activeCustomer:null, customerPickerOpen:false, customerSearchPOS:"",
-  newCustomerMode:false, newCustomerName:"", newCustomerPhone:"",
-  manualDiscount:null, discountModalOpen:false, discountAmountInput:"", discountReasonInput:"", discountError:"",
+  newCustomerMode:false, newCustomerName:"", newCustomerPhone:"", newCustomerAddress:"",
+  manualDiscount:null, discountModalOpen:false, discountType:"fixed", discountValueInput:"", discountCouponInput:"", discountReasonInput:"", discountError:"",
   saleNotes:"", notesModalOpen:false, notesDraft:"",
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
@@ -149,6 +149,7 @@ async function loadData(){
     ]);
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
+    state.coupons = setSnap.exists ? (setSnap.data().coupons||[]) : [];
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
     state.centers = centersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
     state.customers = customersSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -424,52 +425,117 @@ function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta;
 /* ============== AJUSTE POR ENVÍO (descuento manual) ==============
    Adicional a los descuentos y promociones ya aplicados en el precio de cada
    producto; requiere siempre un motivo de justificación. */
-function saleTotal(){ return Math.max(0, cartTotal() - (state.manualDiscount?state.manualDiscount.amount:0)); }
+function prodCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+function isCouponEligibleItem(prodCategories, prodId, coupon){
+  if(coupon.scope==='all') return true;
+  if(coupon.scope==='categories') return (prodCategories||[]).some(c=>(coupon.categories||[]).includes(c));
+  if(coupon.scope==='products') return (coupon.productIds||[]).includes(prodId);
+  return false;
+}
+function couponEligibleCartEntries(coupon){
+  return Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return {key,qty,p,v}; })
+    .filter(({p})=>p && isCouponEligibleItem(prodCats(p), p.id, coupon));
+}
+function couponDiscountAmount(coupon){
+  return couponEligibleCartEntries(coupon).reduce((s,{p,v,qty})=>s + Math.round(itemPrice(p,v)*qty*(coupon.discountPercent/100)), 0);
+}
+function currentDiscountAmount(){
+  if(!state.manualDiscount) return 0;
+  const subtotal = cartTotal();
+  if(state.manualDiscount.type==='percent') return Math.round(subtotal * (state.manualDiscount.value/100));
+  if(state.manualDiscount.type==='coupon') return couponDiscountAmount(state.manualDiscount.coupon);
+  return Math.min(state.manualDiscount.value, subtotal);
+}
+function saleTotal(){ return Math.max(0, cartTotal() - currentDiscountAmount()); }
 function openDiscountModal(){
-  state.discountAmountInput = state.manualDiscount ? String(state.manualDiscount.amount) : '';
-  state.discountReasonInput = state.manualDiscount ? state.manualDiscount.reason : '';
+  state.discountType = state.manualDiscount ? state.manualDiscount.type : 'fixed';
+  state.discountValueInput = state.manualDiscount && state.manualDiscount.type!=='coupon' ? String(state.manualDiscount.value) : '';
+  state.discountCouponInput = state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : '';
+  state.discountReasonInput = state.manualDiscount ? (state.manualDiscount.reason||'') : '';
   state.discountError = ''; state.discountModalOpen = true; render();
 }
 function saveManualDiscount(){
-  const amount = Number(state.discountAmountInput);
+  const value = Number(state.discountValueInput);
   const reason = state.discountReasonInput.trim();
-  if(state.discountAmountInput.trim()==='' || isNaN(amount) || amount<=0){ state.discountError='Ingresa un monto válido'; render(); return; }
+  if(state.discountValueInput.trim()==='' || isNaN(value) || value<=0){ state.discountError='Ingresa un monto válido'; render(); return; }
+  if(state.discountType==='percent' && value>100){ state.discountError='El porcentaje no puede ser mayor a 100'; render(); return; }
   if(!reason){ state.discountError='Escribe un motivo para el ajuste'; render(); return; }
-  state.manualDiscount = {amount, reason};
+  state.manualDiscount = {type: state.discountType, value, reason};
   state.discountModalOpen = false; render();
+}
+async function applyCouponDiscount(){
+  const code = state.discountCouponInput.trim().toUpperCase();
+  if(!code){ state.discountError='Ingresa un código de cupón'; render(); return; }
+  const coupon = (state.coupons||[]).find(c=>c.code===code);
+  if(!coupon || !coupon.active){ state.discountError='Código no válido'; render(); return; }
+  const now = new Date();
+  if(coupon.startDate && now < new Date(coupon.startDate)){ state.discountError='Este cupón todavía no está vigente'; render(); return; }
+  if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ state.discountError='Este cupón ya venció'; render(); return; }
+  if(couponEligibleCartEntries(coupon).length===0){ state.discountError='Este cupón no aplica a los productos de la venta actual'; render(); return; }
+  if(coupon.maxUses>0){
+    try{
+      const used = await db.collection('couponUsage').where('code','==',code).get();
+      if(used.size >= coupon.maxUses){ state.discountError='Este cupón ya alcanzó su límite de usos'; render(); return; }
+    }catch(e){ console.error(e); }
+  }
+  const reason = state.discountReasonInput.trim();
+  state.manualDiscount = {type:'coupon', coupon, reason: reason || `Cupón ${code}`};
+  state.discountModalOpen = false; state.discountError=''; render();
 }
 function removeManualDiscount(){ state.manualDiscount=null; state.discountModalOpen=false; render(); }
 function renderDiscountModal(){
+  const preview = state.discountType==='percent' ? Math.round(cartTotal()*(Number(state.discountValueInput)||0)/100) : Number(state.discountValueInput)||0;
   return `
   <div class="modal-overlay" onclick="if(event.target===this){state.discountModalOpen=false;render();}">
     <div class="modal" style="max-width:380px;">
-      <h3>Ajuste por envío</h3>
-      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 14px;">Descuento manual adicional a las promociones y cupones ya aplicados, por ejemplo para compensar el costo de envío. Requiere un motivo.</p>
-      <input class="field-input" type="number" inputmode="decimal" placeholder="Monto del ajuste" value="${state.discountAmountInput}" oninput="state.discountAmountInput=this.value">
-      <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
-      <div class="err">${state.discountError||''}</div>
-      <button class="btn-primary" onclick="saveManualDiscount()">Aplicar ajuste</button>
-      ${state.manualDiscount ? `<button class="btn-secondary" onclick="removeManualDiscount()">Quitar ajuste</button>` : ''}
-      <button class="btn-secondary" onclick="state.discountModalOpen=false;render()">Cancelar</button>
+      <h3>Descuento</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 14px;">Adicional a las promociones ya aplicadas en el precio de cada producto. Monto fijo o porcentaje: por ejemplo para compensar el costo de envío, requieren un motivo. Cupón: usa uno de tus códigos ya creados.</p>
+      <div class="pay-row" style="margin:0 0 10px;">
+        <button class="pay-btn ${state.discountType==='fixed'?'active':''}" onclick="state.discountType='fixed';render()">Monto fijo</button>
+        <button class="pay-btn ${state.discountType==='percent'?'active':''}" onclick="state.discountType='percent';render()">Porcentaje</button>
+        <button class="pay-btn ${state.discountType==='coupon'?'active':''}" onclick="state.discountType='coupon';render()">Cupón</button>
+      </div>
+      ${state.discountType==='coupon' ? `
+        <input class="field-input" type="text" style="text-transform:uppercase;" placeholder="Código de cupón" value="${state.discountCouponInput}" oninput="state.discountCouponInput=this.value">
+        <input class="field-input" type="text" placeholder="Nota (opcional)" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+        <div class="err">${state.discountError||''}</div>
+        <button class="btn-primary" onclick="applyCouponDiscount()">Aplicar cupón</button>
+        ${state.manualDiscount && state.manualDiscount.type==='coupon' ? `<button class="btn-secondary" onclick="removeManualDiscount()">Quitar cupón</button>` : ''}
+        <button class="btn-secondary" onclick="state.discountModalOpen=false;render()">Cancelar</button>
+      ` : `
+        ${state.discountType==='percent' ? `
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            ${[5,10,15,20].map(p=>`<button class="cat-chip ${Number(state.discountValueInput)===p?'active':''}" style="flex:1;text-align:center;" onclick="state.discountValueInput='${p}';render()">${p}%</button>`).join('')}
+          </div>
+        ` : ''}
+        <input class="field-input" type="number" inputmode="decimal" placeholder="${state.discountType==='percent'?'Porcentaje (%)':'Monto del ajuste ($)'}" value="${state.discountValueInput}" oninput="state.discountValueInput=this.value">
+        ${state.discountValueInput ? `<div style="font-size:12px;color:var(--ink-soft);margin:-4px 0 10px;">Descuento sobre esta venta: ${money(preview)}</div>` : ''}
+        <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+        <div class="err">${state.discountError||''}</div>
+        <button class="btn-primary" onclick="saveManualDiscount()">Aplicar ajuste</button>
+        ${state.manualDiscount && state.manualDiscount.type!=='coupon' ? `<button class="btn-secondary" onclick="removeManualDiscount()">Quitar ajuste</button>` : ''}
+        <button class="btn-secondary" onclick="state.discountModalOpen=false;render()">Cancelar</button>
+      `}
     </div>
   </div>`;
 }
 
 /* ============== CLIENTE DE LA VENTA ============== */
-function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; render(); }
+function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.newCustomerAddress=''; render(); }
 function selectCustomerPOS(id){ state.activeCustomer = state.customers.find(c=>c.id===id) || null; state.customerPickerOpen=false; render(); }
 function clearCustomerPOS(){ state.activeCustomer=null; state.customerPickerOpen=false; render(); }
 async function saveNewCustomerPOS(){
   const name = state.newCustomerName.trim();
   const phone = state.newCustomerPhone.trim();
+  const address = state.newCustomerAddress.trim();
   if(!name){ showToast('Ponle un nombre al cliente'); return; }
-  const payload = {name, phone, email:'', city:'', state:'', country:'', notes:'', createdAt:new Date().toISOString()};
+  const payload = {name, phone, email:'', address, city:'', state:'', country:'', notes:'', createdAt:new Date().toISOString()};
   try{
     const ref = await db.collection('customers').add(payload);
     const c = {id:ref.id, ...payload};
     state.customers.push(c);
     state.activeCustomer = c;
-    state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.customerPickerOpen=false;
+    state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.newCustomerAddress=''; state.customerPickerOpen=false;
     showToast('Cliente agregado');
   }catch(e){ console.error(e); showToast('No se pudo guardar el cliente'); }
   render();
@@ -497,6 +563,7 @@ function renderCustomerPickerModal(){
       ` : `
         <input class="field-input" type="text" placeholder="Nombre del cliente" value="${state.newCustomerName}" oninput="state.newCustomerName=this.value">
         <input class="field-input" type="text" placeholder="Teléfono / WhatsApp (opcional)" value="${state.newCustomerPhone}" oninput="state.newCustomerPhone=this.value">
+        <textarea class="field-input" style="min-height:60px;resize:vertical;font-family:inherit;" placeholder="Dirección (opcional): calle, número, colonia, referencias" oninput="state.newCustomerAddress=this.value">${state.newCustomerAddress}</textarea>
         <button class="btn-primary" onclick="saveNewCustomerPOS()">Guardar y seleccionar</button>
         <button class="btn-secondary" onclick="state.newCustomerMode=false;render()">Cancelar</button>
       `}
@@ -530,8 +597,14 @@ async function chargeSale(){
     return {id:p.id, variantId: v?v.id:null, name: p.name+(v?` (${variantLabel(v)})`:''), price:itemPrice(p,v), qty};
   });
   const subtotal = items.reduce((s,it)=>s+it.price*it.qty,0);
-  const discountAmount = state.manualDiscount ? Math.min(state.manualDiscount.amount, subtotal) : 0;
+  const discountAmount = currentDiscountAmount();
   const total = subtotal - discountAmount;
+  let manualDiscountPayload = null;
+  if(state.manualDiscount){
+    manualDiscountPayload = { type: state.manualDiscount.type, amount: discountAmount, reason: state.manualDiscount.reason };
+    if(state.manualDiscount.type==='coupon') manualDiscountPayload.code = state.manualDiscount.coupon.code;
+    else manualDiscountPayload.value = state.manualDiscount.value;
+  }
   try{
     const orderNumber = await getNextOrderNumber();
     await Promise.all(items.map(it=>{
@@ -553,12 +626,17 @@ async function chargeSale(){
       centerId, centerName: state.activeCenter.name,
       cashRegisterId: state.activeCashRegister.id,
       items, subtotal, total, paymentMethod: state.payMethod,
-      manualDiscount: state.manualDiscount ? {amount: discountAmount, reason: state.manualDiscount.reason} : null,
+      manualDiscount: manualDiscountPayload,
+      couponCode: state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null,
       customerId: state.activeCustomer ? state.activeCustomer.id : null,
       customerName: state.activeCustomer ? state.activeCustomer.name : null,
       customerPhone: state.activeCustomer ? (state.activeCustomer.phone||'') : null,
       notes: state.saleNotes || '',
     });
+    if(state.manualDiscount && state.manualDiscount.type==='coupon'){
+      try{ await db.collection('couponUsage').add({code: state.manualDiscount.coupon.code, date:new Date().toISOString()}); }
+      catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+    }
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.cart = {}; state.saleDone = true;
     state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = '';
   }catch(e){
@@ -681,7 +759,7 @@ function renderPOS(){
       <div class="sale-head"><h3>Venta actual (${cartCount()})</h3></div>
       <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;">
         <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="openCustomerPicker()">👤 ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
-        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="openDiscountModal()">🚚 ${state.manualDiscount?('Envío -'+money(state.manualDiscount.amount)):'Ajuste envío'}</button>
+        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="openDiscountModal()">💲 ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>
         <button class="cat-chip ${state.saleNotes?'active':''}" onclick="openNotesModal()">📝 ${state.saleNotes?'Notas ✓':'Notas'}</button>
       </div>
       <div class="sale-items">
@@ -698,7 +776,7 @@ function renderPOS(){
       <div class="sale-foot">
         ${state.manualDiscount ? `
           <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:2px;"><span>Subtotal</span><span>${money(cartTotal())}</span></div>
-          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>Ajuste por envío</span><span>-${money(state.manualDiscount.amount)}</span></div>
+          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
         ` : ''}
         <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
         <div class="pay-row">${PAY_METHODS.map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="state.payMethod='${m}';render()">${m}</button>`).join('')}</div>
