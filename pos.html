@@ -130,21 +130,28 @@ let state = {
   openingAmountInput:"", openingError:"", openingSubmitting:false,
   cashPanelOpen:false, movementModalOpen:false, movementType:"retiro", movementAmount:"", movementNote:"", movementError:"",
   closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"",
+  // Cliente, ajuste por envío y notas de la venta actual.
+  customers:[], activeCustomer:null, customerPickerOpen:false, customerSearchPOS:"",
+  newCustomerMode:false, newCustomerName:"", newCustomerPhone:"",
+  manualDiscount:null, discountModalOpen:false, discountAmountInput:"", discountReasonInput:"", discountError:"",
+  saleNotes:"", notesModalOpen:false, notesDraft:"",
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
 async function loadData(){
   try{
-    const [prodSnap, setSnap, cashiersSnap, centersSnap] = await Promise.all([
+    const [prodSnap, setSnap, cashiersSnap, centersSnap, customersSnap] = await Promise.all([
       db.collection('products').get(),
       db.collection('settings').doc('store').get(),
       db.collection('cashiers').get(),
       db.collection('distributionCenters').get(),
+      db.collection('customers').get(),
     ]);
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
     state.centers = centersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
+    state.customers = customersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     if(state.centers.length===0){
       const ref = await db.collection('distributionCenters').add({name:'Principal', isDefault:true, active:true, createdAt:new Date().toISOString()});
       state.centers = [{id:ref.id, name:'Principal', isDefault:true, active:true}];
@@ -414,6 +421,105 @@ function pickVariant(variantId){
 }
 function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
 
+/* ============== AJUSTE POR ENVÍO (descuento manual) ==============
+   Adicional a los descuentos y promociones ya aplicados en el precio de cada
+   producto; requiere siempre un motivo de justificación. */
+function saleTotal(){ return Math.max(0, cartTotal() - (state.manualDiscount?state.manualDiscount.amount:0)); }
+function openDiscountModal(){
+  state.discountAmountInput = state.manualDiscount ? String(state.manualDiscount.amount) : '';
+  state.discountReasonInput = state.manualDiscount ? state.manualDiscount.reason : '';
+  state.discountError = ''; state.discountModalOpen = true; render();
+}
+function saveManualDiscount(){
+  const amount = Number(state.discountAmountInput);
+  const reason = state.discountReasonInput.trim();
+  if(state.discountAmountInput.trim()==='' || isNaN(amount) || amount<=0){ state.discountError='Ingresa un monto válido'; render(); return; }
+  if(!reason){ state.discountError='Escribe un motivo para el ajuste'; render(); return; }
+  state.manualDiscount = {amount, reason};
+  state.discountModalOpen = false; render();
+}
+function removeManualDiscount(){ state.manualDiscount=null; state.discountModalOpen=false; render(); }
+function renderDiscountModal(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.discountModalOpen=false;render();}">
+    <div class="modal" style="max-width:380px;">
+      <h3>Ajuste por envío</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 14px;">Descuento manual adicional a las promociones y cupones ya aplicados, por ejemplo para compensar el costo de envío. Requiere un motivo.</p>
+      <input class="field-input" type="number" inputmode="decimal" placeholder="Monto del ajuste" value="${state.discountAmountInput}" oninput="state.discountAmountInput=this.value">
+      <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+      <div class="err">${state.discountError||''}</div>
+      <button class="btn-primary" onclick="saveManualDiscount()">Aplicar ajuste</button>
+      ${state.manualDiscount ? `<button class="btn-secondary" onclick="removeManualDiscount()">Quitar ajuste</button>` : ''}
+      <button class="btn-secondary" onclick="state.discountModalOpen=false;render()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+/* ============== CLIENTE DE LA VENTA ============== */
+function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; render(); }
+function selectCustomerPOS(id){ state.activeCustomer = state.customers.find(c=>c.id===id) || null; state.customerPickerOpen=false; render(); }
+function clearCustomerPOS(){ state.activeCustomer=null; state.customerPickerOpen=false; render(); }
+async function saveNewCustomerPOS(){
+  const name = state.newCustomerName.trim();
+  const phone = state.newCustomerPhone.trim();
+  if(!name){ showToast('Ponle un nombre al cliente'); return; }
+  const payload = {name, phone, email:'', city:'', state:'', country:'', notes:'', createdAt:new Date().toISOString()};
+  try{
+    const ref = await db.collection('customers').add(payload);
+    const c = {id:ref.id, ...payload};
+    state.customers.push(c);
+    state.activeCustomer = c;
+    state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.customerPickerOpen=false;
+    showToast('Cliente agregado');
+  }catch(e){ console.error(e); showToast('No se pudo guardar el cliente'); }
+  render();
+}
+function renderCustomerPickerModal(){
+  const q = state.customerSearchPOS.trim().toLowerCase();
+  let list = state.customers;
+  if(q) list = list.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
+  list = list.slice(0,40);
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.customerPickerOpen=false;render();}">
+    <div class="modal">
+      <h3>Elegir cliente</h3>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Opcional: asocia esta venta a un cliente de tu lista.</p>
+      ${state.activeCustomer ? `<button class="btn-secondary" style="margin:0 0 12px;" onclick="clearCustomerPOS()">Quitar cliente actual (${state.activeCustomer.name})</button>` : ''}
+      ${!state.newCustomerMode ? `
+        <input class="field-input" type="text" placeholder="Buscar por nombre o teléfono..." value="${state.customerSearchPOS}" oninput="state.customerSearchPOS=this.value;render()">
+        <div style="max-height:260px;overflow-y:auto;margin-bottom:12px;">
+          ${list.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` : list.map(c=>`
+            <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="selectCustomerPOS('${c.id}')">
+              <span>${c.name}</span><span style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">${c.phone||''}</span>
+            </button>`).join('')}
+        </div>
+        <button class="btn-secondary" style="margin-top:0;" onclick="state.newCustomerMode=true;render()">+ Agregar nuevo cliente</button>
+      ` : `
+        <input class="field-input" type="text" placeholder="Nombre del cliente" value="${state.newCustomerName}" oninput="state.newCustomerName=this.value">
+        <input class="field-input" type="text" placeholder="Teléfono / WhatsApp (opcional)" value="${state.newCustomerPhone}" oninput="state.newCustomerPhone=this.value">
+        <button class="btn-primary" onclick="saveNewCustomerPOS()">Guardar y seleccionar</button>
+        <button class="btn-secondary" onclick="state.newCustomerMode=false;render()">Cancelar</button>
+      `}
+      <button class="btn-secondary" onclick="state.customerPickerOpen=false;render()">Cerrar</button>
+    </div>
+  </div>`;
+}
+
+/* ============== NOTAS DE LA VENTA ============== */
+function openNotesModal(){ state.notesDraft = state.saleNotes; state.notesModalOpen = true; render(); }
+function saveSaleNotes(){ state.saleNotes = state.notesDraft.trim(); state.notesModalOpen=false; render(); }
+function renderNotesModal(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.notesModalOpen=false;render();}">
+    <div class="modal" style="max-width:380px;">
+      <h3>Notas de la venta</h3>
+      <textarea class="field-input" style="min-height:90px;resize:vertical;font-family:inherit;" placeholder="Ej. cliente pidió empaque discreto extra..." oninput="state.notesDraft=this.value">${state.notesDraft}</textarea>
+      <button class="btn-primary" onclick="saveSaleNotes()">Guardar nota</button>
+      <button class="btn-secondary" onclick="state.notesModalOpen=false;render()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
 async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
   if(!state.activeCashRegister){ showToast('Abre la caja antes de vender'); return; }
@@ -423,7 +529,9 @@ async function chargeSale(){
     const {p,v} = parseCartKey(key);
     return {id:p.id, variantId: v?v.id:null, name: p.name+(v?` (${variantLabel(v)})`:''), price:itemPrice(p,v), qty};
   });
-  const total = items.reduce((s,it)=>s+it.price*it.qty,0);
+  const subtotal = items.reduce((s,it)=>s+it.price*it.qty,0);
+  const discountAmount = state.manualDiscount ? Math.min(state.manualDiscount.amount, subtotal) : 0;
+  const total = subtotal - discountAmount;
   try{
     const orderNumber = await getNextOrderNumber();
     await Promise.all(items.map(it=>{
@@ -444,9 +552,15 @@ async function chargeSale(){
       cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
       centerId, centerName: state.activeCenter.name,
       cashRegisterId: state.activeCashRegister.id,
-      items, total, paymentMethod: state.payMethod,
+      items, subtotal, total, paymentMethod: state.payMethod,
+      manualDiscount: state.manualDiscount ? {amount: discountAmount, reason: state.manualDiscount.reason} : null,
+      customerId: state.activeCustomer ? state.activeCustomer.id : null,
+      customerName: state.activeCustomer ? state.activeCustomer.name : null,
+      customerPhone: state.activeCustomer ? (state.activeCustomer.phone||'') : null,
+      notes: state.saleNotes || '',
     });
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.cart = {}; state.saleDone = true;
+    state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = '';
   }catch(e){
     console.error(e); showToast('No se pudo registrar la venta');
   }
@@ -565,6 +679,11 @@ function renderPOS(){
     </div>
     <div class="sale-panel">
       <div class="sale-head"><h3>Venta actual (${cartCount()})</h3></div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;">
+        <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="openCustomerPicker()">👤 ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
+        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="openDiscountModal()">🚚 ${state.manualDiscount?('Envío -'+money(state.manualDiscount.amount)):'Ajuste envío'}</button>
+        <button class="cat-chip ${state.saleNotes?'active':''}" onclick="openNotesModal()">📝 ${state.saleNotes?'Notas ✓':'Notas'}</button>
+      </div>
       <div class="sale-items">
         ${entries.length===0 ? `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>` :
           entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price=itemPrice(p,v); return `
@@ -577,9 +696,13 @@ function renderPOS(){
             </div>`;}).join('')}
       </div>
       <div class="sale-foot">
-        <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
+        ${state.manualDiscount ? `
+          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:2px;"><span>Subtotal</span><span>${money(cartTotal())}</span></div>
+          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>Ajuste por envío</span><span>-${money(state.manualDiscount.amount)}</span></div>
+        ` : ''}
+        <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
         <div class="pay-row">${PAY_METHODS.map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="state.payMethod='${m}';render()">${m}</button>`).join('')}</div>
-        <button class="btn-primary" ${entries.length===0||state.sending?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(cartTotal())}</button>
+        <button class="btn-primary" ${entries.length===0||state.sending?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
       </div>
     </div>
   </div>
@@ -613,6 +736,9 @@ function render(){
     let html = state.saleDone ? renderReceipt() : (state.closingLoading ? `<div class="loading-screen">Preparando cierre…</div>` : (state.closingOpen ? renderCashCloseScreen() : renderPOS()));
     if(state.cashPanelOpen) html += renderCashPanelModal();
     if(state.movementModalOpen) html += renderMovementModal();
+    if(state.customerPickerOpen) html += renderCustomerPickerModal();
+    if(state.discountModalOpen) html += renderDiscountModal();
+    if(state.notesModalOpen) html += renderNotesModal();
     root.innerHTML = html;
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
