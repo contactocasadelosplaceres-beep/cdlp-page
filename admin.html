@@ -252,6 +252,7 @@ let state = {
   descImportOpen:false, descImport:null,
   variantImportOpen:false, variantImport:null,
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
+  productCatFilter:"Todas", productNeedFilter:"Todas",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   wholesaleModal:null, wholesaleProductSearch:"",
@@ -1233,9 +1234,13 @@ function renderBarChart(data, isMoney){
 
 function renderProductos(){
   const q = (state.productSearch||'').trim().toLowerCase();
-  const filtered = q
-    ? state.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q))
-    : state.products;
+  const catFilter = state.productCatFilter || 'Todas';
+  const needFilter = state.productNeedFilter || 'Todas';
+  let filtered = state.products;
+  if(q) filtered = filtered.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  if(catFilter!=='Todas') filtered = filtered.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
+  if(needFilter!=='Todas') filtered = filtered.filter(p => (p.needs||[]).includes(needFilter));
+  const filterCount = (q?1:0) + (catFilter!=='Todas'?1:0) + (needFilter!=='Todas'?1:0);
   return `
     <div class="toolbar">
       <button class="btn-add-new" onclick="state.productModal={images:[], sku:generateSKU({})};render()">+ Nuevo producto</button>
@@ -1249,8 +1254,16 @@ function renderProductos(){
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
     </div>
-    <div class="panel-title" style="margin-bottom:12px;">Catálogo (${filtered.length}${q?` de ${state.products.length}`:''})</div>
-    ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan con "${state.productSearch}".</div>` :
+    <div class="status-filter">
+      <button class="${catFilter==='Todas'?'active':''}" onclick="state.productCatFilter='Todas';render()">Todas las categorías</button>
+      ${state.settings.categories.map(c=>`<button class="${catFilter===c?'active':''}" onclick="state.productCatFilter='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}
+    </div>
+    <div class="status-filter">
+      <button class="${needFilter==='Todas'?'active':''}" onclick="state.productNeedFilter='Todas';render()">Todos</button>
+      ${NEEDS.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';render()">${n.label}</button>`).join('')}
+    </div>
+    <div class="panel-title" style="margin-bottom:12px;">Catálogo (${filtered.length}${filterCount?` de ${state.products.length}`:''})</div>
+    ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan con este filtro${q?` ("${state.productSearch}")`:''}.</div>` :
       filtered.map(p=>`
       <div class="list-row" style="${p.hidden?'opacity:.55;':''}">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
