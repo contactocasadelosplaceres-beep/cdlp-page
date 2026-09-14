@@ -249,6 +249,7 @@ let state = {
   products:[], orders:[], visits:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
+  descImportOpen:false, descImport:null,
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
@@ -678,6 +679,25 @@ async function generateMissingSKUs(){
     showToast(`${missing.length} SKU generados`); render();
   }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
 }
+function looksTruncatedDesc(desc){
+  const d = (desc||'').trim();
+  if(!d) return false;
+  return /\.\.\.$/.test(d) || /…$/.test(d);
+}
+function exportProductsCSV(){
+  const rows = [['id','sku','nombre','categorias','precio','descripcion','longitud_descripcion','posible_descripcion_cortada']];
+  state.products.forEach(p=>{
+    const desc = p.desc||'';
+    rows.push([p.id, p.sku||'', p.name, (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).join('|'), p.price, desc, desc.length, looksTruncatedDesc(desc)?'SI':'']);
+  });
+  const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(["﻿"+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='productos_descripciones.csv'; a.click();
+  URL.revokeObjectURL(url);
+  const flagged = state.products.filter(p=>looksTruncatedDesc(p.desc)).length;
+  showToast(flagged>0 ? `CSV exportado — ${flagged} producto(s) con posible descripción cortada` : 'CSV exportado — no se detectaron descripciones cortadas');
+}
 async function deleteProduct(id){
   try{
     await db.collection('products').doc(id).delete();
@@ -1084,6 +1104,7 @@ function renderAdmin(){
   </div>
   ${state.productModal!==null ? renderProductModal() : ''}
   ${state.importOpen ? renderImportModal() : ''}
+  ${state.descImportOpen ? renderDescImportModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
@@ -1219,6 +1240,8 @@ function renderProductos(){
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
       <button class="btn-outline" onclick="if(confirm('Esto borra y reemplaza el SKU de TODOS tus productos, incluso los que ya tienen uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
+      <button class="btn-outline" onclick="exportProductsCSV()">Exportar descripciones</button>
+      <button class="btn-outline" onclick="state.descImportOpen=true;render()">Importar descripciones (Tiendanube)</button>
     </div>
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
@@ -1267,6 +1290,153 @@ function renderImportModal(){
       </div>
       <div class="modal-actions">
         <button class="btn-primary" style="width:100%;background:var(--navy);" onclick="if(confirm('Esto reemplaza TODO tu catálogo actual. ¿Continuar?'))commitImport('replace')">Reemplazar catálogo completo</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============== IMPORTAR DESCRIPCIONES DESDE TIENDANUBE ============== */
+function escDescHtml(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function normName(s){
+  return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+function htmlDescToPlainText(html){
+  if(!html) return '';
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  container.querySelectorAll('li').forEach(li=>{
+    li.insertBefore(document.createTextNode('• '), li.firstChild);
+    li.appendChild(document.createTextNode('\n'));
+  });
+  container.querySelectorAll('br').forEach(br=>br.replaceWith('\n'));
+  container.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6,ul,ol,tr').forEach(el=>{
+    el.appendChild(document.createTextNode('\n'));
+  });
+  let text = container.textContent || '';
+  text = text.replace(/ /g,' ');
+  text = text.replace(/[ \t]+\n/g,'\n').replace(/\n[ \t]+/g,'\n');
+  text = text.replace(/\n{3,}/g,'\n\n').trim();
+  return text;
+}
+function parseTiendanubeDescCSV(text){
+  const rows = parseCSV(text);
+  if(!rows.length) return [];
+  const header = rows[0].map(h=>h.trim().toLowerCase());
+  const idxName = header.indexOf('nombre');
+  const idxDesc = header.findIndex(h=>h.includes('descripc'));
+  if(idxName<0 || idxDesc<0) return null;
+  const out = [];
+  for(let i=1;i<rows.length;i++){
+    const row = rows[i];
+    const name = (row[idxName]||'').trim();
+    if(!name) continue; // fila de variante (Tiendanube repite fila por cada variante, solo la primera trae nombre/descripción)
+    out.push({name, descHtml:(row[idxDesc]||'').trim()});
+  }
+  return out;
+}
+function buildDescImportPreview(csvRows){
+  const byNorm = {};
+  state.products.forEach(p=>{ const key = normName(p.name); (byNorm[key]=byNorm[key]||[]).push(p); });
+  const matched = [], unmatched = [], ambiguous = [];
+  let noChange = 0;
+  csvRows.forEach(row=>{
+    if(!row.descHtml) return;
+    const key = normName(row.name);
+    const candidates = byNorm[key];
+    if(!candidates || candidates.length===0){ unmatched.push(row.name); return; }
+    if(candidates.length>1){ ambiguous.push(row.name); return; }
+    const p = candidates[0];
+    const newDesc = htmlDescToPlainText(row.descHtml);
+    const oldDesc = (p.desc||'').trim();
+    if(!newDesc || newDesc===oldDesc){ noChange++; return; }
+    matched.push({ productId:p.id, productName:p.name, oldDesc, newDesc, checked: !oldDesc || looksTruncatedDesc(oldDesc) });
+  });
+  return {matched, unmatched, ambiguous, noChange};
+}
+function handleDescImportFile(input){
+  const file = input.files[0]; if(!file) return;
+  const fileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const csvRows = parseTiendanubeDescCSV(e.target.result);
+    if(csvRows===null){ showToast('No se encontraron columnas "Nombre" y "Descripción" en ese archivo'); return; }
+    state.descImport = {fileName, ...buildDescImportPreview(csvRows)};
+    render();
+  };
+  reader.readAsText(file);
+}
+function toggleDescImportRow(idx){
+  if(!state.descImport || !state.descImport.matched[idx]) return;
+  state.descImport.matched[idx].checked = !state.descImport.matched[idx].checked;
+  render();
+}
+function toggleDescImportAll(checked){
+  if(!state.descImport) return;
+  state.descImport.matched.forEach(r=>r.checked=checked);
+  render();
+}
+async function commitDescImport(){
+  const di = state.descImport;
+  if(!di || !di.matched) return;
+  const toApply = di.matched.filter(r=>r.checked);
+  if(toApply.length===0){ showToast('No hay descripciones seleccionadas'); return; }
+  try{
+    for(let i=0;i<toApply.length;i+=400){
+      const chunk = toApply.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(r=>batch.update(db.collection('products').doc(r.productId), {desc:r.newDesc}));
+      await batch.commit();
+    }
+    toApply.forEach(r=>{ const p = state.products.find(x=>x.id===r.productId); if(p) p.desc = r.newDesc; });
+    showToast(`${toApply.length} descripción(es) actualizada(s)`);
+    state.descImportOpen=false; state.descImport=null;
+    render();
+  }catch(e){ console.error(e); showToast('Ocurrió un error al actualizar: '+(e.message||'error desconocido')); }
+}
+function renderDescImportModal(){
+  const di = state.descImport;
+  const matched = di ? (di.matched||[]) : [];
+  const checkedCount = matched.filter(r=>r.checked).length;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.descImportOpen=false;state.descImport=null;render();}">
+    <div class="modal" style="max-width:720px;">
+      <h3>Importar descripciones desde Tiendanube</h3>
+      <div class="note-box">Sube el CSV de exportación de Tiendanube (columnas <strong>Nombre</strong> y <strong>Descripción</strong>). Los productos se emparejan por nombre exacto con tu catálogo actual; el HTML de la descripción se convierte a texto plano. Solo se marcan para actualizar automáticamente los productos sin descripción o con descripción que parece cortada — puedes marcar o desmarcar cualquier otro antes de aplicar.</div>
+      <div class="import-drop">
+        Selecciona tu archivo .csv<br>
+        <input type="file" accept=".csv,.txt" onchange="handleDescImportFile(this)">
+      </div>
+      ${di && di.fileName ? `<div class="preview-count">Archivo: ${escDescHtml(di.fileName)}</div>` : ''}
+      ${di ? `
+        <div class="preview-count">
+          ${matched.length} producto(s) con cambio de descripción detectado (${checkedCount} seleccionado${checkedCount===1?'':'s'} para actualizar)${di.noChange?`, ${di.noChange} sin cambios`:''}.
+          ${di.unmatched.length ? `<br>${di.unmatched.length} nombre(s) del CSV no se encontraron en tu catálogo.` : ''}
+          ${di.ambiguous.length ? `<br>${di.ambiguous.length} nombre(s) coinciden con más de un producto y se omitieron.` : ''}
+        </div>
+        ${matched.length>0 ? `
+        <div style="margin:6px 0;">
+          <label style="font-size:13px;"><input type="checkbox" ${checkedCount===matched.length?'checked':''} onchange="toggleDescImportAll(this.checked)"> Seleccionar todos</label>
+        </div>
+        <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+          ${matched.map((r,idx)=>`
+            <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;">
+                <input type="checkbox" ${r.checked?'checked':''} onchange="toggleDescImportRow(${idx})" style="margin-top:3px;">
+                <div style="flex:1;">
+                  <div style="font-weight:700;">${escDescHtml(r.productName)}${!r.oldDesc?' <span style="color:#b5495b;">(sin descripción actual)</span>':(looksTruncatedDesc(r.oldDesc)?' <span style="color:#b5495b;">(parece cortada)</span>':'')}</div>
+                  <div style="color:var(--ink-soft);font-size:12px;margin-top:2px;white-space:pre-wrap;">${escDescHtml(r.newDesc.slice(0,220))}${r.newDesc.length>220?'…':''}</div>
+                </div>
+              </label>
+            </div>
+          `).join('')}
+        </div>` : ''}
+        ${di.unmatched.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ver nombres no encontrados (${di.unmatched.length})</summary><div style="font-size:12px;max-height:150px;overflow-y:auto;color:var(--ink-soft);margin-top:6px;">${di.unmatched.map(n=>escDescHtml(n)).join('<br>')}</div></details>` : ''}
+      ` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.descImportOpen=false;state.descImport=null;render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitDescImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
       </div>
     </div>
   </div>`;
