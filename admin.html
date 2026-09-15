@@ -65,6 +65,10 @@
   @media(min-width:700px){.stat-grid{grid-template-columns:repeat(3,1fr);}}
   @media(min-width:960px){.stat-grid{grid-template-columns:repeat(6,1fr);}}
   .stat-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;transition:box-shadow .15s ease,transform .15s ease;}
+  .stat-card.primary{background:linear-gradient(135deg,var(--primary),var(--primary-deep));border-color:transparent;}
+  .stat-card.primary .stat-label{color:rgba(255,255,255,0.78);}
+  .stat-card.primary .stat-value{color:#fff;font-size:26px;}
+  @media(max-width:699px){.stat-card.primary{grid-column:span 2;}}
   .stat-card:hover{box-shadow:var(--shadow-sm);transform:translateY(-1px);}
   .stat-label{font-size:11px;color:var(--ink-soft);margin-bottom:6px;line-height:1.3;font-weight:600;}
   .stat-value{font-size:22px;font-weight:800;font-family:'League Spartan',sans-serif;color:var(--primary-deep);}
@@ -1317,7 +1321,7 @@ function renderResumen(){
   const m = computeMetrics();
   return `
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
+      <div class="stat-card primary"><div class="stat-label">Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
       <div class="stat-card"><div class="stat-label">Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
       <div class="stat-card"><div class="stat-label">Ticket promedio</div><div class="stat-value">${money(m.avgOrder)}</div></div>
       <div class="stat-card"><div class="stat-label">Pedidos activos</div><div class="stat-value">${m.pending}</div></div>
@@ -1481,7 +1485,7 @@ function renderTagAssignPanel(kind, value, label){
   const candidates = q ? state.products.filter(p=>!productHasTag(p,kind,value) && (p.name||'').toLowerCase().includes(q)).slice(0,30) : [];
   return `
     <div style="margin-bottom:10px;">
-      <button class="btn-outline" style="font-size:12px;padding:7px 12px;" onclick="state.${openKey}=!state.${openKey};render()">${state[openKey]?'Ocultar buscador':'+ Agregar productos a'} "${label}"</button>
+      <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Ocultar buscador':'+ Agregar productos a'} "${label}"</button>
       ${state[openKey] ? `
         <div class="panel" style="margin-top:8px;background:var(--bg);">
           <input placeholder="Buscar producto por nombre..." value="${(state[searchKey]||'').replace(/"/g,'&quot;')}" oninput="state.${searchKey}=this.value;render()">
@@ -1624,9 +1628,9 @@ function renderProductos(){
       ${needsList.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';render()">${n.label}</button>`).join('')}
     </div>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.catManageOpen=!state.catManageOpen;render()">${state.catManageOpen?'Ocultar edición de categorías':icon('edit')+' Editar categorías'}</button>
-      <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.needsManageOpen=!state.needsManageOpen;render()">${state.needsManageOpen?'Ocultar edición de etiquetas':icon('edit')+' Editar etiquetas "para quién"'}</button>
-      <button class="btn-outline" style="font-size:12px;padding:6px 11px;" onclick="state.catImportOpen=true;render()">Importar categorías (Tiendanube)</button>
+      <button class="btn-tertiary" onclick="state.catManageOpen=!state.catManageOpen;render()">${state.catManageOpen?'Ocultar edición de categorías':icon('edit',14)+' Editar categorías'}</button>
+      <button class="btn-tertiary" onclick="state.needsManageOpen=!state.needsManageOpen;render()">${state.needsManageOpen?'Ocultar edición de etiquetas':icon('edit',14)+' Editar etiquetas "para quién"'}</button>
+      <button class="btn-tertiary" onclick="state.catImportOpen=true;render()">${icon('folder',14)} Importar categorías (Tiendanube)</button>
     </div>
     ${state.catManageOpen ? renderCategoriesManagePanel() : ''}
     ${state.needsManageOpen ? renderNeedsManagePanel() : ''}
@@ -3418,6 +3422,7 @@ function renderInventarioPorCentro(){
     <div class="form-field" style="max-width:420px;">
       <input id="inventario-search-input" placeholder="Buscar producto..." value="${state.productSearch}" oninput="onProductSearchInput(this.value)">
     </div>
+    ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan${q?` ("${state.productSearch}")`:''}.</div>` : `
     <div class="orders-table-wrap">
       <table class="orders-table inventario-table">
         <thead><tr>
@@ -3436,7 +3441,7 @@ function renderInventarioPorCentro(){
         </tbody>
       </table>
     </div>
-    ${filtered.length>150 ? `<div class="note-box" style="margin-top:10px;">Mostrando los primeros 150 resultados. Usa el buscador para encontrar un producto específico.</div>` : ''}
+    ${filtered.length>150 ? `<div class="note-box" style="margin-top:10px;">Mostrando los primeros 150 resultados. Usa el buscador para encontrar un producto específico.</div>` : ''}`}
   `;
 }
 
