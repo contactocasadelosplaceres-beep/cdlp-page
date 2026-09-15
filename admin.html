@@ -104,6 +104,17 @@
   .btn-primary:active{transform:scale(0.98);}
   .btn-primary:disabled{opacity:.45;box-shadow:none;}
 
+  /* Sistema de botones por nivel: primario (arriba), secundario, terciario, destructivo */
+  .btn-tertiary{background:transparent;color:var(--ink-soft);padding:9px 13px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;border:1.5px dashed var(--border);display:inline-flex;align-items:center;gap:6px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
+  .btn-tertiary:hover{background:var(--surface-soft);border-color:var(--primary);color:var(--primary-deep);}
+  .btn-tertiary svg{flex-shrink:0;}
+  .btn-danger{background:#FBE2E6;color:#A02040;padding:11px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease;}
+  .btn-danger:hover{background:#F6C9D1;}
+  .btn-danger-text{background:transparent;color:#A02040!important;font-weight:700!important;padding:8px 6px;transition:opacity .15s ease;}
+  .btn-danger-text:hover{opacity:.75;}
+  .toolbar-tools-panel{display:flex;flex-wrap:wrap;gap:8px;background:var(--surface-soft);border-radius:var(--radius-md);padding:12px;margin:-4px 0 12px;}
+  .toolbar-tools-panel .btn-outline{background:#fff;}
+
   .modal-overlay{position:fixed;inset:0;background:rgba(43,22,32,0.55);backdrop-filter:blur(1px);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
   @media(min-width:600px){.modal-overlay{align-items:center;}}
   .modal{background:#fff;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:22px 20px;box-shadow:0 -20px 50px -20px rgba(43,22,32,0.35);}
@@ -334,7 +345,7 @@ let state = {
   descImportOpen:false, descImport:null,
   variantImportOpen:false, variantImport:null,
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
-  productCatFilter:"Todas", productNeedFilter:"Todas",
+  productCatFilter:"Todas", productNeedFilter:"Todas", productToolsOpen:false,
   needsManageOpen:false, newNeedInput:"", catManageOpen:false, catImportOpen:false, catImport:null,
   catAssignOpen:false, catAssignSearch:"", needAssignOpen:false, needAssignSearch:"",
   designSubpanel:null,
@@ -468,6 +479,8 @@ function icon(name, size){
     'arrow-up':'<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>',
     'arrow-down':'<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>',
     code:'<path d="M9 6 3 12l6 6"/><path d="M15 6l6 6-6 6"/>',
+    sliders:'<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 12h4"/>',
+    'more-horizontal':'<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -1528,13 +1541,17 @@ function renderProductos(){
   return `
     <div class="toolbar">
       <button class="btn-add-new" onclick="state.productModal={images:[], sku:generateSKU({})};render()">+ Nuevo producto</button>
+      <button class="btn-tertiary" onclick="state.productToolsOpen=!state.productToolsOpen;render()">${icon('sliders',14)} ${state.productToolsOpen?'Ocultar herramientas':'Más herramientas'}</button>
+    </div>
+    ${state.productToolsOpen ? `
+    <div class="toolbar-tools-panel">
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
       <button class="btn-outline" onclick="if(confirm('Esto borra y reemplaza el SKU de TODOS tus productos, incluso los que ya tienen uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
       <button class="btn-outline" onclick="exportProductsCSV()">Exportar descripciones</button>
       <button class="btn-outline" onclick="state.descImportOpen=true;render()">Importar descripciones (Tiendanube)</button>
       <button class="btn-outline" onclick="state.variantImportOpen=true;render()">Importar variantes (Tiendanube)</button>
-    </div>
+    </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
     </div>
@@ -2140,7 +2157,7 @@ function renderOrderRow(o){
             <hr>
             ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
-            <button style="color:var(--rose);" onclick="state.orderActionsMenu=null;deleteOrder('${o.id}','${o.source}')">Eliminar</button>
+            <button class="btn-danger-text" onclick="state.orderActionsMenu=null;deleteOrder('${o.id}','${o.source}')">${icon('trash',14)} Eliminar</button>
           </div>
         ` : ''}
       </td>
