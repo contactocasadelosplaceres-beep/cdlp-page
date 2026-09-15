@@ -148,6 +148,7 @@
   .order-products-toggle .chev{transition:transform .15s ease;}
   .order-products-toggle.open .chev{transform:rotate(180deg);}
   .order-pay-pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--green);background:#EAF3D8;padding:4px 9px;border-radius:var(--radius-pill);white-space:nowrap;}
+  .order-pay-pill.split{color:var(--teal);background:#DFF4F6;cursor:help;}
   .order-ship-sub{font-size:11px;color:var(--ink-soft);margin-top:3px;white-space:normal;max-width:180px;}
   .order-actions-cell{position:relative;text-align:right;}
   .order-actions-btn{width:32px;height:32px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;transition:background .15s ease;}
@@ -161,6 +162,46 @@
   .products-detail-row td{background:var(--bg);padding:10px 14px;white-space:normal;}
   .products-detail-row .pd-line{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;}
   .products-detail-row .pd-extra{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);padding:3px 0;border-top:1px dashed var(--border);margin-top:4px;}
+
+  /* ===== TABLA DE PEDIDOS EN CELULAR: se convierte en tarjetas, no en tabla con scroll =====
+     Solo afecta la tabla de Pedidos (.pedidos-table); la tabla de Inventario por centro,
+     que también usa la clase base .orders-table pero tiene columnas distintas, no se toca. */
+  @media(max-width:760px){
+    .pedidos-table{min-width:0;width:100%;}
+    .orders-table-wrap:has(.pedidos-table){overflow-x:visible;border:none;box-shadow:none;background:transparent;}
+    .pedidos-table thead{display:none;}
+    .pedidos-table tbody{display:block;}
+    .pedidos-table tbody tr:not(.products-detail-row){
+      display:grid;grid-template-columns:1fr auto;column-gap:12px;row-gap:6px;
+      grid-template-areas:"folio status" "customer customer" "total pay" "date products" "actions actions";
+      background:#fff;border:1px solid var(--border);border-radius:var(--radius-md) var(--radius-md) 0 0;
+      box-shadow:var(--shadow-sm);padding:13px 14px;margin:0 0 12px;
+    }
+    .pedidos-table tbody tr:not(.products-detail-row):has(+ tr.products-detail-row){
+      border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0;
+    }
+    .pedidos-table tr:last-child td{border-bottom:none;}
+    .pedidos-table td{padding:0;border-bottom:none;white-space:normal;display:block;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(1){grid-area:folio;align-self:center;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(2){grid-area:date;align-self:center;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(3){grid-area:customer;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(4){grid-area:total;font-size:15px;align-self:center;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(5){grid-area:products;justify-self:end;align-self:center;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(6){grid-area:pay;align-self:center;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(7){grid-area:status;justify-self:end;text-align:right;}
+    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(8){grid-area:actions;margin-top:4px;}
+    .pedidos-table tr.products-detail-row{display:block;}
+    .pedidos-table tr.products-detail-row td{
+      display:block;background:var(--bg);border:1px solid var(--border);border-top:none;
+      border-radius:0 0 var(--radius-md) var(--radius-md);padding:10px 14px 12px;margin:-12px 0 12px;
+    }
+    .pedidos-table .order-products-toggle{width:100%;justify-content:flex-end;padding:6px 8px;border-radius:8px;}
+    .pedidos-table .order-actions-cell{text-align:left;}
+    .pedidos-table .order-actions-btn{width:100%;height:38px;border-radius:var(--radius-sm);font-size:0;gap:6px;}
+    .pedidos-table .order-actions-btn::before{content:"Más acciones";font-size:12.5px;font-weight:700;}
+    .pedidos-table .order-actions-btn::after{content:"⋮";font-size:16px;}
+    .pedidos-table .order-actions-menu{left:0;right:0;top:calc(100% + 4px);}
+  }
   .status-filter button{flex-shrink:0;padding:8px 14px;min-height:36px;border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--ink-soft);font-size:12px;font-weight:700;transition:all .15s ease;}
   .status-filter button.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
@@ -442,6 +483,12 @@ function paymentMethodLabel(o){
   const pays = salePayments(o);
   if(pays.length>1) return 'Dividido: ' + pays.map(p=>`${p.method} ${money(p.amount)}`).join(' · ');
   return pays[0].method;
+}
+// Versión corta para espacios angostos (la pastilla de la tabla de pedidos): solo dice
+// "Dividido" en vez del desglose completo, que se sigue mostrando en el detalle del pedido.
+function paymentMethodShortLabel(o){
+  const pays = salePayments(o);
+  return pays.length>1 ? 'Dividido' : pays[0].method;
 }
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : 'Sin folio'; }
 async function getNextOrderNumber(){
@@ -2041,7 +2088,7 @@ function renderPedidos(){
     <div class="status-filter">${filters.map(f=>`<button class="${state.orderStatusFilter===f?'active':''}" onclick="state.orderStatusFilter='${f}';render()">${f}</button>`).join('')}</div>
     ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` : `
     <div class="orders-table-wrap">
-      <table class="orders-table">
+      <table class="orders-table pedidos-table">
         <thead><tr>
           <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Productos</th><th>Pago</th><th>Estado</th><th></th>
         </tr></thead>
@@ -2059,7 +2106,9 @@ function renderOrderRow(o){
   const itemCount = (o.items||[]).reduce((s,it)=>s+it.qty,0);
   const shipLabel = isPos ? 'Retirada' : (o.status==='Entregado' ? 'Entregada' : o.status==='Cancelado' ? 'Cancelada' : 'Por enviar');
   const shipSub = isPos ? 'Retirado en Punto de Venta' : (o.address || '—');
-  const payLabel = isPos ? paymentMethodLabel(o) : 'Contra entrega';
+  const isSplitPay = isPos && salePayments(o).length > 1;
+  const payLabel = isPos ? paymentMethodShortLabel(o) : 'Contra entrega';
+  const payLabelFull = isPos ? paymentMethodLabel(o) : 'Contra entrega';
   let rows = `
     <tr class="${o.archived?'archived-row':''}">
       <td><button class="order-folio-btn" onclick="event.stopPropagation();openOrderDetailModal('${o.id}')">${formatFolio(o.orderNumber)}</button></td>
@@ -2077,7 +2126,7 @@ function renderOrderRow(o){
           ${itemCount} unid. <span class="chev">▾</span>
         </button>
       </td>
-      <td><span class="order-pay-pill">$ ${payLabel}</span></td>
+      <td><span class="order-pay-pill ${isSplitPay?'split':''}" ${isSplitPay?`title="${payLabelFull.replace(/"/g,'&quot;')}"`:''}>${isSplitPay?icon('layers',12):'$'} ${payLabel}</span></td>
       <td>
         <span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'}">${o.status||'—'}</span>
         <div class="order-ship-sub">${shipSub}</div>
