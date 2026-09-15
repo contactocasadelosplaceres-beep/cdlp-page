@@ -222,7 +222,10 @@
   .detail-cat{font-size:11px;color:var(--ink-soft);text-transform:uppercase;font-weight:700;letter-spacing:.04em;}
   .detail-name{font-size:19px;font-weight:800;font-family:'League Spartan',sans-serif;color:var(--ink);margin:4px 0 8px;line-height:1.25;}
   .detail-price{font-size:20px;font-weight:800;color:var(--primary-deep);margin-bottom:4px;}
-  .detail-stock{font-size:12px;color:var(--ink-soft);margin-bottom:14px;}
+  .detail-stock{font-size:12px;font-weight:700;margin-bottom:14px;display:inline-flex;align-items:center;padding:4px 10px;border-radius:7px;}
+  .detail-stock.ok{color:var(--green);background:#EAF3D8;}
+  .detail-stock.low{color:#3a2200;background:var(--amber);}
+  .detail-stock.out{color:var(--rose);background:#FBE2E6;}
   .detail-desc{font-size:13.5px;color:var(--ink-soft);line-height:1.6;white-space:pre-wrap;}
   .detail-qty-row{display:flex;align-items:center;gap:12px;margin:16px 0 4px;}
   .drawer-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 20px;}
@@ -234,7 +237,8 @@
   .qty-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
   .qty-btn{width:32px;height:32px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .qty-val{font-size:13px;font-weight:700;min-width:20px;text-align:center;}
-  .remove-link{font-size:11.5px;color:var(--rose);margin-left:auto;font-weight:600;padding:8px 0 8px 8px;}
+  .cart-item-subtotal{margin-left:auto;font-size:13px;font-weight:800;color:var(--primary-deep);}
+  .remove-link{font-size:11.5px;color:var(--rose);font-weight:600;padding:8px 0 8px 10px;}
   .drawer-foot{padding:16px 20px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
   .total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:800;margin-bottom:12px;color:var(--primary-deep);}
   .btn-primary{width:100%;background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:14px;min-height:48px;border-radius:var(--radius-sm);font-size:14.5px;font-weight:700;display:block;text-align:center;text-decoration:none;box-shadow:0 10px 22px -10px rgba(188,53,92,0.5);transition:transform .12s ease,opacity .12s ease;}
@@ -803,6 +807,8 @@ function renderProductDetailDrawer(){
   const stockLeft = itemStock(p, matchedVariant);
   const price = matchedVariant && matchedVariant.priceOverride>0 ? matchedVariant.priceOverride : automaticDiscountedPrice(p);
   const needsSelection = hasVariants && !matchedVariant;
+  const stockStateClass = stockLeft<=0 ? 'out' : stockLeft<=3 ? 'low' : 'ok';
+  const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible';
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><button class="close-x" onclick="closeProductDetail()">${icon('x')}</button></div>
     <div class="drawer-body" style="padding:0;">
@@ -824,7 +830,7 @@ function renderProductDetailDrawer(){
         <div class="detail-cat">${productCats(p).join(' · ')}</div>
         <div class="detail-name">${p.name}</div>
         <div class="detail-price">${p.promoPrice>0 && p.promoPrice<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
-        ${!needsSelection ? `<div class="detail-stock">${stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible'}</div>` : ''}
+        ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
         ${hasVariants ? `
           <div style="margin:10px 0;">
             ${p.variantGroups.map(g=>`
@@ -1202,6 +1208,7 @@ function renderCartDrawer(){
                 <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
                 <div class="qty-val">${qty}</div>
                 <button class="qty-btn" onclick="changeQty('${key}',1)">+</button>
+                <span class="cart-item-subtotal">${money(price*qty)}</span>
                 <a class="remove-link" onclick="removeFromCart('${key}')">Quitar</a>
               </div>
             </div>
