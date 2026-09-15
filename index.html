@@ -328,6 +328,12 @@ const DEFAULT_NEEDS = [
 ];
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
 function catIcon(cat){ const i = state.settings.categories.indexOf(cat); return ICONS[(i<0?0:i) % ICONS.length]; }
+// Categorías visibles para el público: se excluyen las que el admin marcó como ocultas
+// (los productos que las usan siguen existiendo y se pueden ver, solo no se muestra el filtro).
+function visibleCategories(){
+  const hidden = state.settings.hiddenCategories||[];
+  return (state.settings.categories||[]).filter(c=>!hidden.includes(c));
+}
 
 const DEFAULT_SECTIONS = [
   {key:"hero", label:"Mensaje de bienvenida", visible:true},
@@ -345,6 +351,7 @@ const DEFAULT_SETTINGS = {
   heroTitle:"Descubre nuevas formas de disfrutar.",
   heroSubtitle:"Explora nuestro catálogo, recibe tu pedido en la comodidad de tu casa y compra con total discreción.",
   categories:[...DEFAULT_CATEGORIES],
+  hiddenCategories:[],
   needs: JSON.parse(JSON.stringify(DEFAULT_NEEDS)),
   sections: JSON.parse(JSON.stringify(DEFAULT_SECTIONS)),
   headerSubtitle:"Discreto · Confidencial · A domicilio",
@@ -367,6 +374,7 @@ async function loadData(){
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
     state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
@@ -871,7 +879,7 @@ function productImageHtml(p){
 
 /* ============== HEADER ============== */
 function renderHeader(){
-  const cats = state.settings.categories||[];
+  const cats = visibleCategories();
   return `
     <div class="topbar-main">
       <button class="brand" onclick="goHome()" aria-label="Ir al inicio">
@@ -975,7 +983,7 @@ function renderFirstTimeSection(){
 
 /* ============== CATEGORIES ============== */
 function renderCategoriesSection(){
-  const cats = ["Todos", ...state.settings.categories];
+  const cats = ["Todos", ...visibleCategories()];
   return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c&&!state.searchQuery&&!state.activeNeed?'active':''}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>`;
 }
 
@@ -1149,7 +1157,7 @@ function renderFooterSection(){
         <h4>Explora</h4>
         <a onclick="goToFeatured()">Más vendidos</a>
         <a onclick="goToCatalog('Todos')">Catálogo completo</a>
-        ${s.categories.slice(0,4).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
+        ${visibleCategories().slice(0,4).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </div>
       <div class="foot-col">
         <h4>Contacto</h4>
@@ -1321,6 +1329,58 @@ function adjustTopbarSpacer(){
   if(bar && spacer) spacer.style.height = bar.offsetHeight + 'px';
 }
 window.addEventListener('resize', adjustTopbarSpacer);
+
+/* ============== INSINUACIÓN VISUAL DE SCROLL EN CHIPS HORIZONTALES ==============
+   "¿Qué estás buscando?" y las categorías son filas que se deslizan horizontalmente,
+   pero nada lo indicaba salvo el propio gesto de arrastrar. Para que se note que hay
+   más opciones a los lados, la fila se mueve sola muy despacio y de ida y vuelta (nunca
+   salta de golpe), se detiene apenas la persona la toca o le da scroll, y no se activa
+   si el sistema tiene pedido reducir animaciones. No cambia qué se puede elegir ni cómo:
+   solo agrega movimiento a las mismas filas que ya existían. Como toda la página se
+   vuelve a dibujar con cada render(), esto busca los elementos en el DOM en cada cuadro
+   en vez de guardar una referencia fija, así sigue funcionando después de cualquier click. */
+const AUTOSCROLL_SELECTORS = ['.needs-row', '.cats'];
+const autoScrollDir = {};
+const autoScrollFrac = {}; // resto (menor a 1px) que un movimiento tan lento deja pendiente entre cuadros
+const autoScrollPausedUntil = {};
+function pauseAutoScrollFor(target){
+  AUTOSCROLL_SELECTORS.forEach(sel=>{ if(target.closest && target.closest(sel)) autoScrollPausedUntil[sel] = Date.now() + 4000; });
+}
+document.addEventListener('pointerdown', (e)=>pauseAutoScrollFor(e.target), {passive:true});
+document.addEventListener('wheel', (e)=>pauseAutoScrollFor(e.target), {passive:true});
+let autoScrollLastTs = null;
+function autoScrollTick(ts){
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dt = autoScrollLastTs===null ? 0 : ts - autoScrollLastTs;
+  autoScrollLastTs = ts;
+  if(!reduceMotion && dt>0 && dt<200){
+    AUTOSCROLL_SELECTORS.forEach(sel=>{
+      const el = document.querySelector(sel);
+      if(!el) return;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if(maxScroll<=4) return; // no hay nada que deslizar
+      if(autoScrollPausedUntil[sel] && Date.now() < autoScrollPausedUntil[sel]) return;
+      const dir = autoScrollDir[sel] || 1;
+      const speed = 22; // px/segundo, sutil pero visible
+      // A esta velocidad el avance por cuadro es menor a 1px, y scrollLeft solo acepta
+      // enteros: si se lee y escribe el valor redondeado en cada cuadro, el navegador
+      // lo vuelve a redondear hacia abajo y nunca avanza. Por eso el resto (< 1px) se
+      // guarda aparte y solo se mueve el elemento cuando ya suma al menos 1px completo.
+      const frac = (autoScrollFrac[sel]||0) + dir*speed*(dt/1000);
+      const wholePixels = Math.trunc(frac);
+      autoScrollFrac[sel] = frac - wholePixels;
+      if(wholePixels!==0){
+        let next = el.scrollLeft + wholePixels;
+        if(next >= maxScroll){ next = maxScroll; autoScrollDir[sel] = -1; autoScrollFrac[sel] = 0; }
+        else if(next <= 0){ next = 0; autoScrollDir[sel] = 1; autoScrollFrac[sel] = 0; }
+        el.scrollLeft = next;
+      }
+    });
+  }
+  requestAnimationFrame(autoScrollTick);
+}
+requestAnimationFrame(autoScrollTick);
+
 loadData();
 </script>
 </body>

@@ -353,6 +353,7 @@ const DEFAULT_SETTINGS = {
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
+  hiddenCategories:[],
   needs: JSON.parse(JSON.stringify(DEFAULT_NEEDS)),
   sections: JSON.parse(JSON.stringify(DEFAULT_SECTIONS)),
   headerSubtitle:"Discreto · Confidencial · A domicilio",
@@ -427,6 +428,7 @@ async function loadData(){
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
+    if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
@@ -1574,23 +1576,31 @@ function renderNeedsManagePanel(){
 }
 function renderCategoriesManagePanel(){
   const cats = state.settings.categories || [];
+  const hidden = state.settings.hiddenCategories || [];
   return `
     <div class="panel" style="background:var(--bg);margin-bottom:14px;">
       <div class="panel-title" style="font-size:13px;margin-bottom:2px;">Editar categorías</div>
-      <div class="panel-sub" style="margin-top:0;">Estas categorías aparecen como filtro en tu tienda pública y en el menú del encabezado. Puedes cambiar el nombre, el orden, agregar nuevas o borrarlas.</div>
-      ${cats.map((c,idx)=>`
-        <div class="list-row" style="margin-bottom:6px;">
+      <div class="panel-sub" style="margin-top:0;">Estas categorías aparecen como filtro en tu tienda pública y en el menú del encabezado. Puedes cambiar el nombre, el orden, agregar nuevas, borrarlas, o marcarlas como ocultas para que no aparezcan en la tienda (los productos siguen existiendo, solo no se muestra el filtro).</div>
+      ${cats.map((c,idx)=>{ const isHidden = hidden.includes(c); return `
+        <div class="list-row" style="margin-bottom:6px;${isHidden?'opacity:.6;':''}">
           <button class="icon-btn" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},-1)">${icon('arrow-up')}</button>
           <button class="icon-btn" ${idx===cats.length-1?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},1)">${icon('arrow-down')}</button>
           <input value="${c.replace(/"/g,'&quot;')}" style="flex:1;padding:9px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="renameCategory('${c.replace(/'/g,"\\'")}',this.value)">
+          <button class="visibility-toggle ${isHidden?'off':'on'}" onclick="toggleCategoryHidden('${c.replace(/'/g,"\\'")}')">${isHidden?'Oculta':'Visible'}</button>
           <button class="icon-btn danger" onclick="removeCategory('${c.replace(/'/g,"\\'")}')">${icon('trash')}</button>
         </div>
-      `).join('')}
+      `;}).join('')}
       <div class="two-col" style="margin-top:8px;">
         <input id="new-cat-input-productos" placeholder="Nueva categoría" value="${(state.newCatInput||'').replace(/"/g,'&quot;')}" oninput="state.newCatInput=this.value">
         <button class="btn-outline" onclick="addCategory()">+ Agregar categoría</button>
       </div>
     </div>`;
+}
+function toggleCategoryHidden(cat){
+  const hidden = state.settings.hiddenCategories || (state.settings.hiddenCategories=[]);
+  const i = hidden.indexOf(cat);
+  if(i>=0) hidden.splice(i,1); else hidden.push(cat);
+  saveSettings(); render();
 }
 function renderProductos(){
   const q = (state.productSearch||'').trim().toLowerCase();
