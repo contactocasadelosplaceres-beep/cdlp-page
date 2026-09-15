@@ -78,6 +78,11 @@
   .prod-name{font-size:12.5px;font-weight:600;line-height:1.25;}
   .prod-price{font-size:13px;font-weight:800;color:var(--primary-deep);}
   .prod-stock{font-size:10.5px;color:var(--ink-soft);}
+  /* Estado "sin inventario": la tarjeta se ve claramente distinta (no solo el texto de stock),
+     y deja de ser tocable, en vez de dejar que el cajero la toque y reciba un aviso después. */
+  .prod-card.out-of-stock{opacity:.6;cursor:not-allowed;}
+  .prod-card.out-of-stock .prod-swatch{filter:grayscale(0.6);}
+  .stock-out-badge{display:inline-block;background:#FBE2E6;color:var(--rose);font-weight:700;font-size:10px;padding:2px 7px;border-radius:6px;}
 
   .sale-panel{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 -16px 40px -18px rgba(43,22,32,0.28);}
   .sale-panel::before{content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);width:36px;height:4px;border-radius:3px;background:var(--border);}
@@ -152,7 +157,7 @@ let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   loaded:false, products:[], categories:[], coupons:[], cashiers:[], centers:[], activeCenter:null,
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
-  activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo", splitAmounts:{},
+  activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo", splitAmounts:{}, cartCollapsed:true,
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, lastPayments:[], sending:false, variantPickerProduct:null,
   // Apertura/cierre de caja: la caja pertenece a la combinación cajero + centro.
   activeCashRegister:null, cashRegisterChecked:false, cashRegisterLoading:false,
@@ -459,7 +464,7 @@ function addToCart(id){
   if(p.variantGroups && p.variantGroups.length){ state.variantPickerProduct = id; render(); return; }
   const available = centerStock(p, state.activeCenter.id);
   if(available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
-  state.cart[id]=(state.cart[id]||0)+1; render();
+  state.cart[id]=(state.cart[id]||0)+1; state.cartCollapsed=false; render();
 }
 function pickVariant(variantId){
   const p = state.products.find(x=>x.id===state.variantPickerProduct);
@@ -468,6 +473,7 @@ function pickVariant(variantId){
   if(itemStockPOS(p,v)<=(state.cart[key]||0)){ showToast('Sin existencias suficientes de esta variante'); return; }
   state.cart[key] = (state.cart[key]||0)+1;
   state.variantPickerProduct = null;
+  state.cartCollapsed = false;
   render();
 }
 function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
@@ -802,35 +808,44 @@ function renderPOS(){
         ${filtered.map(p=>{
           const hasVariants = p.variantGroups && p.variantGroups.length>0;
           const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
+          const stock = hasVariants ? null : centerStock(p, state.activeCenter.id);
+          const outOfStock = !hasVariants && stock<=0;
           return `
-          <div class="prod-card" onclick="addToCart('${p.id}')">
+          <div class="prod-card ${outOfStock?'out-of-stock':''}" ${outOfStock?'':`onclick="addToCart('${p.id}')"`}>
             ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
             <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)}</div>
-            <div class="prod-stock">${hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${centerStock(p, state.activeCenter.id)}`}</div>
+            <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
           </div>`;
         }).join('')}
       </div>
     </div>
-    <div class="sale-panel">
-      <div class="sale-head"><h3>Venta actual (${cartCount()})</h3></div>
+    <div class="sale-panel ${state.cartCollapsed?'collapsed':''}">
+      <div class="sale-head" onclick="state.cartCollapsed=!state.cartCollapsed;render()" style="cursor:pointer;">
+        <h3>Venta actual (${cartCount()})</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${state.cartCollapsed ? `<strong style="color:var(--primary-deep);font-size:15px;">${money(saleTotal())}</strong>` : ''}
+          <span style="color:var(--ink-soft);font-size:13px;">${state.cartCollapsed?'▾':'▴'}</span>
+        </div>
+      </div>
+      ${!state.cartCollapsed ? `
       <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;">
-        <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="openCustomerPicker()">${icon('user')} ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
-        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="openDiscountModal()">${icon('percent')} ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>
-        <button class="cat-chip ${state.saleNotes?'active':''}" onclick="openNotesModal()">${icon('file-text')} ${state.saleNotes?'Notas '+icon('check',12):'Notas'}</button>
+        <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="event.stopPropagation();openCustomerPicker()">${icon('user')} ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
+        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="event.stopPropagation();openDiscountModal()">${icon('percent')} ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>
+        <button class="cat-chip ${state.saleNotes?'active':''}" onclick="event.stopPropagation();openNotesModal()">${icon('file-text')} ${state.saleNotes?'Notas '+icon('check',12):'Notas'}</button>
       </div>
       <div class="sale-items">
         ${entries.length===0 ? `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>` :
           entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price=itemPrice(p,v); return `
             <div class="sale-item">
               <div class="name">${p.name}${v?` <span style="color:var(--ink-soft);">(${variantLabel(v)})</span>`:''}</div>
-              <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
+              <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',-1)">−</button>
               <div>${qty}</div>
-              <button class="qty-btn" onclick="changeQty('${key}',1)">+</button>
+              <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',1)">+</button>
               <div style="width:70px;text-align:right;font-weight:600;">${money(price*qty)}</div>
             </div>`;}).join('')}
       </div>
-      <div class="sale-foot">
+      <div class="sale-foot" onclick="event.stopPropagation();">
         ${state.manualDiscount ? `
           <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:2px;"><span>Subtotal</span><span>${money(cartTotal())}</span></div>
           <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
@@ -840,6 +855,7 @@ function renderPOS(){
         ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
         <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
       </div>
+      ` : ''}
     </div>
   </div>
   ${state.variantPickerProduct ? renderVariantPickerModal() : ''}`;
