@@ -42,6 +42,7 @@
   .admin-tabs::-webkit-scrollbar{display:none;}
   .admin-tab{padding:9px 15px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;color:var(--ink-soft);white-space:nowrap;transition:all .15s ease;}
   .admin-tab.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
+  .tab-badge{display:inline-block;background:var(--rose);color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:2px;}
   .admin-tabs-sep{width:1px;flex-shrink:0;background:var(--border);margin:6px 4px;}
 
   /* Navegación agrupada del admin en celular: reemplaza la franja de 15 pestañas por un
@@ -396,6 +397,7 @@ let state = {
   abandonedCarts:[], abandonedCartsOpen:false,
   globalSearchOpen:false, globalSearchQuery:"",
   histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
+  newOrderCount:0, lastOrderCheck:null, healthOpen:null,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -496,7 +498,54 @@ async function loadData(){
   }
   computeMyPermissions();
   if(state.myPermissions && !canAccessTab(state.adminTab)) state.adminTab = firstAccessibleTab() || state.adminTab;
+  if(!state.lastOrderCheck) state.lastOrderCheck = new Date().toISOString();
   state.loaded = true; render();
+}
+// Aviso de pedido nuevo mientras el admin está abierto: revisa cada 45s si llegó algo
+// nuevo a "orders" o "sales" desde la última revisión, sin que Ale tenga que estar
+// entrando a Pedidos a cada rato para enterarse. Se detiene si la pestaña no está
+// visible (minimizada/en segundo plano) para no gastar lecturas de más.
+let newOrderWatcherTimer = null;
+function ensureNewOrderWatcher(active){
+  if(active && !newOrderWatcherTimer){
+    newOrderWatcherTimer = setInterval(checkForNewOrders, 45000);
+  } else if(!active && newOrderWatcherTimer){
+    clearInterval(newOrderWatcherTimer); newOrderWatcherTimer = null;
+  }
+}
+async function checkForNewOrders(){
+  if(document.hidden || !state.user || !state.loaded) return;
+  const since = state.lastOrderCheck || new Date().toISOString();
+  try{
+    const [ordersSnap, salesSnap] = await Promise.all([
+      db.collection('orders').where('date','>',since).get(),
+      db.collection('sales').where('date','>',since).get(),
+    ]);
+    const newCount = ordersSnap.size + salesSnap.size;
+    state.lastOrderCheck = new Date().toISOString();
+    if(newCount>0){
+      state.newOrderCount = (state.newOrderCount||0) + newCount;
+      playNewOrderChime();
+      showToast(`${newCount} pedido${newCount>1?'s':''} nuevo${newCount>1?'s':''}`);
+      await loadData();
+    }
+  }catch(e){ console.error('No se pudo revisar pedidos nuevos', e); }
+}
+// Aviso sonoro corto, generado sin archivo de audio (Web Audio API) — dos tonos breves.
+function playNewOrderChime(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    [880,1160].forEach((freq,i)=>{
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.type='sine'; osc.frequency.value=freq;
+      osc.connect(gain); gain.connect(ctx.destination);
+      const start = ctx.currentTime + i*0.14;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.18, start+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start+0.22);
+      osc.start(start); osc.stop(start+0.24);
+    });
+  }catch(e){}
 }
 async function saveOrdersStatus(orderId,status,source){ try{ await db.collection(source==='pos'?'sales':'orders').doc(orderId).update({status}); }catch(e){ console.error(e); showToast('No se pudo actualizar el pedido'); } }
 async function saveOrderArchived(orderId,archived,source){ try{ await db.collection(source==='pos'?'sales':'orders').doc(orderId).update({archived}); }catch(e){ console.error(e); showToast('No se pudo archivar el pedido'); } }
@@ -591,6 +640,10 @@ function icon(name, size){
     sliders:'<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 12h4"/>',
     'more-horizontal':'<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    printer:'<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 17v4h12v-4"/>',
+    'alert-triangle':'<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+    bell:'<path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+    package:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -649,7 +702,15 @@ async function deleteOrder(id, source){
 }
 
 /* ============== FICHA COMPLETA DEL PEDIDO + ENVÍO AL REPARTIDOR ============== */
-function openOrderDetailModal(id){ state.orderDetailModal = id; state.orderDiscountEditing=false; render(); }
+function openOrderDetailModal(id){
+  state.orderDetailModal = id; state.orderDiscountEditing=false;
+  // Al abrir un pedido nuevo de la tienda para prepararlo, se avanza solo a "Preparando"
+  // — ahorra el paso extra de acordarse de cambiarle el estado a mano. Las ventas de
+  // Punto de Venta ya nacen "Entregado" y no pasan por aquí.
+  const o = state.orders.find(x=>x.id===id);
+  if(o && o.source!=='pos' && o.status==='Nuevo') updateOrderStatus(id,'Preparando');
+  render();
+}
 function closeOrderDetailModal(){ state.orderDetailModal = null; state.orderDiscountEditing=false; render(); }
 function prodCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
 function isCouponEligibleItem(prodCategories, prodId, coupon){
@@ -1011,6 +1072,7 @@ function renderOrderDetailModal(){
           <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
           Enviar al repartidor
         </button>
+        <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printPackingSlip('${o.id}')">${icon('printer',16)} Imprimir hoja de preparación</button>
       </div>
 
       <div class="modal-actions">
@@ -1018,6 +1080,44 @@ function renderOrderDetailModal(){
       </div>
     </div>
   </div>`;
+}
+// Hoja de preparación/empaque: una ventana aparte, lista para imprimir o guardar como PDF,
+// con lo que se necesita para armar y etiquetar el pedido sin tener que copiar nada a mano.
+function printPackingSlip(id){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const isPos = o.source==='pos';
+  const itemsHtml = (o.items||[]).map(it=>`<tr><td style="padding:6px 0;border-bottom:1px solid #eee;">${it.qty}x ${it.name}</td></tr>`).join('');
+  const win = window.open('', '_blank', 'width=420,height=640');
+  if(!win){ showToast('Habilita las ventanas emergentes para imprimir'); return; }
+  win.document.write(`
+    <html><head><title>Preparación ${formatFolio(o.orderNumber)}</title>
+    <meta charset="utf-8">
+    <style>
+      body{font-family:Arial,sans-serif;padding:24px;color:#222;}
+      h1{font-size:18px;margin:0 0 4px;}
+      .sub{color:#666;font-size:12.5px;margin-bottom:16px;}
+      .box{border:1.5px solid #333;border-radius:8px;padding:12px 14px;margin-bottom:14px;}
+      .label{font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:2px;}
+      table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:10px;}
+      .total{font-size:16px;font-weight:800;text-align:right;}
+      @media print{ button{display:none;} }
+    </style></head><body>
+      <h1>${state.settings.storeName||'La Casa de los Placeres'}</h1>
+      <div class="sub">Hoja de preparación · ${formatFolio(o.orderNumber)} · ${new Date(o.date).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="box">
+        <div class="label">Cliente</div>
+        <div>${o.customer || o.customerName || 'Venta en tienda física'}</div>
+        ${orderContactPhone(o) ? `<div>${orderContactPhone(o)}</div>` : ''}
+        ${!isPos ? `<div class="label" style="margin-top:8px;">Dirección de entrega</div><div>${o.address||'—'}</div>` : ''}
+        ${o.notes ? `<div class="label" style="margin-top:8px;">Notas</div><div>${o.notes}</div>` : ''}
+      </div>
+      <table>${itemsHtml}</table>
+      <div class="total">Total: ${money(o.total)}</div>
+      <button onclick="window.print()" style="margin-top:16px;width:100%;padding:12px;font-size:14px;font-weight:700;">Imprimir</button>
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
 }
 function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function showToast(msg){
@@ -1036,7 +1136,7 @@ async function handleLogin(){
   try{ await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword); }
   catch(e){ state.loginError = 'Correo o contraseña incorrectos'; render(); }
 }
-function handleLogout(){ auth.signOut(); state.loaded=false; }
+function handleLogout(){ auth.signOut(); state.loaded=false; ensureNewOrderWatcher(false); }
 
 /* ============== PRODUCTOS ============== */
 async function saveProduct(p){
@@ -1099,6 +1199,8 @@ function exportProductsJSON(){
   const a = document.createElement('a'); a.href=url; a.download='productos.json'; a.click();
   URL.revokeObjectURL(url);
   showToast(`${data.length} producto(s) exportados (sin imágenes)`);
+  state.settings.lastExportAt = new Date().toISOString();
+  saveSettings();
 }
 async function deleteProduct(id){
   try{
@@ -1677,13 +1779,17 @@ const ADMIN_NAV_GROUPS = [
   {label:'Analítica', tabs:['estadísticas']},
   {label:'Sistema', tabs:['asistente ia','configuración']},
 ];
-function adminTabLabel(t){ return t==='cajeros' ? 'Usuarios' : t==='asistente ia' ? 'Asistente IA' : t[0].toUpperCase()+t.slice(1); }
+function adminTabLabel(t){
+  const base = t==='cajeros' ? 'Usuarios' : t==='asistente ia' ? 'Asistente IA' : t[0].toUpperCase()+t.slice(1);
+  return (t==='pedidos' && state.newOrderCount>0) ? `${base} <span class="tab-badge">${state.newOrderCount}</span>` : base;
+}
 
 function renderAdmin(){
   // El refresco automático de "Tiempo real" solo debe seguir corriendo mientras esa
   // sub-pestaña esté abierta; en cualquier otro caso se detiene aquí.
   if(!(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal')) ensureRealtimeTimer(false);
-  const goTab = (t) => `state.adminTab='${t}';state.designSubpanel=null;state.adminNavOpen=false;render()`;
+  ensureNewOrderWatcher(true);
+  const goTab = (t) => `state.adminTab='${t}';state.designSubpanel=null;state.adminNavOpen=false;${t==='pedidos'?'state.newOrderCount=0;':''}render()`;
   return `
   <div class="app">
     <div class="admin-top">
@@ -1841,6 +1947,36 @@ function computeProductAnalytics(){
     noSales: state.products.filter(p=>!soldIdSet.has(p.id)),
     hasMarginData: withMargin.length>0,
     hasViewData: Object.keys(viewsById).length>0,
+  };
+}
+// Reabasto sugerido: cruza ventas de los últimos 30 días (velocidad de venta) con el
+// stock actual, para avisar qué se va a agotar pronto y cuánto conviene pedir — sin
+// tener que ir a Estadísticas a hacer la cuenta a mano cada vez.
+function computeRestockSuggestions(){
+  const since = new Date(); since.setDate(since.getDate()-30);
+  const valid = state.orders.filter(o=>o.status!=='Cancelado' && new Date(o.date)>=since);
+  const unitsById = {};
+  valid.forEach(o=>(o.items||[]).forEach(it=>{ if(!it.id || it.id==='promo_buyxpayy') return; unitsById[it.id]=(unitsById[it.id]||0)+it.qty; }));
+  const rows = [];
+  state.products.forEach(p=>{
+    const units30 = unitsById[p.id]||0;
+    if(units30<=0) return;
+    const velocity = units30/30;
+    const daysLeft = p.stock>0 ? p.stock/velocity : 0;
+    if(daysLeft < 15){
+      rows.push({ id:p.id, name:p.name, cat:p.cat, stock:p.stock, units30, daysLeft, suggested: Math.max(1, Math.ceil(velocity*30) - p.stock) });
+    }
+  });
+  rows.sort((a,b)=>a.daysLeft-b.daysLeft);
+  return rows;
+}
+// Salud del catálogo: junta en un solo lugar lo que hoy vive disperso (fotos, descripción,
+// SKU faltantes) para no tener que ir producto por producto a notarlo.
+function computeCatalogHealth(){
+  return {
+    noPhoto: state.products.filter(p=>!(p.images&&p.images.length)),
+    noDesc: state.products.filter(p=>!(p.desc&&p.desc.trim())),
+    noSku: state.products.filter(p=>!(p.sku&&p.sku.trim())),
   };
 }
 function computeTrafficSources(){
@@ -2010,11 +2146,46 @@ function renderStatsProductos(){
       ${rows.length===0 ? `<div class="empty-state">Aún no hay datos suficientes.</div>` :
         rows.map((r,i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${r.name}</div></div><div class="row-sub">${valueFmt(r)}</div></div>`).join('')}
     </div>`;
+  const restock = computeRestockSuggestions();
+  const health = computeCatalogHealth();
   return `
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-label">Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
       <div class="stat-card"><div class="stat-label">Sin ninguna venta</div><div class="stat-value">${pa.noSales.length}</div></div>
       <div class="stat-card"><div class="stat-label">Valor de inventario</div><div class="stat-value">${money(m.inventoryValue)}</div></div>
+    </div>
+    ${restock.length>0 ? (()=>{
+      const {shown, remaining} = showMoreSlice('restockShowMore', restock);
+      return `
+    <div class="panel">
+      <div class="panel-title">${icon('package',15)} Reabasto sugerido (${restock.length})</div>
+      <div class="panel-sub">Según lo vendido en los últimos 30 días, a esto le queda poco inventario</div>
+      ${shown.map(r=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${r.name}</div><div class="row-sub">${r.units30} vendidos en 30 días · ${r.stock===0?'agotado':`${r.stock} en stock, ~${Math.floor(r.daysLeft)} día(s) de inventario`}</div></div>
+          <span class="status-badge" style="background:${r.stock===0?'#8a6b78':'var(--amber)'}">Pedir ~${r.suggested}</span>
+        </div>
+      `).join('')}
+      ${renderShowMoreButton('restockShowMore', remaining)}
+    </div>`;
+    })() : ''}
+    <div class="panel">
+      <div class="panel-title">${icon('alert-triangle',15)} Salud del catálogo</div>
+      <div class="panel-sub">Datos incompletos que conviene revisar cuando haya tiempo</div>
+      <div class="stat-grid" style="margin-bottom:0;">
+        <div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='noPhoto'?null:'noPhoto';resetShowMore('healthListShowMore');render()"><div class="stat-label">Sin foto</div><div class="stat-value">${health.noPhoto.length}</div></div>
+        <div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='noDesc'?null:'noDesc';resetShowMore('healthListShowMore');render()"><div class="stat-label">Sin descripción</div><div class="stat-value">${health.noDesc.length}</div></div>
+        <div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='noSku'?null:'noSku';resetShowMore('healthListShowMore');render()"><div class="stat-label">Sin SKU</div><div class="stat-value">${health.noSku.length}</div></div>
+      </div>
+      ${state.healthOpen ? (()=>{
+        const list = health[state.healthOpen];
+        const {shown, remaining} = showMoreSlice('healthListShowMore', list);
+        return `
+        <div style="margin-top:10px;">
+          ${shown.map(p=>`<div class="list-row" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div></div>`).join('')}
+          ${renderShowMoreButton('healthListShowMore', remaining)}
+        </div>`;
+      })() : ''}
     </div>
     ${m.lowStock.length>0 ? (()=>{
       const {shown, remaining} = showMoreSlice('lowStockShowMore', m.lowStock);
@@ -2301,7 +2472,9 @@ function renderProductos(){
   if(catFilter!=='Todas') filtered = filtered.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
   if(needFilter!=='Todas') filtered = filtered.filter(p => (p.needs||[]).includes(needFilter));
   const filterCount = (q?1:0) + (catFilter!=='Todas'?1:0) + (needFilter!=='Todas'?1:0);
+  const daysSinceExport = state.settings.lastExportAt ? Math.floor((Date.now()-new Date(state.settings.lastExportAt).getTime())/86400000) : null;
   return `
+    ${(daysSinceExport===null || daysSinceExport>30) ? `<div class="note-box" style="margin-bottom:12px;">${daysSinceExport===null ? 'Nunca has exportado un respaldo de tu catálogo.' : `No exportas un respaldo de tu catálogo hace ${daysSinceExport} días.`} <button class="btn-tertiary" style="margin-left:6px;" onclick="exportProductsJSON()">Exportar ahora</button></div>` : ''}
     <div class="toolbar">
       <button class="btn-add-new" onclick="state.productModal={images:[], sku:generateSKU({})};render()">+ Nuevo producto</button>
       <button class="btn-tertiary" onclick="state.productToolsOpen=!state.productToolsOpen;render()">${icon('sliders',14)} ${state.productToolsOpen?'Ocultar herramientas':'Más herramientas'}</button>
@@ -4681,6 +4854,7 @@ function renderProductModal(){
       <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc">${p.desc||''}</textarea></div>
 
       <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
+        <button type="button" class="btn-tertiary" style="margin-bottom:8px;" onclick="applySuggestedNeeds()">${icon('star',13)} Sugerir según nombre y categoría</button>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           ${(state.settings.needs||DEFAULT_NEEDS).map(n=>`
             <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--surface-soft);padding:8px 11px;border-radius:9px;cursor:pointer;">
@@ -4699,6 +4873,78 @@ function renderProductModal(){
       </div>
     </div>
   </div>`;
+}
+// Sugerencia automática de "¿Para quién es?" a partir del nombre y la categoría —
+// mismo criterio que se usó para etiquetar los 547 productos del catálogo original,
+// adaptado como botón dentro de la ficha de cada producto nuevo. Es un punto de
+// partida, no una asignación final: Ale revisa y ajusta antes de guardar.
+function has_(name, ...words){ return words.some(w=>name.includes(w)); }
+function suggestNeedsForProduct(p){
+  const name = normName(p.name||'');
+  const cat = normName((p.categories&&p.categories[0]) || p.cat || '');
+  let tags = new Set();
+
+  if(cat==='ropa femenina') tags = new Set(['para-mi','para-ella','para-pareja']);
+  else if(cat==='ropa masculina') tags = new Set(['para-mi','para-el','para-pareja']);
+  else if(cat==='tarjetas de regalo') tags = new Set();
+  else if(cat==='juegos'){
+    if(has_(name,'despedida de soltera')) tags = new Set();
+    else{ tags.add('compartir-pareja'); if(has_(name,'jenga','dado','dados','cartas','naipes','boletos')) tags.add('empezando'); }
+  } else if(cat==='satisfyer'){
+    if(has_(name,'parejas')) tags = new Set(['compartir-pareja','para-mi']);
+    else if(has_(name,' man ') || name.startsWith('man ') || has_(name,'man heat','para el pene')) tags = new Set(['para-el','para-mi']);
+    else if(has_(name,'clitoris','panty','cutie')) tags = new Set(['para-ella','para-mi']);
+    else tags.add('para-mi');
+  } else if(cat==='comestibles'){
+    if(has_(name,'pareja')) tags = new Set(['compartir-pareja','para-pareja']);
+    else if(has_(name,'hombre','masculin')) tags = new Set(['para-el','para-mi']);
+    else if(has_(name,'mujer','femenin')) tags = new Set(['para-ella','para-mi']);
+    else tags.add('para-mi');
+  } else if(cat==='complementos'){
+    if(has_(name,'hombre','masculin')) tags = new Set(['para-el','para-mi']);
+    else if(has_(name,'mujer','femenin')) tags = new Set(['para-ella','para-mi']);
+    else if(has_(name,'latigo','esposas','pinzas para pezon','mascara','antifaz','cadena','vela','petalos','almohada','splash','spray')) tags = new Set(['compartir-pareja','para-mi']);
+    else tags.add('para-mi');
+  } else if(cat==='sadomasoquismo') tags = new Set(['compartir-pareja','para-mi']);
+  else if(cat==='plugs'){
+    tags.add('para-mi');
+    if(has_(name,'gema','cola de zorro','cola de conejo','corazon')) tags.add('empezando');
+  } else if(cat==='dildos'){
+    tags = new Set(['para-mi','para-ella']);
+    if(/\b([789])(\.\d+)?\s*cm/.test(name) || has_(name,'mini')) tags.add('empezando');
+  } else if(cat==='lubricantes'){
+    tags.add('para-mi');
+    if(has_(name,'femenin','vaginal','estrechador','clitoris')) tags.add('para-ella');
+    if(has_(name,'ereccion','erecto','engrosador','garganta profunda','para hombre')) tags.add('para-el');
+    if(has_(name,'unisex','pareja','duo','multiorgasmico','condon')) tags.add('compartir-pareja');
+  } else if(cat==='ocultos'){
+    tags = new Set(['para-mi','compartir-pareja']);
+    if(has_(name,'para ella')) tags.add('para-ella');
+  } else if(cat==='juguetes'){
+    const esMasturbadorMasculino = has_(name,'masturbador','mastubador','funda para pene','funda de pene','funda realista','penis pump','bomba de succion','entrenador para pene','jaula de castidad') ||
+      (has_(name,'vagina','boca','garganta','ano') && !has_(name,'succionador','clitoris'));
+    if(esMasturbadorMasculino) tags = new Set(['para-el','para-mi','para-pareja']);
+    else if(has_(name,'anillo')) tags = new Set(['para-el','compartir-pareja','para-mi']);
+    else if(has_(name,'succionador','clitoris','punto g','kegel','pezon','pezonera')) tags = new Set(['para-ella','para-mi']);
+    else if(has_(name,'dildo','vibrador','consolador','bala','miembro')) tags = new Set(['para-mi','para-ella']);
+    else if(has_(name,'plug','prostat') || (has_(name,'anal') && !has_(name,'masturbador'))) tags.add('para-mi');
+    else if(has_(name,'esposas','arnes','arnés','correa','columpio','collar con pinzas','mordaza')) tags = new Set(['compartir-pareja','para-mi']);
+    else tags.add('para-mi');
+    if(has_(name,'doble cabeza','doble penetracion','para parejas','control remoto','control por app','butterfly','mariposa')) tags.add('compartir-pareja');
+    if(has_(name,'pezon','pezonera')) tags.add('para-ella');
+    if(has_(name,'mini','pequen','chico','bolsillo')) tags.add('empezando');
+  } else {
+    tags.add('para-mi');
+  }
+  return Array.from(tags).filter(k=>(state.settings.needs||DEFAULT_NEEDS).some(n=>n.key===k));
+}
+function applySuggestedNeeds(){
+  const p = state.productModal;
+  const suggested = suggestNeedsForProduct(p);
+  if(!suggested.length){ showToast('No se encontró una sugerencia clara para este producto'); return; }
+  p.needs = suggested;
+  showToast('Sugerencia aplicada — revísala antes de guardar');
+  render();
 }
 function toggleProductNeed(key, checked){
   if(!state.productModal.needs) state.productModal.needs = [];
