@@ -786,7 +786,9 @@ function timeAgo(iso){
 }
 function buildAbandonedCartMessage(c){
   const lines = (c.items||[]).map(it=>`• ${it.qty}x ${it.name}`).join('\n');
-  return `Hola ${c.name}! 👋 Notamos que dejaste estos productos en tu carrito en ${state.settings.storeName||'nuestra tienda'}:\n${lines}\n\nTotal: ${money(c.total||0)}\n\n¿Te gustaría completar tu pedido? Con gusto te ayudamos a coordinar la entrega — recuerda que es pago contra entrega y llega en empaque discreto 💕`;
+  // Urgencia suave: menciona que el stock es limitado (cierto en general, sin inventar una
+  // cifra o fecha límite falsa) en vez de presionar con un conteo regresivo ficticio.
+  return `Hola ${c.name}! 👋 Notamos que dejaste estos productos en tu carrito en ${state.settings.storeName||'nuestra tienda'}:\n${lines}\n\nTotal: ${money(c.total||0)}\n\n¿Seguimos con tu pedido? Como manejamos inventario limitado, con gusto te apartamos lo que llevabas antes de que se agote. Recuerda que es pago contra entrega y llega en empaque discreto, sin ningún logo visible 💕`;
 }
 function recoverAbandonedCart(id){
   const c = (state.abandonedCarts||[]).find(x=>x.id===id);
