@@ -403,7 +403,27 @@ async function loadData(){
   }
 }
 function trackVisit(){
-  try{ db.collection('visits').add({date: new Date().toISOString()}); }catch(e){ /* silencioso */ }
+  try{ db.collection('visits').add({date: new Date().toISOString(), source: trafficSourceBucket()}); }catch(e){ /* silencioso */ }
+}
+/* ============== ANALÍTICA: eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout) ==============
+   Se guardan en una colección aparte ('analyticsEvents') en vez de 'visits' para no
+   inflar esa colección (el admin la trae con límite de 3000 documentos, y mezclar
+   eventos de alta frecuencia ahí reduciría la ventana de tiempo que cubre ese límite). */
+function trafficSourceBucket(){
+  try{
+    const ref = document.referrer;
+    if(!ref) return 'directo';
+    const host = new URL(ref).hostname.replace(/^www\./,'');
+    if(/google\./.test(host)) return 'google';
+    if(/facebook\.|instagram\.|fb\.com/.test(host)) return 'meta';
+    if(/whatsapp\./.test(host)) return 'whatsapp';
+    if(/tiktok\./.test(host)) return 'tiktok';
+    if(host === location.hostname) return 'directo';
+    return host || 'otro';
+  }catch(e){ return 'directo'; }
+}
+function trackEvent(type, extra){
+  try{ db.collection('analyticsEvents').add(Object.assign({type, date:new Date().toISOString()}, extra||{})); }catch(e){ /* silencioso */ }
 }
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
@@ -650,7 +670,7 @@ function addToCart(id, variantId){
   const key = cartKey(id, variantId);
   const available = itemStock(p, v);
   if(available<=0 || available<=(state.cart[key]||0)){ showToast('Sin existencias'); return; }
-  state.cart[key]=(state.cart[key]||0)+1; showToast('Agregado al carrito'); render();
+  state.cart[key]=(state.cart[key]||0)+1; showToast('Agregado al carrito'); trackEvent('add_to_cart', {productId:id}); render();
 }
 function changeQty(key,delta){ const cur=state.cart[key]||0; const next=cur+delta; if(next<=0) delete state.cart[key]; else state.cart[key]=next; render(); }
 function removeFromCart(key){ delete state.cart[key]; render(); }
@@ -662,7 +682,7 @@ function goToFeatured(){
   if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); }
   else { goToCatalog('Todos'); }
 }
-function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={}; render(); }
+function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={}; trackEvent('product_view', {productId:id}); render(); }
 function closeProductDetail(){ state.detailProductId=null; render(); }
 function selectVariantOption(groupName, value){
   state.detailSelectedVariant[groupName] = value;
@@ -720,6 +740,7 @@ async function submitOrder(formData){
   const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
   try{ await db.collection('orders').add(order); }
   catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); state.submittingOrder=false; render(); return; }
+  trackEvent('purchase', {orderTotal: order.total});
   if(couponCode){
     try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString()}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
   }
@@ -1243,7 +1264,7 @@ function renderCartDrawer(){
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
-      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="state.cartOpen=false;state.checkoutOpen=true;render()">Continuar pedido</button>
+      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="state.cartOpen=false;state.checkoutOpen=true;trackEvent('checkout_start',{cartTotal: cartTotal()});render()">Continuar pedido</button>
     </div>`;
 }
 
