@@ -85,6 +85,8 @@
   .stock-out-badge{display:inline-block;background:#FBE2E6;color:var(--rose);font-weight:700;font-size:10px;padding:2px 7px;border-radius:6px;}
   .btn-ver-mas-pos{grid-column:1/-1;text-align:center;background:#fff;color:var(--primary);padding:13px;border-radius:var(--radius-md);font-size:13.5px;font-weight:700;border:1.5px solid var(--border);margin-top:2px;}
   .btn-ver-mas-pos:active{background:var(--surface-soft);}
+  .stale-cash-banner{background:#FFF3E0;color:#8a5a1a;font-size:12.5px;font-weight:600;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .stale-cash-banner button{margin-left:auto;background:#8a5a1a;color:#fff;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:700;}
 
   .sale-panel{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 -16px 40px -18px rgba(43,22,32,0.28);}
   .sale-panel::before{content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);width:36px;height:4px;border-radius:3px;background:var(--border);}
@@ -214,6 +216,9 @@ function icon(name, size){
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/>',
     percent:'<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="17.5" r="2.2"/>',
     'file-text':'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/>',
+    'message-circle':'<path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.4 0-2.7-.3-3.9-.9L3 21l1.4-4.9A8.5 8.5 0 1 1 21 12Z"/>',
+    star:'<path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L6 21l1.6-7-5.4-4.7 7.1-.6L12 2Z"/>',
+    'alert-triangle':'<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -285,6 +290,9 @@ async function loadCashRegister(){
       .where('status','==','abierta')
       .limit(1).get();
     state.activeCashRegister = snap.empty ? null : {id:snap.docs[0].id, ...snap.docs[0].data()};
+    // Si la caja que se retoma se abrió otro día (se le olvidó cerrarla al terminar el
+    // turno anterior), se avisa en vez de dejarla resumir en silencio como si nada.
+    state.cashRegisterStale = state.activeCashRegister ? (new Date(state.activeCashRegister.openedAt).toDateString() !== new Date().toDateString()) : false;
   }catch(e){ console.error(e); showToast('No se pudo verificar la caja'); state.activeCashRegister=null; }
   state.cashRegisterChecked = true; state.cashRegisterLoading = false; render();
 }
@@ -465,13 +473,29 @@ function itemPrice(p, v){ return v && v.priceOverride>0 ? v.priceOverride : effe
 function itemStockPOS(p, v){ return v ? (v.stock||0) : centerStock(p, state.activeCenter.id); }
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
 function cartTotal(){ return Object.entries(state.cart).reduce((s,[key,qty])=>{const {p,v}=parseCartKey(key); return s+(p?itemPrice(p,v)*qty:0);},0); }
+// "Frecuentes": cada dispositivo recuerda (en localStorage, sin tocar Firestore) qué
+// productos se agregan más seguido en ESTE punto de venta, para ofrecer un acceso
+// rápido sin tener que escribir el nombre cada vez.
+function trackFrequent(productId){
+  try{
+    const counts = JSON.parse(localStorage.getItem('cdlp_pos_frequent')||'{}');
+    counts[productId] = (counts[productId]||0) + 1;
+    localStorage.setItem('cdlp_pos_frequent', JSON.stringify(counts));
+  }catch(e){}
+}
+function getFrequentProductIds(limit){
+  try{
+    const counts = JSON.parse(localStorage.getItem('cdlp_pos_frequent')||'{}');
+    return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,limit||18).map(([id])=>id);
+  }catch(e){ return []; }
+}
 function addToCart(id){
   const p = state.products.find(x=>x.id===id);
   if(!p) return;
   if(p.variantGroups && p.variantGroups.length){ state.variantPickerProduct = id; render(); return; }
   const available = centerStock(p, state.activeCenter.id);
   if(available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
-  state.cart[id]=(state.cart[id]||0)+1; state.cartCollapsed=false; render();
+  state.cart[id]=(state.cart[id]||0)+1; state.cartCollapsed=false; trackFrequent(id); render();
 }
 function pickVariant(variantId){
   const p = state.products.find(x=>x.id===state.variantPickerProduct);
@@ -481,6 +505,7 @@ function pickVariant(variantId){
   state.cart[key] = (state.cart[key]||0)+1;
   state.variantPickerProduct = null;
   state.cartCollapsed = false;
+  trackFrequent(p.id);
   render();
 }
 function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
@@ -708,6 +733,7 @@ async function chargeSale(){
       catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
     }
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.saleDone = true;
+    state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
     state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo';
   }catch(e){
     console.error(e); showToast('No se pudo registrar la venta');
@@ -790,9 +816,17 @@ function renderCenterSelect(){
   </div></div>`;
 }
 
+const FREQUENT_CAT = '__frecuentes__';
 function renderPOS(){
   const cats = ["Todos", ...state.categories];
-  let filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
+  const frequentIds = getFrequentProductIds();
+  let filtered;
+  if(state.activeCat===FREQUENT_CAT){
+    const byId = {}; state.products.forEach(p=>byId[p.id]=p);
+    filtered = frequentIds.map(id=>byId[id]).filter(Boolean);
+  } else {
+    filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
+  }
   if(state.search.trim()) filtered = filtered.filter(p=>p.name.toLowerCase().includes(state.search.trim().toLowerCase()));
   const entries = Object.entries(state.cart);
   return `
@@ -806,10 +840,18 @@ function renderPOS(){
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
       </div>
     </div>
+    ${state.cashRegisterStale ? `
+    <div class="stale-cash-banner">
+      ${icon('alert-triangle',15)} Esta caja se abrió el ${new Date(state.activeCashRegister.openedAt).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} y sigue abierta — ¿se te olvidó cerrarla la última vez?
+      <button onclick="state.cashPanelOpen=true;render()">Ver caja</button>
+    </div>` : ''}
     <div class="pos-body">
       <div class="toolbar">
         <div class="search-row"><input id="pos-search-input" placeholder="Buscar producto..." value="${state.search}" oninput="onPosSearchInput(this.value)"></div>
-        <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${c}</button>`).join('')}</div>
+        <div class="cats">
+          ${frequentIds.length ? `<button class="cat-chip ${state.activeCat===FREQUENT_CAT?'active':''}" onclick="state.activeCat='${FREQUENT_CAT}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${icon('star',13)} Frecuentes</button>` : ''}
+          ${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${c}</button>`).join('')}
+        </div>
       </div>
       <div class="prod-grid">
         ${(()=>{ if(state.prodGridLimit==null) state.prodGridLimit=PROD_GRID_PAGE_SIZE;
@@ -887,12 +929,24 @@ function renderSplitPaymentInputs(){
     </div>
   </div>`;
 }
+function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
+function receiptWhatsappMessage(){
+  const lines = (state.lastSaleItems||[]).map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('\n');
+  const storeName = (state.settings && state.settings.storeName) || 'La Casa de los Placeres';
+  return `¡Gracias por tu compra en ${storeName}!${state.lastOrderNumber?` Venta ${formatFolio(state.lastOrderNumber)}`:''}\n\n${lines}\n\nTotal: ${money(state.lastSaleTotal)}\n\n¡Que lo disfrutes!`;
+}
+function sendReceiptWhatsapp(){
+  const phone = normalizePhone(state.lastCustomerPhone);
+  if(!phone) return;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(receiptWhatsappMessage())}`, '_blank');
+}
 function renderReceipt(){
   return `<div class="receipt-screen"><div class="receipt-card">
     <div class="mark">${icon('check',26)}</div>
     <h2>Venta registrada</h2>
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : ''}
     <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>${(state.lastPayments&&state.lastPayments.length>1) ? `Pago dividido: ${state.lastPayments.map(p=>`${p.method} ${money(p.amount)}`).join(' · ')}` : `Método: ${(state.lastPayments&&state.lastPayments[0]&&state.lastPayments[0].method)||state.payMethod}`}<br>Atendió: ${state.activeCashier.name}</p>
+    ${state.lastCustomerPhone ? `<button class="btn-secondary" style="color:var(--green);margin-bottom:8px;" onclick="sendReceiptWhatsapp()">${icon('message-circle',15)} Enviar recibo por WhatsApp a ${state.lastCustomerName||'cliente'}</button>` : ''}
     <button class="btn-primary" onclick="newSale()">Nueva venta</button>
   </div></div>`;
 }
