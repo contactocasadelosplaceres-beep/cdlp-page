@@ -142,7 +142,6 @@
   .first-band h3{font-size:19px;font-weight:800;max-width:340px;}
   .first-band p{margin-top:8px;font-size:13.5px;line-height:1.5;max-width:380px;opacity:.92;}
   .first-band .hero-btn-ghost{background:rgba(255,255,255,0.55);color:#3a2200;margin-top:14px;display:inline-block;}
-  .first-band .promo-code{display:inline-block;background:rgba(255,255,255,0.6);border:1.5px dashed #3a2200;border-radius:8px;padding:3px 9px;font-weight:800;letter-spacing:0.03em;margin:0 2px;}
 
   /* ===== CROSS-SELL SUGGESTION (carrito) ===== */
   .cross-sell-card{display:flex;align-items:center;gap:10px;background:var(--surface-soft);border:1px solid var(--border);border-radius:14px;padding:10px;margin-top:14px;}
@@ -1060,15 +1059,12 @@ function renderFeaturedSection(){
   </div>`;
 }
 
-/* ============== PRIMERA COMPRA (fixed) ==============
-   El código "BIENVENIDA" no se genera aquí: es un cupón normal que se crea (una sola vez)
-   en el admin, pestaña Cupones. Este texto solo lo anuncia; el campo "¿Tienes un código de
-   descuento?" que ya existe en el carrito es el que lo aplica. */
+/* ============== PRIMERA COMPRA (fixed) ============== */
 function renderFirstTimeSection(){
   return `
   <div class="first-band">
     <h3>¿Es tu primera compra?</h3>
-    <p>No necesitas saber por dónde empezar. Cuéntanos qué buscas y te ayudamos a encontrar opciones sencillas y fáciles de elegir. Y por ser tu primer pedido, usa el código <span class="promo-code">BIENVENIDA</span> en el carrito y te llevas 10% de descuento.</p>
+    <p>No necesitas saber por dónde empezar. Cuéntanos qué buscas y te ayudamos a encontrar opciones sencillas y fáciles de elegir.</p>
     <a class="hero-btn-ghost" href="${waLink('Es mi primera compra, ¿me pueden ayudar a elegir?')}" target="_blank">Pedir ayuda para empezar</a>
   </div>`;
 }
