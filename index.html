@@ -426,6 +426,46 @@ function trackEvent(type, extra){
   try{ db.collection('analyticsEvents').add(Object.assign({type, date:new Date().toISOString()}, extra||{})); }catch(e){ /* silencioso */ }
 }
 
+/* ============== BORRADOR DE CARRITO (para recuperación por WhatsApp desde el admin) ==============
+   En cuanto el cliente escribió su nombre y teléfono en el checkout (y tiene productos en el
+   carrito), se guarda un borrador en "abandonedCarts" (un documento por teléfono, se sobreescribe
+   con cada cambio). Si completa el pedido, ese borrador se borra. Si lo abandona, el admin puede
+   verlo en Pedidos → "Carritos abandonados" y escribirle por WhatsApp. Todo silencioso: nunca debe
+   interrumpir el checkout si falla. */
+let abandonedCartTimer = null;
+function scheduleAbandonedCartSave(){
+  clearTimeout(abandonedCartTimer);
+  abandonedCartTimer = setTimeout(saveAbandonedCartDraft, 1500);
+}
+function saveAbandonedCartDraft(){
+  try{
+    const nameEl = document.getElementById('ck-name'), phoneEl = document.getElementById('ck-phone');
+    const addressEl = document.getElementById('ck-address'), notesEl = document.getElementById('ck-notes');
+    if(!nameEl || !phoneEl) return;
+    const name = nameEl.value.trim(), phone = phoneEl.value.trim();
+    const address = addressEl ? addressEl.value.trim() : '', notes = notesEl ? notesEl.value.trim() : '';
+    const phoneDigits = phone.replace(/\D/g,'');
+    if(!name || phoneDigits.length<8 || cartCount()===0) return;
+    const items = Object.entries(state.cart).map(([key,qty])=>{
+      const {p,v} = parseCartKey(key);
+      if(!p) return null;
+      const price = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p);
+      return {id:p.id, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
+    }).filter(Boolean);
+    if(!items.length) return;
+    db.collection('abandonedCarts').doc(phoneDigits).set({
+      name, phone, address, notes, items, total: cartTotal(),
+      updatedAt: new Date().toISOString(), completed:false
+    });
+  }catch(e){ /* silencioso, no debe interrumpir el checkout */ }
+}
+function clearAbandonedCartDraft(phone){
+  try{
+    const phoneDigits = (phone||'').replace(/\D/g,'');
+    if(phoneDigits) db.collection('abandonedCarts').doc(phoneDigits).delete();
+  }catch(e){ /* silencioso */ }
+}
+
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
 function icon(name, size){
   size = size || 16;
@@ -741,6 +781,8 @@ async function submitOrder(formData){
   try{ await db.collection('orders').add(order); }
   catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); state.submittingOrder=false; render(); return; }
   trackEvent('purchase', {orderTotal: order.total});
+  clearTimeout(abandonedCartTimer);
+  clearAbandonedCartDraft(formData.phone);
   if(couponCode){
     try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString()}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
   }
@@ -1274,10 +1316,10 @@ function renderCheckoutDrawer(){
     <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">Pago contra entrega. Tu pedido llega en empaque neutro, sin ningún logo visible.</div>
-      <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}"></div>
-      <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" placeholder="Calle, número, colonia, referencias">${p.address||''}</textarea></div>
-      <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra...">${p.notes||''}</textarea></div>
+      <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
+      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
+      <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" placeholder="Calle, número, colonia, referencias" oninput="scheduleAbandonedCartSave()">${p.address||''}</textarea></div>
+      <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="scheduleAbandonedCartSave()">${p.notes||''}</textarea></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-top:-4px;">
         <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''} style="width:16px;height:16px;">
         Recordar mis datos en este celular para la próxima compra

@@ -375,9 +375,7 @@ let state = {
   products:[], orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   statsSubview:"general",
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
-  importOpen:false, importPreview:[], importText:"", newCatInput:"",
-  descImportOpen:false, descImport:null,
-  variantImportOpen:false, variantImport:null,
+  importOpen:false, importPreview:[], importText:"", importFileName:"", importResult:null, newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   productCatFilter:"Todas", productNeedFilter:"Todas", productToolsOpen:false, adminNavOpen:false,
   needsManageOpen:false, newNeedInput:"", catManageOpen:false, catImportOpen:false, catImport:null,
@@ -393,6 +391,7 @@ let state = {
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
   cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
   orderDiscountEditing:false, orderDiscountType:"fixed", orderDiscountValueInput:"", orderDiscountCouponInput:"", orderDiscountReasonInput:"",
+  abandonedCarts:[], abandonedCartsOpen:false,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -412,7 +411,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -428,6 +427,10 @@ async function loadData(){
       // Eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout, compra) de la
       // tienda pública. Colección aparte de "visits" para no reducir la ventana que cubre su límite de 3000.
       db.collection('analyticsEvents').orderBy('date','desc').limit(5000).get(),
+      // Carritos que un cliente empezó a llenar en el checkout de la tienda (nombre + teléfono
+      // capturados) pero no completó. La tienda (index.html) guarda/borra su propio borrador;
+      // aquí solo se leen para el botón "Carritos abandonados" de Pedidos.
+      db.collection('abandonedCarts').orderBy('updatedAt','desc').limit(300).get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -450,6 +453,7 @@ async function loadData(){
     state.orders = [...tiendaOrders, ...posOrders].sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.visits = visitsSnap.docs.map(d=>d.data());
     state.analyticsEvents = analyticsEventsSnap.docs.map(d=>d.data());
+    state.abandonedCarts = abandonedCartsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -481,7 +485,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -755,6 +759,73 @@ function sendToDelivery(id){
   if(!state.settings.deliveryWhatsapp){ showToast('Configura el WhatsApp del repartidor en la pestaña Configuración'); return; }
   window.open(waLink(state.settings.deliveryWhatsapp, buildDeliveryMessage(o)), '_blank');
 }
+
+/* ============== CARRITOS ABANDONADOS ==============
+   La tienda (index.html) guarda un borrador en "abandonedCarts" (un documento por teléfono)
+   cuando el cliente ya escribió su nombre y teléfono en el checkout y tiene productos en el
+   carrito, y lo borra en cuanto el pedido se completa. Aquí solo se listan los que quedaron sin
+   completar, para poder escribirles por WhatsApp con un clic. Se ocultan los de menos de 15
+   minutos de antigüedad para no molestar a alguien que sigue comprando en ese momento. */
+const ABANDONED_CART_MIN_AGE_MS = 15*60*1000;
+function pendingAbandonedCarts(){
+  const cutoff = Date.now() - ABANDONED_CART_MIN_AGE_MS;
+  return (state.abandonedCarts||[])
+    .filter(c=>!c.completed && new Date(c.updatedAt).getTime() <= cutoff)
+    .sort((a,b)=> new Date(b.updatedAt) - new Date(a.updatedAt));
+}
+function timeAgo(iso){
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms/60000);
+  if(min<60) return `hace ${min} min`;
+  const hr = Math.floor(min/60);
+  if(hr<24) return `hace ${hr} h`;
+  const d = Math.floor(hr/24);
+  return `hace ${d} día${d===1?'':'s'}`;
+}
+function buildAbandonedCartMessage(c){
+  const lines = (c.items||[]).map(it=>`• ${it.qty}x ${it.name}`).join('\n');
+  return `Hola ${c.name}! 👋 Notamos que dejaste estos productos en tu carrito en ${state.settings.storeName||'nuestra tienda'}:\n${lines}\n\nTotal: ${money(c.total||0)}\n\n¿Te gustaría completar tu pedido? Con gusto te ayudamos a coordinar la entrega — recuerda que es pago contra entrega y llega en empaque discreto 💕`;
+}
+function recoverAbandonedCart(id){
+  const c = (state.abandonedCarts||[]).find(x=>x.id===id);
+  if(!c) return;
+  window.open(waLink(c.phone, buildAbandonedCartMessage(c)), '_blank');
+}
+async function dismissAbandonedCart(id){
+  try{ await db.collection('abandonedCarts').doc(id).delete(); }catch(e){ console.error(e); }
+  state.abandonedCarts = (state.abandonedCarts||[]).filter(x=>x.id!==id);
+  render();
+}
+function renderAbandonedCartsModal(){
+  const list = pendingAbandonedCarts();
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.abandonedCartsOpen=false;render();}">
+    <div class="modal" style="max-width:640px;">
+      <h3>Carritos abandonados</h3>
+      <div class="note-box">Clientes que empezaron su pedido en la tienda (ya escribieron nombre y teléfono) pero no lo completaron. "Recuperar por WhatsApp" abre un mensaje ya redactado para invitarlos a terminar su compra.</div>
+      ${list.length===0 ? `<div class="empty-state">No hay carritos abandonados pendientes por ahora.</div>` : `
+      <div style="max-height:420px;overflow-y:auto;">
+        ${list.map(c=>`
+          <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <div style="font-weight:700;">${c.name||'(sin nombre)'}</div>
+              <div class="row-sub">${timeAgo(c.updatedAt)}</div>
+            </div>
+            <div class="row-sub" style="margin:2px 0 6px;">${c.phone||''} · ${money(c.total||0)}</div>
+            <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">${(c.items||[]).map(it=>`${it.qty}x ${it.name}`).join(', ')}</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-primary" style="flex:1;" onclick="recoverAbandonedCart('${c.id}')">${icon('message-circle',14)} Recuperar por WhatsApp</button>
+              <button class="btn-cancel" onclick="dismissAbandonedCart('${c.id}')">Descartar</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`}
+      <div class="modal-actions">
+        <button class="btn-cancel" style="flex:1;" onclick="state.abandonedCartsOpen=false;render()">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
+}
 function renderOrderDetailModal(){
   const o = state.orders.find(x=>x.id===state.orderDetailModal);
   if(!o){ return ''; }
@@ -889,22 +960,6 @@ async function saveProduct(p){
   }catch(e){ console.error(e); showToast('No se pudo guardar (revisa el tamaño de las imágenes)'); return; }
   state.productModal=null; showToast('Producto guardado'); render();
 }
-async function regenerateAllSKUs(){
-  showToast('Generando SKU nuevos para todos, un momento...');
-  const usedSkus = new Set();
-  const batch = db.batch();
-  state.products.forEach(p=>{
-    let sku;
-    do{ sku = generateSKU(p); }while(usedSkus.has(sku));
-    usedSkus.add(sku);
-    p.sku = sku;
-    batch.update(db.collection('products').doc(p.id), {sku});
-  });
-  try{
-    await batch.commit();
-    showToast(`${state.products.length} SKU regenerados`); render();
-  }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
-}
 async function generateMissingSKUs(){
   const missing = state.products.filter(p=>!p.sku);
   if(missing.length===0){ showToast('Todos tus productos ya tienen SKU'); return; }
@@ -928,19 +983,22 @@ function looksTruncatedDesc(desc){
   if(!d) return false;
   return /\.\.\.$/.test(d) || /…$/.test(d);
 }
-function exportProductsCSV(){
-  const rows = [['id','sku','nombre','categorias','precio','descripcion','longitud_descripcion','posible_descripcion_cortada']];
-  state.products.forEach(p=>{
-    const desc = p.desc||'';
-    rows.push([p.id, p.sku||'', p.name, (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).join('|'), p.price, desc, desc.length, looksTruncatedDesc(desc)?'SI':'']);
+// Exporta TODOS los datos estructurados de cada producto (no las imágenes — son demasiado
+// pesadas para este archivo y se siguen agregando aparte, producto por producto) en el mismo
+// formato JSON que "Importar archivo" sabe leer, para poder editar en bloque y reimportar.
+function exportProductsJSON(){
+  const fields = ['id','sku','name','cat','categories','price','promoPrice','cost','stock','stockByCenter','desc','needs','variantGroups','variants'];
+  const data = state.products.map(p=>{
+    const out = {};
+    fields.forEach(f=>{ if(p[f]!==undefined) out[f]=p[f]; });
+    return out;
   });
-  const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob = new Blob(["﻿"+csv], {type:'text/csv;charset=utf-8;'});
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='productos_descripciones.csv'; a.click();
+  const a = document.createElement('a'); a.href=url; a.download='productos.json'; a.click();
   URL.revokeObjectURL(url);
-  const flagged = state.products.filter(p=>looksTruncatedDesc(p.desc)).length;
-  showToast(flagged>0 ? `CSV exportado — ${flagged} producto(s) con posible descripción cortada` : 'CSV exportado — no se detectaron descripciones cortadas');
+  showToast(`${data.length} producto(s) exportados (sin imágenes)`);
 }
 async function deleteProduct(id){
   try{
@@ -952,7 +1010,47 @@ async function deleteProduct(id){
     showToast('No se pudo eliminar: ' + (e.message||'error desconocido'));
   }
 }
-async function updateOrderStatus(id,status){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.status=status; await saveOrdersStatus(id,status,o.source); render(); }
+async function updateOrderStatus(id,status){
+  const o=state.orders.find(x=>x.id===id); if(!o) return;
+  const prevStatus = o.status;
+  o.status=status;
+  await saveOrdersStatus(id,status,o.source);
+  // Cancelar una venta de Punto de Venta debe devolver al inventario lo que esa venta había
+  // descontado al momento de cobrarse — si no, ese stock se pierde para siempre. Los pedidos
+  // de la tienda en línea NUNCA descuentan stock al crearse (Ale lo ajusta a mano al
+  // prepararlos), así que ahí cancelar no tiene nada que restaurar.
+  if(o.source==='pos' && prevStatus!==status){
+    if(status==='Cancelado' && prevStatus!=='Cancelado') await adjustStockForSale(o, 1);
+    else if(prevStatus==='Cancelado' && status!=='Cancelado') await adjustStockForSale(o, -1);
+  }
+  render();
+}
+// sign=1 restaura stock (venta cancelada); sign=-1 lo vuelve a descontar (venta reactivada
+// desde "Cancelado" a cualquier otro estado). Refleja exactamente el descuento que hace
+// chargeSale() en pos.html: por variante (v.stock + p.stock) o por centro (stockByCenter + p.stock).
+async function adjustStockForSale(sale, sign){
+  const centerId = sale.centerId;
+  const updates = [];
+  (sale.items||[]).forEach(it=>{
+    if(!it.id || it.id==='promo_buyxpayy') return;
+    const p = state.products.find(x=>x.id===it.id);
+    if(!p) return;
+    if(it.variantId){
+      const v = (p.variants||[]).find(x=>x.id===it.variantId);
+      if(v) v.stock = Math.max(0, (v.stock||0) + sign*it.qty);
+      p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
+      updates.push(db.collection('products').doc(p.id).update({variants: p.variants, stock: p.stock}));
+    } else {
+      if(!p.stockByCenter) p.stockByCenter = {};
+      if(centerId) p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) + sign*it.qty);
+      p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
+      updates.push(db.collection('products').doc(p.id).update({stockByCenter: p.stockByCenter, stock: p.stock}));
+    }
+  });
+  if(!updates.length) return;
+  try{ await Promise.all(updates); showToast(sign>0 ? 'Inventario restaurado' : 'Inventario descontado de nuevo'); }
+  catch(e){ console.error('No se pudo ajustar el inventario de esta venta', e); showToast('No se pudo ajustar el inventario de esta venta'); }
+}
 async function toggleArchiveOrder(id,archived){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); showToast(archived?'Pedido archivado':'Pedido restaurado'); render(); }
 async function saveSettingsForm(s){ state.settings={...state.settings,...s}; await saveSettings(); showToast('Configuración guardada'); render(); }
 
@@ -1111,7 +1209,7 @@ function applyCrop(){
   canvas.getContext('2d').drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, CROP_OUT, CROP_OUT);
   const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
   if(!state.productModal.images) state.productModal.images = [];
-  if(state.productModal.images.length>=5){ showToast('Máximo 5 imágenes por producto'); }
+  if(state.productModal.images.length>=10){ showToast('Máximo 10 imágenes por producto'); }
   else state.productModal.images.push(dataUrl);
   state.cropOpen = false; cropCtx = null; render();
 }
@@ -1169,58 +1267,180 @@ function rowsToProducts(rows){
   }
   return out;
 }
+/* ============== IMPORTAR ARCHIVO (unificado) ==============
+   Antes había tres botones: "Importar archivo" (CSV de 5 columnas), "Importar descripciones
+   (Tiendanube)" e "Importar variantes (Tiendanube)". Ahora uno solo detecta qué le subiste:
+   - JSON (el mismo formato que genera "Exportar productos"): trae todos los campos de cada
+     producto — nombre, categorías, precio, costo, stock, descripción, etiquetas, variantes.
+     Empareja por "id" si lo trae, si no por nombre; si no encuentra el producto, lo crea.
+   - CSV de Tiendanube (tiene la columna "Identificador de URL"): de ahí se sacan a la vez
+     descripción y variantes (lo que antes hacían los dos importadores de Tiendanube por
+     separado), reusando exactamente el mismo análisis de columnas ya probado. Solo actualiza
+     productos que ya existen en tu catálogo (emparejados por nombre) — no crea nuevos.
+   - CSV simple de 5 columnas (nombre, categoría, precio, stock, descripción), igual que antes.
+   En los tres casos se arma una vista previa con una fila por producto y una casilla para
+   elegir qué aplicar — nada se guarda sin que la revises primero. */
+function detectImportFormat(rawText){
+  const trimmed = (rawText||'').trim();
+  if(!trimmed) return {type:'empty'};
+  if(trimmed[0]==='[' || trimmed[0]==='{'){
+    try{ const json = JSON.parse(trimmed); return {type:'json', data: Array.isArray(json)?json:[json]}; }
+    catch(e){ /* no era JSON válido — sigue intentando como CSV */ }
+  }
+  const rows = parseCSV(trimmed);
+  if(!rows.length) return {type:'empty'};
+  const header = rows[0].map(h=>h.trim().toLowerCase());
+  if(header.indexOf('identificador de url')>=0) return {type:'tiendanube', rawText:trimmed};
+  return {type:'simple', rows};
+}
+function buildSimpleImportRows(rows){
+  const products = rowsToProducts(rows);
+  const byNorm = {};
+  state.products.forEach(p=>{ const k=normName(p.name); (byNorm[k]=byNorm[k]||[]).push(p); });
+  return products.map((p,idx)=>{
+    const candidates = byNorm[normName(p.name)];
+    const existing = candidates && candidates.length===1 ? candidates[0] : null;
+    const ambiguous = !!(candidates && candidates.length>1);
+    const patch = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc};
+    const summary = [`Precio ${money(p.price)}`, `Stock ${p.stock}`, p.desc?'Descripción':''].filter(Boolean).join(' · ');
+    return {key:'s'+idx, productId: (existing&&!ambiguous)?existing.id:null, name:p.name, isNew:!existing, ambiguous, summary, patch, checked:true};
+  });
+}
+function buildTiendanubeImportRows(rawText){
+  const descRows = parseTiendanubeDescCSV(rawText) || [];
+  const variantGroups = parseTiendanubeVariantGroups(rawText) || [];
+  const byNorm = {};
+  state.products.forEach(p=>{ const k=normName(p.name); (byNorm[k]=byNorm[k]||[]).push(p); });
+  const combined = {};
+  descRows.forEach(r=>{ if(!r.descHtml) return; const k=normName(r.name); combined[k]=combined[k]||{name:r.name}; combined[k].descHtml=r.descHtml; });
+  variantGroups.forEach(g=>{ if(!g.variants||!g.variants.length) return; const k=normName(g.name); combined[k]=combined[k]||{name:g.name}; combined[k].variantGroup=g; });
+  const out = []; let unmatched = 0, ambiguousCount = 0;
+  Object.values(combined).forEach((g,idx)=>{
+    const candidates = byNorm[normName(g.name)];
+    const ambiguous = !!(candidates && candidates.length>1);
+    const existing = candidates && candidates.length===1 ? candidates[0] : null;
+    if(!existing){ ambiguous ? ambiguousCount++ : unmatched++; return; } // el import de Tiendanube solo actualiza productos que ya existen
+    const patch = {}; const summaryParts = [];
+    if(g.descHtml){
+      const newDesc = htmlDescToPlainText(g.descHtml);
+      const oldDesc = (existing.desc||'').trim();
+      if(newDesc && newDesc!==oldDesc){ patch.desc = newDesc; summaryParts.push(!oldDesc?'Descripción nueva':'Descripción actualizada'); }
+    }
+    if(g.variantGroup){
+      const variants = g.variantGroup.variants.map(v=>({id:uid('var_'), combo:v.combo, sku:'', priceOverride:v.price, stock:v.stock}));
+      patch.variantGroups = g.variantGroup.groups; patch.variants = variants;
+      patch.stock = variants.reduce((s,v)=>s+(v.stock||0),0);
+      summaryParts.push(`${variants.length} variante(s)`);
+    }
+    if(!Object.keys(patch).length) return;
+    out.push({
+      key:'t'+idx, productId: existing.id, name: g.name, isNew:false, ambiguous:false,
+      summary: summaryParts.join(' · '), patch,
+      checked: (!!patch.desc && (!existing.desc || looksTruncatedDesc(existing.desc))) || (!!patch.variantGroups && !(existing.variants&&existing.variants.length)),
+    });
+  });
+  return {rows: out, unmatched, ambiguous: ambiguousCount};
+}
+function buildJsonImportRows(data){
+  const byNorm = {};
+  state.products.forEach(p=>{ const k=normName(p.name); (byNorm[k]=byNorm[k]||[]).push(p); });
+  const FIELDS = ['name','cat','categories','price','promoPrice','cost','stock','desc','needs','sku','variantGroups','variants','stockByCenter'];
+  return data.map((item,idx)=>{
+    const existing = item.id ? state.products.find(p=>p.id===item.id) : null;
+    const byName = !existing && item.name ? byNorm[normName(item.name)] : null;
+    const ambiguous = !!(byName && byName.length>1);
+    const matched = existing || (byName && byName.length===1 ? byName[0] : null);
+    const patch = {};
+    FIELDS.forEach(f=>{ if(item[f]!==undefined) patch[f]=item[f]; });
+    const summaryParts = [];
+    if(patch.price!==undefined) summaryParts.push('Precio '+money(patch.price));
+    if(patch.stock!==undefined) summaryParts.push('Stock '+patch.stock);
+    if(patch.desc!==undefined) summaryParts.push('Descripción');
+    if(patch.variants!==undefined) summaryParts.push(`${(patch.variants||[]).length} variante(s)`);
+    return {
+      key:'j'+idx, productId: (matched&&!ambiguous)?matched.id:null, name: item.name||(matched?matched.name:'(sin nombre)'),
+      isNew: !matched, ambiguous, summary: summaryParts.join(' · ') || 'Todos los campos', patch, checked:true,
+    };
+  });
+}
+function buildImportPreview(rawText){
+  const detected = detectImportFormat(rawText);
+  if(detected.type==='empty') return {kind:'empty', rows:[], unmatched:0, ambiguous:0};
+  if(detected.type==='json') return {kind:'json', rows: buildJsonImportRows(detected.data), unmatched:0, ambiguous: buildJsonImportRows(detected.data).filter(r=>r.ambiguous).length};
+  if(detected.type==='tiendanube'){ const r = buildTiendanubeImportRows(detected.rawText); return {kind:'tiendanube', rows:r.rows, unmatched:r.unmatched, ambiguous:r.ambiguous}; }
+  const rows = buildSimpleImportRows(detected.rows);
+  return {kind:'simple', rows, unmatched:0, ambiguous: rows.filter(r=>r.ambiguous).length};
+}
 function handleImportFile(input){
   const file = input.files[0]; if(!file) return;
+  state.importFileName = file.name;
   const reader = new FileReader();
-  reader.onload = e=>{ state.importText = e.target.result; state.importPreview = rowsToProducts(parseCSV(state.importText)); render(); };
+  reader.onload = e=>{ state.importText = e.target.result; Object.assign(state, {importResult: buildImportPreview(state.importText)}); render(); };
   reader.readAsText(file);
 }
 function handleImportTextChange(val){
-  state.importText = val;
-  state.importPreview = rowsToProducts(parseCSV(val));
+  state.importText = val; state.importFileName='';
+  state.importResult = buildImportPreview(val);
+  render();
+}
+function toggleImportRow(key, checked){
+  const r = (state.importResult&&state.importResult.rows||[]).find(x=>x.key===key);
+  if(r) r.checked = checked;
+}
+function toggleImportAll(checked){
+  (state.importResult&&state.importResult.rows||[]).forEach(r=>{ if(!r.ambiguous) r.checked=checked; });
   render();
 }
 async function commitImport(mode){
-  if(state.importPreview.length===0){ showToast('No hay productos para importar'); return; }
-  const newCats = new Set(state.settings.categories);
-  state.importPreview.forEach(p=>newCats.add(p.cat));
+  const rows = (state.importResult&&state.importResult.rows||[]).filter(r=>r.checked && !r.ambiguous);
+  if(rows.length===0){ showToast('No hay productos seleccionados para importar'); return; }
+  const newCats = new Set(mode==='replace' ? [] : state.settings.categories);
+  const addCatsFrom = (obj)=>{ if(obj.cat) newCats.add(obj.cat); (obj.categories||[]).forEach(c=>newCats.add(c)); };
   try{
     if(mode==='replace'){
       const batchDel = db.batch();
       state.products.forEach(p=>batchDel.delete(db.collection('products').doc(p.id)));
       await batchDel.commit();
-      const batchAdd = db.batch();
       const newProducts = [];
-      state.importPreview.forEach(p=>{
-        const ref = db.collection('products').doc();
-        const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:[]};
-        batchAdd.set(ref, payload);
-        newProducts.push({id:ref.id, ...payload});
-      });
-      await batchAdd.commit();
+      for(let i=0;i<rows.length;i+=400){
+        const chunk = rows.slice(i,i+400);
+        const batch = db.batch();
+        chunk.forEach(r=>{
+          const ref = db.collection('products').doc();
+          const fresh = {name:r.name, cat:'Otros', price:0, stock:0, desc:'', images:[], needs:[], ...r.patch};
+          addCatsFrom(fresh);
+          batch.set(ref, fresh);
+          newProducts.push({id:ref.id, ...fresh});
+        });
+        await batch.commit();
+      }
       state.products = newProducts;
     }else{
-      const batch = db.batch();
-      state.importPreview.forEach(p=>{
-        const existing = state.products.find(x=>x.name.trim().toLowerCase()===p.name.trim().toLowerCase());
-        if(existing){
-          existing.cat=p.cat; existing.price=p.price; existing.stock=p.stock; existing.desc=p.desc||existing.desc;
-          batch.set(db.collection('products').doc(existing.id), {name:existing.name,cat:existing.cat,price:existing.price,stock:existing.stock,desc:existing.desc,images:existing.images||[]});
-        }else{
-          const ref = db.collection('products').doc();
-          const payload = {name:p.name, cat:p.cat, price:p.price, stock:p.stock, desc:p.desc, images:[]};
-          batch.set(ref, payload);
-          state.products.push({id:ref.id, ...payload});
-        }
-      });
-      await batch.commit();
+      for(let i=0;i<rows.length;i+=400){
+        const chunk = rows.slice(i,i+400);
+        const batch = db.batch();
+        chunk.forEach(r=>{
+          if(r.productId){
+            const existing = state.products.find(p=>p.id===r.productId);
+            if(existing){ Object.assign(existing, r.patch); addCatsFrom(existing); }
+            batch.update(db.collection('products').doc(r.productId), r.patch);
+          }else{
+            const ref = db.collection('products').doc();
+            const fresh = {name:r.name, cat:'Otros', price:0, stock:0, desc:'', images:[], needs:[], ...r.patch};
+            addCatsFrom(fresh);
+            batch.set(ref, fresh);
+            state.products.push({id:ref.id, ...fresh});
+          }
+        });
+        await batch.commit();
+      }
     }
     state.settings.categories = Array.from(newCats);
     await saveSettings();
-    state.importOpen=false; state.importPreview=[]; state.importText='';
-    showToast('Catálogo importado');
+    state.importOpen=false; state.importPreview=[]; state.importText=''; state.importFileName=''; state.importResult=null;
+    showToast(`${rows.length} producto(s) importado(s)/actualizado(s)`);
     render();
-  }catch(e){ console.error(e); showToast('Ocurrió un error al importar'); }
+  }catch(e){ console.error(e); showToast('Ocurrió un error al importar: '+(e.message||'error desconocido')); }
 }
 
 /* ============== MÉTRICAS ============== */
@@ -1397,8 +1617,7 @@ function renderAdmin(){
   </div>
   ${state.productModal!==null ? renderProductModal() : ''}
   ${state.importOpen ? renderImportModal() : ''}
-  ${state.descImportOpen ? renderDescImportModal() : ''}
-  ${state.variantImportOpen ? renderVariantImportModal() : ''}
+  ${state.abandonedCartsOpen ? renderAbandonedCartsModal() : ''}
   ${state.catImportOpen ? renderCategoryImportModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
@@ -1954,11 +2173,8 @@ function renderProductos(){
     ${state.productToolsOpen ? `
     <div class="toolbar-tools-panel">
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
+      <button class="btn-outline" onclick="exportProductsJSON()">Exportar productos</button>
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
-      <button class="btn-outline" onclick="if(confirm('Esto borra y reemplaza el SKU de TODOS tus productos, incluso los que ya tienen uno. ¿Continuar?'))regenerateAllSKUs()">Regenerar todos los SKU</button>
-      <button class="btn-outline" onclick="exportProductsCSV()">Exportar descripciones</button>
-      <button class="btn-outline" onclick="state.descImportOpen=true;render()">Importar descripciones (Tiendanube)</button>
-      <button class="btn-outline" onclick="state.variantImportOpen=true;render()">Importar variantes (Tiendanube)</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
@@ -2006,26 +2222,59 @@ function onProductSearchInput(v){
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 
+function closeImportModal(){
+  state.importOpen=false; state.importPreview=[]; state.importText=''; state.importFileName=''; state.importResult=null;
+  render();
+}
 function renderImportModal(){
+  const res = state.importResult;
+  const rows = res ? res.rows : [];
+  const checkedCount = rows.filter(r=>r.checked && !r.ambiguous).length;
+  const kindLabel = {simple:'CSV simple (nombre, categoría, precio, stock, descripción)', tiendanube:'CSV de Tiendanube (descripciones y variantes)', json:'JSON (formato de "Exportar productos")', empty:''}[res?res.kind:''] || '';
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.importOpen=false;state.importPreview=[];state.importText='';render();}">
-    <div class="modal">
-      <h3>Importar productos</h3>
-      <div class="note-box">Sube un archivo <strong>CSV</strong> o pega el contenido con columnas: <strong>nombre, categoría, precio, stock, descripción</strong> (en ese orden; encabezado opcional). Las imágenes se agregan después, producto por producto.</div>
+  <div class="modal-overlay" onclick="if(event.target===this){closeImportModal();}">
+    <div class="modal" style="max-width:760px;">
+      <h3>Importar archivo</h3>
+      <div class="note-box">Sube un archivo <strong>CSV</strong> (simple o exportado desde Tiendanube) o el <strong>JSON</strong> que genera "Exportar productos", o pega el contenido abajo. El formato se detecta solo y se arma una vista previa por producto con una casilla para elegir qué aplicar — nada se guarda sin que la revises primero.</div>
       <div class="import-drop">
-        Selecciona tu archivo .csv<br>
-        <input type="file" accept=".csv,.txt" onchange="handleImportFile(this)">
+        Selecciona tu archivo<br>
+        <input type="file" accept=".csv,.txt,.json" onchange="handleImportFile(this)">
       </div>
       <div class="form-field"><label>O pega aquí el contenido</label>
-        <textarea style="min-height:110px;" placeholder="nombre,categoria,precio,stock,descripcion" oninput="handleImportTextChange(this.value)">${state.importText}</textarea>
+        <textarea style="min-height:100px;" placeholder="nombre,categoria,precio,stock,descripcion" oninput="handleImportTextChange(this.value)">${state.importText}</textarea>
       </div>
-      ${state.importPreview.length>0 ? `<div class="preview-count">${state.importPreview.length} producto(s) detectado(s) y listos para importar.</div>` : ''}
+      ${state.importFileName ? `<div class="preview-count">Archivo: ${escDescHtml(state.importFileName)}</div>` : ''}
+      ${res && res.kind!=='empty' ? `
+        <div class="preview-count">
+          Formato detectado: ${kindLabel}.<br>
+          ${rows.length} producto(s) detectado(s) (${checkedCount} seleccionado${checkedCount===1?'':'s'} para aplicar)${rows.filter(r=>r.isNew).length?`, ${rows.filter(r=>r.isNew).length} nuevo(s)`:''}.
+          ${res.unmatched ? `<br>${res.unmatched} nombre(s) del archivo no se encontraron en tu catálogo y se omitieron.` : ''}
+          ${res.ambiguous ? `<br>${res.ambiguous} nombre(s) coinciden con más de un producto y se omitieron.` : ''}
+        </div>
+        ${rows.length>0 ? `
+        <div style="margin:6px 0;">
+          <label style="font-size:13px;"><input type="checkbox" ${checkedCount===rows.filter(r=>!r.ambiguous).length && rows.some(r=>!r.ambiguous)?'checked':''} onchange="toggleImportAll(this.checked)"> Seleccionar todos</label>
+        </div>
+        <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+          ${rows.map(r=>`
+            <div style="padding:8px 10px;border-bottom:1px solid var(--border);${r.ambiguous?'opacity:.55;':''}">
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:${r.ambiguous?'default':'pointer'};">
+                <input type="checkbox" ${r.checked&&!r.ambiguous?'checked':''} ${r.ambiguous?'disabled':''} onchange="toggleImportRow('${r.key}', this.checked)" style="margin-top:3px;">
+                <div style="flex:1;">
+                  <div style="font-weight:700;">${escDescHtml(r.name)}${r.isNew?' <span style="color:#3a8a5a;">(nuevo producto)</span>':''}${r.ambiguous?' <span style="color:#b5495b;">(nombre ambiguo, omitido)</span>':''}</div>
+                  <div style="color:var(--ink-soft);font-size:12px;margin-top:2px;">${escDescHtml(r.summary||'')}</div>
+                </div>
+              </label>
+            </div>
+          `).join('')}
+        </div>` : ''}
+      ` : ''}
       <div class="modal-actions">
-        <button class="btn-cancel" onclick="state.importOpen=false;state.importPreview=[];state.importText='';render()">Cancelar</button>
-        <button class="btn-primary" style="flex:1;" onclick="commitImport('merge')">Agregar / actualizar</button>
+        <button class="btn-cancel" onclick="closeImportModal()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitImport('merge')" ${checkedCount===0?'disabled':''}>Agregar / actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
       </div>
       <div class="modal-actions">
-        <button class="btn-primary" style="width:100%;background:var(--navy);" onclick="if(confirm('Esto reemplaza TODO tu catálogo actual. ¿Continuar?'))commitImport('replace')">Reemplazar catálogo completo</button>
+        <button class="btn-primary" style="width:100%;background:var(--navy);" onclick="if(confirm('Esto reemplaza TODO tu catálogo actual. ¿Continuar?'))commitImport('replace')" ${checkedCount===0?'disabled':''}>Reemplazar catálogo completo</button>
       </div>
     </div>
   </div>`;
@@ -2072,112 +2321,6 @@ function parseTiendanubeDescCSV(text){
   }
   return out;
 }
-function buildDescImportPreview(csvRows){
-  const byNorm = {};
-  state.products.forEach(p=>{ const key = normName(p.name); (byNorm[key]=byNorm[key]||[]).push(p); });
-  const matched = [], unmatched = [], ambiguous = [];
-  let noChange = 0;
-  csvRows.forEach(row=>{
-    if(!row.descHtml) return;
-    const key = normName(row.name);
-    const candidates = byNorm[key];
-    if(!candidates || candidates.length===0){ unmatched.push(row.name); return; }
-    if(candidates.length>1){ ambiguous.push(row.name); return; }
-    const p = candidates[0];
-    const newDesc = htmlDescToPlainText(row.descHtml);
-    const oldDesc = (p.desc||'').trim();
-    if(!newDesc || newDesc===oldDesc){ noChange++; return; }
-    matched.push({ productId:p.id, productName:p.name, oldDesc, newDesc, checked: !oldDesc || looksTruncatedDesc(oldDesc) });
-  });
-  return {matched, unmatched, ambiguous, noChange};
-}
-function handleDescImportFile(input){
-  const file = input.files[0]; if(!file) return;
-  const fileName = file.name;
-  const reader = new FileReader();
-  reader.onload = e=>{
-    const csvRows = parseTiendanubeDescCSV(e.target.result);
-    if(csvRows===null){ showToast('No se encontraron columnas "Nombre" y "Descripción" en ese archivo'); return; }
-    state.descImport = {fileName, ...buildDescImportPreview(csvRows)};
-    render();
-  };
-  reader.readAsText(file);
-}
-function toggleDescImportRow(idx){
-  if(!state.descImport || !state.descImport.matched[idx]) return;
-  state.descImport.matched[idx].checked = !state.descImport.matched[idx].checked;
-  render();
-}
-function toggleDescImportAll(checked){
-  if(!state.descImport) return;
-  state.descImport.matched.forEach(r=>r.checked=checked);
-  render();
-}
-async function commitDescImport(){
-  const di = state.descImport;
-  if(!di || !di.matched) return;
-  const toApply = di.matched.filter(r=>r.checked);
-  if(toApply.length===0){ showToast('No hay descripciones seleccionadas'); return; }
-  try{
-    for(let i=0;i<toApply.length;i+=400){
-      const chunk = toApply.slice(i,i+400);
-      const batch = db.batch();
-      chunk.forEach(r=>batch.update(db.collection('products').doc(r.productId), {desc:r.newDesc}));
-      await batch.commit();
-    }
-    toApply.forEach(r=>{ const p = state.products.find(x=>x.id===r.productId); if(p) p.desc = r.newDesc; });
-    showToast(`${toApply.length} descripción(es) actualizada(s)`);
-    state.descImportOpen=false; state.descImport=null;
-    render();
-  }catch(e){ console.error(e); showToast('Ocurrió un error al actualizar: '+(e.message||'error desconocido')); }
-}
-function renderDescImportModal(){
-  const di = state.descImport;
-  const matched = di ? (di.matched||[]) : [];
-  const checkedCount = matched.filter(r=>r.checked).length;
-  return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.descImportOpen=false;state.descImport=null;render();}">
-    <div class="modal" style="max-width:720px;">
-      <h3>Importar descripciones desde Tiendanube</h3>
-      <div class="note-box">Sube el CSV de exportación de Tiendanube (columnas <strong>Nombre</strong> y <strong>Descripción</strong>). Los productos se emparejan por nombre exacto con tu catálogo actual; el HTML de la descripción se convierte a texto plano. Solo se marcan para actualizar automáticamente los productos sin descripción o con descripción que parece cortada — puedes marcar o desmarcar cualquier otro antes de aplicar.</div>
-      <div class="import-drop">
-        Selecciona tu archivo .csv<br>
-        <input type="file" accept=".csv,.txt" onchange="handleDescImportFile(this)">
-      </div>
-      ${di && di.fileName ? `<div class="preview-count">Archivo: ${escDescHtml(di.fileName)}</div>` : ''}
-      ${di ? `
-        <div class="preview-count">
-          ${matched.length} producto(s) con cambio de descripción detectado (${checkedCount} seleccionado${checkedCount===1?'':'s'} para actualizar)${di.noChange?`, ${di.noChange} sin cambios`:''}.
-          ${di.unmatched.length ? `<br>${di.unmatched.length} nombre(s) del CSV no se encontraron en tu catálogo.` : ''}
-          ${di.ambiguous.length ? `<br>${di.ambiguous.length} nombre(s) coinciden con más de un producto y se omitieron.` : ''}
-        </div>
-        ${matched.length>0 ? `
-        <div style="margin:6px 0;">
-          <label style="font-size:13px;"><input type="checkbox" ${checkedCount===matched.length?'checked':''} onchange="toggleDescImportAll(this.checked)"> Seleccionar todos</label>
-        </div>
-        <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
-          ${matched.map((r,idx)=>`
-            <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
-              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;">
-                <input type="checkbox" ${r.checked?'checked':''} onchange="toggleDescImportRow(${idx})" style="margin-top:3px;">
-                <div style="flex:1;">
-                  <div style="font-weight:700;">${escDescHtml(r.productName)}${!r.oldDesc?' <span style="color:#b5495b;">(sin descripción actual)</span>':(looksTruncatedDesc(r.oldDesc)?' <span style="color:#b5495b;">(parece cortada)</span>':'')}</div>
-                  <div style="color:var(--ink-soft);font-size:12px;margin-top:2px;white-space:pre-wrap;">${escDescHtml(r.newDesc.slice(0,220))}${r.newDesc.length>220?'…':''}</div>
-                </div>
-              </label>
-            </div>
-          `).join('')}
-        </div>` : ''}
-        ${di.unmatched.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ver nombres no encontrados (${di.unmatched.length})</summary><div style="font-size:12px;max-height:150px;overflow-y:auto;color:var(--ink-soft);margin-top:6px;">${di.unmatched.map(n=>escDescHtml(n)).join('<br>')}</div></details>` : ''}
-      ` : ''}
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick="state.descImportOpen=false;state.descImport=null;render()">Cancelar</button>
-        <button class="btn-primary" style="flex:1;" onclick="commitDescImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 /* ============== IMPORTAR VARIANTES DESDE TIENDANUBE ============== */
 // El CSV de Tiendanube trae una fila por variante (mismo "Identificador de URL" repetido);
 // solo la primera fila de cada producto trae "Nombre". Las columnas de propiedad (Talla, Color, etc.)
@@ -2232,120 +2375,6 @@ function parseTiendanubeVariantGroups(text){
   });
   return out;
 }
-function buildVariantImportPreview(csvGroups){
-  const byNorm = {};
-  state.products.forEach(p=>{ const key = normName(p.name); (byNorm[key]=byNorm[key]||[]).push(p); });
-  const matched = [], unmatched = [], ambiguous = [];
-  csvGroups.forEach(g=>{
-    const key = normName(g.name);
-    const candidates = byNorm[key];
-    if(!candidates || candidates.length===0){ unmatched.push(g.name); return; }
-    if(candidates.length>1){ ambiguous.push(g.name); return; }
-    const p = candidates[0];
-    const variants = g.variants.map(v=>({ id: uid('var_'), combo:v.combo, sku:'', priceOverride:v.price, stock:v.stock }));
-    const totalStockSum = variants.reduce((s,v)=>s+(v.stock||0),0);
-    matched.push({
-      productId:p.id, productName:p.name, groups:g.groups, variants, totalStockSum,
-      alreadyHasVariants: !!(p.variants && p.variants.length),
-      checked: !(p.variants && p.variants.length)
-    });
-  });
-  return {matched, unmatched, ambiguous};
-}
-function handleVariantImportFile(input){
-  const file = input.files[0]; if(!file) return;
-  const fileName = file.name;
-  const reader = new FileReader();
-  reader.onload = e=>{
-    const csvGroups = parseTiendanubeVariantGroups(e.target.result);
-    if(csvGroups===null){ showToast('No se encontraron las columnas de propiedades (Talla, Color, etc.) en ese archivo'); return; }
-    state.variantImport = {fileName, ...buildVariantImportPreview(csvGroups)};
-    render();
-  };
-  reader.readAsText(file);
-}
-function toggleVariantImportRow(idx){
-  if(!state.variantImport || !state.variantImport.matched[idx]) return;
-  state.variantImport.matched[idx].checked = !state.variantImport.matched[idx].checked;
-  render();
-}
-function toggleVariantImportAll(checked){
-  if(!state.variantImport) return;
-  state.variantImport.matched.forEach(r=>r.checked=checked);
-  render();
-}
-async function commitVariantImport(){
-  const vi = state.variantImport;
-  if(!vi || !vi.matched) return;
-  const toApply = vi.matched.filter(r=>r.checked);
-  if(toApply.length===0){ showToast('No hay variantes seleccionadas'); return; }
-  try{
-    for(let i=0;i<toApply.length;i+=400){
-      const chunk = toApply.slice(i,i+400);
-      const batch = db.batch();
-      chunk.forEach(r=>batch.update(db.collection('products').doc(r.productId), {
-        variantGroups: r.groups, variants: r.variants, stock: r.totalStockSum
-      }));
-      await batch.commit();
-    }
-    toApply.forEach(r=>{
-      const p = state.products.find(x=>x.id===r.productId);
-      if(p){ p.variantGroups = r.groups; p.variants = r.variants; p.stock = r.totalStockSum; }
-    });
-    showToast(`${toApply.length} producto(s) actualizado(s) con sus variantes`);
-    state.variantImportOpen=false; state.variantImport=null;
-    render();
-  }catch(e){ console.error(e); showToast('Ocurrió un error al actualizar: '+(e.message||'error desconocido')); }
-}
-function renderVariantImportModal(){
-  const vi = state.variantImport;
-  const matched = vi ? (vi.matched||[]) : [];
-  const checkedCount = matched.filter(r=>r.checked).length;
-  return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.variantImportOpen=false;state.variantImport=null;render();}">
-    <div class="modal" style="max-width:720px;">
-      <h3>Importar variantes desde Tiendanube</h3>
-      <div class="note-box">Sube el mismo CSV de exportación de Tiendanube. Detecta los productos con variantes (talla, color, etc.) por sus columnas de propiedad, y arma el precio y el stock de cada variante (sumando las columnas de stock por ubicación del CSV). Se empareja por nombre de producto igual que la importación de descripciones. Los productos que <strong>ya tienen variantes guardadas</strong> aparecen sin marcar por seguridad, para no sobrescribirlas sin que las revises.</div>
-      <div class="import-drop">
-        Selecciona tu archivo .csv<br>
-        <input type="file" accept=".csv,.txt" onchange="handleVariantImportFile(this)">
-      </div>
-      ${vi && vi.fileName ? `<div class="preview-count">Archivo: ${escDescHtml(vi.fileName)}</div>` : ''}
-      ${vi ? `
-        <div class="preview-count">
-          ${matched.length} producto(s) con variantes detectadas en el CSV (${checkedCount} seleccionado${checkedCount===1?'':'s'} para actualizar).
-          ${vi.unmatched.length ? `<br>${vi.unmatched.length} nombre(s) del CSV no se encontraron en tu catálogo.` : ''}
-          ${vi.ambiguous.length ? `<br>${vi.ambiguous.length} nombre(s) coinciden con más de un producto y se omitieron.` : ''}
-        </div>
-        ${matched.length>0 ? `
-        <div style="margin:6px 0;">
-          <label style="font-size:13px;"><input type="checkbox" ${checkedCount===matched.length?'checked':''} onchange="toggleVariantImportAll(this.checked)"> Seleccionar todos</label>
-        </div>
-        <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
-          ${matched.map((r,idx)=>`
-            <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
-              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;">
-                <input type="checkbox" ${r.checked?'checked':''} onchange="toggleVariantImportRow(${idx})" style="margin-top:3px;">
-                <div style="flex:1;">
-                  <div style="font-weight:700;">${escDescHtml(r.productName)}${r.alreadyHasVariants?' <span style="color:#b5495b;">(ya tiene variantes guardadas)</span>':''}</div>
-                  <div style="color:var(--ink-soft);font-size:12px;margin-top:2px;">
-                    ${r.variants.map(v=>`${escDescHtml(Object.values(v.combo).join(' / '))}: ${money(v.priceOverride)}${v.stock?` · stock ${v.stock}`:' · sin stock'}`).join(' &nbsp;|&nbsp; ')}
-                  </div>
-                </div>
-              </label>
-            </div>
-          `).join('')}
-        </div>` : ''}
-        ${vi.unmatched.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--ink-soft);">Ver nombres no encontrados (${vi.unmatched.length})</summary><div style="font-size:12px;max-height:150px;overflow-y:auto;color:var(--ink-soft);margin-top:6px;">${vi.unmatched.map(n=>escDescHtml(n)).join('<br>')}</div></details>` : ''}
-      ` : ''}
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick="state.variantImportOpen=false;state.variantImport=null;render()">Cancelar</button>
-        <button class="btn-primary" style="flex:1;" onclick="commitVariantImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 /* ============== IMPORTAR CATEGORÍAS DESDE TIENDANUBE ============== */
 // El CSV de Tiendanube trae la columna "Categorías" (varias separadas por coma) repetida en
 // todas las filas de un mismo producto (identificado por "Identificador de URL"); solo hace
@@ -2500,7 +2529,11 @@ function renderPedidos(){
   let shown = state.orders.filter(o=> state.showArchived ? o.archived : !o.archived);
   if(state.orderSourceFilter && state.orderSourceFilter!=="Todos") shown = shown.filter(o=>o.source===state.orderSourceFilter);
   if(state.orderStatusFilter!=="Todos") shown = shown.filter(o=>o.status===state.orderStatusFilter);
+  const abandonedCount = pendingAbandonedCarts().length;
   return `
+    <div class="toolbar" style="margin-bottom:6px;">
+      <button class="btn-tertiary" onclick="state.abandonedCartsOpen=true;render()">${icon('bag',14)} Carritos abandonados${abandonedCount?` (${abandonedCount})`:''}</button>
+    </div>
     <div class="status-filter">
       <button class="${!state.showArchived?'active':''}" onclick="state.showArchived=false;render()">Activos</button>
       <button class="${state.showArchived?'active':''}" onclick="state.showArchived=true;render()">Archivados</button>
