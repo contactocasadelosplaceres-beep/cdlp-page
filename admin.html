@@ -393,6 +393,7 @@ let state = {
   orderDiscountEditing:false, orderDiscountType:"fixed", orderDiscountValueInput:"", orderDiscountCouponInput:"", orderDiscountReasonInput:"",
   abandonedCarts:[], abandonedCartsOpen:false,
   globalSearchOpen:false, globalSearchQuery:"",
+  histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -4407,7 +4408,83 @@ function renderConfig(){
     <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207"></div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
     <div class="note-box" style="margin-top:14px;">Para agregar más administradores o cambiar tu contraseña, hazlo desde la consola de Firebase → Authentication → Users.</div>
+    ${!state.myPermissions ? renderHistoricalImportPanel() : ''}
   `;
+}
+function renderHistoricalImportPanel(){
+  const r = state.histImportPreview;
+  return `
+    <div class="panel-title" style="margin-top:24px;">Importar historial de ventas (Tiendanube)</div>
+    <div class="note-box">Herramienta de una sola vez: sube el archivo <strong>historial_ventas_tiendanube.json</strong> que te compartí para agregar tus ventas pasadas de Tiendanube a Pedidos y Estadísticas. No toca el stock actual de tus productos — solo agrega registros de ventas que ya ocurrieron. Puedes subir el mismo archivo más de una vez sin duplicar nada (cada pedido usa un identificador fijo, así que reimportar solo actualiza los mismos registros).</div>
+    <div class="form-field"><label>Archivo JSON</label><input type="file" accept=".json,application/json" onchange="handleHistImportFile(this)"></div>
+    ${state.histImportFileName ? `<div class="preview-count">Archivo: ${escDescHtml(state.histImportFileName)}</div>` : ''}
+    ${r ? (r.error ? `<div class="note-box" style="color:var(--rose);">${escDescHtml(r.error)}</div>` : `
+      <div class="note-box">
+        <strong>${r.count} pedidos</strong> por importar · ${money(r.totalRevenue)} en total · del ${r.dateMin} al ${r.dateMax}<br>
+        ${r.alreadyImported>0 ? `${r.alreadyImported} de estos pedidos ya están importados — se actualizarán con los mismos datos, sin duplicarse.<br>` : ''}
+        ${r.unmatchedLines>0 ? `${r.unmatchedLines} línea(s) de producto no encontraron equivalente en tu catálogo actual (se guardan igual, con el nombre original, pero no se les asocia un producto específico para el detalle por producto).` : ''}
+      </div>
+      <button class="btn-primary" ${state.histImportBusy?'disabled':''} onclick="confirmHistImport()">${state.histImportBusy?'Importando…':'Importar a Firestore'}</button>
+    `) : ''}
+    ${state.histImportResult ? `<div class="note-box" style="color:var(--green);">${escDescHtml(state.histImportResult)}</div>` : ''}
+  `;
+}
+function handleHistImportFile(input){
+  const file = input.files[0]; if(!file) return;
+  state.histImportFileName = file.name;
+  state.histImportResult = null;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!Array.isArray(data)) throw new Error('el archivo debe ser una lista de pedidos');
+      const existingIds = new Set(state.orders.map(o=>o.id));
+      let totalRevenue=0, unmatchedLines=0, alreadyImported=0, dateMin=null, dateMax=null;
+      data.forEach(o=>{
+        totalRevenue += o.total||0;
+        (o.items||[]).forEach(it=>{ if(!it.id) unmatchedLines++; });
+        if(existingIds.has(o.firestoreId)) alreadyImported++;
+        if(o.date){ if(!dateMin||o.date<dateMin) dateMin=o.date; if(!dateMax||o.date>dateMax) dateMax=o.date; }
+      });
+      state.histImportData = data;
+      state.histImportPreview = {
+        count: data.length, totalRevenue, unmatchedLines, alreadyImported,
+        dateMin: dateMin ? new Date(dateMin).toLocaleDateString('es-MX') : '—',
+        dateMax: dateMax ? new Date(dateMax).toLocaleDateString('es-MX') : '—',
+      };
+    }catch(err){
+      state.histImportData = null;
+      state.histImportPreview = {error: 'No se pudo leer el archivo: '+(err.message||'formato inválido')};
+    }
+    render();
+  };
+  reader.readAsText(file);
+}
+async function confirmHistImport(){
+  const data = state.histImportData;
+  if(!data || !data.length) return;
+  if(!confirm(`Vas a importar ${data.length} pedidos históricos de Tiendanube a Firestore. Es seguro repetirlo (no duplica), pero sí escribe datos reales en tu base de datos. ¿Continuar?`)) return;
+  state.histImportBusy = true; render();
+  try{
+    for(let i=0;i<data.length;i+=400){
+      const chunk = data.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(o=>{
+        const {firestoreId, ...payload} = o;
+        batch.set(db.collection('sales').doc(firestoreId), payload);
+      });
+      await batch.commit();
+    }
+    state.histImportResult = `Listo: se importaron ${data.length} pedidos.`;
+    state.histImportData = null; state.histImportPreview = null; state.histImportFileName = '';
+    render();
+    await loadData();
+    showToast('Historial de ventas importado');
+  }catch(e){
+    console.error(e);
+    showToast('Ocurrió un error al importar: '+(e.message||'error desconocido'));
+  }
+  state.histImportBusy = false; render();
 }
 function handleSaveSettings(){
   saveSettingsForm({
