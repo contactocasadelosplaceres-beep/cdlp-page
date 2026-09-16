@@ -83,6 +83,8 @@
   .prod-card.out-of-stock{opacity:.6;cursor:not-allowed;}
   .prod-card.out-of-stock .prod-swatch{filter:grayscale(0.6);}
   .stock-out-badge{display:inline-block;background:#FBE2E6;color:var(--rose);font-weight:700;font-size:10px;padding:2px 7px;border-radius:6px;}
+  .btn-ver-mas-pos{grid-column:1/-1;text-align:center;background:#fff;color:var(--primary);padding:13px;border-radius:var(--radius-md);font-size:13.5px;font-weight:700;border:1.5px solid var(--border);margin-top:2px;}
+  .btn-ver-mas-pos:active{background:var(--surface-soft);}
 
   .sale-panel{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;max-height:60vh;display:flex;flex-direction:column;box-shadow:0 -16px 40px -18px rgba(43,22,32,0.28);}
   .sale-panel::before{content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);width:36px;height:4px;border-radius:3px;background:var(--border);}
@@ -218,10 +220,15 @@ function icon(name, size){
 
 function onPosSearchInput(v){
   state.search = v;
+  state.prodGridLimit = PROD_GRID_PAGE_SIZE;
   render();
   const i = document.getElementById('pos-search-input');
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
+// El catálogo puede tener cientos de productos: en vez de dibujar todas las tarjetas
+// de golpe (lento en tablets y hace scroll interminable), se muestran de a poco con
+// un botón "Ver más". Se reinicia cada que cambia la búsqueda o la categoría activa.
+const PROD_GRID_PAGE_SIZE = 24;
 function showToast(msg){
   const t=document.getElementById('toast'); if(!t) return;
   t.textContent=msg; t.classList.add('show');
@@ -802,10 +809,13 @@ function renderPOS(){
     <div class="pos-body">
       <div class="toolbar">
         <div class="search-row"><input id="pos-search-input" placeholder="Buscar producto..." value="${state.search}" oninput="onPosSearchInput(this.value)"></div>
-        <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}</div>
+        <div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${c}</button>`).join('')}</div>
       </div>
       <div class="prod-grid">
-        ${filtered.map(p=>{
+        ${(()=>{ if(state.prodGridLimit==null) state.prodGridLimit=PROD_GRID_PAGE_SIZE;
+          const visible = filtered.slice(0, state.prodGridLimit);
+          const remaining = filtered.length - visible.length;
+          return visible.map(p=>{
           const hasVariants = p.variantGroups && p.variantGroups.length>0;
           const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
           const stock = hasVariants ? null : centerStock(p, state.activeCenter.id);
@@ -817,7 +827,8 @@ function renderPOS(){
             <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)}</div>
             <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
           </div>`;
-        }).join('')}
+        }).join('') + (remaining>0 ? `<button class="btn-ver-mas-pos" onclick="state.prodGridLimit+=PROD_GRID_PAGE_SIZE;render()">Ver más (${remaining} más)</button>` : '');
+        })()}
       </div>
     </div>
     <div class="sale-panel ${state.cartCollapsed?'collapsed':''}">

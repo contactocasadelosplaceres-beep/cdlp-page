@@ -127,6 +127,8 @@
 
   /* Sistema de botones por nivel: primario (arriba), secundario, terciario, destructivo */
   .btn-tertiary{background:transparent;color:var(--ink-soft);padding:9px 13px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;border:1.5px dashed var(--border);display:inline-flex;align-items:center;gap:6px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
+  .btn-ver-mas{display:block;width:100%;text-align:center;background:var(--surface-soft);color:var(--primary);padding:11px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;margin-top:8px;border:1.5px solid var(--border);}
+  .btn-ver-mas:hover{background:#fff;border-color:var(--primary);}
   .btn-tertiary:hover{background:var(--surface-soft);border-color:var(--primary);color:var(--primary-deep);}
   .btn-tertiary svg{flex-shrink:0;}
   .btn-danger{background:#FBE2E6;color:#A02040;padding:11px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease;}
@@ -1541,6 +1543,24 @@ async function commitImport(mode){
   }catch(e){ console.error(e); showToast('Ocurrió un error al importar: '+(e.message||'error desconocido')); }
 }
 
+/* ============== LISTAS LARGAS: "ver más" ============== */
+// Helper genérico para no renderizar de golpe listas que pueden tener cientos de
+// filas (bajo stock, catálogo completo, pedidos, clientes...). Cada lista tiene su
+// propia llave en `state` que recuerda cuántos elementos se han revelado; se resetea
+// llamando resetShowMore(key) cuando cambia el filtro/búsqueda que la alimenta.
+const SHOW_MORE_PAGE_SIZE = 20;
+function showMoreSlice(key, items, pageSize){
+  pageSize = pageSize || SHOW_MORE_PAGE_SIZE;
+  if(state[key]==null) state[key] = pageSize;
+  return { shown: items.slice(0, state[key]), remaining: Math.max(0, items.length - state[key]) };
+}
+function renderShowMoreButton(key, remaining, pageSize){
+  pageSize = pageSize || SHOW_MORE_PAGE_SIZE;
+  if(remaining<=0) return '';
+  return `<button class="btn-ver-mas" onclick="state.${key}=(state.${key}||${pageSize})+${pageSize};render()">Ver más (${remaining} más)</button>`;
+}
+function resetShowMore(key){ state[key] = SHOW_MORE_PAGE_SIZE; }
+
 /* ============== MÉTRICAS ============== */
 function computeMetrics(){
   const valid = state.orders.filter(o=>o.status!=='Cancelado');
@@ -1996,17 +2016,21 @@ function renderStatsProductos(){
       <div class="stat-card"><div class="stat-label">Sin ninguna venta</div><div class="stat-value">${pa.noSales.length}</div></div>
       <div class="stat-card"><div class="stat-label">Valor de inventario</div><div class="stat-value">${money(m.inventoryValue)}</div></div>
     </div>
-    ${m.lowStock.length>0 ? `
+    ${m.lowStock.length>0 ? (()=>{
+      const {shown, remaining} = showMoreSlice('lowStockShowMore', m.lowStock);
+      return `
     <div class="panel">
-      <div class="panel-title">Bajo stock</div>
-      ${m.lowStock.map(p=>`
+      <div class="panel-title">Bajo stock (${m.lowStock.length})</div>
+      ${shown.map(p=>`
         <div class="list-row">
           ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
           <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
           <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
         </div>
       `).join('')}
-    </div>` : ''}
+      ${renderShowMoreButton('lowStockShowMore', remaining)}
+    </div>`;
+    })() : ''}
     <div class="panel">
       <div class="panel-title">Ventas por categoría — unidades</div>
       ${m.catUnitRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
@@ -2028,12 +2052,16 @@ function renderStatsProductos(){
     ${rankList('Menor facturación', 'Entre los que sí han tenido al menos una venta', pa.leastByRevenue, r=>money(r.value))}
     ${rankList('Mayor margen de ganancia', pa.hasMarginData?null:'Agrega el costo a tus productos para ver esta lista', pa.topMargin, r=>`${r.marginPct}%`)}
     ${rankList('Menor margen de ganancia', null, pa.lowMargin, r=>`${r.marginPct}%`)}
-    ${pa.noSales.length>0 ? `
+    ${pa.noSales.length>0 ? (()=>{
+      const {shown, remaining} = showMoreSlice('noSalesShowMore', pa.noSales);
+      return `
     <div class="panel">
-      <div class="panel-title">Productos sin ninguna venta registrada</div>
+      <div class="panel-title">Productos sin ninguna venta registrada (${pa.noSales.length})</div>
       <div class="panel-sub">Candidatos a promoción, combo o revisión de precio</div>
-      ${pa.noSales.slice(0,10).map(p=>`<div class="list-row">${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}<div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)}</div></div></div>`).join('')}
-    </div>` : ''}
+      ${shown.map(p=>`<div class="list-row">${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}<div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)}</div></div></div>`).join('')}
+      ${renderShowMoreButton('noSalesShowMore', remaining)}
+    </div>`;
+    })() : ''}
   `;
 }
 function renderStatsTrafico(){
@@ -2288,12 +2316,12 @@ function renderProductos(){
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
     </div>
     <div class="status-filter">
-      <button class="${catFilter==='Todas'?'active':''}" onclick="state.productCatFilter='Todas';render()">Todas las categorías</button>
-      ${state.settings.categories.map(c=>`<button class="${catFilter===c?'active':''}" onclick="state.productCatFilter='${c.replace(/'/g,"\\'")}';render()">${c}</button>`).join('')}
+      <button class="${catFilter==='Todas'?'active':''}" onclick="state.productCatFilter='Todas';resetShowMore('productListShowMore');render()">Todas las categorías</button>
+      ${state.settings.categories.map(c=>`<button class="${catFilter===c?'active':''}" onclick="state.productCatFilter='${c.replace(/'/g,"\\'")}';resetShowMore('productListShowMore');render()">${c}</button>`).join('')}
     </div>
     <div class="status-filter" style="margin-bottom:6px;">
-      <button class="${needFilter==='Todas'?'active':''}" onclick="state.productNeedFilter='Todas';render()">Todos</button>
-      ${needsList.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';render()">${n.label}</button>`).join('')}
+      <button class="${needFilter==='Todas'?'active':''}" onclick="state.productNeedFilter='Todas';resetShowMore('productListShowMore');render()">Todos</button>
+      ${needsList.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';resetShowMore('productListShowMore');render()">${n.label}</button>`).join('')}
     </div>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn-tertiary" onclick="state.catManageOpen=!state.catManageOpen;render()">${state.catManageOpen?'Ocultar edición de categorías':icon('edit',14)+' Editar categorías'}</button>
@@ -2306,7 +2334,7 @@ function renderProductos(){
     ${needFilter!=='Todas' ? renderTagAssignPanel('need', needFilter, (needsList.find(n=>n.key===needFilter)||{}).label || needFilter) : ''}
     <div class="panel-title" style="margin-bottom:12px;">Catálogo (${filtered.length}${filterCount?` de ${state.products.length}`:''})</div>
     ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan con este filtro${q?` ("${state.productSearch}")`:''}.</div>` :
-      filtered.map(p=>`
+      (()=>{ const {shown, remaining} = showMoreSlice('productListShowMore', filtered); return shown.map(p=>`
       <div class="list-row" style="${p.hidden?'opacity:.55;':''}">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main">
@@ -2320,11 +2348,13 @@ function renderProductos(){
           <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">${icon('trash')}</button>
         </div>
       </div>
-    `).join('')}
+    `).join('') + renderShowMoreButton('productListShowMore', remaining); })()}
   `;
 }
 function onProductSearchInput(v){
   state.productSearch = v;
+  resetShowMore('productListShowMore');
+  resetShowMore('inventarioShowMore');
   render();
   const i = document.getElementById('product-search-input') || document.getElementById('inventario-search-input');
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
@@ -2643,26 +2673,30 @@ function renderPedidos(){
       <button class="btn-tertiary" onclick="state.abandonedCartsOpen=true;render()">${icon('bag',14)} Carritos abandonados${abandonedCount?` (${abandonedCount})`:''}</button>
     </div>
     <div class="status-filter">
-      <button class="${!state.showArchived?'active':''}" onclick="state.showArchived=false;render()">Activos</button>
-      <button class="${state.showArchived?'active':''}" onclick="state.showArchived=true;render()">Archivados</button>
+      <button class="${!state.showArchived?'active':''}" onclick="state.showArchived=false;resetShowMore('ordersShowMore');render()">Activos</button>
+      <button class="${state.showArchived?'active':''}" onclick="state.showArchived=true;resetShowMore('ordersShowMore');render()">Archivados</button>
     </div>
     <div class="status-filter">
-      <button class="${!state.orderSourceFilter||state.orderSourceFilter==='Todos'?'active':''}" onclick="state.orderSourceFilter='Todos';render()">Todos los orígenes</button>
-      <button class="${state.orderSourceFilter==='tienda'?'active':''}" onclick="state.orderSourceFilter='tienda';render()">${icon('bag')} Tienda</button>
-      <button class="${state.orderSourceFilter==='pos'?'active':''}" onclick="state.orderSourceFilter='pos';render()">${icon('receipt')} Punto de venta</button>
+      <button class="${!state.orderSourceFilter||state.orderSourceFilter==='Todos'?'active':''}" onclick="state.orderSourceFilter='Todos';resetShowMore('ordersShowMore');render()">Todos los orígenes</button>
+      <button class="${state.orderSourceFilter==='tienda'?'active':''}" onclick="state.orderSourceFilter='tienda';resetShowMore('ordersShowMore');render()">${icon('bag')} Tienda</button>
+      <button class="${state.orderSourceFilter==='pos'?'active':''}" onclick="state.orderSourceFilter='pos';resetShowMore('ordersShowMore');render()">${icon('receipt')} Punto de venta</button>
     </div>
-    <div class="status-filter">${filters.map(f=>`<button class="${state.orderStatusFilter===f?'active':''}" onclick="state.orderStatusFilter='${f}';render()">${f}</button>`).join('')}</div>
-    ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` : `
+    <div class="status-filter">${filters.map(f=>`<button class="${state.orderStatusFilter===f?'active':''}" onclick="state.orderStatusFilter='${f}';resetShowMore('ordersShowMore');render()">${f}</button>`).join('')}</div>
+    ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` : (()=>{
+      const {shown:visible, remaining} = showMoreSlice('ordersShowMore', shown);
+      return `
     <div class="orders-table-wrap">
       <table class="orders-table pedidos-table">
         <thead><tr>
           <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Productos</th><th>Pago</th><th>Estado</th><th></th>
         </tr></thead>
         <tbody>
-          ${shown.map(o=>renderOrderRow(o)).join('')}
+          ${visible.map(o=>renderOrderRow(o)).join('')}
         </tbody>
       </table>
-    </div>`}
+    </div>
+    ${renderShowMoreButton('ordersShowMore', remaining)}`;
+    })()}
   `;
 }
 function renderOrderRow(o){
@@ -3069,27 +3103,27 @@ function renderClientes(){
       <button class="btn-outline" onclick="exportCustomersCSV()">Exportar</button>
     </div>
     <div class="two-col" style="margin-bottom:12px;">
-      <input placeholder="Buscar por nombre, teléfono o email..." value="${state.customerSearch}" oninput="state.customerSearch=this.value;render()">
-      <select onchange="state.customerFilters.regDate=this.value;render()">
+      <input placeholder="Buscar por nombre, teléfono o email..." value="${state.customerSearch}" oninput="state.customerSearch=this.value;resetShowMore('customersShowMore');render()">
+      <select onchange="state.customerFilters.regDate=this.value;resetShowMore('customersShowMore');render()">
         ${['Todas','Último día','Últimos 7 días','Últimos 30 días'].map(d=>`<option ${state.customerFilters.regDate===d?'selected':''}>${d}</option>`).join('')}
       </select>
     </div>
     <div class="two-col" style="margin-bottom:16px;">
-      <select onchange="state.customerFilters.country=this.value;render()">
+      <select onchange="state.customerFilters.country=this.value;resetShowMore('customersShowMore');render()">
         <option>Todos</option>${distinctCustomerValues('country').map(v=>`<option ${state.customerFilters.country===v?'selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="state.customerFilters.state=this.value;render()">
+      <select onchange="state.customerFilters.state=this.value;resetShowMore('customersShowMore');render()">
         <option>Todos</option>${distinctCustomerValues('state').map(v=>`<option ${state.customerFilters.state===v?'selected':''}>${v}</option>`).join('')}
       </select>
     </div>
     <div class="form-field" style="max-width:50%;margin-bottom:16px;">
-      <select onchange="state.customerFilters.city=this.value;render()">
+      <select onchange="state.customerFilters.city=this.value;resetShowMore('customersShowMore');render()">
         <option>Todos</option>${distinctCustomerValues('city').map(v=>`<option ${state.customerFilters.city===v?'selected':''}>${v}</option>`).join('')}
       </select>
     </div>
     <div class="panel-title" style="margin-bottom:12px;">Clientes (${list.length})</div>
     ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan.</div>` :
-      list.map(c=>`
+      (()=>{ const {shown, remaining} = showMoreSlice('customersShowMore', list); return shown.map(c=>`
         <div class="list-row">
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
             <div class="row-title">${c.name}${c.isManual?'':' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(automático)</span>'}</div>
@@ -3105,7 +3139,7 @@ function renderClientes(){
             ${c.isManual ? `<button class="icon-btn danger" onclick="event.stopPropagation();deleteCustomerProfile('${c.manualId}')">${icon('trash')}</button>` : ''}
           </div>
         </div>
-      `).join('')}
+      `).join('') + renderShowMoreButton('customersShowMore', remaining); })()}
     ${state.customerModal ? renderCustomerModal() : ''}
     ${state.customerImportOpen ? renderCustomerImportModal() : ''}
   `;
@@ -3934,7 +3968,9 @@ function renderInventarioPorCentro(){
     <div class="form-field" style="max-width:420px;">
       <input id="inventario-search-input" placeholder="Buscar producto..." value="${state.productSearch}" oninput="onProductSearchInput(this.value)">
     </div>
-    ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan${q?` ("${state.productSearch}")`:''}.</div>` : `
+    ${filtered.length===0 ? `<div class="empty-state">No hay productos que coincidan${q?` ("${state.productSearch}")`:''}.</div>` : (()=>{
+      const {shown, remaining} = showMoreSlice('inventarioShowMore', filtered);
+      return `
     <div class="orders-table-wrap">
       <table class="orders-table inventario-table">
         <thead><tr>
@@ -3943,7 +3979,7 @@ function renderInventarioPorCentro(){
           <th>Total</th>
         </tr></thead>
         <tbody>
-          ${filtered.slice(0,150).map(p=>`
+          ${shown.map(p=>`
             <tr>
               <td>${p.name}</td>
               ${activeCenters.map(c=>`<td>${centerStock(p,c.id)}</td>`).join('')}
@@ -3953,7 +3989,8 @@ function renderInventarioPorCentro(){
         </tbody>
       </table>
     </div>
-    ${filtered.length>150 ? `<div class="note-box" style="margin-top:10px;">Mostrando los primeros 150 resultados. Usa el buscador para encontrar un producto específico.</div>` : ''}`}
+    ${renderShowMoreButton('inventarioShowMore', remaining)}`;
+    })()}
   `;
 }
 
