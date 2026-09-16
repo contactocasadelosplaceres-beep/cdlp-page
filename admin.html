@@ -398,6 +398,7 @@ let state = {
   globalSearchOpen:false, globalSearchQuery:"",
   histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
   newOrderCount:0, lastOrderCheck:null, healthOpen:null,
+  storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -417,7 +418,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -437,6 +438,9 @@ async function loadData(){
       // capturados) pero no completó. La tienda (index.html) guarda/borra su propio borrador;
       // aquí solo se leen para el botón "Carritos abandonados" de Pedidos.
       db.collection('abandonedCarts').orderBy('updatedAt','desc').limit(300).get(),
+      // Buzón de mensajes: quejas, sugerencias y preguntas que un cliente deja desde la tienda
+      // (index.html) sin necesidad de escribir por WhatsApp. Se leen aquí para la pestaña "Mensajes".
+      db.collection('storeMessages').orderBy('date','desc').limit(500).get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -460,6 +464,7 @@ async function loadData(){
     state.visits = visitsSnap.docs.map(d=>d.data());
     state.analyticsEvents = analyticsEventsSnap.docs.map(d=>d.data());
     state.abandonedCarts = abandonedCartsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.storeMessages = storeMessagesSnap.docs.map(d=>({id:d.id, status:'nuevo', ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -491,7 +496,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -499,12 +504,13 @@ async function loadData(){
   computeMyPermissions();
   if(state.myPermissions && !canAccessTab(state.adminTab)) state.adminTab = firstAccessibleTab() || state.adminTab;
   if(!state.lastOrderCheck) state.lastOrderCheck = new Date().toISOString();
+  if(!state.lastMessageCheck) state.lastMessageCheck = new Date().toISOString();
   state.loaded = true; render();
 }
-// Aviso de pedido nuevo mientras el admin está abierto: revisa cada 45s si llegó algo
-// nuevo a "orders" o "sales" desde la última revisión, sin que Ale tenga que estar
-// entrando a Pedidos a cada rato para enterarse. Se detiene si la pestaña no está
-// visible (minimizada/en segundo plano) para no gastar lecturas de más.
+// Aviso de pedido/mensaje nuevo mientras el admin está abierto: revisa cada 45s si llegó algo
+// nuevo a "orders", "sales" o "storeMessages" desde la última revisión, sin que Ale tenga que
+// estar entrando a Pedidos o Mensajes a cada rato para enterarse. Se detiene si la pestaña no
+// está visible (minimizada/en segundo plano) para no gastar lecturas de más.
 let newOrderWatcherTimer = null;
 function ensureNewOrderWatcher(active){
   if(active && !newOrderWatcherTimer){
@@ -515,21 +521,29 @@ function ensureNewOrderWatcher(active){
 }
 async function checkForNewOrders(){
   if(document.hidden || !state.user || !state.loaded) return;
-  const since = state.lastOrderCheck || new Date().toISOString();
+  const sinceOrders = state.lastOrderCheck || new Date().toISOString();
+  const sinceMessages = state.lastMessageCheck || new Date().toISOString();
   try{
-    const [ordersSnap, salesSnap] = await Promise.all([
-      db.collection('orders').where('date','>',since).get(),
-      db.collection('sales').where('date','>',since).get(),
+    const [ordersSnap, salesSnap, messagesSnap] = await Promise.all([
+      db.collection('orders').where('date','>',sinceOrders).get(),
+      db.collection('sales').where('date','>',sinceOrders).get(),
+      db.collection('storeMessages').where('date','>',sinceMessages).get(),
     ]);
     const newCount = ordersSnap.size + salesSnap.size;
+    const newMsgCount = messagesSnap.size;
     state.lastOrderCheck = new Date().toISOString();
-    if(newCount>0){
-      state.newOrderCount = (state.newOrderCount||0) + newCount;
+    state.lastMessageCheck = new Date().toISOString();
+    if(newCount>0 || newMsgCount>0){
+      if(newCount>0) state.newOrderCount = (state.newOrderCount||0) + newCount;
+      if(newMsgCount>0) state.newMessageCount = (state.newMessageCount||0) + newMsgCount;
       playNewOrderChime();
-      showToast(`${newCount} pedido${newCount>1?'s':''} nuevo${newCount>1?'s':''}`);
+      const parts = [];
+      if(newCount>0) parts.push(`${newCount} pedido${newCount>1?'s':''} nuevo${newCount>1?'s':''}`);
+      if(newMsgCount>0) parts.push(`${newMsgCount} mensaje${newMsgCount>1?'s':''} nuevo${newMsgCount>1?'s':''}`);
+      showToast(parts.join(' · '));
       await loadData();
     }
-  }catch(e){ console.error('No se pudo revisar pedidos nuevos', e); }
+  }catch(e){ console.error('No se pudo revisar pedidos/mensajes nuevos', e); }
 }
 // Aviso sonoro corto, generado sin archivo de audio (Web Audio API) — dos tonos breves.
 function playNewOrderChime(){
@@ -579,12 +593,14 @@ const PERMISSION_DEFS = [
   {key:'caja', label:'Caja (apertura/cierre del Punto de Venta)'},
   {key:'centros', label:'Centros de distribución y transferencias'},
   {key:'estadisticas', label:'Estadísticas'},
+  {key:'mensajes', label:'Mensajes (buzón de quejas y sugerencias de clientes)'},
   {key:'config', label:'Configuración de la tienda (mayoreo, cupones, promociones, diseño, ajustes, asistente IA)'},
 ];
 const TAB_PERMISSION = {
   resumen:'resumen', pedidos:'pedidos', caja:'caja', productos:'productos', centros:'centros',
   mayoreo:'config', cupones:'config', promociones:'config', diseño:'config',
   clientes:'clientes', estadísticas:'estadisticas', 'asistente ia':'config', configuración:'config',
+  mensajes:'mensajes',
   cajeros:null, // nunca delegable
 };
 // Sincroniza (o revoca) el espejo en "staffPermissions" que usan las reglas de seguridad.
@@ -1775,13 +1791,15 @@ function renderLogin(){
 const ADMIN_NAV_GROUPS = [
   {label:'Ventas', tabs:['resumen','pedidos','caja']},
   {label:'Catálogo', tabs:['productos','centros','mayoreo','cupones','promociones','diseño']},
-  {label:'Personas', tabs:['clientes','cajeros']},
+  {label:'Personas', tabs:['clientes','mensajes','cajeros']},
   {label:'Analítica', tabs:['estadísticas']},
   {label:'Sistema', tabs:['asistente ia','configuración']},
 ];
 function adminTabLabel(t){
   const base = t==='cajeros' ? 'Usuarios' : t==='asistente ia' ? 'Asistente IA' : t[0].toUpperCase()+t.slice(1);
-  return (t==='pedidos' && state.newOrderCount>0) ? `${base} <span class="tab-badge">${state.newOrderCount}</span>` : base;
+  if(t==='pedidos' && state.newOrderCount>0) return `${base} <span class="tab-badge">${state.newOrderCount}</span>`;
+  if(t==='mensajes' && state.newMessageCount>0) return `${base} <span class="tab-badge">${state.newMessageCount}</span>`;
+  return base;
 }
 
 function renderAdmin(){
@@ -1789,7 +1807,7 @@ function renderAdmin(){
   // sub-pestaña esté abierta; en cualquier otro caso se detiene aquí.
   if(!(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal')) ensureRealtimeTimer(false);
   ensureNewOrderWatcher(true);
-  const goTab = (t) => `state.adminTab='${t}';state.designSubpanel=null;state.adminNavOpen=false;${t==='pedidos'?'state.newOrderCount=0;':''}render()`;
+  const goTab = (t) => `state.adminTab='${t}';state.designSubpanel=null;state.adminNavOpen=false;${t==='pedidos'?'state.newOrderCount=0;':''}${t==='mensajes'?'state.newMessageCount=0;':''}render()`;
   return `
   <div class="app">
     <div class="admin-top">
@@ -1828,6 +1846,7 @@ function renderAdmin(){
       ${state.adminTab==='productos' ? renderProductos() : ''}
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='clientes' ? renderClientes() : ''}
+      ${state.adminTab==='mensajes' ? renderMensajes() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
       ${state.adminTab==='caja' ? renderCaja() : ''}
       ${state.adminTab==='centros' ? renderCentros() : ''}
@@ -2931,6 +2950,87 @@ function renderOrderRow(o){
     </td></tr>`;
   }
   return rows;
+}
+
+/* ============== MENSAJES (buzón de quejas y sugerencias) ==============
+   Los clientes dejan un mensaje desde la tienda (index.html), sin necesidad de escribir por
+   WhatsApp — igual que el buzón de mensajes que tenía Tiendanube. Se guardan en la colección
+   "storeMessages" (solo creación pública, lectura/edición con el permiso "mensajes", ver
+   firestore.rules). Cada mensaje trae nombre, teléfono, un tipo (pregunta/sugerencia/queja/otro)
+   y el texto; aquí se pueden marcar como leídos/respondidos y responder por WhatsApp en un clic. */
+const MESSAGE_STATUS_COLOR = {nuevo:'#bc355c', leido:'#c9a227', respondido:'#4CAF7D'};
+const MESSAGE_STATUS_LABEL = {nuevo:'Nuevo', leido:'Leído', respondido:'Respondido'};
+const MESSAGE_TYPE_LABEL = {pregunta:'Pregunta', sugerencia:'Sugerencia', queja:'Queja', otro:'Otro'};
+function messageWhatsappLink(m){
+  const num = normalizePhone(m.phone);
+  if(!num) return null;
+  const msg = `Hola ${m.name||''}, soy de ${state.settings.storeName}. Vi tu mensaje: "${(m.message||'').slice(0,180)}" — `;
+  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+}
+async function updateMessageStatus(id, status){
+  try{ await db.collection('storeMessages').doc(id).update({status}); }
+  catch(e){ console.error(e); showToast('No se pudo actualizar el mensaje'); return; }
+  const m = state.storeMessages.find(x=>x.id===id);
+  if(m) m.status = status;
+  render();
+}
+async function deleteStoreMessage(id){
+  if(!confirm('¿Eliminar este mensaje? Esta acción no se puede deshacer.')) return;
+  try{
+    await db.collection('storeMessages').doc(id).delete();
+    state.storeMessages = state.storeMessages.filter(x=>x.id!==id);
+    showToast('Mensaje eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar el mensaje'); }
+}
+function filteredStoreMessages(){
+  let list = [...(state.storeMessages||[])].sort((a,b)=> new Date(b.date||0) - new Date(a.date||0));
+  if(state.messageStatusFilter && state.messageStatusFilter!=='Todos'){
+    list = list.filter(m=>(m.status||'nuevo')===state.messageStatusFilter);
+  }
+  const q = (state.messageSearch||'').trim().toLowerCase();
+  if(q) list = list.filter(m=> (m.name||'').toLowerCase().includes(q) || (m.message||'').toLowerCase().includes(q) || (m.phone||'').includes(q));
+  return list;
+}
+function renderMensajes(){
+  const filters = [
+    {key:'Todos', label:'Todos'},
+    {key:'nuevo', label:'Nuevos'},
+    {key:'leido', label:'Leídos'},
+    {key:'respondido', label:'Respondidos'},
+  ];
+  const list = filteredStoreMessages();
+  return `
+    <div class="note-box" style="margin-bottom:14px;">Los clientes dejan estos mensajes desde el enlace "Buzón de sugerencias" en el pie de página de tu tienda. Si dejaron teléfono, puedes responder directo por WhatsApp.</div>
+    <div class="status-filter">${filters.map(f=>`<button class="${state.messageStatusFilter===f.key?'active':''}" onclick="state.messageStatusFilter='${f.key}';resetShowMore('messagesShowMore');render()">${f.label}</button>`).join('')}</div>
+    <div class="form-field" style="max-width:420px;margin:10px 0 16px;">
+      <input placeholder="Buscar por nombre, teléfono o texto..." value="${(state.messageSearch||'').replace(/"/g,'&quot;')}" oninput="state.messageSearch=this.value;resetShowMore('messagesShowMore');render()">
+    </div>
+    <div class="panel-title" style="margin-bottom:12px;">Mensajes (${list.length})</div>
+    ${list.length===0 ? `<div class="empty-state">No hay mensajes en este filtro.</div>` :
+      (()=>{ const {shown, remaining} = showMoreSlice('messagesShowMore', list); return shown.map(m=>{
+        const wa = messageWhatsappLink(m);
+        const status = m.status||'nuevo';
+        return `
+        <div class="list-row" style="align-items:flex-start;">
+          <div class="row-main">
+            <div class="row-title">${m.name||'Sin nombre'} <span class="status-badge" style="background:var(--teal);">${MESSAGE_TYPE_LABEL[m.type]||'Otro'}</span></div>
+            <div class="row-sub">${m.date ? new Date(m.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''} ${m.phone?`· ${m.phone}`:''}</div>
+            <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5;">${(m.message||'').replace(/</g,'&lt;')}</div>
+            <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
+              <span class="status-badge" style="background:${MESSAGE_STATUS_COLOR[status]}">${MESSAGE_STATUS_LABEL[status]}</span>
+              ${status!=='leido' ? `<button class="btn-tertiary" style="padding:4px 10px;" onclick="updateMessageStatus('${m.id}','leido')">Marcar leído</button>` : ''}
+              ${status!=='respondido' ? `<button class="btn-tertiary" style="padding:4px 10px;" onclick="updateMessageStatus('${m.id}','respondido')">Marcar respondido</button>` : ''}
+            </div>
+          </div>
+          <div class="row-actions">
+            ${wa ? `<a class="icon-btn" href="${wa}" target="_blank" title="Responder por WhatsApp" onclick="updateMessageStatus('${m.id}','respondido')">
+              <svg width="15" height="15" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
+            </a>` : ''}
+            <button class="icon-btn danger" onclick="deleteStoreMessage('${m.id}')">${icon('trash')}</button>
+          </div>
+        </div>
+      `; }).join('') + renderShowMoreButton('messagesShowMore', remaining); })()}
+  `;
 }
 
 function renderCajeros(){
