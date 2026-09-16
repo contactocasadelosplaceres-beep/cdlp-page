@@ -142,6 +142,14 @@
   .first-band h3{font-size:19px;font-weight:800;max-width:340px;}
   .first-band p{margin-top:8px;font-size:13.5px;line-height:1.5;max-width:380px;opacity:.92;}
   .first-band .hero-btn-ghost{background:rgba(255,255,255,0.55);color:#3a2200;margin-top:14px;display:inline-block;}
+  .first-band .promo-code{display:inline-block;background:rgba(255,255,255,0.6);border:1.5px dashed #3a2200;border-radius:8px;padding:3px 9px;font-weight:800;letter-spacing:0.03em;margin:0 2px;}
+
+  /* ===== CROSS-SELL SUGGESTION (carrito) ===== */
+  .cross-sell-card{display:flex;align-items:center;gap:10px;background:var(--surface-soft);border:1px solid var(--border);border-radius:14px;padding:10px;margin-top:14px;}
+  .cross-sell-swatch{width:48px;height:48px;border-radius:10px;flex-shrink:0;object-fit:cover;background:linear-gradient(135deg,var(--surface-soft),var(--border));}
+  .cross-sell-info{flex:1;min-width:0;font-size:12.5px;line-height:1.4;}
+  .cross-sell-info b{color:var(--primary-deep);}
+  .cross-sell-add{flex-shrink:0;background:var(--primary);color:#fff;padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:700;}
 
   /* ===== PROMO BANNER ===== */
   .promo-banner{margin:0 20px 6px;border-radius:20px;overflow:hidden;background:var(--surface-soft);border:1px solid var(--border);display:flex;flex-direction:column;}
@@ -171,6 +179,7 @@
   .rating-stars{color:var(--amber);font-size:15px;letter-spacing:1px;}
   .rating-num{font-weight:800;color:var(--primary-deep);font-size:15px;}
   .rating-label{font-size:12.5px;color:var(--ink-soft);}
+  .rating-line-standalone{display:flex;align-items:center;justify-content:center;gap:8px;margin:26px 20px 4px;padding:12px 18px;background:var(--surface-soft);border-radius:var(--radius-pill);}
   .testimonial-row{display:grid;grid-template-columns:1fr;gap:12px;padding:0 20px 6px;}
   @media(min-width:640px){.testimonial-row{grid-template-columns:repeat(2,1fr);}}
   @media(min-width:980px){.testimonial-row{grid-template-columns:repeat(3,1fr);}}
@@ -363,14 +372,20 @@ const DEFAULT_SETTINGS = {
   customCss:"",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"" };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"" };
 
 async function loadData(){
   try{
-    const [prodSnap, setSnap] = await Promise.all([
+    const [prodSnap, setSnap, counterSnap] = await Promise.all([
       db.collection('products').orderBy('name').limit(40).get(),
       db.collection('settings').doc('store').get(),
+      db.collection('counters').doc('orders').get(),
     ]);
+    // "counters/orders" es de lectura pública (lo usa también el checkout para sacar el
+    // folio) y se incrementa en cada pedido de la tienda y cada venta del Punto de Venta,
+    // así que sirve como número real de pedidos para el rating-line, sin exponer ningún
+    // dato de pedidos individuales (eso sigue protegido detrás del permiso "pedidos").
+    state.orderCount = counterSnap.exists ? Math.max(0, (counterSnap.data().next||1) - 1) : 0;
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
     state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
@@ -669,6 +684,17 @@ function activeGift(){
   if(!gift) return null;
   const product = state.products.find(p=>p.id===gift.giftProductId);
   return product ? {promo:gift, product} : null;
+}
+// Sugerencia de producto complementario: reusa las promociones "cross_sell" que ya existen
+// (Producto A + Producto B, con % de descuento en B) — en cuanto A está en el carrito, se
+// muestra B como sugerencia con su descuento ya listo, sin ser un pop-up que interrumpa.
+// Si B ya está en el carrito, deja de sugerirse (ya no hace falta insistir).
+function crossSellSuggestions(){
+  const inCartIds = new Set(Object.keys(state.cart).map(key=>{ const {p}=parseCartKey(key); return p?p.id:null; }).filter(Boolean));
+  return activePromotions()
+    .filter(promo=>promo.type==='cross_sell' && inCartIds.has(promo.triggerProductId) && !inCartIds.has(promo.discountProductId))
+    .map(promo=>({promo, product: state.products.find(p=>p.id===promo.discountProductId)}))
+    .filter(x=>x.product);
 }
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
@@ -1034,12 +1060,15 @@ function renderFeaturedSection(){
   </div>`;
 }
 
-/* ============== PRIMERA COMPRA (fixed) ============== */
+/* ============== PRIMERA COMPRA (fixed) ==============
+   El código "BIENVENIDA" no se genera aquí: es un cupón normal que se crea (una sola vez)
+   en el admin, pestaña Cupones. Este texto solo lo anuncia; el campo "¿Tienes un código de
+   descuento?" que ya existe en el carrito es el que lo aplica. */
 function renderFirstTimeSection(){
   return `
   <div class="first-band">
     <h3>¿Es tu primera compra?</h3>
-    <p>No necesitas saber por dónde empezar. Cuéntanos qué buscas y te ayudamos a encontrar opciones sencillas y fáciles de elegir.</p>
+    <p>No necesitas saber por dónde empezar. Cuéntanos qué buscas y te ayudamos a encontrar opciones sencillas y fáciles de elegir. Y por ser tu primer pedido, usa el código <span class="promo-code">BIENVENIDA</span> en el carrito y te llevas 10% de descuento.</p>
     <a class="hero-btn-ghost" href="${waLink('Es mi primera compra, ¿me pueden ayudar a elegir?')}" target="_blank">Pedir ayuda para empezar</a>
   </div>`;
 }
@@ -1160,21 +1189,35 @@ function renderProductCard(p, forceBest){
 }
 
 /* ============== TESTIMONIOS ============== */
+// El resumen de estrellas (rating-line) ya no vive aquí: se movió a una franja fija justo
+// arriba del catálogo (ver renderRatingLineBlock más abajo) para que sea lo primero que se
+// vea antes de los precios. Aquí solo quedan las tarjetas con el detalle de cada opinión.
 function renderTestimonialsSection(){
   const list = state.settings.testimonials||[];
   if(!list.length) return '';
-  const avg = list.reduce((s,t)=>s+(Number(t.rating)||5),0)/list.length;
   return `
   <div class="section-block">
     <div class="section-heading" style="margin-bottom:6px;">Lo que dicen nuestros clientes</div>
-    <div class="rating-line">
-      <span class="rating-stars">★★★★★</span>
-      <span class="rating-num">${avg.toFixed(1)}</span>
-      <span class="rating-label">Opiniones de clientes</span>
-    </div>
   </div>
   <div class="testimonial-row">
       ${list.map(t=>`<div class="testimonial-card"><span class="stars">${'★'.repeat(Number(t.rating)||5)}</span><p>"${t.text}"</p>${t.name?`<div class="testimonial-name">— ${t.name}</div>`:''}</div>`).join('')}
+  </div>`;
+}
+// Franja fija con estrellas + calificación + número real de pedidos, arriba del catálogo
+// completo (antes de que el cliente vea precios). Solo se muestra si ya hay testimonios
+// activados (si no, no hay calificación que mostrar). El conteo de pedidos sale de
+// "counters/orders" (ver loadData): es de lectura pública y ya se usa para los folios, así
+// que no expone ningún dato de pedidos individuales.
+function renderRatingLineBlock(){
+  const list = state.settings.testimonials||[];
+  if(!list.length) return '';
+  const avg = list.reduce((s,t)=>s+(Number(t.rating)||5),0)/list.length;
+  const count = state.orderCount||0;
+  return `
+  <div class="rating-line-standalone">
+    <span class="rating-stars">★★★★★</span>
+    <span class="rating-num">${avg.toFixed(1)}</span>
+    <span class="rating-label">${count>0 ? `· +${count} pedidos` : 'Opiniones de clientes'}</span>
   </div>`;
 }
 
@@ -1200,9 +1243,9 @@ function renderNewsletterSection(){
   if(!state.settings.whatsapp) return '';
   return `
   <div class="newsletter-block">
-    <div class="section-heading">¿No sabes cuál elegir?</div>
-    <div class="newsletter-text">Cuéntanos qué estás buscando y te mostramos opciones, con toda confianza.</div>
-    <a class="btn-primary" style="display:inline-block;width:auto;padding:12px 22px;" href="${waLink('Hola, no sé qué producto elegir, ¿me pueden ayudar?')}" target="_blank">Hablar por WhatsApp</a>
+    <div class="section-heading">¿Tienes dudas íntimas?</div>
+    <div class="newsletter-text">Escríbenos, respondemos con toda discreción. Sin pena, sin juicios — solo queremos ayudarte a encontrar lo que buscas.</div>
+    <a class="btn-primary" style="display:inline-block;width:auto;padding:12px 22px;" href="${waLink('Hola, tengo una duda y me gustaría preguntar con confianza.')}" target="_blank">Hablar por WhatsApp</a>
   </div>`;
 }
 
@@ -1286,6 +1329,13 @@ function renderCartDrawer(){
           </div>`;}).join('')}
       ${buyXPayYSavings>0 ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Promoción aplicada: ahorras ${money(buyXPayYSavings)}</div>` : ''}
       ${gift ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('gift')} ¡Llevas de regalo: ${gift.product.name}!</div>` : ''}
+      ${crossSellSuggestions().map(({promo,product})=>`
+        <div class="cross-sell-card">
+          ${product.images&&product.images.length ? `<img class="cross-sell-swatch" src="${product.images[0]}">` : `<div class="cross-sell-swatch"></div>`}
+          <div class="cross-sell-info">También te puede interesar <b>${product.name}</b> — <b>${promo.discountPercent}% de descuento</b> por llevarlo junto.</div>
+          <button class="cross-sell-add" onclick="addToCart('${product.id}')">Agregar</button>
+        </div>
+      `).join('')}
       ${entries.length>0 ? `
         <div class="form-field" style="margin-top:14px;">
           <label>¿Tienes un código de descuento?</label>
@@ -1344,9 +1394,9 @@ function renderSuccess(){
 
 function renderStore(){
   const order = ['hero','featured','categories','promoBanner','grid','testimonials','newsletter','footer'];
-  const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
+  const before = { grid: ['ratingline','kits'] }; // fixed sections inserted right before a configurable one
   const after = { hero: ['trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
-  const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
+  const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection, ratingline: renderRatingLineBlock };
 
   let body = '';
   order.forEach(key=>{
