@@ -2136,23 +2136,31 @@ function renderTagAssignPanel(kind, value, label){
   const openKey = kind==='cat' ? 'catAssignOpen' : 'needAssignOpen';
   const searchKey = kind==='cat' ? 'catAssignSearch' : 'needAssignSearch';
   const q = (state[searchKey]||'').trim().toLowerCase();
-  const candidates = q ? state.products.filter(p=>!productHasTag(p,kind,value) && (p.name||'').toLowerCase().includes(q)).slice(0,30) : [];
+  // Antes esta búsqueda solo mostraba productos que TODAVÍA no tenían la etiqueta (para
+  // agregarlos). Ahora muestra cualquier producto que coincida con el nombre buscado, y
+  // decide el botón según si ya la tiene o no — así desde la misma barra se puede agregar
+  // o quitar, sin tener que bajar a buscarlo en la lista completa de abajo.
+  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,30) : [];
   return `
     <div style="margin-bottom:10px;">
-      <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Ocultar buscador':'+ Agregar productos a'} "${label}"</button>
+      <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Ocultar buscador':'+ Agregar o quitar productos de'} "${label}"</button>
       ${state[openKey] ? `
         <div class="panel" style="margin-top:8px;background:var(--bg);">
           <input placeholder="Buscar producto por nombre..." value="${(state[searchKey]||'').replace(/"/g,'&quot;')}" oninput="state.${searchKey}=this.value;render()">
           ${q ? (candidates.length ? `
             <div style="max-height:220px;overflow-y:auto;margin-top:8px;">
-              ${candidates.map(p=>`
+              ${candidates.map(p=>{
+                const has = productHasTag(p,kind,value);
+                return `
                 <div class="list-row" style="margin:0 0 6px;">
-                  <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div></div>
-                  <button class="btn-outline" style="font-size:12px;padding:6px 10px;" onclick="addProductTag('${p.id}','${kind}','${value.replace(/'/g,"\\'")}')">+ Agregar</button>
+                  <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div>${has?`<div class="row-sub">Ya está en "${label}"</div>`:''}</div>
+                  ${has
+                    ? `<button class="btn-outline" style="font-size:12px;padding:6px 10px;color:var(--rose);border-color:var(--rose);" onclick="removeProductTag('${p.id}','${kind}','${value.replace(/'/g,"\\'")}')">Quitar</button>`
+                    : `<button class="btn-outline" style="font-size:12px;padding:6px 10px;" onclick="addProductTag('${p.id}','${kind}','${value.replace(/'/g,"\\'")}')">+ Agregar</button>`}
                 </div>
-              `).join('')}
+              `;}).join('')}
             </div>
-          ` : `<div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Sin resultados, o ya están todos en "${label}".</div>`) : ''}
+          ` : `<div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Sin resultados para "${state[searchKey]}".</div>`) : ''}
         </div>
       ` : ''}
     </div>`;
