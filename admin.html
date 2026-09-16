@@ -486,6 +486,8 @@ async function loadData(){
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
   }
+  computeMyPermissions();
+  if(state.myPermissions && !canAccessTab(state.adminTab)) state.adminTab = firstAccessibleTab() || state.adminTab;
   state.loaded = true; render();
 }
 async function saveOrdersStatus(orderId,status,source){ try{ await db.collection(source==='pos'?'sales':'orders').doc(orderId).update({status}); }catch(e){ console.error(e); showToast('No se pudo actualizar el pedido'); } }
@@ -493,11 +495,71 @@ async function saveOrderArchived(orderId,archived,source){ try{ await db.collect
 async function saveSettings(){ try{ await db.collection('settings').doc('store').set(state.settings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración'); } }
 async function saveAiSettingsDoc(){ try{ await db.collection('settings').doc('ai').set(state.aiSettings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración de IA'); } }
 async function saveCashierDoc(c){
-  const payload = {name:c.name, pin:c.pin||'', active:c.active, email:c.email||'', role:c.role||'cajero', notify:c.notify||{}};
+  const payload = {name:c.name, pin:c.pin||'', active:c.active, email:c.email||'', role:c.role||'cajero', notify:c.notify||{}, permissions:c.permissions||{}};
   if(c.id){ await db.collection('cashiers').doc(c.id).set(payload); }
   else{ const ref = await db.collection('cashiers').add(payload); c.id = ref.id; }
 }
 async function deleteCashierDoc(id){ await db.collection('cashiers').doc(id).delete(); }
+
+/* ============== PERMISOS DE COLABORADOR ==============
+   El rol "colaborador" da acceso a admin.html con su propia cuenta de Firebase (creada
+   aparte, en la consola de Firebase — ver nota en el modal), pero solo a las secciones
+   que aquí se le marquen. La lista de abajo controla tanto lo que VE en el panel (aquí)
+   como lo que puede REALMENTE leer/escribir en Firestore: cada vez que se guarda un
+   colaborador se refleja en la colección "staffPermissions", indexada por su correo en
+   minúsculas, que es la que consultan las reglas de seguridad (firestore.rules). Nunca se
+   borra ese documento al desactivar o quitarle acceso a alguien — se deja con todos los
+   permisos en falso, para que la restricción siga aplicando aunque la cuenta de Firebase
+   de esa persona siga existiendo.
+   "Usuarios" (este mismo panel) nunca aparece en la lista: si un colaborador pudiera
+   editar permisos, podría dárselos a sí mismo. Administrar usuarios queda reservado a
+   cuentas sin restricciones (las que no tienen un documento de colaborador con ese correo). */
+const PERMISSION_DEFS = [
+  {key:'resumen', label:'Resumen (ventas totales, ingresos)'},
+  {key:'pedidos', label:'Pedidos (ver y gestionar pedidos y ventas)'},
+  {key:'productos', label:'Productos (editar catálogo e inventario)'},
+  {key:'clientes', label:'Clientes'},
+  {key:'caja', label:'Caja (apertura/cierre del Punto de Venta)'},
+  {key:'centros', label:'Centros de distribución y transferencias'},
+  {key:'estadisticas', label:'Estadísticas'},
+  {key:'config', label:'Configuración de la tienda (mayoreo, cupones, promociones, diseño, ajustes, asistente IA)'},
+];
+const TAB_PERMISSION = {
+  resumen:'resumen', pedidos:'pedidos', caja:'caja', productos:'productos', centros:'centros',
+  mayoreo:'config', cupones:'config', promociones:'config', diseño:'config',
+  clientes:'clientes', estadísticas:'estadisticas', 'asistente ia':'config', configuración:'config',
+  cajeros:null, // nunca delegable
+};
+// Sincroniza (o revoca) el espejo en "staffPermissions" que usan las reglas de seguridad.
+// email/oldEmail siempre en minúsculas; revoke=true escribe todos los permisos en falso
+// en vez de borrar el documento (ver nota arriba de por qué no se borra).
+async function syncStaffPermissions(email, permissions, oldEmail){
+  const clean = (email||'').trim().toLowerCase();
+  const oldClean = (oldEmail||'').trim().toLowerCase();
+  try{
+    if(oldClean && oldClean!==clean){
+      await db.collection('staffPermissions').doc(oldClean).set({permissions:{}});
+    }
+    if(clean){
+      await db.collection('staffPermissions').doc(clean).set({permissions: permissions||{}});
+    }
+  }catch(e){ console.error('No se pudo sincronizar los permisos', e); }
+}
+function computeMyPermissions(){
+  const myEmail = (state.user && state.user.email || '').trim().toLowerCase();
+  const mine = state.cashiers.find(c=>c.role==='colaborador' && (c.email||'').trim().toLowerCase()===myEmail && myEmail);
+  state.myPermissions = (mine && mine.active) ? (mine.permissions||{}) : null;
+}
+function canAccessTab(t){
+  if(!state.myPermissions) return true;
+  const perm = TAB_PERMISSION[t];
+  if(!perm) return false;
+  return !!state.myPermissions[perm];
+}
+function firstAccessibleTab(){
+  for(const g of ADMIN_NAV_GROUPS){ for(const t of g.tabs){ if(canAccessTab(t)) return t; } }
+  return null;
+}
 
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
 function icon(name, size){
@@ -902,21 +964,37 @@ async function saveCashierForm(){
   const pin = document.getElementById('cash-pin').value.trim();
   if(!name){ showToast('Ponle un nombre'); return; }
   if(role==='cajero' && !pin){ showToast('Los cajeros necesitan un PIN para el Punto de Venta'); return; }
+  if(role==='colaborador' && !email){ showToast('Los colaboradores necesitan el correo con el que van a iniciar sesión'); return; }
+  if(role==='colaborador' && (state.user.email||'').trim().toLowerCase()===email.trim().toLowerCase()){ showToast('No puedes usar tu propio correo — te quedarías sin acceso completo'); return; }
   const notify = state.cashierModal.notify || {};
+  const permissions = role==='colaborador' ? (state.cashierModal.permissions||{}) : {};
   const existing = state.cashierModal.id ? state.cashiers.find(c=>c.id===state.cashierModal.id) : null;
-  const c = existing ? {...existing, name, email, role, pin, notify} : {name, email, role, pin, notify, active:true};
+  const oldEmail = existing ? existing.email : null;
+  const c = existing ? {...existing, name, email, role, pin, notify, permissions} : {name, email, role, pin, notify, permissions, active:true};
   await saveCashierDoc(c);
+  // El acceso real siempre lo decide "staffPermissions", no la lista de cajeros: si el
+  // rol dejó de ser "colaborador" o se cambió el correo, hay que revocar el correo anterior.
+  await syncStaffPermissions(role==='colaborador' ? email : '', role==='colaborador' ? permissions : {}, oldEmail);
   if(!existing) state.cashiers.push(c);
-  else Object.assign(existing, {name, email, role, pin, notify});
+  else Object.assign(existing, {name, email, role, pin, notify, permissions});
+  if(state.user && (state.user.email||'').trim().toLowerCase()===(email||'').trim().toLowerCase()) computeMyPermissions();
   state.cashierModal=null; showToast('Guardado'); render();
 }
 async function toggleCashierActive(id){
   const c = state.cashiers.find(x=>x.id===id); if(!c) return;
-  c.active = !c.active; await saveCashierDoc(c); render();
+  c.active = !c.active; await saveCashierDoc(c);
+  // Desactivar a un colaborador debe revocar su acceso real de inmediato, no solo la
+  // etiqueta visual — si no, su cuenta de Firebase seguiría entrando con sus permisos viejos.
+  if(c.role==='colaborador') await syncStaffPermissions(c.active ? c.email : '', c.active ? (c.permissions||{}) : {}, c.active ? null : c.email);
+  computeMyPermissions(); render();
 }
 async function deleteCashier(id){
+  const c = state.cashiers.find(x=>x.id===id);
   try{
     await deleteCashierDoc(id);
+    // Igual que al desactivar: si era colaborador, hay que revocarle el acceso real,
+    // no solo quitarlo de esta lista.
+    if(c && c.role==='colaborador' && c.email) await syncStaffPermissions('', {}, c.email);
     state.cashiers = state.cashiers.filter(c=>c.id!==id);
     showToast('Eliminado'); render();
   }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
@@ -1273,12 +1351,12 @@ function renderAdmin(){
     <div class="admin-top">
       <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Panel de administración</div></div>
       <div class="admin-top-actions">
-        <a class="logout-link" href="pos.html" target="_blank">Punto de venta</a>
+        ${!state.myPermissions ? `<a class="logout-link" href="pos.html" target="_blank">Punto de venta</a>` : ''}
         <button class="logout-link" onclick="handleLogout()">Cerrar sesión</button>
       </div>
     </div>
     <div class="admin-tabs admin-tabs-main">
-      ${ADMIN_NAV_GROUPS.map((g,gi)=>`
+      ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map((g,gi)=>`
         ${gi>0?'<span class="admin-tabs-sep"></span>':''}
         ${g.tabs.map(t=>`<button class="admin-tab ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${adminTabLabel(t)}</button>`).join('')}
       `).join('')}
@@ -1290,7 +1368,7 @@ function renderAdmin(){
       </button>
       ${state.adminNavOpen ? `
       <div class="admin-nav-mobile-sheet">
-        ${ADMIN_NAV_GROUPS.map(g=>`
+        ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map(g=>`
           <div class="admin-nav-group-label">${g.label}</div>
           <div class="admin-nav-group-row">
             ${g.tabs.map(t=>`<button class="admin-tab ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${adminTabLabel(t)}</button>`).join('')}
@@ -1299,6 +1377,7 @@ function renderAdmin(){
       </div>` : ''}
     </div>
     <div class="admin-body">
+      ${!canAccessTab(state.adminTab) ? `<div class="empty-state">No tienes permiso para ver esta sección.</div>` : `
       ${state.adminTab==='resumen' ? renderResumen() : ''}
       ${state.adminTab==='estadísticas' ? renderEstadisticas() : ''}
       ${state.adminTab==='productos' ? renderProductos() : ''}
@@ -1313,6 +1392,7 @@ function renderAdmin(){
       ${state.adminTab==='diseño' ? renderDiseno() : ''}
       ${state.adminTab==='asistente ia' ? renderAsistenteIA() : ''}
       ${state.adminTab==='configuración' ? renderConfig() : ''}
+      `}
     </div>
   </div>
   ${state.productModal!==null ? renderProductModal() : ''}
@@ -2506,11 +2586,11 @@ function renderOrderRow(o){
 }
 
 function renderCajeros(){
-  const ROLE_LABEL = {cajero:'Cajero', administrador:'Administrador'};
+  const ROLE_LABEL = {cajero:'Cajero', administrador:'Administrador', colaborador:'Colaborador'};
   const NOTIF_LABEL = {ventas:'Ventas', pedidos:'Pedidos', stockBajo:'Stock bajo'};
   return `
-    <div class="note-box">Aquí administras a las personas que trabajan contigo: cajeros que usan el Punto de Venta con su PIN, y quién debería enterarse de qué (ventas nuevas, pedidos, stock bajo). Crear una cuenta nueva con acceso total al panel todavía se hace desde la consola de Firebase — aquí solo la dejas registrada para tener todo en un solo lugar.</div>
-    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.cashierModal={role:'cajero',notify:{}};render()">+ Agregar</button>
+    <div class="note-box">Aquí administras a las personas que trabajan contigo: cajeros que usan el Punto de Venta con su PIN, colaboradores con acceso limitado y personalizable al panel, y quién debería enterarse de qué (ventas nuevas, pedidos, stock bajo). Crear la cuenta de acceso (administrador o colaborador) todavía se hace desde la consola de Firebase — aquí solo defines qué puede ver y hacer una vez que entra.</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.cashierModal={role:'cajero',notify:{},permissions:{}};render()">+ Agregar</button>
     <div class="panel-title" style="margin-bottom:12px;">Usuarios (${state.cashiers.length})</div>
     ${state.cashiers.length===0 ? `<div class="empty-state">Aún no has agregado a nadie.</div>` :
       state.cashiers.map(c=>`
@@ -2526,7 +2606,8 @@ function renderCajeros(){
           <div class="row-sub">${c.email||'Sin email'} · PIN: ${c.pin||'—'}</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
             <span class="status-badge" style="background:var(--primary);">${ROLE_LABEL[c.role]||'Cajero'}</span>
-            ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--teal);">${NOTIF_LABEL[k]||k}</span>`).join('')}
+            ${c.role==='colaborador' ? PERMISSION_DEFS.filter(p=>c.permissions&&c.permissions[p.key]).map(p=>`<span class="status-badge" style="background:var(--teal);">${p.label.split(' (')[0]}</span>`).join('') : ''}
+            ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--amber);">${NOTIF_LABEL[k]||k}</span>`).join('')}
           </div>
         </div>
       `).join('')
@@ -2537,22 +2618,48 @@ function toggleCashierNotify(key, checked){
   if(!state.cashierModal.notify) state.cashierModal.notify = {};
   state.cashierModal.notify[key] = checked;
 }
+function toggleCashierPermission(key, checked){
+  if(!state.cashierModal.permissions) state.cashierModal.permissions = {};
+  state.cashierModal.permissions[key] = checked;
+}
+function setCashierRole(role){
+  state.cashierModal.role = role;
+  if(role==='colaborador' && !state.cashierModal.permissions) state.cashierModal.permissions = {};
+  render();
+}
 function renderCashierModal(){
   const c = state.cashierModal;
   const NOTIF_OPTIONS = [{key:'ventas',label:'Ventas nuevas (Punto de Venta)'},{key:'pedidos',label:'Pedidos nuevos (tienda online)'},{key:'stockBajo',label:'Alertas de stock bajo'}];
+  const isColaborador = c.role==='colaborador';
   return `
   <div class="modal-overlay" onclick="if(event.target===this){state.cashierModal=null;render();}">
     <div class="modal">
       <h3>${c.id?'Editar usuario':'Nuevo usuario'}</h3>
-      <div class="form-field"><label>Nombre</label><input id="cash-name" value="${c.name||''}"></div>
-      <div class="form-field"><label>Email (opcional)</label><input id="cash-email" type="email" value="${c.email||''}"></div>
+      <div class="form-field"><label>Nombre</label><input id="cash-name" value="${c.name||''}" oninput="state.cashierModal.name=this.value"></div>
+      <div class="form-field"><label>Email ${isColaborador?'(con el que va a iniciar sesión)':'(opcional)'}</label><input id="cash-email" type="email" value="${c.email||''}" oninput="state.cashierModal.email=this.value"></div>
       <div class="form-field"><label>Permisos</label>
-        <select id="cash-role">
-          <option value="cajero" ${c.role!=='administrador'?'selected':''}>Cajero (solo Punto de Venta)</option>
+        <select id="cash-role" onchange="setCashierRole(this.value)">
+          <option value="cajero" ${c.role!=='administrador'&&c.role!=='colaborador'?'selected':''}>Cajero (solo Punto de Venta)</option>
+          <option value="colaborador" ${c.role==='colaborador'?'selected':''}>Colaborador (acceso limitado y personalizable al panel)</option>
           <option value="administrador" ${c.role==='administrador'?'selected':''}>Administrador (acceso total al panel)</option>
         </select>
       </div>
-      <div class="form-field"><label>PIN para el Punto de Venta (4 dígitos)</label><input id="cash-pin" maxlength="6" value="${c.pin||''}"></div>
+      ${isColaborador ? `
+      <div class="form-field">
+        <label>¿A qué secciones del panel tiene acceso?</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${PERMISSION_DEFS.map(p=>`
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:9px 12px;border-radius:9px;cursor:pointer;">
+              <input type="checkbox" ${c.permissions&&c.permissions[p.key]?'checked':''} onchange="toggleCashierPermission('${p.key}',this.checked)">
+              ${p.label}
+            </label>`).join('')}
+        </div>
+      </div>
+      <div class="note-box" style="margin-top:4px;">
+        Un colaborador nunca puede administrar Usuarios (esta sección) ni darse permisos a sí mismo, aunque tenga todo lo demás marcado.<br><br>
+        Antes de que pueda entrar, crea su cuenta en la consola de Firebase (Authentication → Add user) con este mismo correo — aquí solo defines qué puede ver y hacer una vez que inicie sesión, no crea la cuenta.
+      </div>` : ''}
+      <div class="form-field"><label>PIN para el Punto de Venta (4 dígitos)</label><input id="cash-pin" maxlength="6" value="${c.pin||''}" oninput="state.cashierModal.pin=this.value"></div>
       <div class="form-field"><label>Notificaciones</label>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${NOTIF_OPTIONS.map(n=>`
