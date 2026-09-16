@@ -372,7 +372,8 @@ const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-son
 
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
-  products:[], orders:[], visits:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
+  products:[], orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
+  statsSubview:"general",
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", newCatInput:"",
   descImportOpen:false, descImport:null,
@@ -411,7 +412,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -424,6 +425,9 @@ async function loadData(){
       db.collection('customers').get(),
       db.collection('couponUsage').get(),
       db.collection('cashRegisters').orderBy('openedAt','desc').limit(300).get(),
+      // Eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout, compra) de la
+      // tienda pública. Colección aparte de "visits" para no reducir la ventana que cubre su límite de 3000.
+      db.collection('analyticsEvents').orderBy('date','desc').limit(5000).get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -445,6 +449,7 @@ async function loadData(){
     });
     state.orders = [...tiendaOrders, ...posOrders].sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.visits = visitsSnap.docs.map(d=>d.data());
+    state.analyticsEvents = analyticsEventsSnap.docs.map(d=>d.data());
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -476,7 +481,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -1253,12 +1258,15 @@ const ADMIN_NAV_GROUPS = [
   {label:'Ventas', tabs:['resumen','pedidos','caja']},
   {label:'Catálogo', tabs:['productos','centros','mayoreo','cupones','promociones','diseño']},
   {label:'Personas', tabs:['clientes','cajeros']},
-  {label:'Analítica', tabs:['métricas','tráfico']},
+  {label:'Analítica', tabs:['estadísticas']},
   {label:'Sistema', tabs:['asistente ia','configuración']},
 ];
 function adminTabLabel(t){ return t==='cajeros' ? 'Usuarios' : t==='asistente ia' ? 'Asistente IA' : t[0].toUpperCase()+t.slice(1); }
 
 function renderAdmin(){
+  // El refresco automático de "Tiempo real" solo debe seguir corriendo mientras esa
+  // sub-pestaña esté abierta; en cualquier otro caso se detiene aquí.
+  if(!(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal')) ensureRealtimeTimer(false);
   const goTab = (t) => `state.adminTab='${t}';state.designSubpanel=null;state.adminNavOpen=false;render()`;
   return `
   <div class="app">
@@ -1292,8 +1300,7 @@ function renderAdmin(){
     </div>
     <div class="admin-body">
       ${state.adminTab==='resumen' ? renderResumen() : ''}
-      ${state.adminTab==='métricas' ? renderMetricas() : ''}
-      ${state.adminTab==='tráfico' ? renderTrafico() : ''}
+      ${state.adminTab==='estadísticas' ? renderEstadisticas() : ''}
       ${state.adminTab==='productos' ? renderProductos() : ''}
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='clientes' ? renderClientes() : ''}
@@ -1345,68 +1352,180 @@ function renderResumen(){
   `;
 }
 
-function renderTrafico(){
-  const v = computeVisitMetrics();
-  return `
-    <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Visitas totales</div><div class="stat-value">${v.totalVisits}</div></div>
-      <div class="stat-card"><div class="stat-label">Visitas últimas 24h</div><div class="stat-value">${v.last24h}</div></div>
-      <div class="stat-card"><div class="stat-label">Hora con más tráfico</div><div class="stat-value" style="font-size:16px;">${v.peakHour}:00–${v.peakHour+1}:00</div></div>
-    </div>
-    <div class="panel"><div class="panel-title">Visitas — últimos 7 días</div>${renderBarChart(v.visitsByDay, false)}</div>
-    <div class="panel"><div class="panel-title">Visitas por hora del día</div><div class="panel-sub">Para saber cuándo tu tienda tiene más tráfico</div>${renderBarChart(v.visitsByHour, false)}</div>
-    <div class="note-box">Cada vez que alguien abre la tienda se registra una visita anónima (solo fecha y hora, sin datos personales).</div>
-  `;
+/* ============== ESTADÍSTICAS: cálculos nuevos ==============
+   Se apoyan en computeMetrics()/computeVisitMetrics() (ya existentes) más los eventos
+   de embudo (state.analyticsEvents) y el campo "source" de las visitas, ambos agregados
+   junto con esta función. Todo lo que dependa de esos dos campos empieza a llenarse a
+   partir de esta actualización — antes no existían, así que no hay datos históricos. */
+function computeFunnel(){
+  const events = state.analyticsEvents || [];
+  const views = events.filter(e=>e.type==='product_view').length;
+  const addToCart = events.filter(e=>e.type==='add_to_cart').length;
+  const checkoutStarts = events.filter(e=>e.type==='checkout_start').length;
+  const purchases = state.orders.filter(o=>o.source==='tienda' && o.status!=='Cancelado').length;
+  const pct = (a,b)=> b>0 ? Math.round((a/b)*100) : 0;
+  return {
+    views, addToCart, checkoutStarts, purchases,
+    cartConversion: pct(addToCart, views),
+    salesConversion: pct(purchases, views),
+    hasData: events.length>0,
+  };
+}
+function computePaymentStats(){
+  const valid = state.orders.filter(o=>o.status!=='Cancelado');
+  const totals = {};
+  valid.forEach(o=>{
+    if(o.source==='pos'){
+      salePayments(o).forEach(p=>{
+        const key = p.method || 'Efectivo';
+        totals[key] = totals[key] || {amount:0,count:0};
+        totals[key].amount += p.amount||0; totals[key].count += 1;
+      });
+    } else {
+      totals['Contra entrega'] = totals['Contra entrega'] || {amount:0,count:0};
+      totals['Contra entrega'].amount += o.total||0; totals['Contra entrega'].count += 1;
+    }
+  });
+  const rows = Object.entries(totals).map(([method,v])=>({method, amount:v.amount, count:v.count})).sort((a,b)=>b.amount-a.amount);
+  const totalAmount = rows.reduce((s,r)=>s+r.amount,0);
+  const colors = {Efectivo:'var(--green)', Tarjeta:'var(--teal)', Transferencia:'var(--amber)', 'Contra entrega':'var(--primary)'};
+  const segments = rows.map(r=>({label:r.method, value:r.amount, pct: totalAmount? (r.amount/totalAmount*100):0, color: colors[r.method] || 'var(--rose)'}));
+  return {rows, totalAmount, segments};
+}
+function computeProductAnalytics(){
+  const valid = state.orders.filter(o=>o.status!=='Cancelado');
+  const unitsById = {}, revenueById = {};
+  valid.forEach(o=>o.items.forEach(it=>{
+    if(!it.id || it.id==='promo_buyxpayy') return;
+    unitsById[it.id] = (unitsById[it.id]||0) + it.qty;
+    revenueById[it.id] = (revenueById[it.id]||0) + it.price*it.qty;
+  }));
+  const viewsById = {};
+  (state.analyticsEvents||[]).forEach(e=>{ if(e.type==='product_view' && e.productId) viewsById[e.productId]=(viewsById[e.productId]||0)+1; });
+  const withName = (id)=>{ const p = state.products.find(x=>x.id===id); return p ? p.name : '(producto eliminado)'; };
+  const soldIds = Object.keys(unitsById);
+  const byUnits = soldIds.map(id=>({id,name:withName(id),value:unitsById[id]}));
+  const byRevenue = soldIds.map(id=>({id,name:withName(id),value:revenueById[id]}));
+  const mostViewed = Object.entries(viewsById).map(([id,v])=>({id,name:withName(id),value:v})).sort((a,b)=>b.value-a.value).slice(0,6);
+  const withMargin = state.products.filter(p=>p.cost>0 && p.price>0).map(p=>({
+    id:p.id, name:p.name, marginPct: Math.round(((p.price-p.cost)/p.price)*100), profitPerUnit: p.price-p.cost
+  }));
+  const soldIdSet = new Set(soldIds);
+  return {
+    topByUnits: [...byUnits].sort((a,b)=>b.value-a.value).slice(0,6),
+    leastByUnits: [...byUnits].sort((a,b)=>a.value-b.value).slice(0,6),
+    topByRevenue: [...byRevenue].sort((a,b)=>b.value-a.value).slice(0,6),
+    leastByRevenue: [...byRevenue].sort((a,b)=>a.value-b.value).slice(0,6),
+    mostViewed,
+    topMargin: [...withMargin].sort((a,b)=>b.marginPct-a.marginPct).slice(0,6),
+    lowMargin: [...withMargin].sort((a,b)=>a.marginPct-b.marginPct).slice(0,6),
+    noSales: state.products.filter(p=>!soldIdSet.has(p.id)),
+    hasMarginData: withMargin.length>0,
+    hasViewData: Object.keys(viewsById).length>0,
+  };
+}
+function computeTrafficSources(){
+  const labels = {directo:'Directo', google:'Google', meta:'Meta (FB/IG)', whatsapp:'WhatsApp', tiktok:'TikTok', otro:'Otro'};
+  const counts = {};
+  (state.visits||[]).forEach(v=>{ const key = v.source || 'sin-dato'; counts[key] = (counts[key]||0)+1; });
+  const sinDato = counts['sin-dato']||0; delete counts['sin-dato'];
+  const rows = Object.entries(counts).map(([k,v])=>({label: labels[k]||k, value:v})).sort((a,b)=>b.value-a.value);
+  return {rows, sinDato, total: state.visits.length};
+}
+function computeRealtime(){
+  const visits = state.recentVisitsLive || state.visits || [];
+  const events = state.recentEventsLive || state.analyticsEvents || [];
+  const now = Date.now(); const windowMs = 5*60*1000;
+  const recentVisits = visits.filter(v=>now-new Date(v.date).getTime()<windowMs);
+  const recentEvents = events.filter(e=>now-new Date(e.date).getTime()<windowMs);
+  const activityLabel = {product_view:'Vio un producto', add_to_cart:'Agregó al carrito', checkout_start:'Inició su compra', purchase:'Completó una compra'};
+  const feed = [...recentEvents].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,15).map(e=>{
+    const p = e.productId ? state.products.find(x=>x.id===e.productId) : null;
+    return { label: activityLabel[e.type]||e.type, detail: p ? p.name : (e.orderTotal?money(e.orderTotal):''), date: e.date };
+  });
+  return { recentVisitsCount: recentVisits.length, feed };
+}
+// Refresco automático de "Tiempo real": trae solo lo reciente cada 20s mientras esa
+// sub-pestaña esté abierta, y se detiene al salir para no dejar temporizadores vivos.
+let realtimeTimer = null;
+function ensureRealtimeTimer(active){
+  if(active && !realtimeTimer){
+    realtimeTimer = setInterval(async ()=>{
+      try{
+        const [visitsSnap, eventsSnap] = await Promise.all([
+          db.collection('visits').orderBy('date','desc').limit(200).get(),
+          db.collection('analyticsEvents').orderBy('date','desc').limit(200).get(),
+        ]);
+        state.recentVisitsLive = visitsSnap.docs.map(d=>d.data());
+        state.recentEventsLive = eventsSnap.docs.map(d=>d.data());
+        if(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal') render();
+      }catch(e){ /* silencioso */ }
+    }, 20000);
+  } else if(!active && realtimeTimer){
+    clearInterval(realtimeTimer); realtimeTimer = null;
+  }
 }
 
-function renderMetricas(){
-  const m = computeMetrics();
+/* ============== RENDER: ESTADÍSTICAS ============== */
+function renderEstadisticas(){
+  const sub = state.statsSubview || 'general';
+  const goSub = (s) => `state.statsSubview='${s}';render()`;
   return `
+    <div class="admin-tabs" style="padding:0 0 14px;border-bottom:none;">
+      <button class="admin-tab ${sub==='general'?'active':''}" onclick="${goSub('general')}">General</button>
+      <button class="admin-tab ${sub==='pagos'?'active':''}" onclick="${goSub('pagos')}">Pagos</button>
+      <button class="admin-tab ${sub==='productos'?'active':''}" onclick="${goSub('productos')}">Productos</button>
+      <button class="admin-tab ${sub==='trafico'?'active':''}" onclick="${goSub('trafico')}">Fuentes de tráfico</button>
+      <button class="admin-tab ${sub==='tiemporeal'?'active':''}" onclick="${goSub('tiemporeal')}">Tiempo real</button>
+      <button class="admin-tab ${sub==='visitas'?'active':''}" onclick="${goSub('visitas')}">Visitas</button>
+    </div>
+    ${sub==='general' ? renderStatsGeneral() : ''}
+    ${sub==='pagos' ? renderStatsPagos() : ''}
+    ${sub==='productos' ? renderStatsProductos() : ''}
+    ${sub==='trafico' ? renderStatsTrafico() : ''}
+    ${sub==='tiemporeal' ? renderStatsTiempoReal() : ''}
+    ${sub==='visitas' ? renderStatsVisitas() : ''}
+  `;
+}
+function renderStatsGeneral(){
+  const m = computeMetrics();
+  const v = computeVisitMetrics();
+  const f = computeFunnel();
+  const maxFunnel = Math.max(1, f.views, f.addToCart, f.checkoutStarts, f.purchases);
+  return `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Vistas a la tienda</div><div class="stat-value">${v.totalVisits}</div></div>
+      <div class="stat-card primary"><div class="stat-label">Ventas totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Ticket promedio</div><div class="stat-value">${money(m.avgOrder)}</div></div>
+      <div class="stat-card"><div class="stat-label">Conversión del carrito</div><div class="stat-value">${f.cartConversion}%</div></div>
+      <div class="stat-card"><div class="stat-label">Conversión de ventas</div><div class="stat-value">${f.salesConversion}%</div></div>
+      <div class="stat-card"><div class="stat-label">Hora con más visitas</div><div class="stat-value" style="font-size:16px;">${v.peakHour}:00–${v.peakHour+1}:00</div></div>
+    </div>
     <div class="stat-grid">
       <div class="stat-card"><div class="stat-label">Pedidos totales</div><div class="stat-value">${m.totalOrders}</div></div>
       <div class="stat-card"><div class="stat-label">Tasa de cancelación</div><div class="stat-value">${m.cancelRate}%</div></div>
       <div class="stat-card"><div class="stat-label">Artículos por pedido (prom.)</div><div class="stat-value">${m.avgItems.toFixed(1)}</div></div>
       <div class="stat-card"><div class="stat-label">Clientes recurrentes</div><div class="stat-value">${m.repeatCustomers} (${m.repeatRate}%)</div></div>
       <div class="stat-card"><div class="stat-label">Mejor día (prom. ingresos)</div><div class="stat-value" style="font-size:16px;">${m.weekdayNames[m.bestDayIdx]}</div></div>
-      <div class="stat-card"><div class="stat-label">Valor de inventario</div><div class="stat-value">${money(m.inventoryValue)}</div></div>
+    </div>
+    <div class="panel"><div class="panel-title">Ingresos — últimos 7 días</div>${renderBarChart(m.dayRevenue)}</div>
+    <div class="panel"><div class="panel-title">Horarios en que los clientes entran a la tienda</div><div class="panel-sub">Por hora del día, últimos 3000 registros de visitas</div>${renderBarChart(v.visitsByHour, false)}</div>
+    <div class="panel">
+      <div class="panel-title">Comportamiento del checkout</div>
+      <div class="panel-sub">De cada visitante que ve un producto, cuántos siguen hasta comprar (solo tienda en línea; las ventas de mostrador no pasan por este flujo)</div>
+      <div class="hbar-row"><div class="hbar-label" title="Vieron un producto">Vistas</div><div class="hbar-track"><div class="hbar-fill" style="width:100%;background:var(--teal)"></div></div><div class="hbar-val">${f.views}</div></div>
+      <div class="hbar-row"><div class="hbar-label" title="Agregaron al carrito">Carrito</div><div class="hbar-track"><div class="hbar-fill" style="width:${(f.addToCart/maxFunnel*100)}%;background:var(--amber)"></div></div><div class="hbar-val">${f.addToCart}</div></div>
+      <div class="hbar-row"><div class="hbar-label" title="Iniciaron su compra">Checkout</div><div class="hbar-track"><div class="hbar-fill" style="width:${(f.checkoutStarts/maxFunnel*100)}%;background:var(--coral)"></div></div><div class="hbar-val">${f.checkoutStarts}</div></div>
+      <div class="hbar-row"><div class="hbar-label" title="Completaron la compra">Compra</div><div class="hbar-track"><div class="hbar-fill" style="width:${(f.purchases/maxFunnel*100)}%;background:var(--green)"></div></div><div class="hbar-val">${f.purchases}</div></div>
+      ${!f.hasData ? `<div class="note-box">Este embudo se empezó a registrar a partir de esta actualización — los números de vistas, carrito y checkout crecerán con el uso diario de la tienda.</div>` : ''}
     </div>
     <div class="panel"><div class="panel-title">Ingresos por mes — últimos 6 meses</div>${renderBarChart(m.monthRevenue)}</div>
     <div class="panel"><div class="panel-title">Ingresos por día de la semana (promedio)</div>${renderBarChart(m.weekdayNames.map((n,i)=>({label:n.slice(0,3), value:m.weekdayAvg[i]})))}</div>
-    <div class="panel">
-      <div class="panel-title">Ventas por categoría — unidades</div>
-      ${m.catUnitRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
-        m.catUnitRows.map(([cat,units])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(units/m.maxCatUnit*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${units}</div></div>`).join('')}
-    </div>
-    <div class="panel">
-      <div class="panel-title">Ingresos por categoría</div>
-      ${m.catRevRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
-        m.catRevRows.map(([cat,rev])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(rev/m.maxCatRev*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(rev)}</div></div>`).join('')}
-    </div>
-    <div class="panel">
-      <div class="panel-title">Productos más vendidos — por unidades</div>
-      ${m.topByUnits.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
-        m.topByUnits.map(([name,qty],i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${name}</div></div><div class="row-sub">${qty} vendidos</div></div>`).join('')}
-    </div>
-    <div class="panel">
-      <div class="panel-title">Productos más vendidos — por ingresos</div>
-      ${m.topByRevenue.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
-        m.topByRevenue.map(([name,rev],i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${name}</div></div><div class="row-sub">${money(rev)}</div></div>`).join('')}
-    </div>
     <div class="panel">
       <div class="panel-title">Mejores clientes</div>
       ${m.topCustomers.length===0 ? `<div class="empty-state">Aún no hay clientes registrados.</div>` :
         m.topCustomers.map((c,i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${c.name}</div><div class="row-sub">${c.count} pedido(s)</div></div><div class="row-sub">${money(c.spend)}</div></div>`).join('')}
     </div>
-    <div class="panel">
-      <div class="panel-title">Valor de inventario por categoría</div>
-      ${m.invRows.map(([cat,val])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(val/m.maxInv*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(val)}</div></div>`).join('')}
-    </div>
-    ${m.noSales.length>0 ? `
-    <div class="panel">
-      <div class="panel-title">Productos sin ninguna venta registrada</div>
-      <div class="panel-sub">Candidatos a promoción, combo o revisión de precio</div>
-      ${m.noSales.slice(0,10).map(p=>`<div class="list-row">${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}<div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)}</div></div></div>`).join('')}
-    </div>` : ''}
     <div class="panel">
       <div class="panel-title">Estado de todos los pedidos</div>
       ${STATUS_FLOW.map(s=>{ const count=m.statusCounts[s]||0; const max=Math.max(1,...Object.values(m.statusCounts));
@@ -1419,10 +1538,145 @@ function renderMetricas(){
         ${m.avgOrder>0 ? `Tu ticket promedio es ${money(m.avgOrder)} con ${m.avgItems.toFixed(1)} artículos por pedido en promedio.<br><br>`:''}
         ${m.repeatRate<30 && m.uniqueCustomers>3 ? `Solo ${m.repeatRate}% de tus clientes ha vuelto a comprar.<br><br>`:''}
         ${m.lowStock.length>0 ? `Tienes ${m.lowStock.length} producto(s) por agotarse.<br><br>`:''}
-        ${m.noSales.length>0 ? `${m.noSales.length} producto(s) no han tenido ninguna venta.<br><br>`:''}
+        ${f.hasData && f.cartConversion>0 ? `${f.cartConversion}% de quienes ven un producto lo agregan al carrito.<br><br>`:''}
         ${m.catRevRows.length>0 ? `<strong>${m.catRevRows[0][0]}</strong> es tu categoría más rentable; <strong>${m.weekdayNames[m.bestDayIdx]}</strong> es tu día con mejor ticket promedio.`:''}
       </div>
     </div>
+  `;
+}
+function renderDonutChart(segments){
+  const withValue = segments.filter(s=>s.value>0);
+  if(!withValue.length) return `<div class="empty-state">Aún no hay datos suficientes.</div>`;
+  let acc = 0;
+  const stops = withValue.map(s=>{ const start=acc; acc+=s.pct; return `${s.color} ${start}% ${acc}%`; }).join(', ');
+  return `
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+      <div style="width:140px;height:140px;border-radius:50%;background:conic-gradient(${stops});flex-shrink:0;"></div>
+      <div style="flex:1;min-width:160px;">
+        ${withValue.map(s=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;">
+            <span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex-shrink:0;"></span>
+            <span style="flex:1;">${s.label}</span>
+            <strong>${Math.round(s.pct)}%</strong>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+function renderStatsPagos(){
+  const p = computePaymentStats();
+  return `
+    <div class="stat-grid">
+      <div class="stat-card primary"><div class="stat-label">Total cobrado</div><div class="stat-value">${money(p.totalAmount)}</div></div>
+      ${p.rows.slice(0,3).map(r=>`<div class="stat-card"><div class="stat-label">${r.method}</div><div class="stat-value">${money(r.amount)}</div></div>`).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Cómo pagan tus clientes</div>
+      <div class="panel-sub">Incluye ventas en punto de venta y pedidos de la tienda en línea (contra entrega)</div>
+      ${renderDonutChart(p.segments)}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Desglose por método de pago</div>
+      ${p.rows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        p.rows.map(r=>`<div class="list-row"><div class="row-main"><div class="row-title">${r.method}</div><div class="row-sub">${r.count} pago(s)</div></div><div class="row-sub">${money(r.amount)}</div></div>`).join('')}
+    </div>
+  `;
+}
+function renderStatsProductos(){
+  const m = computeMetrics();
+  const pa = computeProductAnalytics();
+  const rankList = (title, sub, rows, valueFmt) => `
+    <div class="panel">
+      <div class="panel-title">${title}</div>
+      ${sub?`<div class="panel-sub">${sub}</div>`:''}
+      ${rows.length===0 ? `<div class="empty-state">Aún no hay datos suficientes.</div>` :
+        rows.map((r,i)=>`<div class="list-row"><div class="rank-num">${i+1}</div><div class="row-main"><div class="row-title">${r.name}</div></div><div class="row-sub">${valueFmt(r)}</div></div>`).join('')}
+    </div>`;
+  return `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Sin ninguna venta</div><div class="stat-value">${pa.noSales.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Valor de inventario</div><div class="stat-value">${money(m.inventoryValue)}</div></div>
+    </div>
+    ${m.lowStock.length>0 ? `
+    <div class="panel">
+      <div class="panel-title">Bajo stock</div>
+      ${m.lowStock.map(p=>`
+        <div class="list-row">
+          ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+          <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
+          <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
+        </div>
+      `).join('')}
+    </div>` : ''}
+    <div class="panel">
+      <div class="panel-title">Ventas por categoría — unidades</div>
+      ${m.catUnitRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        m.catUnitRows.map(([cat,units])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(units/m.maxCatUnit*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${units}</div></div>`).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Ingresos por categoría</div>
+      ${m.catRevRows.length===0 ? `<div class="empty-state">Aún no hay ventas registradas.</div>` :
+        m.catRevRows.map(([cat,rev])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(rev/m.maxCatRev*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(rev)}</div></div>`).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-title">Valor de inventario por categoría</div>
+      ${m.invRows.map(([cat,val])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(val/m.maxInv*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(val)}</div></div>`).join('')}
+    </div>
+    ${rankList('Más visitados', pa.hasViewData?null:'Se empieza a registrar a partir de esta actualización', pa.mostViewed, r=>`${r.value} vista(s)`)}
+    ${rankList('Más vendidos', null, pa.topByUnits, r=>`${r.value} vendidos`)}
+    ${rankList('Menos vendidos', 'Entre los que sí han tenido al menos una venta', pa.leastByUnits, r=>`${r.value} vendidos`)}
+    ${rankList('Mayor facturación', null, pa.topByRevenue, r=>money(r.value))}
+    ${rankList('Menor facturación', 'Entre los que sí han tenido al menos una venta', pa.leastByRevenue, r=>money(r.value))}
+    ${rankList('Mayor margen de ganancia', pa.hasMarginData?null:'Agrega el costo a tus productos para ver esta lista', pa.topMargin, r=>`${r.marginPct}%`)}
+    ${rankList('Menor margen de ganancia', null, pa.lowMargin, r=>`${r.marginPct}%`)}
+    ${pa.noSales.length>0 ? `
+    <div class="panel">
+      <div class="panel-title">Productos sin ninguna venta registrada</div>
+      <div class="panel-sub">Candidatos a promoción, combo o revisión de precio</div>
+      ${pa.noSales.slice(0,10).map(p=>`<div class="list-row">${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}<div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · ${money(p.price)}</div></div></div>`).join('')}
+    </div>` : ''}
+  `;
+}
+function renderStatsTrafico(){
+  const t = computeTrafficSources();
+  const max = Math.max(1, ...t.rows.map(r=>r.value));
+  return `
+    <div class="panel">
+      <div class="panel-title">Fuentes de tráfico</div>
+      <div class="panel-sub">De dónde llegan las visitas a tu tienda, según el sitio desde el que entraron</div>
+      ${t.rows.length===0 ? `<div class="empty-state">Aún no hay datos suficientes. Este dato se registra a partir de esta actualización.</div>` :
+        t.rows.map(r=>`<div class="hbar-row"><div class="hbar-label">${r.label}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(r.value/max*100)}%;background:var(--teal)"></div></div><div class="hbar-val">${r.value}</div></div>`).join('')}
+    </div>
+    ${t.sinDato>0 ? `<div class="note-box">${t.sinDato} visita(s) sin fuente registrada (de antes de esta actualización, o su navegador no compartió el origen).</div>` : ''}
+  `;
+}
+function renderStatsTiempoReal(){
+  const r = computeRealtime();
+  ensureRealtimeTimer(true);
+  return `
+    <div class="stat-grid">
+      <div class="stat-card primary"><div class="stat-label">Sesiones iniciadas (últimos 5 min)</div><div class="stat-value">${r.recentVisitsCount}</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Actividad reciente</div>
+      <div class="panel-sub">Se actualiza automáticamente cada 20 segundos mientras estás en esta pestaña</div>
+      ${r.feed.length===0 ? `<div class="empty-state">Sin actividad en los últimos minutos.</div>` :
+        r.feed.map(f=>`<div class="list-row"><div class="row-main"><div class="row-title">${f.label}</div>${f.detail?`<div class="row-sub">${f.detail}</div>`:''}</div><div class="row-sub">${new Date(f.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')}
+    </div>
+    <div class="note-box">Esto es una aproximación: cuenta actividad de los últimos 5 minutos, no una conexión en vivo persona por persona.</div>
+  `;
+}
+function renderStatsVisitas(){
+  const v = computeVisitMetrics();
+  return `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Visitas totales</div><div class="stat-value">${v.totalVisits}</div></div>
+      <div class="stat-card"><div class="stat-label">Visitas últimas 24h</div><div class="stat-value">${v.last24h}</div></div>
+      <div class="stat-card"><div class="stat-label">Hora con más tráfico</div><div class="stat-value" style="font-size:16px;">${v.peakHour}:00–${v.peakHour+1}:00</div></div>
+    </div>
+    <div class="panel"><div class="panel-title">Visitas — últimos 7 días</div>${renderBarChart(v.visitsByDay, false)}</div>
+    <div class="panel"><div class="panel-title">Visitas por hora del día</div><div class="panel-sub">Para saber cuándo tu tienda tiene más tráfico</div>${renderBarChart(v.visitsByHour, false)}</div>
+    <div class="note-box">Cada vez que alguien abre la tienda se registra una visita anónima (solo fecha y hora, sin datos personales).</div>
   `;
 }
 
