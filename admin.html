@@ -392,6 +392,7 @@ let state = {
   cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
   orderDiscountEditing:false, orderDiscountType:"fixed", orderDiscountValueInput:"", orderDiscountCouponInput:"", orderDiscountReasonInput:"",
   abandonedCarts:[], abandonedCartsOpen:false,
+  globalSearchOpen:false, globalSearchQuery:"",
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -586,6 +587,7 @@ function icon(name, size){
     code:'<path d="M9 6 3 12l6 6"/><path d="M15 6l6 6-6 6"/>',
     sliders:'<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 12h4"/>',
     'more-horizontal':'<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+    search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -826,6 +828,99 @@ function renderAbandonedCartsModal(){
     </div>
   </div>`;
 }
+
+/* ============== BÚSQUEDA GLOBAL ==============
+   Un solo buscador (botón "Buscar" en la barra superior) que busca a la vez en productos,
+   pedidos/ventas y clientes, y al hacer clic en un resultado te lleva directo a la pestaña
+   y abre el detalle correspondiente. Cada grupo de resultados solo se muestra si la cuenta
+   tiene permiso para esa sección (igual criterio que canAccessTab/TAB_PERMISSION). */
+function openGlobalSearch(){ state.globalSearchOpen=true; render(); }
+function closeGlobalSearch(){ state.globalSearchOpen=false; state.globalSearchQuery=""; render(); }
+function computeGlobalSearchResults(){
+  const q = (state.globalSearchQuery||'').trim().toLowerCase();
+  const empty = {products:[], orders:[], customers:[], q};
+  if(!q) return empty;
+  const LIMIT = 8;
+  const result = {q, products:[], orders:[], customers:[]};
+  if(canAccessTab('productos')){
+    result.products = state.products
+      .filter(p=>(p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q))
+      .slice(0, LIMIT);
+  }
+  if(canAccessTab('pedidos')){
+    result.orders = state.orders
+      .filter(o=> formatFolio(o.orderNumber).toLowerCase().includes(q) || (o.customer||'').toLowerCase().includes(q) || (o.customerName||'').toLowerCase().includes(q) || (o.phone||'').includes(q) || (o.customerPhone||'').includes(q))
+      .sort((a,b)=> new Date(b.date) - new Date(a.date))
+      .slice(0, LIMIT);
+  }
+  if(canAccessTab('clientes')){
+    result.customers = computeCustomersList()
+      .filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q))
+      .slice(0, LIMIT);
+  }
+  return result;
+}
+function goToGlobalSearchProduct(id){
+  const p = state.products.find(x=>x.id===id);
+  if(!p) return;
+  closeGlobalSearch();
+  state.adminTab='productos'; state.productModal=JSON.parse(JSON.stringify(p));
+  render();
+}
+function goToGlobalSearchOrder(id){
+  closeGlobalSearch();
+  state.adminTab='pedidos';
+  openOrderDetailModal(id);
+}
+function goToGlobalSearchCustomer(phoneOrName){
+  closeGlobalSearch();
+  state.adminTab='clientes'; state.customerSearch=phoneOrName||'';
+  render();
+}
+function renderGlobalSearchModal(){
+  const r = computeGlobalSearchResults();
+  const hasQuery = !!r.q;
+  const totalResults = r.products.length + r.orders.length + r.customers.length;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){closeGlobalSearch();}">
+    <div class="modal" style="max-width:560px;">
+      <h3>${icon('search',16)} Buscar en el panel</h3>
+      <input id="global-search-input" type="search" placeholder="Buscar productos, pedidos o clientes..." value="${(state.globalSearchQuery||'').replace(/"/g,'&quot;')}" oninput="state.globalSearchQuery=this.value;render()" style="margin-bottom:14px;">
+      ${!hasQuery ? `<div class="empty-state">Escribe un nombre, folio, teléfono o SKU para buscar.</div>` : totalResults===0 ? `<div class="empty-state">No encontré nada que coincida con "${r.q}".</div>` : `
+      <div style="max-height:420px;overflow-y:auto;">
+        ${r.products.length ? `
+        <div class="panel-title" style="margin-bottom:8px;">Productos</div>
+        ${r.products.map(p=>`
+          <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchProduct('${p.id}')">
+            ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+            <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat||''}${p.sku?` · SKU ${p.sku}`:''}</div></div>
+            <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
+          </div>
+        `).join('')}` : ''}
+        ${r.orders.length ? `
+        <div class="panel-title" style="margin:${r.products.length?'16px':'0'} 0 8px;">Pedidos y ventas</div>
+        ${r.orders.map(o=>`
+          <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchOrder('${o.id}')">
+            <div class="row-main"><div class="row-title">${formatFolio(o.orderNumber)} — ${o.customer||o.customerName||'Sin nombre'}</div><div class="row-sub">${o.phone||o.customerPhone||''} · ${o.status||''}</div></div>
+            <div style="font-weight:800;color:var(--primary-deep);">${money(o.total||0)}</div>
+          </div>
+        `).join('')}` : ''}
+        ${r.customers.length ? `
+        <div class="panel-title" style="margin:${(r.products.length||r.orders.length)?'16px':'0'} 0 8px;">Clientes</div>
+        ${r.customers.map(c=>`
+          <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchCustomer('${(c.phone||c.name||'').replace(/'/g,"\\'")}')">
+            <div class="row-main"><div class="row-title">${c.name}</div><div class="row-sub">${c.phone||c.email||''} · ${c.purchaseCount} compra(s)</div></div>
+            <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
+          </div>
+        `).join('')}` : ''}
+      </div>`}
+      <div class="modal-actions">
+        <button class="btn-cancel" style="flex:1;" onclick="closeGlobalSearch()">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderOrderDetailModal(){
   const o = state.orders.find(x=>x.id===state.orderDetailModal);
   if(!o){ return ''; }
@@ -1571,6 +1666,7 @@ function renderAdmin(){
     <div class="admin-top">
       <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Panel de administración</div></div>
       <div class="admin-top-actions">
+        <button class="logout-link" onclick="openGlobalSearch()">${icon('search',13)} Buscar</button>
         ${!state.myPermissions ? `<a class="logout-link" href="pos.html" target="_blank">Punto de venta</a>` : ''}
         <button class="logout-link" onclick="handleLogout()">Cerrar sesión</button>
       </div>
@@ -1618,6 +1714,7 @@ function renderAdmin(){
   ${state.productModal!==null ? renderProductModal() : ''}
   ${state.importOpen ? renderImportModal() : ''}
   ${state.abandonedCartsOpen ? renderAbandonedCartsModal() : ''}
+  ${state.globalSearchOpen ? renderGlobalSearchModal() : ''}
   ${state.catImportOpen ? renderCategoryImportModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
@@ -4632,6 +4729,7 @@ function render(){
   root.innerHTML = renderAdmin();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   const pinField = document.getElementById('pin-field'); if(pinField) pinField.focus();
+  const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
 }
 render();
 </script>
