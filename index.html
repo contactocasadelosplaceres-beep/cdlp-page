@@ -183,8 +183,9 @@
 
   /* ===== TESTIMONIALS ===== */
   .rating-line{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;}
-  .rating-stars{color:var(--amber);font-size:15px;letter-spacing:1px;}
+  .rating-badge{color:var(--primary);display:inline-flex;align-items:center;}
   .rating-num{font-weight:800;color:var(--primary-deep);font-size:15px;}
+  .rating-outof{font-weight:600;color:var(--ink-soft);font-size:12px;}
   .rating-label{font-size:12.5px;color:var(--ink-soft);}
   .rating-line-standalone{display:flex;align-items:center;justify-content:center;gap:8px;margin:26px 20px 4px;padding:12px 18px;background:var(--surface-soft);border-radius:var(--radius-pill);}
   .testimonial-row{display:grid;grid-template-columns:1fr;gap:12px;padding:0 20px 6px;}
@@ -1327,8 +1328,8 @@ function renderRatingLineBlock(){
   const count = (state.orderCount||0) + (Number(state.settings.historicalOrderCountOffset)||0);
   return `
   <div class="rating-line-standalone">
-    <span class="rating-stars">★★★★★</span>
-    <span class="rating-num">${avg.toFixed(1)}</span>
+    <span class="rating-badge">${icon('shield',18)}</span>
+    <span class="rating-num">${avg.toFixed(1)}<span class="rating-outof">/5</span></span>
     <span class="rating-label">${count>0 ? `· +${count} pedidos` : 'Opiniones de clientes'}</span>
   </div>`;
 }

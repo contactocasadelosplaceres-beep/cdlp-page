@@ -438,6 +438,8 @@ let state = {
   newOrderCount:0, lastOrderCheck:null, healthOpen:null,
   storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null,
   marketingSubpanel:null, configSubpanel:null,
+  bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
+  bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -1520,6 +1522,170 @@ function moveImage(idx,dir){
   [arr[idx],arr[j]] = [arr[j],arr[idx]]; render();
 }
 
+/* ============== CORRECCIÓN DE FOTOS CON FONDO NEGRO ==============
+   Bug histórico: el recorte de imágenes (applyCrop, arriba) exportaba a JPEG sin rellenar
+   fondo blanco antes — cualquier foto con transparencia (PNG) quedaba con esas zonas en negro,
+   porque JPEG no tiene canal alfa y el navegador las pinta de negro por defecto al convertir.
+   Ya se corrigió para las fotos nuevas (applyCrop ahora rellena de blanco antes de dibujar).
+   Esta herramienta es para arreglar las fotos que ya quedaron guardadas así: revisa cada foto
+   de cada producto, detecta las que tienen negro puro pegado a los 4 bordes (la firma de este
+   bug en particular) y, para las que se confirmen, rellena esas zonas de blanco con un flood
+   fill desde el borde — mismo tamaño y mismo límite de peso de siempre, no se toca nada más
+   del producto. */
+const BGFIX_SAMPLE_SIZE = 60; // miniatura usada solo para decidir qué fotos son candidatas (rápido)
+const BGFIX_BLACK_THRESHOLD = 14; // 0-255: qué tan oscuro debe ser un pixel para contar como "negro puro"
+
+function bgFixSampleIsBlackBorder(canvas){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const pts = [
+    [1,1],[w-2,1],[1,h-2],[w-2,h-2],
+    [Math.floor(w/2),1],[Math.floor(w/2),h-2],[1,Math.floor(h/2)],[w-2,Math.floor(h/2)],
+  ];
+  let darkCount = 0;
+  pts.forEach(([x,y])=>{
+    const d = ctx.getImageData(x,y,1,1).data;
+    if((d[0]+d[1]+d[2])/3 <= BGFIX_BLACK_THRESHOLD) darkCount++;
+  });
+  return darkCount >= 6;
+}
+function loadImageAsync(src){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+async function openBgFixTool(){
+  state.bgFixOpen = true; state.bgFixScanning = true; state.bgFixCandidates = []; state.bgFixResult = null;
+  state.bgFixScanProgress = 0;
+  render();
+  const jobs = [];
+  state.products.forEach(p=>{ (p.images||[]).forEach((src,idx)=>{ jobs.push({productId:p.id, productName:p.name, imageIndex:idx, src}); }); });
+  state.bgFixScanTotal = jobs.length;
+  const candidates = [];
+  for(const job of jobs){
+    try{
+      const img = await loadImageAsync(job.src);
+      const c = document.createElement('canvas'); c.width=BGFIX_SAMPLE_SIZE; c.height=BGFIX_SAMPLE_SIZE;
+      c.getContext('2d').drawImage(img, 0, 0, BGFIX_SAMPLE_SIZE, BGFIX_SAMPLE_SIZE);
+      if(bgFixSampleIsBlackBorder(c)) candidates.push({...job, checked:true});
+    }catch(e){ /* imagen ilegible, se ignora */ }
+    state.bgFixScanProgress++;
+    if(state.bgFixScanProgress % 15 === 0) render();
+  }
+  state.bgFixCandidates = candidates;
+  state.bgFixScanning = false;
+  render();
+}
+function closeBgFixTool(){
+  if(state.bgFixProcessing) return;
+  state.bgFixOpen=false; state.bgFixCandidates=[]; state.bgFixResult=null; render();
+}
+function toggleBgFixCandidate(i){ const c = state.bgFixCandidates[i]; if(!c) return; c.checked = !c.checked; render(); }
+function toggleBgFixAll(checked){ state.bgFixCandidates.forEach(c=>c.checked=checked); render(); }
+// Rellena de blanco, con flood fill desde los bordes, cualquier zona conectada de negro puro —
+// así solo se corrige el fondo (que siempre toca los 4 bordes en un recorte cuadrado), sin
+// tocar el producto en sí aunque tenga partes negras, mientras no estén pegadas al borde.
+function floodFillBlackBorderToWhite(canvas, threshold){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0,0,w,h);
+  const data = imgData.data;
+  const visited = new Uint8Array(w*h);
+  const stack = [];
+  function isBlack(i){ const p=i*4; return (data[p]+data[p+1]+data[p+2])/3 <= threshold; }
+  function seed(x,y){
+    if(x<0||y<0||x>=w||y>=h) return;
+    const i = y*w+x;
+    if(visited[i]) return;
+    if(isBlack(i)){ visited[i]=1; stack.push(i); }
+  }
+  for(let x=0;x<w;x++){ seed(x,0); seed(x,h-1); }
+  for(let y=0;y<h;y++){ seed(0,y); seed(w-1,y); }
+  while(stack.length){
+    const i = stack.pop();
+    const x = i % w, y = (i - x) / w;
+    const p = i*4;
+    data[p]=255; data[p+1]=255; data[p+2]=255;
+    seed(x+1,y); seed(x-1,y); seed(x,y+1); seed(x,y-1);
+  }
+  ctx.putImageData(imgData,0,0);
+}
+async function applyBgFix(){
+  const selected = state.bgFixCandidates.filter(c=>c.checked);
+  if(selected.length===0){ showToast('No hay ninguna foto seleccionada'); return; }
+  state.bgFixProcessing = true; state.bgFixProgress = 0; render();
+  const byProduct = {};
+  for(const c of selected){
+    try{
+      const img = await loadImageAsync(c.src);
+      const size = Math.max(img.naturalWidth, img.naturalHeight, 300);
+      const canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,size,size);
+      ctx.drawImage(img, 0, 0);
+      // Umbral más permisivo que la detección, para limpiar también el halo gris oscuro que
+      // suele quedar en el borde entre el producto y el fondo negro original.
+      floodFillBlackBorderToWhite(canvas, 60);
+      const newUrl = canvasToLimitedJpeg(canvas, MAX_IMG_BYTES) || canvas.toDataURL('image/jpeg', 0.6);
+      const p = state.products.find(x=>x.id===c.productId);
+      if(p && p.images && p.images[c.imageIndex]!==undefined){
+        p.images[c.imageIndex] = newUrl;
+        (byProduct[c.productId] = byProduct[c.productId] || []).push(c.imageIndex);
+      }
+    }catch(e){ console.error('No se pudo corregir una imagen', e); }
+    state.bgFixProgress++;
+    if(state.bgFixProgress % 5 === 0) render();
+  }
+  const productIds = Object.keys(byProduct);
+  let saved = 0, failed = 0;
+  for(const id of productIds){
+    const p = state.products.find(x=>x.id===id);
+    if(!p) continue;
+    try{ await db.collection('products').doc(id).update({images: p.images}); saved++; }
+    catch(e){ console.error(e); failed++; }
+  }
+  state.bgFixProcessing = false;
+  state.bgFixResult = { photos: selected.length, products: productIds.length, failed };
+  state.bgFixCandidates = state.bgFixCandidates.filter(c=>!c.checked);
+  render();
+  showToast(`Se corrigieron ${selected.length} foto(s) en ${saved} producto(s)`);
+}
+function renderBgFixModal(){
+  const cands = state.bgFixCandidates;
+  const checkedCount = cands.filter(c=>c.checked).length;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this && !state.bgFixProcessing){closeBgFixTool();}">
+    <div class="modal" style="max-width:640px;">
+      <h3>Corregir fondo negro en fotos</h3>
+      <div class="note-box">Busca fotos de producto que quedaron con fondo negro por un error del recorte anterior (fotos con fondo transparente que se convirtieron a JPEG sin relleno). Revisa la vista previa y desmarca cualquiera que en realidad tenga fondo negro a propósito, antes de corregir.</div>
+      ${state.bgFixScanning ? `<div class="empty-state">Revisando fotos… ${state.bgFixScanProgress} de ${state.bgFixScanTotal}</div>` : ''}
+      ${state.bgFixResult ? `<div class="note-box" style="color:var(--green);">Listo: se corrigieron ${state.bgFixResult.photos} foto(s) en ${state.bgFixResult.products} producto(s)${state.bgFixResult.failed?`, ${state.bgFixResult.failed} no se pudieron guardar`:''}.</div>` : ''}
+      ${!state.bgFixScanning && cands.length>0 ? `
+        <div class="preview-count">${cands.length} foto(s) con posible fondo negro encontrada(s) · ${checkedCount} seleccionada(s)</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button class="btn-tertiary" onclick="toggleBgFixAll(true)">Marcar todas</button>
+          <button class="btn-tertiary" onclick="toggleBgFixAll(false)">Desmarcar todas</button>
+        </div>
+        <div class="img-thumbs" style="max-height:340px;overflow-y:auto;">
+          ${cands.map((c,i)=>`
+            <div class="img-thumb" style="width:90px;height:90px;cursor:pointer;${c.checked?'':'opacity:.4;'}" onclick="toggleBgFixCandidate(${i})" title="${escDescHtml(c.productName)}">
+              <img src="${c.src}">
+              <div style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:4px;background:${c.checked?'var(--primary)':'rgba(255,255,255,0.85)'};color:#fff;display:flex;align-items:center;justify-content:center;">${c.checked?icon('check',12):''}</div>
+            </div>
+          `).join('')}
+        </div>
+      ` : (!state.bgFixScanning && !state.bgFixResult ? `<div class="empty-state">No se encontró ninguna foto con este problema.</div>` : (!state.bgFixScanning && cands.length===0 && state.bgFixResult ? `<div class="preview-count">No quedan más fotos con este problema.</div>` : ''))}
+      <div class="modal-actions">
+        <button class="btn-cancel" ${state.bgFixProcessing?'disabled':''} onclick="closeBgFixTool()">Cerrar</button>
+        ${cands.length>0 ? `<button class="btn-primary" style="flex:1;" ${state.bgFixProcessing?'disabled':''} onclick="applyBgFix()">${state.bgFixProcessing?`Corrigiendo… ${state.bgFixProgress}/${checkedCount}`:'Corregir seleccionadas'}</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
 /* ============== CSV IMPORT ============== */
 function parseCSV(text){
   const rows = []; let i=0, field='', row=[], inQuotes=false;
@@ -1946,6 +2112,7 @@ function renderAdmin(){
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
+  ${state.bgFixOpen ? renderBgFixModal() : ''}
   `;
 }
 
@@ -2582,6 +2749,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="state.importOpen=true;render()">Importar archivo</button>
       <button class="btn-outline" onclick="exportProductsJSON()">Exportar productos</button>
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
+      <button class="btn-outline" onclick="openBgFixTool()">Corregir fondo negro en fotos</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
