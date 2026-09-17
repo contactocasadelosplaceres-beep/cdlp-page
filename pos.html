@@ -726,6 +726,7 @@ async function chargeSale(){
       customerId: state.activeCustomer ? state.activeCustomer.id : null,
       customerName: state.activeCustomer ? state.activeCustomer.name : null,
       customerPhone: state.activeCustomer ? (state.activeCustomer.phone||'') : null,
+      customerAddress: state.activeCustomer ? (state.activeCustomer.address||'') : null,
       notes: state.saleNotes || '',
     });
     if(state.manualDiscount && state.manualDiscount.type==='coupon'){

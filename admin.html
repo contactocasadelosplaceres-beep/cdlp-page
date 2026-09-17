@@ -860,9 +860,13 @@ function waLink(phone, text){
 // una venta de Punto de Venta (o.customerPhone) — para que "Escribir al cliente" y "Enviar al
 // repartidor" funcionen igual sin importar dónde se hizo la venta.
 function orderContactPhone(o){ return o.phone || o.customerPhone || ''; }
+// Dirección de contacto del pedido: la de la tienda online (o.address) o, si la venta se hizo
+// en el Punto de Venta con un cliente asignado, la que tiene guardada ese cliente (o.customerAddress).
+function orderContactAddress(o){ return o.address || o.customerAddress || ''; }
 function buildDeliveryMessage(o){
   const origen = state.settings.storeAddress || '(configura tu dirección de origen en Configuración)';
-  const destino = [o.address, o.notes].filter(Boolean).join(' — ') || (o.source==='pos' ? 'Retirado en Punto de Venta' : '(sin dirección)');
+  const direccion = orderContactAddress(o) || (o.source==='pos' ? 'Retirado en Punto de Venta' : '(sin dirección)');
+  const destino = [direccion, o.notes].filter(Boolean).join(' — ');
   const telefono = orderContactPhone(o);
   return `*PEDIDO ${o.orderNumber || ''}*\n\n` +
          `*De* ${origen}\n\n` +
@@ -1106,7 +1110,9 @@ function renderOrderDetailModal(){
           <div><span>Atendió</span><span>${o.cashierName||'—'}</span></div>
           <div><span>Centro</span><span>${o.centerName||'—'}</span></div>
           <div><span>Método de pago</span><span>${paymentMethodLabel(o)}</span></div>
-          ${o.customerName?`<div><span>Cliente</span><span>${o.customerName}${o.customerPhone?` · ${o.customerPhone}`:''}</span></div>`:''}
+          ${o.customerName?`<div><span>Cliente</span><span>${o.customerName}</span></div>`:''}
+          <div><span>Teléfono</span><span>${orderContactPhone(o)||'—'}</span></div>
+          <div><span>Dirección</span><span style="text-align:right;">${orderContactAddress(o)||'Retirado en Punto de Venta'}</span></div>
           ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
         </div>
       ` : `
@@ -1164,7 +1170,7 @@ function printPackingSlip(id){
         <div class="label">Cliente</div>
         <div>${o.customer || o.customerName || 'Venta en tienda física'}</div>
         ${orderContactPhone(o) ? `<div>${orderContactPhone(o)}</div>` : ''}
-        ${!isPos ? `<div class="label" style="margin-top:8px;">Dirección de entrega</div><div>${o.address||'—'}</div>` : ''}
+        <div class="label" style="margin-top:8px;">Dirección de entrega</div><div>${orderContactAddress(o) || (isPos ? 'Retirado en Punto de Venta' : '—')}</div>
         ${o.notes ? `<div class="label" style="margin-top:8px;">Notas</div><div>${o.notes}</div>` : ''}
       </div>
       <table>${itemsHtml}</table>
