@@ -1488,17 +1488,24 @@ function applyCrop(){
   const sx = -cropCtx.offX/scale, sy = -cropCtx.offY/scale, ssize = CROP_SIZE/scale;
   // Primero se intenta con la resolución normal (700x700) bajando la calidad; solo si una imagen
   // muy detallada no cabe ni en la calidad más baja, se reduce el tamaño y se repite.
+  // Se rellena el canvas de blanco antes de dibujar: el formato de salida es JPEG (sin canal
+  // alfa), así que si la foto original tiene fondo transparente (PNG), sin este relleno esas
+  // zonas se verían negras en vez de blancas al exportar.
   let outSize = CROP_OUT, dataUrl = null;
   while(outSize >= 300 && !dataUrl){
     const canvas = document.createElement('canvas'); canvas.width=outSize; canvas.height=outSize;
-    canvas.getContext('2d').drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, outSize, outSize);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,outSize,outSize);
+    ctx.drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, outSize, outSize);
     dataUrl = canvasToLimitedJpeg(canvas, MAX_IMG_BYTES);
     if(!dataUrl) outSize = Math.round(outSize*0.85);
   }
   if(!dataUrl){
     // último recurso (imagen extremadamente compleja): tamaño mínimo, calidad mínima, se acepta lo que salga
     const canvas = document.createElement('canvas'); canvas.width=300; canvas.height=300;
-    canvas.getContext('2d').drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, 300, 300);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,300,300);
+    ctx.drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, 300, 300);
     dataUrl = canvas.toDataURL('image/jpeg', 0.2);
   }
   if(!state.productModal.images) state.productModal.images = [];
