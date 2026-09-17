@@ -384,6 +384,7 @@ const DEFAULT_SETTINGS = {
   promotions:[],
   logoUrl:"",
   theme:{},
+  historicalOrderCountOffset:0,
 };
 // Paletas de color prediseñadas para la tienda (Diseño → Apariencia). Cada una define los 4
 // colores que en realidad se usan en toda la tienda (primary/primaryDeep para botones y
@@ -4914,6 +4915,11 @@ function renderOperativoSubpanel(){
     <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}"></div>
     <div class="form-field"><label>Dirección de origen (de donde sale cada pedido)</label><input id="set-store-address" value="${s.storeAddress||''}" placeholder="Ej. Miguel Hidalgo 815 interior 22"></div>
     <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207"></div>
+    <div class="form-field">
+      <label>Pedidos adicionales a sumar en "+X pedidos" de tu tienda</label>
+      <input id="set-hist-offset" type="number" min="0" value="${s.historicalOrderCountOffset||0}">
+      <div class="note-box" style="margin-top:6px;">El "+X pedidos" que ven tus clientes junto a las estrellas cuenta automáticamente los pedidos y ventas reales que ha registrado el sistema desde que existe el folio consecutivo. Si ya importaste tu historial de ventas de Tiendanube (588 pedidos), o tienes ventas anteriores que no quedaron en ese conteo, ponlas aquí para que se sumen — es un número real, no decorativo, así que solo cuenta ventas que de verdad ocurrieron.</div>
+    </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
   </div>`;
 }
@@ -5001,6 +5007,7 @@ function handleSaveSettings(){
     schedule: document.getElementById('set-sched').value.trim(),
     storeAddress: document.getElementById('set-store-address').value.trim(),
     deliveryWhatsapp: document.getElementById('set-delivery-wa').value.trim(),
+    historicalOrderCountOffset: Math.max(0, Number(document.getElementById('set-hist-offset').value)||0),
   });
 }
 async function addCategory(){
