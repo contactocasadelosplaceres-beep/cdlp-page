@@ -1460,12 +1460,41 @@ function cropSetZoom(val){
   cropCtx.zoom = parseFloat(val);
   clampCropOffsets(); updateCropImgTransform();
 }
+const MAX_IMG_BYTES = 250*1024; // límite de peso por imagen (plan Blaze: cada byte guardado en Firestore se paga)
+function dataUrlBytes(dataUrl){
+  const b64 = dataUrl.slice(dataUrl.indexOf(',')+1);
+  const len = b64.length;
+  const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+  return Math.floor(len*3/4) - padding;
+}
+// Prueba calidades de mayor a menor hasta que el JPEG resultante quepa en maxBytes.
+// Devuelve null si ni la calidad más baja alcanza (entonces hay que reducir resolución).
+function canvasToLimitedJpeg(canvas, maxBytes){
+  const qualities = [0.85,0.8,0.75,0.7,0.65,0.6,0.55,0.5,0.45,0.4,0.35,0.3,0.25,0.2];
+  for(const q of qualities){
+    const url = canvas.toDataURL('image/jpeg', q);
+    if(dataUrlBytes(url) <= maxBytes) return url;
+  }
+  return null;
+}
 function applyCrop(){
   const scale = cropCtx.baseScale*cropCtx.zoom;
   const sx = -cropCtx.offX/scale, sy = -cropCtx.offY/scale, ssize = CROP_SIZE/scale;
-  const canvas = document.createElement('canvas'); canvas.width=CROP_OUT; canvas.height=CROP_OUT;
-  canvas.getContext('2d').drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, CROP_OUT, CROP_OUT);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+  // Primero se intenta con la resolución normal (700x700) bajando la calidad; solo si una imagen
+  // muy detallada no cabe ni en la calidad más baja, se reduce el tamaño y se repite.
+  let outSize = CROP_OUT, dataUrl = null;
+  while(outSize >= 300 && !dataUrl){
+    const canvas = document.createElement('canvas'); canvas.width=outSize; canvas.height=outSize;
+    canvas.getContext('2d').drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, outSize, outSize);
+    dataUrl = canvasToLimitedJpeg(canvas, MAX_IMG_BYTES);
+    if(!dataUrl) outSize = Math.round(outSize*0.85);
+  }
+  if(!dataUrl){
+    // último recurso (imagen extremadamente compleja): tamaño mínimo, calidad mínima, se acepta lo que salga
+    const canvas = document.createElement('canvas'); canvas.width=300; canvas.height=300;
+    canvas.getContext('2d').drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, 300, 300);
+    dataUrl = canvas.toDataURL('image/jpeg', 0.2);
+  }
   if(!state.productModal.images) state.productModal.images = [];
   if(state.productModal.images.length>=10){ showToast('Máximo 10 imágenes por producto'); }
   else state.productModal.images.push(dataUrl);
