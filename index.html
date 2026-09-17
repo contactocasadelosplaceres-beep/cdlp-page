@@ -183,11 +183,6 @@
 
   /* ===== TESTIMONIALS ===== */
   .rating-line{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;}
-  .rating-badge{color:var(--primary);display:inline-flex;align-items:center;}
-  .rating-num{font-weight:800;color:var(--primary-deep);font-size:15px;}
-  .rating-outof{font-weight:600;color:var(--ink-soft);font-size:12px;}
-  .rating-label{font-size:12.5px;color:var(--ink-soft);}
-  .rating-line-standalone{display:flex;align-items:center;justify-content:center;gap:8px;margin:26px 20px 4px;padding:12px 18px;background:var(--surface-soft);border-radius:var(--radius-pill);}
   .testimonial-row{display:grid;grid-template-columns:1fr;gap:12px;padding:0 20px 6px;}
   @media(min-width:640px){.testimonial-row{grid-template-columns:repeat(2,1fr);}}
   @media(min-width:980px){.testimonial-row{grid-template-columns:repeat(3,1fr);}}
@@ -1313,26 +1308,8 @@ function renderTestimonialsSection(){
       ${list.map(t=>`<div class="testimonial-card"><span class="stars">${'★'.repeat(Number(t.rating)||5)}</span><p>"${t.text}"</p>${t.name?`<div class="testimonial-name">— ${t.name}</div>`:''}</div>`).join('')}
   </div>`;
 }
-// Franja fija con estrellas + calificación + número real de pedidos, arriba del catálogo
-// completo (antes de que el cliente vea precios). Solo se muestra si ya hay testimonios
-// activados (si no, no hay calificación que mostrar). El conteo de pedidos sale de
-// "counters/orders" (ver loadData): es de lectura pública y ya se usa para los folios, así
-// que no expone ningún dato de pedidos individuales.
-function renderRatingLineBlock(){
-  const list = state.settings.testimonials||[];
-  if(!list.length) return '';
-  const avg = list.reduce((s,t)=>s+(Number(t.rating)||5),0)/list.length;
-  // Conteo real: pedidos/ventas con folio (el contador automático) + pedidos históricos que
-  // Ale haya declarado en Configuración (por ejemplo, ventas importadas de Tiendanube que no
-  // pasaron por el folio consecutivo). Ambas partes son datos reales, nunca un número inventado.
-  const count = (state.orderCount||0) + (Number(state.settings.historicalOrderCountOffset)||0);
-  return `
-  <div class="rating-line-standalone">
-    <span class="rating-badge">${icon('shield',18)}</span>
-    <span class="rating-num">${avg.toFixed(1)}<span class="rating-outof">/5</span></span>
-    <span class="rating-label">${count>0 ? `· +${count} pedidos` : 'Opiniones de clientes'}</span>
-  </div>`;
-}
+// El resumen de estrellas (rating-line) que antes iba aquí se quitó por completo a pedido del
+// usuario — no le gustó ninguna de las variantes probadas (estrellas, ícono, solo texto).
 
 /* ============== DISCRECIÓN (fixed) ============== */
 function renderDiscretionSection(){
@@ -1508,9 +1485,9 @@ function renderSuccess(){
 
 function renderStore(){
   const order = ['hero','featured','categories','promoBanner','grid','testimonials','newsletter','footer'];
-  const before = { grid: ['ratingline','kits'] }; // fixed sections inserted right before a configurable one
+  const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
   const after = { hero: ['trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
-  const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection, ratingline: renderRatingLineBlock };
+  const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
 
   let body = '';
   order.forEach(key=>{
