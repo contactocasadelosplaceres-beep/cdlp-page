@@ -377,7 +377,7 @@ const DEFAULT_SETTINGS = {
   historicalOrderCountOffset:0,
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false };
 
 async function loadData(){
   try{
@@ -874,12 +874,16 @@ function saveCustomerProfile(p){
 function clearCustomerProfile(){
   try{ localStorage.removeItem(PROFILE_KEY); }catch(e){}
 }
-function openProfile(){ state.profileOpen = true; render(); }
-function closeProfile(){ state.profileOpen = false; render(); }
+function openProfile(){
+  state.profileOpen = true;
+  state.profileDraft = {...(loadCustomerProfile()||{})};
+  render();
+}
+function closeProfile(){ state.profileOpen = false; state.profileDraft = null; render(); }
 function handleSaveProfile(){
-  const name = document.getElementById('pf-cli-name').value.trim();
-  const phone = document.getElementById('pf-cli-phone').value.trim();
-  const address = document.getElementById('pf-cli-address').value.trim();
+  const name = (state.profileDraft.name||'').trim();
+  const phone = (state.profileDraft.phone||'').trim();
+  const address = (state.profileDraft.address||'').trim();
   if(!name || !phone){ showToast('Ponle al menos tu nombre y teléfono'); return; }
   saveCustomerProfile({name, phone, address, notes:'', remember:true});
   showToast('Tus datos quedaron guardados en este celular');
@@ -887,19 +891,20 @@ function handleSaveProfile(){
 }
 function handleForgetProfile(){
   clearCustomerProfile();
+  state.profileDraft = {};
   showToast('Se borraron tus datos guardados');
   render();
 }
 function renderProfileDrawer(){
-  const p = loadCustomerProfile() || {};
+  const p = state.profileDraft || (state.profileDraft = {...(loadCustomerProfile()||{})});
   const tier = activeWholesaleTier();
   return `
     <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" onclick="closeProfile()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">Guarda tus datos en este celular para que tus próximos pedidos sean más rápidos. No se comparten con nadie más, ni requieren contraseña — solo quedan en este dispositivo.</div>
-      <div class="form-field"><label>Nombre completo</label><input id="pf-cli-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="pf-cli-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}"></div>
-      <div class="form-field"><label>Dirección de entrega</label><textarea id="pf-cli-address" placeholder="Calle, número, colonia, referencias">${p.address||''}</textarea></div>
+      <div class="form-field"><label>Nombre completo</label><input id="pf-cli-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.name=this.value"></div>
+      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="pf-cli-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.phone=this.value"></div>
+      <div class="form-field"><label>Dirección de entrega</label><textarea id="pf-cli-address" placeholder="Calle, número, colonia, referencias" oninput="state.profileDraft.address=this.value">${p.address||''}</textarea></div>
       <div class="form-field" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
         <label>Código de mayoreo</label>
         ${tier ? `

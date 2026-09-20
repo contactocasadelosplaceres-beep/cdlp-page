@@ -440,6 +440,7 @@ let state = {
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
+  testimonialDraftName:'', testimonialDraftText:'',
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -3670,18 +3671,18 @@ function renderCustomerModal(){
   <div class="modal-overlay" onclick="if(event.target===this){closeCustomerModal();}">
     <div class="modal">
       <h3>${c.id?'Editar cliente':'Nuevo cliente'}</h3>
-      <div class="form-field"><label>Nombre</label><input id="cm-name" value="${c.name||''}"></div>
+      <div class="form-field"><label>Nombre</label><input id="cm-name" value="${c.name||''}" oninput="state.customerModal.name=this.value"></div>
       <div class="two-col">
-        <div class="form-field"><label>Teléfono / WhatsApp</label><input id="cm-phone" value="${c.phone||''}"></div>
-        <div class="form-field"><label>Email</label><input id="cm-email" value="${c.email||''}"></div>
+        <div class="form-field"><label>Teléfono / WhatsApp</label><input id="cm-phone" value="${c.phone||''}" oninput="state.customerModal.phone=this.value"></div>
+        <div class="form-field"><label>Email</label><input id="cm-email" value="${c.email||''}" oninput="state.customerModal.email=this.value"></div>
       </div>
-      <div class="form-field"><label>Dirección</label><textarea id="cm-address" placeholder="Calle, número, colonia, referencias">${c.address||''}</textarea></div>
+      <div class="form-field"><label>Dirección</label><textarea id="cm-address" placeholder="Calle, número, colonia, referencias" oninput="state.customerModal.address=this.value">${c.address||''}</textarea></div>
       <div class="two-col">
-        <div class="form-field"><label>Ciudad</label><input id="cm-city" value="${c.city||''}"></div>
-        <div class="form-field"><label>Estado</label><input id="cm-state" value="${c.state||''}"></div>
+        <div class="form-field"><label>Ciudad</label><input id="cm-city" value="${c.city||''}" oninput="state.customerModal.city=this.value"></div>
+        <div class="form-field"><label>Estado</label><input id="cm-state" value="${c.state||''}" oninput="state.customerModal.state=this.value"></div>
       </div>
-      <div class="form-field"><label>País</label><input id="cm-country" value="${c.country||''}"></div>
-      <div class="form-field"><label>Notas</label><textarea id="cm-notes">${c.notes||''}</textarea></div>
+      <div class="form-field"><label>País</label><input id="cm-country" value="${c.country||''}" oninput="state.customerModal.country=this.value"></div>
+      <div class="form-field"><label>Notas</label><textarea id="cm-notes" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCustomerModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveCustomerModal()">Guardar</button>
@@ -3835,10 +3836,10 @@ function renderWholesaleModal(){
   <div class="modal-overlay" onclick="if(event.target===this){closeWholesaleModal();}">
     <div class="modal" style="max-width:520px;">
       <h3>${t.name?'Editar':'Nueva'} tabla de precios de mayoreo</h3>
-      <div class="form-field"><label>Nombre</label><input id="wt-name" value="${t.name||''}" placeholder="Ej. Mayoristas chicos"></div>
+      <div class="form-field"><label>Nombre</label><input id="wt-name" value="${t.name||''}" placeholder="Ej. Mayoristas chicos" oninput="state.wholesaleModal.name=this.value"></div>
       <div class="two-col">
-        <div class="form-field"><label>Descuento (%)</label><input id="wt-discount" type="number" value="${t.discountPercent}"></div>
-        <div class="form-field"><label>Código de acceso</label><input id="wt-code" value="${t.code}" style="text-transform:uppercase;"></div>
+        <div class="form-field"><label>Descuento (%)</label><input id="wt-discount" type="number" value="${t.discountPercent}" oninput="state.wholesaleModal.discountPercent=this.value"></div>
+        <div class="form-field"><label>Código de acceso</label><input id="wt-code" value="${t.code}" style="text-transform:uppercase;" oninput="state.wholesaleModal.code=this.value"></div>
       </div>
       <div class="form-field"><label>¿A qué aplica el descuento?</label>
         <select id="wt-scope" onchange="state.wholesaleModal.scope=this.value;render()">
@@ -3875,12 +3876,12 @@ function renderWholesaleModal(){
       ` : ''}
       <div class="two-col" style="margin-top:10px;">
         <div class="form-field"><label>Compra mínima por</label>
-          <select id="wt-mintype">
+          <select id="wt-mintype" onchange="state.wholesaleModal.minType=this.value">
             <option value="amount" ${t.minType==='amount'?'selected':''}>Monto ($)</option>
             <option value="qty" ${t.minType==='qty'?'selected':''}>Cantidad de piezas</option>
           </select>
         </div>
-        <div class="form-field"><label>Valor mínimo</label><input id="wt-minvalue" type="number" value="${t.minValue}"></div>
+        <div class="form-field"><label>Valor mínimo</label><input id="wt-minvalue" type="number" value="${t.minValue}" oninput="state.wholesaleModal.minValue=this.value"></div>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeWholesaleModal()">Cancelar</button>
@@ -3981,8 +3982,8 @@ function renderCouponModal(){
     <div class="modal" style="max-width:520px;">
       <h3>${c.code?'Editar':'Nuevo'} cupón</h3>
       <div class="two-col">
-        <div class="form-field"><label>Código</label><input id="cp-code" value="${c.code||''}" style="text-transform:uppercase;" placeholder="Ej. VERANO20"></div>
-        <div class="form-field"><label>Descuento (%)</label><input id="cp-discount" type="number" value="${c.discountPercent}"></div>
+        <div class="form-field"><label>Código</label><input id="cp-code" value="${c.code||''}" style="text-transform:uppercase;" placeholder="Ej. VERANO20" oninput="state.couponModal.code=this.value"></div>
+        <div class="form-field"><label>Descuento (%)</label><input id="cp-discount" type="number" value="${c.discountPercent}" oninput="state.couponModal.discountPercent=this.value"></div>
       </div>
       <div class="form-field"><label>¿A qué aplica?</label>
         <select id="cp-scope" onchange="state.couponModal.scope=this.value;render()">
@@ -4018,10 +4019,10 @@ function renderCouponModal(){
         <div class="panel-sub">${(c.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
       ` : ''}
       <div class="two-col" style="margin-top:10px;">
-        <div class="form-field"><label>Vigente desde (opcional)</label><input id="cp-start" type="date" value="${c.startDate||''}"></div>
-        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="cp-end" type="date" value="${c.endDate||''}"></div>
+        <div class="form-field"><label>Vigente desde (opcional)</label><input id="cp-start" type="date" value="${c.startDate||''}" oninput="state.couponModal.startDate=this.value"></div>
+        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="cp-end" type="date" value="${c.endDate||''}" oninput="state.couponModal.endDate=this.value"></div>
       </div>
-      <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" value="${c.maxUses||0}"></div>
+      <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" value="${c.maxUses||0}" oninput="state.couponModal.maxUses=this.value"></div>
       ${couponUsedCount(c.code)>0 ? `<div class="panel-sub">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCouponModal()">Cancelar</button>
@@ -4189,7 +4190,7 @@ function renderPromoModal(){
   <div class="modal-overlay" onclick="if(event.target===this){closePromoModal();}">
     <div class="modal" style="max-width:560px;">
       <h3>${p.name?'Editar':'Nueva'} promoción</h3>
-      <div class="form-field"><label>Nombre (uso interno, no lo ven tus clientes)</label><input id="pr-name" value="${p.name||''}"></div>
+      <div class="form-field"><label>Nombre (uso interno, no lo ven tus clientes)</label><input id="pr-name" value="${p.name||''}" oninput="state.promoModal.name=this.value"></div>
       <div class="form-field"><label>Tipo de descuento</label>
         <select id="pr-type" onchange="state.promoModal.type=this.value;render()">
           ${Object.entries(PROMO_TYPES).map(([k,v])=>`<option value="${k}" ${p.type===k?'selected':''}>${v}</option>`).join('')}
@@ -4198,8 +4199,8 @@ function renderPromoModal(){
 
       ${p.type==='buyxpayy' ? `
         <div class="two-col">
-          <div class="form-field"><label>Llevando (unidades)</label><input id="pr-buyqty" type="number" value="${p.buyQty}"></div>
-          <div class="form-field"><label>Pagas (unidades)</label><input id="pr-payqty" type="number" value="${p.payQty}"></div>
+          <div class="form-field"><label>Llevando (unidades)</label><input id="pr-buyqty" type="number" value="${p.buyQty}" oninput="state.promoModal.buyQty=this.value"></div>
+          <div class="form-field"><label>Pagas (unidades)</label><input id="pr-payqty" type="number" value="${p.payQty}" oninput="state.promoModal.payQty=this.value"></div>
         </div>
         ${renderPromoScopePicker(p)}
       ` : ''}
@@ -4219,14 +4220,14 @@ function renderPromoModal(){
 
       ${p.type==='cart_discount' ? `
         <div class="two-col">
-          <div class="form-field"><label>Descuento (%)</label><input id="pr-discount" type="number" value="${p.discountPercent}"></div>
-          <div class="form-field"><label>Compra mínima ($, 0 = sin mínimo)</label><input id="pr-minamount" type="number" value="${p.minAmount}"></div>
+          <div class="form-field"><label>Descuento (%)</label><input id="pr-discount" type="number" value="${p.discountPercent}" oninput="state.promoModal.discountPercent=this.value"></div>
+          <div class="form-field"><label>Compra mínima ($, 0 = sin mínimo)</label><input id="pr-minamount" type="number" value="${p.minAmount}" oninput="state.promoModal.minAmount=this.value"></div>
         </div>
         ${renderPromoScopePicker(p)}
       ` : ''}
 
       ${p.type==='gift' ? `
-        <div class="form-field"><label>Compra mínima para el regalo ($)</label><input id="pr-gift-minamount" type="number" value="${p.minAmount}"></div>
+        <div class="form-field"><label>Compra mínima para el regalo ($)</label><input id="pr-gift-minamount" type="number" value="${p.minAmount}" oninput="state.promoModal.minAmount=this.value"></div>
         <div class="form-field"><label>Buscar producto de regalo</label>
           <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
         </div>
@@ -4243,7 +4244,7 @@ function renderPromoModal(){
       ` : ''}
 
       ${p.type==='cross_sell' ? `
-        <div class="form-field"><label>Descuento (%) sobre el segundo producto</label><input id="pr-cross-discount" type="number" value="${p.discountPercent}"></div>
+        <div class="form-field"><label>Descuento (%) sobre el segundo producto</label><input id="pr-cross-discount" type="number" value="${p.discountPercent}" oninput="state.promoModal.discountPercent=this.value"></div>
         <div class="form-field"><label>Buscar producto A (el que dispara la promo)</label>
           <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
         </div>
@@ -4273,8 +4274,8 @@ function renderPromoModal(){
       ` : ''}
 
       <div class="two-col" style="margin-top:10px;">
-        <div class="form-field"><label>Vigente desde (opcional)</label><input id="pr-start" type="date" value="${p.startDate||''}"></div>
-        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="pr-end" type="date" value="${p.endDate||''}"></div>
+        <div class="form-field"><label>Vigente desde (opcional)</label><input id="pr-start" type="date" value="${p.startDate||''}" oninput="state.promoModal.startDate=this.value"></div>
+        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="pr-end" type="date" value="${p.endDate||''}" oninput="state.promoModal.endDate=this.value"></div>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closePromoModal()">Cancelar</button>
@@ -4436,7 +4437,7 @@ function renderCenterModal(){
   <div class="modal-overlay" onclick="if(event.target===this){state.centerModal=null;render();}">
     <div class="modal">
       <h3>Editar centro</h3>
-      <div class="form-field"><label>Nombre</label><input id="center-name-input" value="${c.name||''}"></div>
+      <div class="form-field"><label>Nombre</label><input id="center-name-input" value="${c.name||''}" oninput="state.centerModal.name=this.value"></div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.centerModal=null;render()">Cancelar</button>
         <button class="btn-primary" onclick="saveCenterModal()">Guardar</button>
@@ -4686,12 +4687,15 @@ function renderAsistenteIA(){
     <div class="note-box">Conecta tu propia clave de API de Claude (Anthropic) o de OpenAI para tener un asistente que te ayude a redactar respuestas o analizar tu negocio. <strong>Importante:</strong> tu clave queda guardada para que la use únicamente esta página de administración — no compartas el link ni la contraseña de este panel.</div>
     <div class="two-col">
       <div class="form-field"><label>Proveedor</label>
-        <select id="ai-provider"><option value="anthropic" ${a.provider==='anthropic'?'selected':''}>Anthropic (Claude)</option><option value="openai" ${a.provider==='openai'?'selected':''}>OpenAI</option></select>
+        <select id="ai-provider" onchange="state.aiSettings.provider=this.value">
+          <option value="anthropic" ${a.provider==='anthropic'?'selected':''}>Anthropic (Claude)</option>
+          <option value="openai" ${a.provider==='openai'?'selected':''}>OpenAI</option>
+        </select>
       </div>
-      <div class="form-field"><label>Modelo</label><input id="ai-model" value="${a.model}" placeholder="claude-sonnet-5"></div>
+      <div class="form-field"><label>Modelo</label><input id="ai-model" value="${a.model}" placeholder="claude-sonnet-5" oninput="state.aiSettings.model=this.value"></div>
     </div>
-    <div class="form-field"><label>API key</label><input id="ai-key" type="password" value="${a.apiKey}" placeholder="sk-..."></div>
-    <div class="form-field"><label>Instrucciones del asistente</label><textarea id="ai-prompt">${a.systemPrompt}</textarea></div>
+    <div class="form-field"><label>API key</label><input id="ai-key" type="password" value="${a.apiKey}" placeholder="sk-..." oninput="state.aiSettings.apiKey=this.value"></div>
+    <div class="form-field"><label>Instrucciones del asistente</label><textarea id="ai-prompt" oninput="state.aiSettings.systemPrompt=this.value">${a.systemPrompt}</textarea></div>
     <button class="btn-primary" onclick="handleSaveAiSettings()">Guardar conexión</button>
     <div class="panel-title" style="margin:26px 0 12px;">Probar el asistente</div>
     <div class="panel" style="max-height:280px;overflow-y:auto;">
@@ -4795,7 +4799,7 @@ function renderBrandSubpanel(){
   <div class="panel">
     <div class="panel-title">Nombre y logo de la tienda</div>
     <div class="panel-sub">Se muestran en el encabezado y el pie de página de tu tienda.</div>
-    <div class="form-field"><label>Nombre de la tienda</label><input id="brand-name" value="${s.storeName}"></div>
+    <div class="form-field"><label>Nombre de la tienda</label><input id="brand-name" value="${s.storeName}" oninput="state.settings.storeName=this.value"></div>
     <div class="form-field">
       <label>Logo</label>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
@@ -4962,10 +4966,10 @@ function renderPromoSubpanel(){
   <div class="panel">
     <div class="panel-title">Banner promocional</div>
     <div class="note-box">Actívalo desde "Secciones de la página de inicio" para que se muestre en la tienda. Útil para anunciar una promoción temporal, un combo o una categoría nueva.</div>
-    <div class="form-field"><label>Título</label><input id="promo-title" value="${p.title||''}" placeholder="Ej. 2x1 en lubricantes"></div>
-    <div class="form-field"><label>Texto</label><textarea id="promo-text" placeholder="Detalles de la promoción...">${p.text||''}</textarea></div>
+    <div class="form-field"><label>Título</label><input id="promo-title" value="${p.title||''}" placeholder="Ej. 2x1 en lubricantes" oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).title=this.value"></div>
+    <div class="form-field"><label>Texto</label><textarea id="promo-text" placeholder="Detalles de la promoción..." oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).text=this.value">${p.text||''}</textarea></div>
     <div class="two-col">
-      <div class="form-field"><label>Texto del botón</label><input id="promo-btn-text" value="${p.buttonText||''}" placeholder="Ver catálogo"></div>
+      <div class="form-field"><label>Texto del botón</label><input id="promo-btn-text" value="${p.buttonText||''}" placeholder="Ver catálogo" oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).buttonText=this.value"></div>
       <div class="form-field"><label>Categoría a la que enlaza</label>
         <select id="promo-btn-link">
           <option value="">Sin enlace</option>
@@ -5036,17 +5040,18 @@ function renderTestimonialsSubpanel(){
           <button class="icon-btn danger" onclick="removeTestimonial(${idx})">${icon('trash')}</button>
         </div>
       `).join('')}
-    <div class="form-field" style="margin-top:14px;"><label>Nombre o iniciales (opcional)</label><input id="test-name" placeholder="Ej. J.R."></div>
-    <div class="form-field"><label>Testimonio</label><textarea id="test-text" placeholder="Excelente atención y muy discretos..."></textarea></div>
+    <div class="form-field" style="margin-top:14px;"><label>Nombre o iniciales (opcional)</label><input id="test-name" placeholder="Ej. J.R." value="${state.testimonialDraftName||''}" oninput="state.testimonialDraftName=this.value"></div>
+    <div class="form-field"><label>Testimonio</label><textarea id="test-text" placeholder="Excelente atención y muy discretos..." oninput="state.testimonialDraftText=this.value">${state.testimonialDraftText||''}</textarea></div>
     <button class="btn-primary" onclick="addTestimonial()">+ Agregar testimonio</button>
   </div>`;
 }
 function addTestimonial(){
-  const name = document.getElementById('test-name').value.trim();
-  const text = document.getElementById('test-text').value.trim();
+  const name = (state.testimonialDraftName||'').trim();
+  const text = (state.testimonialDraftText||'').trim();
   if(!text){ showToast('Escribe el texto del testimonio'); return; }
   if(!state.settings.testimonials) state.settings.testimonials = [];
   state.settings.testimonials.push({name, text});
+  state.testimonialDraftName=''; state.testimonialDraftText='';
   saveSettings(); showToast('Testimonio agregado'); render();
 }
 function removeTestimonial(idx){
@@ -5296,7 +5301,7 @@ function renderProductModal(){
       <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
 
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
-        <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''}>
+        <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''} onchange="state.productModal.hidden=this.checked">
         Ocultar este producto del catálogo público (sigue existiendo, solo no se muestra en la tienda)
       </label>
 
@@ -5317,12 +5322,12 @@ function renderProductModal(){
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
       </div>
 
-      <div class="form-field"><label>Nombre</label><input id="pf-name" value="${p.name||''}"></div>
+      <div class="form-field"><label>Nombre</label><input id="pf-name" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
 
       <div class="two-col">
         <div class="form-field"><label>SKU</label>
           <div style="display:flex;gap:6px;">
-            <input id="pf-sku" value="${p.sku||''}" style="flex:1;">
+            <input id="pf-sku" value="${p.sku||''}" style="flex:1;" oninput="state.productModal.sku=this.value">
             <button class="btn-outline" style="padding:0 12px;white-space:nowrap;" onclick="regenerateSKU()">Generar</button>
           </div>
         </div>
@@ -5340,10 +5345,10 @@ function renderProductModal(){
       <div class="form-section-label">Precio</div>
       <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
         <div class="two-col">
-          <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" value="${p.price||''}" oninput="updatePriceCalc()"></div>
-          <div class="form-field"><label>Precio promocional</label><input id="pf-promo" type="number" value="${p.promoPrice||''}" placeholder="0.00" oninput="updatePriceCalc()"></div>
+          <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" value="${p.price||''}" oninput="state.productModal.price=this.value;updatePriceCalc()"></div>
+          <div class="form-field"><label>Precio promocional</label><input id="pf-promo" type="number" value="${p.promoPrice||''}" placeholder="0.00" oninput="state.productModal.promoPrice=this.value;updatePriceCalc()"></div>
         </div>
-        <div class="form-field"><label>Costo</label><input id="pf-cost" type="number" value="${p.cost||''}" oninput="updatePriceCalc()"></div>
+        <div class="form-field"><label>Costo</label><input id="pf-cost" type="number" value="${p.cost||''}" oninput="state.productModal.cost=this.value;updatePriceCalc()"></div>
         <div class="panel-sub" style="margin-bottom:0;">Es de uso interno, tus clientes no lo verán en la tienda.</div>
         <div class="two-col" style="margin-top:10px;">
           <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="font-size:16px;color:var(--primary-deep);">${margin}%</strong></div>
@@ -5367,7 +5372,7 @@ function renderProductModal(){
       </div>
 
       <div class="form-section-label">Descripción y categorización</div>
-      <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc">${p.desc||''}</textarea></div>
+      <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea></div>
 
       <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
         <button type="button" class="btn-tertiary" style="margin-bottom:8px;" onclick="applySuggestedNeeds()">${icon('star',13)} Sugerir según nombre y categoría</button>
@@ -5497,7 +5502,9 @@ function generateSKU(product){
 }
 function regenerateSKU(){
   const name = document.getElementById('pf-name').value.trim();
-  document.getElementById('pf-sku').value = generateSKU({name, categories: state.productModal.categories, cat: state.productModal.cat});
+  const sku = generateSKU({name, categories: state.productModal.categories, cat: state.productModal.cat});
+  document.getElementById('pf-sku').value = sku;
+  state.productModal.sku = sku;
 }
 
 /* ---- Variantes ---- */
