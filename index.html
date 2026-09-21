@@ -375,6 +375,7 @@ const DEFAULT_SETTINGS = {
   customCss:"", logoUrl:"",
   theme:{},
   historicalOrderCountOffset:0,
+  slackWebhookUrl:"",
 };
 
 let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
@@ -752,6 +753,20 @@ function cartTotal(){
   return Math.max(0, total);
 }
 function waLink(msg){ const num=(state.settings.whatsapp||'').replace(/\D/g,''); return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`; }
+// Aviso interno a Slack (opcional, ver Configuración → Datos operativos). Se manda en paralelo
+// al mensaje de WhatsApp del cliente, nunca en su lugar, y nunca debe interrumpir el flujo de
+// compra si falla o si Ale no configuró ningún webhook. Por una restricción de los navegadores
+// (CORS), un webhook de Slack no se puede llamar de la forma normal desde el navegador sin
+// servidor propio: se manda con mode "no-cors" y Content-Type "text/plain" (aunque el cuerpo
+// sea JSON) para evitar que el navegador la bloquee — a cambio, nunca se sabe si en verdad llegó
+// bien, así que esto es "mejor esfuerzo", no garantizado.
+function sendSlackNotification(text){
+  const url = state.settings.slackWebhookUrl;
+  if(!url) return;
+  try{
+    fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({text}) }).catch(()=>{});
+  }catch(e){ /* silencioso a propósito: Slack es un aviso extra, no debe tronar la compra */ }
+}
 
 function addToCart(id, variantId){
   const p = state.products.find(x=>x.id===id);
@@ -841,12 +856,15 @@ async function submitOrder(formData){
   }
   state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; render();
 
-  const lines = items.map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('%0A');
-  const msg = `Hola, quiero confirmar mi pedido:%0A${lines}%0A%0ATotal: ${money(order.total)}%0ANombre: ${formData.name}%0ADirección: ${formData.address}%0APago contra entrega.`;
+  // Mensaje de confirmación de compra: se abre solo, listo para que el cliente lo mande por
+  // WhatsApp al número de la tienda (state.settings.whatsapp, configurable en Configuración).
+  const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
+  const msg = `Hola, me gustaria confirmar mi compra:\nProducto: \n${productLines}\nDirección: ${formData.address}\nTotal: ${money(order.total)} (el total no incluye el costo del envío)\n\n¡Gracias!`;
   if(state.settings.whatsapp){
-    const num = state.settings.whatsapp.replace(/\D/g,'');
-    window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+    window.open(waLink(msg), '_blank');
   }
+  // Aviso interno a Slack (en paralelo, no en lugar del de WhatsApp) — ver Configuración → Datos operativos.
+  sendSlackNotification(`🛒 *Nuevo pedido* ${orderNumber?`#${orderNumber}`:''}\nCliente: ${formData.name} (${formData.phone})\nProducto:\n${productLines}\nDirección: ${formData.address}\nTotal: ${money(order.total)} (no incluye envío)`);
 }
 function handleCheckoutSubmit(){
   if(state.submittingOrder) return; // evita doble envío si tocan el botón varias veces
