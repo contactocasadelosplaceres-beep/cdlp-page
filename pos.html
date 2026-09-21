@@ -952,11 +952,35 @@ function renderReceipt(){
   </div></div>`;
 }
 
+/* ============== PRESERVAR EL CAMPO QUE SE ESTÁ EDITANDO AL VOLVER A DIBUJAR LA PANTALLA ==============
+   Mismo mecanismo que en admin.html: captura qué campo tenía el foco y en qué posición iba el
+   cursor justo antes de que render() reconstruya el HTML, y lo restaura después. */
+function captureFocusState(root){
+  const el = document.activeElement;
+  if(!el || !root || !root.contains(el) || !el.id) return null;
+  const tag = el.tagName;
+  if(tag!=='INPUT' && tag!=='TEXTAREA' && tag!=='SELECT') return null;
+  const info = { id: el.id, value: el.value, scrollTop: root.scrollTop };
+  if(typeof el.selectionStart === 'number'){ info.selStart = el.selectionStart; info.selEnd = el.selectionEnd; }
+  return info;
+}
+function restoreFocusState(root, info){
+  if(!info) return;
+  const el = document.getElementById(info.id);
+  if(!el) return;
+  if('value' in el && el.value !== info.value) el.value = info.value;
+  el.focus();
+  if(info.selStart!=null && el.setSelectionRange){
+    try{ el.setSelectionRange(info.selStart, info.selEnd); }catch(e){}
+  }
+  root.scrollTop = info.scrollTop;
+}
 function render(){
   const root = document.getElementById('root');
-  if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; return; }
-  if(!state.user){ root.innerHTML = renderLogin(); return; }
-  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando…</div>`; return; }
+  const focusInfo = captureFocusState(root);
+  if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
+  if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
+  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando…</div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.activeCashier){ root.innerHTML = renderCashierSelect(); }
   else if(!state.pinConfirmed){ root.innerHTML = renderPinScreen(); }
   else if(!state.activeCenter){ root.innerHTML = renderCenterSelect(); }
@@ -975,6 +999,7 @@ function render(){
     root.innerHTML = html;
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  restoreFocusState(root, focusInfo);
 }
 render();
 </script>
