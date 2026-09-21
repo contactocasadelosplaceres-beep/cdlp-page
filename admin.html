@@ -378,7 +378,7 @@ const DEFAULT_SETTINGS = {
   testimonials:[],
   socialInstagram:"", socialFacebook:"", contactEmail:"",
   customCss:"",
-  storeAddress:"", deliveryWhatsapp:"523413292207",
+  storeAddress:"", deliveryWhatsapp:"523413292207", slackWebhookUrl:"",
   wholesaleTiers:[],
   coupons:[],
   promotions:[],
@@ -5126,13 +5126,18 @@ function renderOperativoSubpanel(){
   return `
   <div class="panel">
     <div class="panel-title">Datos operativos</div>
-    <div class="form-field"><label>WhatsApp para confirmaciones (con código de país)</label><input id="set-wa" value="${s.whatsapp}"></div>
-    <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}"></div>
-    <div class="form-field"><label>Dirección de origen (de donde sale cada pedido)</label><input id="set-store-address" value="${s.storeAddress||''}" placeholder="Ej. Miguel Hidalgo 815 interior 22"></div>
-    <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207"></div>
+    <div class="form-field"><label>WhatsApp para confirmaciones (con código de país)</label><input id="set-wa" value="${s.whatsapp}" oninput="state.settings.whatsapp=this.value"></div>
+    <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}" oninput="state.settings.schedule=this.value"></div>
+    <div class="form-field"><label>Dirección de origen (de donde sale cada pedido)</label><input id="set-store-address" value="${s.storeAddress||''}" placeholder="Ej. Miguel Hidalgo 815 interior 22" oninput="state.settings.storeAddress=this.value"></div>
+    <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207" oninput="state.settings.deliveryWhatsapp=this.value"></div>
+    <div class="form-field">
+      <label>Webhook de Slack (opcional)</label>
+      <input id="set-slack-webhook" value="${s.slackWebhookUrl||''}" placeholder="https://hooks.slack.com/services/..." oninput="state.settings.slackWebhookUrl=this.value">
+      <div class="note-box" style="margin-top:6px;">Si lo llenas, cada pedido nuevo de la tienda y cada venta cerrada en el Punto de Venta mandan además un aviso automático a ese canal de Slack (en paralelo al mensaje de WhatsApp, no lo reemplaza). Para conseguir esta URL: en Slack, crea una app → Incoming Webhooks → actívalo → "Add New Webhook to Workspace" y elige el canal. <strong>Ojo:</strong> como esta tienda no tiene servidor propio, esta URL queda visible en el código de la página para quien la busque — alguien podría usarla para mandar mensajes falsos a tu canal (spam), aunque no puede leer ni robar ningún dato tuyo con ella. Déjalo vacío si prefieres no activar esto.</div>
+    </div>
     <div class="form-field">
       <label>Pedidos adicionales a sumar en "+X pedidos" de tu tienda</label>
-      <input id="set-hist-offset" type="number" min="0" value="${s.historicalOrderCountOffset||0}">
+      <input id="set-hist-offset" type="number" min="0" value="${s.historicalOrderCountOffset||0}" oninput="state.settings.historicalOrderCountOffset=this.value">
       <div class="note-box" style="margin-top:6px;">El "+X pedidos" que ven tus clientes junto a las estrellas cuenta automáticamente los pedidos y ventas reales que ha registrado el sistema desde que existe el folio consecutivo. Si ya importaste tu historial de ventas de Tiendanube (588 pedidos), o tienes ventas anteriores que no quedaron en ese conteo, ponlas aquí para que se sumen — es un número real, no decorativo, así que solo cuenta ventas que de verdad ocurrieron.</div>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
@@ -5222,6 +5227,7 @@ function handleSaveSettings(){
     schedule: document.getElementById('set-sched').value.trim(),
     storeAddress: document.getElementById('set-store-address').value.trim(),
     deliveryWhatsapp: document.getElementById('set-delivery-wa').value.trim(),
+    slackWebhookUrl: document.getElementById('set-slack-webhook').value.trim(),
     historicalOrderCountOffset: Math.max(0, Number(document.getElementById('set-hist-offset').value)||0),
   });
 }

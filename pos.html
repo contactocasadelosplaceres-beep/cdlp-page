@@ -160,6 +160,7 @@ function splitRemaining(){
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   loaded:false, products:[], categories:[], coupons:[], cashiers:[], centers:[], activeCenter:null,
+  settings:{},
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
   activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo", splitAmounts:{}, cartCollapsed:true,
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, lastPayments:[], sending:false, variantPickerProduct:null,
@@ -186,6 +187,7 @@ async function loadData(){
       db.collection('customers').get(),
     ]);
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.settings = setSnap.exists ? setSnap.data() : {};
     state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
     state.coupons = setSnap.exists ? (setSnap.data().coupons||[]) : [];
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
@@ -735,6 +737,10 @@ async function chargeSale(){
     }
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.saleDone = true;
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
+    // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin.
+    const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
+    const clienteLine = state.activeCustomer ? `\nCliente: ${state.activeCustomer.name}${state.activeCustomer.phone?` (${state.activeCustomer.phone})`:''}` : '';
+    sendSlackNotification(`💰 *Nueva venta* ${orderNumber?`#${orderNumber}`:''} — ${state.activeCenter.name}\nAtendió: ${state.activeCashier.name}\nProducto:\n${productLines}${clienteLine}\nTotal: ${money(total)}`);
     state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo';
   }catch(e){
     console.error(e); showToast('No se pudo registrar la venta');
@@ -931,6 +937,16 @@ function renderSplitPaymentInputs(){
   </div>`;
 }
 function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
+// Aviso interno a Slack (opcional, ver admin.html → Configuración → Datos operativos). Mismo
+// mecanismo que en index.html: se manda "a ciegas" (no-cors) para evitar el bloqueo de CORS de
+// un webhook de Slack llamado sin servidor propio, y nunca debe interrumpir el cobro si falla.
+function sendSlackNotification(text){
+  const url = state.settings.slackWebhookUrl;
+  if(!url) return;
+  try{
+    fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({text}) }).catch(()=>{});
+  }catch(e){ /* silencioso a propósito: Slack es un aviso extra, no debe tronar el cobro */ }
+}
 function receiptWhatsappMessage(){
   const lines = (state.lastSaleItems||[]).map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('\n');
   const storeName = (state.settings && state.settings.storeName) || 'La Casa de los Placeres';
