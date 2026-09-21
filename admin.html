@@ -5614,15 +5614,47 @@ function renderCropModal(){
   </div>`;
 }
 
+/* ============== PRESERVAR EL CAMPO QUE SE ESTÁ EDITANDO AL VOLVER A DIBUJAR LA PANTALLA ==============
+   render() reconstruye TODO el HTML desde cero cada vez (por ejemplo, cuando llega un pedido
+   nuevo en segundo plano mientras editas algo). Desde que cada campo de texto importante está
+   "atado" al estado (ver los oninput= en los formularios de arriba), ese HTML nuevo ya trae el
+   valor correcto — pero igual te saca el foco del campo, como si hubieras hecho click en otro
+   lado a media palabra. Esto captura, justo antes de reconstruir la pantalla, en qué campo
+   estabas escribiendo y en qué posición iba el cursor, y lo restaura después. De paso, por si
+   algún campo quedara sin atar al estado (ahora o en el futuro), respeta el valor que tenías en
+   pantalla en ese instante por encima de lo que traiga el estado — así nunca se pierde una letra
+   de lo que estabas escribiendo, pase lo que pase en segundo plano. */
+function captureFocusState(root){
+  const el = document.activeElement;
+  if(!el || !root || !root.contains(el) || !el.id) return null;
+  const tag = el.tagName;
+  if(tag!=='INPUT' && tag!=='TEXTAREA' && tag!=='SELECT') return null;
+  const info = { id: el.id, value: el.value, scrollTop: root.scrollTop };
+  if(typeof el.selectionStart === 'number'){ info.selStart = el.selectionStart; info.selEnd = el.selectionEnd; }
+  return info;
+}
+function restoreFocusState(root, info){
+  if(!info) return;
+  const el = document.getElementById(info.id);
+  if(!el) return;
+  if('value' in el && el.value !== info.value) el.value = info.value;
+  el.focus();
+  if(info.selStart!=null && el.setSelectionRange){
+    try{ el.setSelectionRange(info.selStart, info.selEnd); }catch(e){}
+  }
+  root.scrollTop = info.scrollTop;
+}
 function render(){
   const root = document.getElementById('root');
-  if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; return; }
-  if(!state.user){ root.innerHTML = renderLogin(); return; }
-  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; return; }
+  const focusInfo = captureFocusState(root);
+  if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
+  if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
+  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
-  const pinField = document.getElementById('pin-field'); if(pinField) pinField.focus();
-  const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
+  const pinField = document.getElementById('pin-field'); if(pinField && !focusInfo) pinField.focus();
+  const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
+  restoreFocusState(root, focusInfo);
 }
 render();
 </script>

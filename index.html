@@ -377,7 +377,7 @@ const DEFAULT_SETTINGS = {
   historicalOrderCountOffset:0,
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
 
 async function loadData(){
   try{
@@ -931,6 +931,7 @@ function renderProfileDrawer(){
    por WhatsApp. Lleva un campo trampa invisible ("website") y un límite de un envío por
    minuto por dispositivo, para frenar el spam automatizado sin necesitar un backend. */
 const MESSAGE_MIN_INTERVAL_MS = 60000;
+function openMessageDrawer(){ state.messageDrawerOpen=true; state.messageDraft={name:'',phone:'',type:'pregunta',text:''}; render(); }
 function closeMessageDrawer(){ state.messageDrawerOpen=false; state.messageSent=false; render(); }
 function renderMessageDrawer(){
   if(state.messageSent){
@@ -945,17 +946,17 @@ function renderMessageDrawer(){
     <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" onclick="closeMessageDrawer()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">¿Tienes una queja, sugerencia o pregunta para nosotros? Escríbenos aquí y te respondemos directo por WhatsApp.</div>
-      <div class="form-field"><label>Tu nombre</label><input id="msg-name" type="text" placeholder="Tu nombre"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="msg-phone" type="tel" placeholder="33 1234 5678"></div>
+      <div class="form-field"><label>Tu nombre</label><input id="msg-name" type="text" placeholder="Tu nombre" value="${(state.messageDraft.name||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.name=this.value"></div>
+      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="msg-phone" type="tel" placeholder="33 1234 5678" value="${(state.messageDraft.phone||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.phone=this.value"></div>
       <div class="form-field"><label>Tipo de mensaje</label>
-        <select id="msg-type">
-          <option value="pregunta">Pregunta</option>
-          <option value="sugerencia">Sugerencia</option>
-          <option value="queja">Queja</option>
-          <option value="otro">Otro</option>
+        <select id="msg-type" onchange="state.messageDraft.type=this.value">
+          <option value="pregunta" ${state.messageDraft.type==='pregunta'?'selected':''}>Pregunta</option>
+          <option value="sugerencia" ${state.messageDraft.type==='sugerencia'?'selected':''}>Sugerencia</option>
+          <option value="queja" ${state.messageDraft.type==='queja'?'selected':''}>Queja</option>
+          <option value="otro" ${state.messageDraft.type==='otro'?'selected':''}>Otro</option>
         </select>
       </div>
-      <div class="form-field"><label>Tu mensaje</label><textarea id="msg-text" placeholder="Cuéntanos qué pasó o qué se te ocurre..."></textarea></div>
+      <div class="form-field"><label>Tu mensaje</label><textarea id="msg-text" placeholder="Cuéntanos qué pasó o qué se te ocurre..." oninput="state.messageDraft.text=this.value">${state.messageDraft.text||''}</textarea></div>
       <input id="msg-website" type="text" name="website" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
     </div>
     <div class="drawer-foot">
@@ -964,10 +965,10 @@ function renderMessageDrawer(){
 }
 async function handleSendStoreMessage(){
   if((document.getElementById('msg-website')||{}).value){ return; } // campo trampa: los bots lo llenan
-  const name = document.getElementById('msg-name').value.trim();
-  const phone = document.getElementById('msg-phone').value.trim();
-  const type = document.getElementById('msg-type').value;
-  const message = document.getElementById('msg-text').value.trim();
+  const name = (state.messageDraft.name||'').trim();
+  const phone = (state.messageDraft.phone||'').trim();
+  const type = state.messageDraft.type||'pregunta';
+  const message = (state.messageDraft.text||'').trim();
   if(!name || !phone || !message){ showToast('Ponle tu nombre, teléfono y el mensaje'); return; }
   let lastSent = 0;
   try{ lastSent = Number(localStorage.getItem('cdlp_msg_last_sent')||0); }catch(e){}
@@ -976,6 +977,7 @@ async function handleSendStoreMessage(){
   try{
     await db.collection('storeMessages').add({ date:new Date().toISOString(), name, phone, type, message, status:'nuevo' });
     try{ localStorage.setItem('cdlp_msg_last_sent', String(Date.now())); }catch(e){}
+    state.messageDraft = {name:'',phone:'',type:'pregunta',text:''};
     state.sendingMessage = false; state.messageSent = true; render();
   }catch(e){
     console.error(e); state.sendingMessage = false; render();
@@ -1526,12 +1528,39 @@ function renderStore(){
   `;
 }
 
+/* ============== PRESERVAR EL CAMPO QUE SE ESTÁ EDITANDO AL VOLVER A DIBUJAR LA PANTALLA ==============
+   Mismo mecanismo que en admin.html: captura qué campo tenía el foco y en qué posición iba el
+   cursor justo antes de que render() reconstruya el HTML, y lo restaura después — así nunca se
+   pierde lo que un cliente está escribiendo (su nombre, dirección, etc.) si algo en segundo
+   plano dispara un redibujado mientras tanto. */
+function captureFocusState(root){
+  const el = document.activeElement;
+  if(!el || !root || !root.contains(el) || !el.id) return null;
+  const tag = el.tagName;
+  if(tag!=='INPUT' && tag!=='TEXTAREA' && tag!=='SELECT') return null;
+  const info = { id: el.id, value: el.value, scrollTop: root.scrollTop };
+  if(typeof el.selectionStart === 'number'){ info.selStart = el.selectionStart; info.selEnd = el.selectionEnd; }
+  return info;
+}
+function restoreFocusState(root, info){
+  if(!info) return;
+  const el = document.getElementById(info.id);
+  if(!el) return;
+  if('value' in el && el.value !== info.value) el.value = info.value;
+  el.focus();
+  if(info.selStart!=null && el.setSelectionRange){
+    try{ el.setSelectionRange(info.selStart, info.selEnd); }catch(e){}
+  }
+  root.scrollTop = info.scrollTop;
+}
 function render(){
   const root = document.getElementById('root');
-  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando catálogo…</div>`; return; }
+  const focusInfo = captureFocusState(root);
+  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando catálogo…</div>`; restoreFocusState(root, focusInfo); return; }
   root.innerHTML = state.orderPlaced ? renderSuccess() : renderStore();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   adjustTopbarSpacer();
+  restoreFocusState(root, focusInfo);
 }
 function adjustTopbarSpacer(){
   const bar = document.querySelector('.topbar');
