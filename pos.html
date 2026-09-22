@@ -642,7 +642,7 @@ function renderCustomerPickerModal(){
       <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Opcional: asocia esta venta a un cliente de tu lista.</p>
       ${state.activeCustomer ? `<button class="btn-secondary" style="margin:0 0 12px;" onclick="clearCustomerPOS()">Quitar cliente actual (${state.activeCustomer.name})</button>` : ''}
       ${!state.newCustomerMode ? `
-        <input class="field-input" type="text" placeholder="Buscar por nombre o teléfono..." value="${state.customerSearchPOS}" oninput="state.customerSearchPOS=this.value;render()">
+        <input id="customer-search-pos-input" class="field-input" type="text" placeholder="Buscar por nombre o teléfono..." value="${state.customerSearchPOS}" oninput="state.customerSearchPOS=this.value;render()">
         <div style="max-height:260px;overflow-y:auto;margin-bottom:12px;">
           ${list.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` : list.map(c=>`
             <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="selectCustomerPOS('${c.id}')">
@@ -928,7 +928,7 @@ function renderSplitPaymentInputs(){
     ${PAY_METHODS.map(m=>`
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <span style="flex:1;font-size:13px;color:var(--ink-soft);">${m}</span>
-        <input class="field-input" style="margin:0;width:110px;text-align:right;" type="number" inputmode="decimal" min="0" placeholder="0" value="${state.splitAmounts[m]||''}" onchange="state.splitAmounts['${m}']=this.value;render()">
+        <input id="split-amount-${m}" class="field-input" style="margin:0;width:110px;text-align:right;" type="number" inputmode="decimal" min="0" placeholder="0" value="${state.splitAmounts[m]||''}" onchange="state.splitAmounts['${m}']=this.value;render()">
       </div>
     `).join('')}
     <div style="text-align:center;font-size:12.5px;font-weight:700;margin:2px 0 0;color:${remaining===0?'var(--green)':'var(--rose)'};">
@@ -991,9 +991,19 @@ function restoreFocusState(root, info){
   }
   root.scrollTop = info.scrollTop;
 }
+const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"]';
+function captureScrollPositions(root){
+  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>el.scrollTop);
+}
+function restoreScrollPositions(root, positions){
+  if(!positions || !positions.length) return;
+  const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
+  els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
+  const scrollPositions = captureScrollPositions(root);
   if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando…</div>`; restoreFocusState(root, focusInfo); return; }
@@ -1016,6 +1026,7 @@ function render(){
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   restoreFocusState(root, focusInfo);
+  restoreScrollPositions(root, scrollPositions);
 }
 render();
 </script>

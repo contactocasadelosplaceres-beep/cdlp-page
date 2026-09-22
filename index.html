@@ -1571,14 +1571,25 @@ function restoreFocusState(root, info){
   }
   root.scrollTop = info.scrollTop;
 }
+const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"]';
+function captureScrollPositions(root){
+  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>el.scrollTop);
+}
+function restoreScrollPositions(root, positions){
+  if(!positions || !positions.length) return;
+  const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
+  els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
+  const scrollPositions = captureScrollPositions(root);
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando catálogo…</div>`; restoreFocusState(root, focusInfo); return; }
   root.innerHTML = state.orderPlaced ? renderSuccess() : renderStore();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   adjustTopbarSpacer();
   restoreFocusState(root, focusInfo);
+  restoreScrollPositions(root, scrollPositions);
 }
 function adjustTopbarSpacer(){
   const bar = document.querySelector('.topbar');
