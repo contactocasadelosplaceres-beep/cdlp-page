@@ -2612,7 +2612,7 @@ function renderTagAssignPanel(kind, value, label){
       <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Ocultar buscador':'+ Agregar o quitar productos de'} "${label}"</button>
       ${state[openKey] ? `
         <div class="panel" style="margin-top:8px;background:var(--bg);">
-          <input placeholder="Buscar producto por nombre..." value="${(state[searchKey]||'').replace(/"/g,'&quot;')}" oninput="state.${searchKey}=this.value;render()">
+          <input id="tag-assign-search-input" placeholder="Buscar producto por nombre..." value="${(state[searchKey]||'').replace(/"/g,'&quot;')}" oninput="state.${searchKey}=this.value;render()">
           ${q ? (candidates.length ? `
             <div style="max-height:220px;overflow-y:auto;margin-top:8px;">
               ${candidates.map(p=>{
@@ -3251,7 +3251,7 @@ function renderMensajes(){
     <div class="note-box" style="margin-bottom:14px;">Los clientes dejan estos mensajes desde el enlace "Buzón de sugerencias" en el pie de página de tu tienda. Si dejaron teléfono, puedes responder directo por WhatsApp.</div>
     <div class="status-filter">${filters.map(f=>`<button class="${state.messageStatusFilter===f.key?'active':''}" onclick="state.messageStatusFilter='${f.key}';resetShowMore('messagesShowMore');render()">${f.label}</button>`).join('')}</div>
     <div class="form-field" style="max-width:420px;margin:10px 0 16px;">
-      <input placeholder="Buscar por nombre, teléfono o texto..." value="${(state.messageSearch||'').replace(/"/g,'&quot;')}" oninput="state.messageSearch=this.value;resetShowMore('messagesShowMore');render()">
+      <input id="message-search-input" placeholder="Buscar por nombre, teléfono o texto..." value="${(state.messageSearch||'').replace(/"/g,'&quot;')}" oninput="state.messageSearch=this.value;resetShowMore('messagesShowMore');render()">
     </div>
     <div class="panel-title" style="margin-bottom:12px;">Mensajes (${list.length})</div>
     ${list.length===0 ? `<div class="empty-state">No hay mensajes en este filtro.</div>` :
@@ -3624,7 +3624,7 @@ function renderClientes(){
       <button class="btn-outline" onclick="exportCustomersCSV()">Exportar</button>
     </div>
     <div class="two-col" style="margin-bottom:12px;">
-      <input placeholder="Buscar por nombre, teléfono o email..." value="${state.customerSearch}" oninput="state.customerSearch=this.value;resetShowMore('customersShowMore');render()">
+      <input id="customer-search-input" placeholder="Buscar por nombre, teléfono o email..." value="${state.customerSearch}" oninput="state.customerSearch=this.value;resetShowMore('customersShowMore');render()">
       <select onchange="state.customerFilters.regDate=this.value;resetShowMore('customersShowMore');render()">
         ${['Todas','Último día','Últimos 7 días','Últimos 30 días'].map(d=>`<option ${state.customerFilters.regDate===d?'selected':''}>${d}</option>`).join('')}
       </select>
@@ -3861,7 +3861,7 @@ function renderWholesaleModal(){
       ` : ''}
       ${t.scope==='products' ? `
         <div class="form-field"><label>Buscar productos para incluir</label>
-          <input placeholder="Nombre del producto..." value="${state.wholesaleProductSearch}" oninput="state.wholesaleProductSearch=this.value;render()">
+          <input id="wholesale-product-search-input" placeholder="Nombre del producto..." value="${state.wholesaleProductSearch}" oninput="state.wholesaleProductSearch=this.value;render()">
         </div>
         ${candidates.length>0 ? `
           <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
@@ -4005,7 +4005,7 @@ function renderCouponModal(){
       ` : ''}
       ${c.scope==='products' ? `
         <div class="form-field"><label>Buscar productos para incluir</label>
-          <input placeholder="Nombre del producto..." value="${state.couponProductSearch}" oninput="state.couponProductSearch=this.value;render()">
+          <input id="coupon-product-search-input" placeholder="Nombre del producto..." value="${state.couponProductSearch}" oninput="state.couponProductSearch=this.value;render()">
         </div>
         ${candidates.length>0 ? `
           <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
@@ -4169,7 +4169,7 @@ function renderPromoScopePicker(p){
     ` : ''}
     ${p.scope==='products' ? `
       <div class="form-field"><label>Buscar productos</label>
-        <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
+        <input id="promo-product-search-input" placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
       </div>
       ${candidates.length>0 ? `
         <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
@@ -4229,7 +4229,7 @@ function renderPromoModal(){
       ${p.type==='gift' ? `
         <div class="form-field"><label>Compra mínima para el regalo ($)</label><input id="pr-gift-minamount" type="number" value="${p.minAmount}" oninput="state.promoModal.minAmount=this.value"></div>
         <div class="form-field"><label>Buscar producto de regalo</label>
-          <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
+          <input id="promo-product-search-input" placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
         </div>
         ${(state.promoProductSearch||'').trim() ? `
           <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
@@ -4246,7 +4246,7 @@ function renderPromoModal(){
       ${p.type==='cross_sell' ? `
         <div class="form-field"><label>Descuento (%) sobre el segundo producto</label><input id="pr-cross-discount" type="number" value="${p.discountPercent}" oninput="state.promoModal.discountPercent=this.value"></div>
         <div class="form-field"><label>Buscar producto A (el que dispara la promo)</label>
-          <input placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
+          <input id="promo-product-search-input" placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
         </div>
         ${(state.promoProductSearch||'').trim() ? `
           <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
@@ -4259,7 +4259,7 @@ function renderPromoModal(){
         ` : ''}
         <div class="panel-sub" style="margin-bottom:10px;">Producto A: ${p.triggerProductId ? (state.products.find(x=>x.id===p.triggerProductId)||{}).name || '—' : 'ninguno'}</div>
         <div class="form-field"><label>Buscar producto B (el que recibe el descuento)</label>
-          <input placeholder="Nombre del producto..." value="${state.promoProductSearch2}" oninput="state.promoProductSearch2=this.value;render()">
+          <input id="promo-product-search2-input" placeholder="Nombre del producto..." value="${state.promoProductSearch2}" oninput="state.promoProductSearch2=this.value;render()">
         </div>
         ${(state.promoProductSearch2||'').trim() ? `
           <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
@@ -4595,7 +4595,7 @@ async function commitAudit(applyAdjustment){
 function renderAuditorias(){
   const q = (state.auditSearch||'').trim().toLowerCase();
   let auditFiltered = state.auditCenter ? state.products : [];
-  if(state.auditCategory && state.auditCategory!=='Todas') auditFiltered = auditFiltered.filter(p=>p.cat===state.auditCategory);
+  if(state.auditCategory && state.auditCategory!=='Todas') auditFiltered = auditFiltered.filter(p=>(p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(state.auditCategory));
   if(q) auditFiltered = auditFiltered.filter(p=>(p.name||'').toLowerCase().includes(q));
   const candidates = auditFiltered.slice(0, state.auditListLimit);
   const hasMoreCandidates = auditFiltered.length > candidates.length;
@@ -4629,7 +4629,7 @@ function renderAuditorias(){
               <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
                 ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
                 <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
-                <input type="number" min="0" placeholder="Conteo" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
+                <input id="audit-count-${p.id}" type="number" min="0" placeholder="Conteo" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
               </div>
             `).join('')}
           </div>
@@ -5650,9 +5650,26 @@ function restoreFocusState(root, info){
   }
   root.scrollTop = info.scrollTop;
 }
+// Además del campo enfocado, muchas listas (buscar y agregar un producto, elegir alcance de una
+// promoción, auditoría, etc.) tienen su propio scroll interno. Sin esto, marcar una casilla o
+// agregar un producto de esa lista la reconstruye desde cero y el navegador la regresa hasta
+// arriba, aunque el campo enfocado no cambie. En vez de etiquetar cada una a mano (son muchas y
+// crecen con el tiempo), se recuerda el scroll de CADA contenedor con scroll propio, en el orden
+// en que aparecen en pantalla, y se restaura en ese mismo orden tras el redibujado — funciona
+// porque typear o marcar algo cambia el CONTENIDO de esas listas, no cuántas hay ni en qué orden.
+const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"]';
+function captureScrollPositions(root){
+  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>el.scrollTop);
+}
+function restoreScrollPositions(root, positions){
+  if(!positions || !positions.length) return;
+  const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
+  els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
+  const scrollPositions = captureScrollPositions(root);
   if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
@@ -5661,6 +5678,7 @@ function render(){
   const pinField = document.getElementById('pin-field'); if(pinField && !focusInfo) pinField.focus();
   const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
   restoreFocusState(root, focusInfo);
+  restoreScrollPositions(root, scrollPositions);
 }
 render();
 </script>
