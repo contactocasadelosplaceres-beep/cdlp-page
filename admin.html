@@ -413,6 +413,7 @@ const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-son
 
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
+  totpRequired:false, totpVerified:false, totpSecretForChallenge:null, totpSetup:null, totpDisableCode:"", totpChallengeInput:"", totpChallengeError:"",
   products:[], orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   statsSubview:"general",
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
@@ -703,6 +704,7 @@ function icon(name, size){
     bell:'<path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
     package:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
     palette:'<circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c1.1 0 1.8-1 1.3-2-.3-.6-.1-1.3.4-1.7.6-.5 1.5-.3 2.1.1.7.5 1.7.4 2.1-.3A10 10 0 0 0 12 2Z"/>',
+    shield:'<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5Z"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -902,6 +904,13 @@ function pendingAbandonedCarts(){
     .filter(c=>!c.completed && new Date(c.updatedAt).getTime() <= cutoff)
     .sort((a,b)=> new Date(b.updatedAt) - new Date(a.updatedAt));
 }
+// Carritos que sí se guardaron pero que el panel todavía no muestra por ser demasiado recientes
+// (ver nota arriba) — sirve para avisar que "no hay nada que mostrar TODAVÍA" es distinto de
+// "no se guardó nada", que es la confusión más común al probar esta función.
+function recentHiddenAbandonedCarts(){
+  const cutoff = Date.now() - ABANDONED_CART_MIN_AGE_MS;
+  return (state.abandonedCarts||[]).filter(c=>!c.completed && new Date(c.updatedAt).getTime() > cutoff);
+}
 function timeAgo(iso){
   const ms = Date.now() - new Date(iso).getTime();
   const min = Math.floor(ms/60000);
@@ -929,11 +938,13 @@ async function dismissAbandonedCart(id){
 }
 function renderAbandonedCartsModal(){
   const list = pendingAbandonedCarts();
+  const recentHidden = recentHiddenAbandonedCarts();
   return `
   <div class="modal-overlay" onclick="if(event.target===this){state.abandonedCartsOpen=false;render();}">
     <div class="modal" style="max-width:640px;">
       <h3>Carritos abandonados</h3>
-      <div class="note-box">Clientes que empezaron su pedido en la tienda (ya escribieron nombre y teléfono) pero no lo completaron. "Recuperar por WhatsApp" abre un mensaje ya redactado para invitarlos a terminar su compra.</div>
+      <div class="note-box">Clientes que empezaron su pedido en la tienda (ya escribieron nombre y teléfono) pero no lo completaron. "Recuperar por WhatsApp" abre un mensaje ya redactado para invitarlos a terminar su compra. Por diseño, uno recién dejado tarda hasta 15 minutos en aparecer aquí — para no interrumpir a alguien que sigue comprando en ese momento.</div>
+      ${recentHidden.length>0 ? `<div class="note-box" style="background:#FFF6E0;color:#8a6300;">${recentHidden.length===1?'Hay 1 carrito muy reciente':`Hay ${recentHidden.length} carritos muy recientes`} (de los últimos 15 minutos) que todavía no se muestra${recentHidden.length===1?'':'n'} abajo por eso mismo — no es que no se haya guardado, solo está esperando su turno.</div>` : ''}
       ${list.length===0 ? `<div class="empty-state">No hay carritos abandonados pendientes por ahora.</div>` : `
       <div style="max-height:420px;overflow-y:auto;">
         ${list.map(c=>`
@@ -1192,9 +1203,158 @@ function showToast(msg){
 }
 
 /* ============== AUTH ============== */
-auth.onAuthStateChanged(user=>{
+/* ---- Verificación en dos pasos (TOTP tipo Google Authenticator), implementación propia ----
+   No requiere subir de nivel el proyecto de Firebase ni cambiar el SDK. Cada persona con acceso
+   al panel activa esto para SU PROPIA cuenta (Configuración → Verificación en dos pasos); el
+   secreto se guarda en la colección "security_totp", con el correo en minúsculas como ID.
+   IMPORTANTE — límite real de esta implementación: como esta tienda no tiene servidor propio,
+   Firebase ya deja completamente autenticada a la cuenta en cuanto la contraseña es correcta.
+   Esta pantalla de código es una barrera adicional en el navegador, no algo que Firebase mismo
+   exija — alguien con la contraseña Y conocimientos técnicos (herramientas de desarrollador)
+   podría saltársela. Sí sirve para frenar a alguien que solo consiguió la contraseña sin más. */
+const TOTP_DIGITS = 6, TOTP_STEP_SECONDS = 30;
+function base32Encode(bytes){
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '', output = '';
+  for(const b of bytes) bits += b.toString(2).padStart(8,'0');
+  for(let i=0;i+5<=bits.length;i+=5) output += alphabet[parseInt(bits.substr(i,5),2)];
+  const rem = bits.length % 5;
+  if(rem) output += alphabet[parseInt(bits.substr(bits.length-rem).padEnd(5,'0'),2)];
+  return output;
+}
+function base32Decode(str){
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  str = (str||'').toUpperCase().replace(/[^A-Z2-7]/g,'');
+  let bits = '';
+  for(const ch of str){ const idx = alphabet.indexOf(ch); if(idx>=0) bits += idx.toString(2).padStart(5,'0'); }
+  const bytes = [];
+  for(let i=0;i+8<=bits.length;i+=8) bytes.push(parseInt(bits.substr(i,8),2));
+  return new Uint8Array(bytes);
+}
+function generateTotpSecret(){
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  return base32Encode(bytes);
+}
+async function hotp(secretBytes, counter){
+  const counterBytes = new ArrayBuffer(8);
+  const view = new DataView(counterBytes);
+  view.setUint32(4, counter, false); // el contador cabe en 32 bits por muchísimos años (30s de paso)
+  const key = await crypto.subtle.importKey('raw', secretBytes, {name:'HMAC', hash:'SHA-1'}, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, counterBytes));
+  const offset = sig[sig.length-1] & 0xf;
+  const binCode = ((sig[offset]&0x7f)<<24) | ((sig[offset+1]&0xff)<<16) | ((sig[offset+2]&0xff)<<8) | (sig[offset+3]&0xff);
+  return (binCode % (10**TOTP_DIGITS)).toString().padStart(TOTP_DIGITS,'0');
+}
+async function totpCodeAt(secretBase32, stepOffset){
+  const counter = Math.floor(Date.now()/1000/TOTP_STEP_SECONDS) + (stepOffset||0);
+  return hotp(base32Decode(secretBase32), counter);
+}
+// Tolera hasta 1 paso (30s) de diferencia de reloj entre el celular y la computadora.
+async function verifyTotpCode(secretBase32, userCode){
+  const clean = (userCode||'').replace(/\D/g,'');
+  if(clean.length!==TOTP_DIGITS) return false;
+  for(const offset of [0,-1,1]){ if((await totpCodeAt(secretBase32, offset))===clean) return true; }
+  return false;
+}
+function totpDocId(email){ return (email||'').trim().toLowerCase(); }
+function openTotpSetup(){
+  const secret = generateTotpSecret();
+  state.totpSetup = { secret, confirmCode:'', error:'' };
+  render();
+}
+function cancelTotpSetup(){ state.totpSetup = null; render(); }
+async function confirmTotpSetup(){
+  const s = state.totpSetup; if(!s) return;
+  if(!(await verifyTotpCode(s.secret, s.confirmCode))){
+    state.totpSetup.error = 'El código no es correcto o ya expiró — prueba con el que te muestre la app en este momento.';
+    render(); return;
+  }
+  try{
+    await db.collection('security_totp').doc(totpDocId(state.user.email)).set({ secret:s.secret, enabled:true, updatedAt:new Date().toISOString() });
+    state.totpRequired = true; state.totpSetup = null;
+    showToast('Verificación en dos pasos activada'); render();
+  }catch(e){ console.error(e); state.totpSetup.error = 'No se pudo guardar, intenta de nuevo.'; render(); }
+}
+async function disableTotpSetup(code){
+  try{
+    const email = totpDocId(state.user.email);
+    const doc = await db.collection('security_totp').doc(email).get();
+    if(!doc.exists || !doc.data().enabled){ state.totpRequired=false; render(); return; }
+    if(!(await verifyTotpCode(doc.data().secret, code))){ showToast('Código incorrecto, no se desactivó'); return; }
+    await db.collection('security_totp').doc(email).update({enabled:false});
+    state.totpRequired = false; state.totpDisableCode='';
+    showToast('Verificación en dos pasos desactivada'); render();
+  }catch(e){ console.error(e); showToast('No se pudo desactivar, intenta de nuevo'); }
+}
+function renderTotpChallenge(){
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <h2>Verificación en dos pasos</h2>
+      <p>Ingresa el código de 6 dígitos de tu app de autenticación para ${state.user.email}.</p>
+      <input id="totp-challenge-input" inputmode="numeric" maxlength="6" placeholder="000000" value="${state.totpChallengeInput||''}" oninput="state.totpChallengeInput=this.value" onkeydown="if(event.key==='Enter')handleTotpChallenge()">
+      <div class="login-error">${state.totpChallengeError||''}</div>
+      <button class="btn-primary" style="width:100%;" onclick="handleTotpChallenge()">Verificar</button>
+      <button class="logout-link" style="margin-top:12px;" onclick="handleLogout()">Cerrar sesión</button>
+    </div>
+  </div>`;
+}
+async function handleTotpChallenge(){
+  state.totpChallengeError = '';
+  if(!(await verifyTotpCode(state.totpSecretForChallenge, state.totpChallengeInput))){
+    state.totpChallengeError = 'Código incorrecto o expirado. Intenta con el código actual de tu app.';
+    render(); return;
+  }
+  state.totpVerified = true; state.totpChallengeInput=''; render();
+  if(!state.loaded) loadData();
+}
+function renderTotpSubpanel(){
+  const enabled = !!state.totpRequired;
+  return `
+  <div class="panel">
+    <div class="panel-title">Verificación en dos pasos</div>
+    <div class="note-box">Le agrega, a <strong>tu</strong> cuenta (${escDescHtml(state.user.email)}), un código de 6 dígitos de una app como Google Authenticator, además de tu contraseña normal. Cada persona con acceso al panel activa esto por separado, para su propia cuenta. <strong>Importante:</strong> como esta tienda no tiene servidor propio, esto es un obstáculo adicional en el navegador, no algo que Firebase mismo exija — alguien que ya tenga tu contraseña y sepa usar las herramientas de desarrollador del navegador podría saltárselo. Sí frena a alguien que solo consiguió tu contraseña sin más.</div>
+    ${enabled ? `
+      <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Activada en esta cuenta.</div>
+      <div class="form-field"><label>Para desactivarla, escribe el código actual de tu app</label>
+        <input id="totp-disable-code" inputmode="numeric" maxlength="6" placeholder="000000" value="${state.totpDisableCode||''}" oninput="state.totpDisableCode=this.value">
+      </div>
+      <button class="btn-cancel" onclick="disableTotpSetup(state.totpDisableCode)">Desactivar verificación en dos pasos</button>
+    ` : state.totpSetup ? `
+      <div class="form-field"><label>1. Abre Google Authenticator (o una app similar) → Agregar cuenta → Ingresar una clave de configuración</label></div>
+      <div class="form-field"><label>Nombre de la cuenta</label><input value="${state.user.email}" readonly></div>
+      <div class="form-field"><label>Clave (tipo de clave: Basada en tiempo)</label>
+        <div style="display:flex;gap:6px;">
+          <input id="totp-secret-display" value="${state.totpSetup.secret}" readonly style="flex:1;font-family:monospace;letter-spacing:1px;">
+          <button class="btn-outline" onclick="navigator.clipboard.writeText('${state.totpSetup.secret}');showToast('Clave copiada')">Copiar</button>
+        </div>
+      </div>
+      <div class="form-field"><label>2. Escribe aquí el código de 6 dígitos que te muestre la app, para confirmar</label>
+        <input id="totp-confirm-code" inputmode="numeric" maxlength="6" placeholder="000000" value="${state.totpSetup.confirmCode||''}" oninput="state.totpSetup.confirmCode=this.value" onkeydown="if(event.key==='Enter')confirmTotpSetup()">
+      </div>
+      ${state.totpSetup.error ? `<div class="login-error">${state.totpSetup.error}</div>` : ''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="cancelTotpSetup()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="confirmTotpSetup()">Confirmar y activar</button>
+      </div>
+    ` : `
+      <button class="btn-primary" onclick="openTotpSetup()">Activar verificación en dos pasos</button>
+    `}
+  </div>`;
+}
+auth.onAuthStateChanged(async user=>{
   state.user = user; state.authChecked = true;
-  if(user && !state.loaded){ loadData(); } else { render(); }
+  state.totpRequired=false; state.totpVerified=false; state.totpSecretForChallenge=null; state.totpSetup=null; state.totpDisableCode='';
+  if(!user){ render(); return; }
+  try{
+    const doc = await db.collection('security_totp').doc(totpDocId(user.email)).get();
+    if(doc.exists && doc.data().enabled){
+      state.totpRequired = true; state.totpSecretForChallenge = doc.data().secret;
+      render(); return;
+    }
+  }catch(e){ console.error('No se pudo verificar la configuración de dos pasos, se deja pasar para no bloquear el acceso a la tienda', e); }
+  if(!state.loaded) loadData(); else render();
 });
 async function handleLogin(){
   state.loginError='';
@@ -5098,6 +5258,7 @@ function saveCustomCss(){
 const CONFIG_SUBPANELS = [
   {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos)'},
   {key:'asistente', icon:icon('message-circle'), label:'Asistente IA'},
+  {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
   {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
 ];
 function renderConfig(){
@@ -5118,7 +5279,7 @@ function renderConfig(){
 }
 function renderConfigSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.configSubpanel=null;render()">‹ Volver a Configuración</button>`;
-  const map = {operativo: renderOperativoSubpanel, asistente: renderAsistenteIA, herramientas: renderHerramientasSubpanel};
+  const map = {operativo: renderOperativoSubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 function renderOperativoSubpanel(){
@@ -5672,6 +5833,7 @@ function render(){
   const scrollPositions = captureScrollPositions(root);
   if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
+  if(state.totpRequired && !state.totpVerified){ root.innerHTML = renderTotpChallenge(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
