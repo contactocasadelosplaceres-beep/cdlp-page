@@ -446,6 +446,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
   storeAddress:"", deliveryWhatsapp:"523413292207", slackWebhookUrl:"",
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
+  dismissedHealthWarnings:[],
   wholesaleTiers:[],
   coupons:[],
   promotions:[],
@@ -2736,13 +2737,47 @@ function computeRestockSuggestions(){
   return rows;
 }
 // Salud del catálogo: junta en un solo lugar lo que hoy vive disperso (fotos, descripción,
-// SKU faltantes) para no tener que ir producto por producto a notarlo.
+// SKU, categoría, precio, SKU repetido, agotados que se siguen mostrando) para no tener que ir
+// producto por producto a notarlo. Cada aviso se puede "marcar como leído" (Configuración lo
+// guarda, así que no vuelve a aparecer en ningún dispositivo) para los casos donde así lo
+// quieres a propósito — al quitarlo de en medio, el panel muestra solo los que sigan
+// pendientes, como pedirte.
+const HEALTH_CHECKS_DEF = [
+  {key:'noPhoto', label:'Sin foto'},
+  {key:'noDesc', label:'Sin descripción'},
+  {key:'noSku', label:'Sin SKU'},
+  {key:'noCategory', label:'Sin categoría'},
+  {key:'noPrice', label:'Sin precio'},
+  {key:'duplicateSku', label:'SKU repetido en más de un producto'},
+  {key:'outOfStockVisible', label:'Agotado y aún visible en la tienda'},
+];
 function computeCatalogHealth(){
-  return {
+  const skuCounts = {};
+  state.products.forEach(p=>{ if(p.sku && p.sku.trim()) skuCounts[p.sku.trim()] = (skuCounts[p.sku.trim()]||0)+1; });
+  const listByKey = {
     noPhoto: state.products.filter(p=>!(p.images&&p.images.length)),
     noDesc: state.products.filter(p=>!(p.desc&&p.desc.trim())),
     noSku: state.products.filter(p=>!(p.sku&&p.sku.trim())),
+    noCategory: state.products.filter(p=>!((p.categories&&p.categories.length)||p.cat)),
+    noPrice: state.products.filter(p=>!(p.price>0)),
+    duplicateSku: state.products.filter(p=>p.sku&&p.sku.trim()&&skuCounts[p.sku.trim()]>1),
+    outOfStockVisible: state.products.filter(p=>!p.hidden && (p.stock||0)<=0),
   };
+  const dismissed = new Set(state.settings.dismissedHealthWarnings||[]);
+  return HEALTH_CHECKS_DEF.map(c=>({...c, list: listByKey[c.key]||[], dismissed: dismissed.has(c.key)}));
+}
+async function dismissHealthWarning(key){
+  if(!state.settings.dismissedHealthWarnings) state.settings.dismissedHealthWarnings = [];
+  if(!state.settings.dismissedHealthWarnings.includes(key)) state.settings.dismissedHealthWarnings.push(key);
+  state.healthOpen = null;
+  await saveSettings();
+  showToast('Marcada como leída — no se te vuelve a avisar de esto');
+  render();
+}
+async function undismissHealthWarning(key){
+  state.settings.dismissedHealthWarnings = (state.settings.dismissedHealthWarnings||[]).filter(k=>k!==key);
+  await saveSettings();
+  render();
 }
 function computeTrafficSources(){
   const labels = {directo:'Directo', google:'Google', meta:'Meta (FB/IG)', whatsapp:'WhatsApp', tiktok:'TikTok', otro:'Otro'};
@@ -2928,7 +2963,9 @@ function renderStatsProductos(){
       ${shown.map(r=>`
         <div class="list-row">
           <div class="row-main"><div class="row-title">${r.name}</div><div class="row-sub">${r.units30} vendidos en 30 días · ${r.stock===0?'agotado':`${r.stock} en stock, ~${Math.floor(r.daysLeft)} día(s) de inventario`}</div></div>
-          <span class="status-badge" style="background:${r.stock===0?'#8a6b78':'var(--amber)'}">Pedir ~${r.suggested}</span>
+          ${state.restockItems.find(x=>x.productId===r.id)
+            ? `<span class="status-badge status-ok">${icon('check',11)} En la lista</span>`
+            : `<button class="status-badge" style="background:${r.stock===0?'#8a6b78':'var(--amber)'};color:${r.stock===0?'#fff':'#2B1620'};" onclick="addProductToRestock('${r.id}', ${r.suggested})">Pedir ~${r.suggested}</button>`}
         </div>
       `).join('')}
       ${renderShowMoreButton('restockShowMore', remaining)}
@@ -2937,20 +2974,32 @@ function renderStatsProductos(){
     <div class="panel">
       <div class="panel-title">${icon('alert-triangle',15)} Salud del catálogo</div>
       <div class="panel-sub">Datos incompletos que conviene revisar cuando haya tiempo</div>
-      <div class="stat-grid" style="margin-bottom:0;">
-        <div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='noPhoto'?null:'noPhoto';resetShowMore('healthListShowMore');render()"><div class="stat-label">Sin foto</div><div class="stat-value">${health.noPhoto.length}</div></div>
-        <div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='noDesc'?null:'noDesc';resetShowMore('healthListShowMore');render()"><div class="stat-label">Sin descripción</div><div class="stat-value">${health.noDesc.length}</div></div>
-        <div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='noSku'?null:'noSku';resetShowMore('healthListShowMore');render()"><div class="stat-label">Sin SKU</div><div class="stat-value">${health.noSku.length}</div></div>
-      </div>
-      ${state.healthOpen ? (()=>{
-        const list = health[state.healthOpen];
-        const {shown, remaining} = showMoreSlice('healthListShowMore', list);
+      ${(()=>{
+        const activeChecks = health.filter(c=>!c.dismissed && c.list.length>0);
+        const dismissedChecks = health.filter(c=>c.dismissed);
         return `
-        <div style="margin-top:10px;">
-          ${shown.map(p=>`<div class="list-row" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div></div>`).join('')}
-          ${renderShowMoreButton('healthListShowMore', remaining)}
-        </div>`;
-      })() : ''}
+        ${activeChecks.length===0 ? `<div class="empty-state">Sin pendientes por ahora — buen trabajo.</div>` : `
+          <div class="stat-grid" style="margin-bottom:0;">
+            ${activeChecks.map(c=>`<div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='${c.key}'?null:'${c.key}';resetShowMore('healthListShowMore');render()"><div class="stat-label">${c.label}</div><div class="stat-value">${c.list.length}</div></div>`).join('')}
+          </div>
+        `}
+        ${state.healthOpen && activeChecks.find(c=>c.key===state.healthOpen) ? (()=>{
+          const check = activeChecks.find(c=>c.key===state.healthOpen);
+          const {shown, remaining} = showMoreSlice('healthListShowMore', check.list);
+          return `
+          <div style="margin-top:10px;">
+            <button class="btn-tertiary" style="margin-bottom:10px;" onclick="dismissHealthWarning('${check.key}')">${icon('check',13)} Marcar como leída — dejar de avisarme de "${check.label}"</button>
+            ${shown.map(p=>`<div class="list-row" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div></div>`).join('')}
+            ${renderShowMoreButton('healthListShowMore', remaining)}
+          </div>`;
+        })() : ''}
+        ${dismissedChecks.length>0 ? `
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+            <div class="row-sub" style="margin-bottom:8px;">Marcadas como leídas, ya no avisan:</div>
+            ${dismissedChecks.map(c=>`<button class="btn-tertiary" style="margin:0 6px 6px 0;" onclick="undismissHealthWarning('${c.key}')">${icon('x',11)} ${c.label} — reactivar</button>`).join('')}
+          </div>
+        ` : ''}`;
+      })()}
     </div>
     ${m.lowStock.length>0 ? (()=>{
       const {shown, remaining} = showMoreSlice('lowStockShowMore', m.lowStock);
