@@ -446,7 +446,7 @@ const DEFAULT_SETTINGS = {
   customCss:"",
   storeAddress:"", deliveryWhatsapp:"523413292207", slackWebhookUrl:"",
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
-  dismissedHealthWarnings:[],
+  dismissedHealthItems:[],
   wholesaleTiers:[],
   coupons:[],
   promotions:[],
@@ -506,7 +506,7 @@ let state = {
   abandonedCarts:[], abandonedCartsOpen:false,
   globalSearchOpen:false, globalSearchQuery:"",
   histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
-  newOrderCount:0, lastOrderCheck:null, healthOpen:null,
+  newOrderCount:0, lastOrderCheck:null, healthOpen:null, healthShowDismissed:false,
   storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null,
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
@@ -2738,10 +2738,10 @@ function computeRestockSuggestions(){
 }
 // Salud del catálogo: junta en un solo lugar lo que hoy vive disperso (fotos, descripción,
 // SKU, categoría, precio, SKU repetido, agotados que se siguen mostrando) para no tener que ir
-// producto por producto a notarlo. Cada aviso se puede "marcar como leído" (Configuración lo
-// guarda, así que no vuelve a aparecer en ningún dispositivo) para los casos donde así lo
-// quieres a propósito — al quitarlo de en medio, el panel muestra solo los que sigan
-// pendientes, como pedirte.
+// producto por producto a notarlo. "Marcar como leído" es POR PRODUCTO, no por categoría
+// completa: si ya revisaste que a un lubricante en particular no le hace falta foto, ese deja de
+// avisarte — pero si mañana hay otro producto nuevo (o uno que aún no habías visto) con esa
+// misma falta, sí te avisa de ese, porque nunca lo marcaste como revisado.
 const HEALTH_CHECKS_DEF = [
   {key:'noPhoto', label:'Sin foto'},
   {key:'noDesc', label:'Sin descripción'},
@@ -2751,6 +2751,7 @@ const HEALTH_CHECKS_DEF = [
   {key:'duplicateSku', label:'SKU repetido en más de un producto'},
   {key:'outOfStockVisible', label:'Agotado y aún visible en la tienda'},
 ];
+function healthDismissKey(productId, checkKey){ return productId+'::'+checkKey; }
 function computeCatalogHealth(){
   const skuCounts = {};
   state.products.forEach(p=>{ if(p.sku && p.sku.trim()) skuCounts[p.sku.trim()] = (skuCounts[p.sku.trim()]||0)+1; });
@@ -2763,19 +2764,24 @@ function computeCatalogHealth(){
     duplicateSku: state.products.filter(p=>p.sku&&p.sku.trim()&&skuCounts[p.sku.trim()]>1),
     outOfStockVisible: state.products.filter(p=>!p.hidden && (p.stock||0)<=0),
   };
-  const dismissed = new Set(state.settings.dismissedHealthWarnings||[]);
-  return HEALTH_CHECKS_DEF.map(c=>({...c, list: listByKey[c.key]||[], dismissed: dismissed.has(c.key)}));
+  const dismissedSet = new Set(state.settings.dismissedHealthItems||[]);
+  return HEALTH_CHECKS_DEF.map(c=>{
+    const fullList = listByKey[c.key]||[];
+    const pending = fullList.filter(p=>!dismissedSet.has(healthDismissKey(p.id, c.key)));
+    return {...c, list: pending, dismissedCount: fullList.length - pending.length};
+  });
 }
-async function dismissHealthWarning(key){
-  if(!state.settings.dismissedHealthWarnings) state.settings.dismissedHealthWarnings = [];
-  if(!state.settings.dismissedHealthWarnings.includes(key)) state.settings.dismissedHealthWarnings.push(key);
-  state.healthOpen = null;
+async function dismissHealthItem(productId, checkKey){
+  if(!state.settings.dismissedHealthItems) state.settings.dismissedHealthItems = [];
+  const k = healthDismissKey(productId, checkKey);
+  if(!state.settings.dismissedHealthItems.includes(k)) state.settings.dismissedHealthItems.push(k);
   await saveSettings();
-  showToast('Marcada como leída — no se te vuelve a avisar de esto');
+  showToast('Marcado como leído para este producto');
   render();
 }
-async function undismissHealthWarning(key){
-  state.settings.dismissedHealthWarnings = (state.settings.dismissedHealthWarnings||[]).filter(k=>k!==key);
+async function undismissHealthItem(productId, checkKey){
+  const k = healthDismissKey(productId, checkKey);
+  state.settings.dismissedHealthItems = (state.settings.dismissedHealthItems||[]).filter(x=>x!==k);
   await saveSettings();
   render();
 }
@@ -2973,32 +2979,45 @@ function renderStatsProductos(){
     })() : ''}
     <div class="panel">
       <div class="panel-title">${icon('alert-triangle',15)} Salud del catálogo</div>
-      <div class="panel-sub">Datos incompletos que conviene revisar cuando haya tiempo</div>
+      <div class="panel-sub">Datos incompletos que conviene revisar cuando haya tiempo. "Marcar como leído" es por producto — si otro más adelante tiene la misma falta, sí te avisa de ese.</div>
       ${(()=>{
-        const activeChecks = health.filter(c=>!c.dismissed && c.list.length>0);
-        const dismissedChecks = health.filter(c=>c.dismissed);
+        const activeChecks = health.filter(c=>c.list.length>0);
         return `
         ${activeChecks.length===0 ? `<div class="empty-state">Sin pendientes por ahora — buen trabajo.</div>` : `
           <div class="stat-grid" style="margin-bottom:0;">
-            ${activeChecks.map(c=>`<div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='${c.key}'?null:'${c.key}';resetShowMore('healthListShowMore');render()"><div class="stat-label">${c.label}</div><div class="stat-value">${c.list.length}</div></div>`).join('')}
+            ${activeChecks.map(c=>`<div class="stat-card" style="cursor:pointer;" onclick="state.healthOpen=state.healthOpen==='${c.key}'?null:'${c.key}';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"><div class="stat-label">${c.label}</div><div class="stat-value">${c.list.length}</div></div>`).join('')}
           </div>
         `}
         ${state.healthOpen && activeChecks.find(c=>c.key===state.healthOpen) ? (()=>{
           const check = activeChecks.find(c=>c.key===state.healthOpen);
+          const allForCheck = computeCatalogHealth().find(c=>c.key===check.key); // para saber cuántos hay marcados como leídos en esta categoría
           const {shown, remaining} = showMoreSlice('healthListShowMore', check.list);
           return `
           <div style="margin-top:10px;">
-            <button class="btn-tertiary" style="margin-bottom:10px;" onclick="dismissHealthWarning('${check.key}')">${icon('check',13)} Marcar como leída — dejar de avisarme de "${check.label}"</button>
-            ${shown.map(p=>`<div class="list-row" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div></div>`).join('')}
+            ${shown.map(p=>`
+              <div class="list-row">
+                <div class="row-main" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>
+                  <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div>
+                </div>
+                <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Marcar como leído</button>
+              </div>
+            `).join('')}
             ${renderShowMoreButton('healthListShowMore', remaining)}
+            ${allForCheck.dismissedCount>0 ? `
+              <button class="btn-tertiary" style="margin-top:10px;" onclick="state.healthShowDismissed=!state.healthShowDismissed;render()">${state.healthShowDismissed?'Ocultar':'Ver'} los ${allForCheck.dismissedCount} ya marcados como leídos en "${check.label}"</button>
+              ${state.healthShowDismissed ? `
+                <div style="margin-top:8px;">
+                  ${state.products.filter(p=>(state.settings.dismissedHealthItems||[]).includes(healthDismissKey(p.id, check.key))).map(p=>`
+                    <div class="list-row">
+                      <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
+                      <button class="btn-cancel" style="padding:8px 12px;border-radius:9px;" onclick="undismissHealthItem('${p.id}','${check.key}')">Reactivar aviso</button>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+            ` : ''}
           </div>`;
-        })() : ''}
-        ${dismissedChecks.length>0 ? `
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
-            <div class="row-sub" style="margin-bottom:8px;">Marcadas como leídas, ya no avisan:</div>
-            ${dismissedChecks.map(c=>`<button class="btn-tertiary" style="margin:0 6px 6px 0;" onclick="undismissHealthWarning('${c.key}')">${icon('x',11)} ${c.label} — reactivar</button>`).join('')}
-          </div>
-        ` : ''}`;
+        })() : ''}`;
       })()}
     </div>
     ${m.lowStock.length>0 ? (()=>{
