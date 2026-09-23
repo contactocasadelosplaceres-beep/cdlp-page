@@ -996,15 +996,6 @@ function recentHiddenAbandonedCarts(){
   const cutoff = Date.now() - ABANDONED_CART_MIN_AGE_MS;
   return (state.abandonedCarts||[]).filter(c=>!c.completed && new Date(c.updatedAt).getTime() > cutoff);
 }
-function timeAgo(iso){
-  const ms = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(ms/60000);
-  if(min<60) return `hace ${min} min`;
-  const hr = Math.floor(min/60);
-  if(hr<24) return `hace ${hr} h`;
-  const d = Math.floor(hr/24);
-  return `hace ${d} día${d===1?'':'s'}`;
-}
 function buildAbandonedCartMessage(c){
   const lines = (c.items||[]).map(it=>`• ${it.qty}x ${it.name}`).join('\n');
   // Urgencia suave: menciona que el stock es limitado (cierto en general, sin inventar una
@@ -1476,8 +1467,9 @@ async function confirmTotpSetup(){
   }
   try{
     await db.collection('security_totp').doc(totpDocId(state.user.email)).set({ secret:s.secret, enabled:true, updatedAt:new Date().toISOString() });
-    state.totpRequired = true; state.totpSetup = null;
+    state.totpRequired = true; state.totpSetup = null; state.totpVerified = true;
     setTotpTrusted(state.user.email); // ya probaste tener la app en este momento: este navegador queda confiado 30 días
+    recordAdminSession(state.user.email); // así tu propio dispositivo actual también aparece en la lista, sin esperar a la próxima vez que inicies sesión
     showToast('Verificación en dos pasos activada'); render();
   }catch(e){ console.error(e); state.totpSetup.error = 'No se pudo guardar, intenta de nuevo.'; render(); }
 }
