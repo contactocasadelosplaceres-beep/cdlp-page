@@ -1106,7 +1106,7 @@ function renderGlobalSearchModal(){
           <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchProduct('${p.id}')">
             ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat||''}${p.sku?` · SKU ${p.sku}`:''}</div></div>
-            <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
+            ${stockStatusBadge(p)}
           </div>
         `).join('')}` : ''}
         ${r.orders.length ? `
@@ -2302,7 +2302,8 @@ function adminTabLabel(t){
 function stockStatusBadge(p){
   if(p.stock<=0) return `<span class="status-badge status-out">${icon('x',11)} Agotado</span>`;
   if(p.stock===1) return `<span class="status-badge status-critical">${icon('alert-triangle',11)} Crítico · ${p.stock}</span>`;
-  return `<span class="status-badge status-low">${icon('alert-triangle',11)} Bajo · ${p.stock}</span>`;
+  if(p.stock<=3) return `<span class="status-badge status-low">${icon('alert-triangle',11)} Bajo · ${p.stock}</span>`;
+  return `<span class="status-badge status-ok">${icon('check',11)} Disponible · ${p.stock}</span>`;
 }
 
 function renderAdmin(){
@@ -3050,7 +3051,8 @@ function renderProductos(){
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main">
           <div class="row-title">${p.name} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
-          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · stock: ${p.stock} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
+          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
+          <div style="margin-top:5px;">${stockStatusBadge(p)}</div>
         </div>
         <div class="row-actions">
           ${catFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de la categoría ${catFilter}" onclick="removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x')}</button>` : ''}
