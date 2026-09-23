@@ -22,7 +22,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
   h1,h2,h3{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
-  button{font-family:inherit;cursor:pointer;border:none;touch-action:manipulation;} input,select{font-family:inherit;}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;touch-action:manipulation;} input,select{font-family:inherit;}
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
   .app{max-width:1100px;margin:0 auto;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;}
@@ -358,7 +358,7 @@ function renderCashPanelModal(){
   const totalRetiros = movs.filter(m=>m.type==='retiro').reduce((s,m)=>s+m.amount,0);
   const totalIngresos = movs.filter(m=>m.type==='ingreso').reduce((s,m)=>s+m.amount,0);
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.cashPanelOpen=false;render();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>Caja · ${cr.centerName}</h3>
       <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:12px;">Abierta por ${cr.cashierName} desde ${new Date(cr.openedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</p>
@@ -383,7 +383,7 @@ function renderCashPanelModal(){
 }
 function renderMovementModal(){
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.movementModalOpen=false;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:360px;">
       <h3>Registrar movimiento</h3>
       <div class="pay-row" style="margin:14px 0 12px;">
@@ -589,7 +589,7 @@ function removeManualDiscount(){ state.manualDiscount=null; state.discountModalO
 function renderDiscountModal(){
   const preview = state.discountType==='percent' ? Math.round(cartTotal()*(Number(state.discountValueInput)||0)/100) : Number(state.discountValueInput)||0;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.discountModalOpen=false;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:380px;">
       <h3>Descuento</h3>
       <p style="font-size:12px;color:var(--ink-soft);margin:0 0 14px;">Adicional a las promociones ya aplicadas en el precio de cada producto. Monto fijo o porcentaje: por ejemplo para compensar el costo de envío, requieren un motivo. Cupón: usa uno de tus códigos ya creados.</p>
@@ -649,7 +649,7 @@ function renderCustomerPickerModal(){
   if(q) list = list.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
   list = list.slice(0,40);
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.customerPickerOpen=false;render();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>Elegir cliente</h3>
       <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Opcional: asocia esta venta a un cliente de tu lista.</p>
@@ -680,7 +680,7 @@ function openNotesModal(){ state.notesDraft = state.saleNotes; state.notesModalO
 function saveSaleNotes(){ state.saleNotes = state.notesDraft.trim(); state.notesModalOpen=false; render(); }
 function renderNotesModal(){
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.notesModalOpen=false;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:380px;">
       <h3>Notas de la venta</h3>
       <textarea class="field-input" style="min-height:90px;resize:vertical;font-family:inherit;" placeholder="Ej. cliente pidió empaque discreto extra..." oninput="state.notesDraft=this.value">${state.notesDraft}</textarea>
@@ -765,7 +765,7 @@ function renderVariantPickerModal(){
   const p = state.products.find(x=>x.id===state.variantPickerProduct);
   if(!p) return '';
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.variantPickerProduct=null;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:380px;">
       <h3>${p.name}</h3>
       <p style="font-size:12.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:12px;">Elige la variante</p>
