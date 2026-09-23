@@ -492,6 +492,7 @@ let state = {
   catAssignOpen:false, catAssignSearch:"", needAssignOpen:false, needAssignSearch:"",
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
+  suppliers:[], restockItems:[], newSupplierInput:"", restockAddSearch:"", restockPickedProductId:null, restockPickedQty:"", restockPickedSupplierId:"",
   wholesaleModal:null, wholesaleProductSearch:"",
   customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas"},
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
@@ -529,7 +530,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap, suppliersSnap, restockItemsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -552,6 +553,11 @@ async function loadData(){
       // Buzón de mensajes: quejas, sugerencias y preguntas que un cliente deja desde la tienda
       // (index.html) sin necesidad de escribir por WhatsApp. Se leen aquí para la pestaña "Mensajes".
       db.collection('storeMessages').orderBy('date','desc').limit(500).get(),
+      // Proveedores y la lista de reabasto pendiente (Centros → Reabasto): quién le compra qué
+      // y cuánto pedirle, agrupado solo — no toca el inventario, es una lista de compra, no un
+      // movimiento de stock.
+      db.collection('suppliers').get(),
+      db.collection('restockItems').get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -576,6 +582,8 @@ async function loadData(){
     state.analyticsEvents = analyticsEventsSnap.docs.map(d=>d.data());
     state.abandonedCarts = abandonedCartsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.storeMessages = storeMessagesSnap.docs.map(d=>({id:d.id, status:'nuevo', ...d.data()}));
+    state.suppliers = suppliersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.restockItems = restockItemsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -607,7 +615,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -2624,8 +2632,12 @@ function renderResumen(){
           ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
           <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
           ${stockStatusBadge(p)}
+          ${state.restockItems.find(r=>r.productId===p.id)
+            ? `<span class="status-badge status-ok">${icon('check',11)} En la lista</span>`
+            : `<button class="btn-tertiary" onclick="addProductToRestock('${p.id}')">${icon('package',13)} Agregar a reabasto</button>`}
         </div>
       `).join('')}
+      <div class="row-sub" style="margin-top:6px;">Los que agregues aparecen en Centros → Reabasto, listos para armar el pedido por proveedor.</div>
     </div>` : ''}
   `;
 }
@@ -4898,12 +4910,161 @@ function renderCentros(){
       <button class="admin-tab ${sub==='transferencias'?'active':''}" onclick="state.centersSubview='transferencias';render()">Transferencias</button>
       <button class="admin-tab ${sub==='inventario'?'active':''}" onclick="state.centersSubview='inventario';render()">Inventario por centro</button>
       <button class="admin-tab ${sub==='auditorias'?'active':''}" onclick="state.centersSubview='auditorias';render()">Auditorías</button>
+      <button class="admin-tab ${sub==='reabasto'?'active':''}" onclick="state.centersSubview='reabasto';render()">Reabasto${state.restockItems.length?` <span class="tab-badge">${state.restockItems.length}</span>`:''}</button>
     </div>
     ${sub==='centros' ? renderCentrosList() : ''}
     ${sub==='transferencias' ? renderTransferencias() : ''}
     ${sub==='inventario' ? renderInventarioPorCentro() : ''}
     ${sub==='auditorias' ? renderAuditorias() : ''}
+    ${sub==='reabasto' ? renderReabasto() : ''}
     ${state.centerModal ? renderCenterModal() : ''}
+  `;
+}
+/* ============== REABASTO (proveedores + lista de compra) ==============
+   Una lista de compra sencilla: qué pedir, cuánto y a quién. No toca el inventario ni lo
+   modifica — es solo para organizar el pedido; cuando llegue la mercancía, el stock se sigue
+   ajustando donde siempre (editar producto o una transferencia). Un producto solo puede
+   aparecer una vez en la lista (el ID del documento es el ID del producto) — agregarlo de
+   nuevo solo actualiza el renglón que ya tenía, no lo duplica.
+*/
+async function saveSupplierDoc(name){
+  const clean = (name||'').trim();
+  if(!clean) return;
+  try{
+    const ref = await db.collection('suppliers').add({name: clean});
+    state.suppliers.push({id: ref.id, name: clean});
+    state.newSupplierInput = '';
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo agregar el proveedor'); }
+}
+async function deleteSupplierDoc(id){
+  try{
+    await db.collection('suppliers').doc(id).delete();
+    state.suppliers = state.suppliers.filter(s=>s.id!==id);
+    // Los productos que tenía asignados no se pierden de la lista — solo quedan sin proveedor,
+    // para que los reasignes en vez de que desaparezcan solos.
+    const toUnassign = state.restockItems.filter(r=>r.supplierId===id);
+    for(const r of toUnassign){ r.supplierId=''; await db.collection('restockItems').doc(r.id).update({supplierId:''}); }
+    showToast('Proveedor eliminado');
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar'); }
+}
+async function addProductToRestock(productId, qty){
+  const p = state.products.find(x=>x.id===productId);
+  if(!p) return;
+  const existing = state.restockItems.find(r=>r.productId===productId);
+  const payload = { productId, productName:p.name, productCat:p.cat||'', qty: existing ? existing.qty : (qty||5), supplierId: existing ? existing.supplierId : '', addedAt: existing ? existing.addedAt : new Date().toISOString() };
+  try{
+    await db.collection('restockItems').doc(productId).set(payload);
+    if(existing) Object.assign(existing, payload);
+    else state.restockItems.push({id: productId, ...payload});
+    state.restockAddSearch = '';
+    showToast('Agregado a la lista de reabasto');
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo agregar'); }
+}
+async function removeRestockItem(id){
+  try{
+    await db.collection('restockItems').doc(id).delete();
+    state.restockItems = state.restockItems.filter(r=>r.id!==id);
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo quitar'); }
+}
+async function updateRestockItemQty(id, qty){
+  const item = state.restockItems.find(r=>r.id===id); if(!item) return;
+  const n = Math.max(1, Number(qty)||1);
+  item.qty = n;
+  try{ await db.collection('restockItems').doc(id).update({qty:n}); }catch(e){ console.error(e); }
+}
+async function updateRestockItemSupplier(id, supplierId){
+  const item = state.restockItems.find(r=>r.id===id); if(!item) return;
+  item.supplierId = supplierId;
+  try{ await db.collection('restockItems').doc(id).update({supplierId}); render(); }catch(e){ console.error(e); }
+}
+function copyRestockListForSupplier(supplierId, supplierName){
+  const items = state.restockItems.filter(r=>(r.supplierId||'')===(supplierId||''));
+  if(!items.length) return;
+  const lines = items.map(r=>`• ${r.productName} — pedir ${r.qty}`).join('\n');
+  const text = `Pedido para ${supplierName}:\n${lines}`;
+  try{
+    navigator.clipboard.writeText(text);
+    showToast('Lista copiada — pégala donde la necesites');
+  }catch(e){ showToast('No se pudo copiar'); }
+}
+async function markSupplierOrderDone(supplierId){
+  const items = state.restockItems.filter(r=>(r.supplierId||'')===(supplierId||''));
+  if(!items.length) return;
+  if(!confirm(`¿Ya hiciste este pedido? Se va a vaciar esta lista (${items.length} producto${items.length===1?'':'s'}).`)) return;
+  try{
+    for(const item of items){ await db.collection('restockItems').doc(item.id).delete(); }
+    const ids = new Set(items.map(i=>i.id));
+    state.restockItems = state.restockItems.filter(r=>!ids.has(r.id));
+    showToast('Lista marcada como pedida');
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo actualizar'); }
+}
+function renderReabasto(){
+  const q = (state.restockAddSearch||'').trim().toLowerCase();
+  const searchResults = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q) && !state.restockItems.find(r=>r.productId===p.id)).slice(0,8) : [];
+  const groups = [...state.suppliers.map(s=>({id:s.id, name:s.name})), {id:'', name:'Sin proveedor asignado'}];
+  return `
+    <div class="panel">
+      <div class="panel-title">Proveedores</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input id="new-supplier-input" placeholder="Nombre del proveedor (ej. Proveedor 1)" value="${state.newSupplierInput}" oninput="state.newSupplierInput=this.value" onkeydown="if(event.key==='Enter')saveSupplierDoc(state.newSupplierInput)" style="flex:1;">
+        <button class="btn-outline" onclick="saveSupplierDoc(state.newSupplierInput)">+ Agregar</button>
+      </div>
+      ${state.suppliers.length===0 ? `<div class="row-sub">Aún no tienes proveedores registrados — agrega uno arriba.</div>` : `
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${state.suppliers.map(s=>`<span class="cat-manage-chip">${s.name}<button onclick="if(confirm('¿Eliminar a ${escDescHtml(s.name)}? Sus productos en la lista quedarán sin proveedor.'))deleteSupplierDoc('${s.id}')">${icon('x',11)}</button></span>`).join('')}
+        </div>
+      `}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Agregar cualquier producto a la lista</div>
+      <input id="restock-add-search" placeholder="Buscar producto por nombre..." value="${state.restockAddSearch}" oninput="state.restockAddSearch=this.value;render()">
+      ${searchResults.length>0 ? `
+        <div class="img-thumbs" style="margin-top:10px;">
+          ${searchResults.map(p=>`
+            <div class="list-row" style="margin:0;">
+              ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · stock: ${p.stock}</div></div>
+              <button class="btn-outline" onclick="addProductToRestock('${p.id}')">+ Agregar</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+
+    ${state.restockItems.length===0 ? `<div class="empty-state">Tu lista de reabasto está vacía. Agrega productos desde aquí, o desde "Reabastecer pronto" en el Resumen.</div>` :
+      groups.map(g=>{
+        const items = state.restockItems.filter(r=>(r.supplierId||'')===g.id);
+        if(!items.length) return '';
+        return `
+        <div class="panel">
+          <div class="panel-title">${g.name} <span class="row-sub">(${items.length} producto${items.length===1?'':'s'})</span></div>
+          ${items.map(r=>`
+            <div class="list-row">
+              <div class="row-main"><div class="row-title">${r.productName}</div><div class="row-sub">${r.productCat||''}</div></div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span class="row-sub">Pedir</span>
+                <input type="number" min="1" value="${r.qty}" style="width:60px;padding:7px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="updateRestockItemQty('${r.id}', this.value)">
+              </div>
+              <select style="max-width:160px;" onchange="updateRestockItemSupplier('${r.id}', this.value)">
+                <option value="" ${!r.supplierId?'selected':''}>Sin proveedor</option>
+                ${state.suppliers.map(s=>`<option value="${s.id}" ${r.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}
+              </select>
+              <button class="icon-btn danger" onclick="removeRestockItem('${r.id}')">${icon('trash')}</button>
+            </div>
+          `).join('')}
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn-outline" style="flex:1;" onclick="copyRestockListForSupplier('${g.id}','${escDescHtml(g.name)}')">${icon('receipt',14)} Copiar lista</button>
+            <button class="btn-cancel" style="flex:1;padding:11px;border-radius:10px;" onclick="markSupplierOrderDone('${g.id}')">Ya lo pedí (vaciar)</button>
+          </div>
+        </div>`;
+      }).join('')
+    }
   `;
 }
 function renderCentrosList(){
