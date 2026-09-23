@@ -4949,11 +4949,38 @@ async function deleteSupplierDoc(id){
     render();
   }catch(e){ console.error(e); showToast('No se pudo eliminar'); }
 }
+// Cuánto vendiste de este producto en los últimos "days" días (tienda + POS juntos, sin contar
+// lo cancelado) — la base real para sugerir cuánto pedir. Como se calcula sobre state.orders
+// (siempre la venta más reciente que ya está cargada), la sugerencia se recalcula sola cada
+// vez que se usa: no es una foto fija de un solo momento.
+function salesVelocity(productId, days){
+  const cutoff = Date.now() - days*24*60*60*1000;
+  let qty = 0;
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    if(new Date(o.date).getTime() < cutoff) return;
+    (o.items||[]).forEach(it=>{ if(it.id===productId) qty += Number(it.qty)||0; });
+  });
+  return qty;
+}
+// Sugerencia de cuánto pedir: mira las ventas reales de los últimos 60 días, calcula el
+// promedio diario, y sugiere lo necesario para cubrir 30 días de venta a ese ritmo, restando lo
+// que ya tienes en stock. Si el producto casi no se ha vendido (o es nuevo, sin historial), no
+// hay con qué calcular un ritmo real — se sugiere un mínimo conservador de 3 en vez de un
+// número inventado, para no sobrepedir algo que no sabes si se va a mover.
+const RESTOCK_LOOKBACK_DAYS = 60, RESTOCK_TARGET_DAYS = 30, RESTOCK_MIN_SALES_TO_TRUST = 2;
+function suggestRestockQty(p){
+  const sold = salesVelocity(p.id, RESTOCK_LOOKBACK_DAYS);
+  if(sold < RESTOCK_MIN_SALES_TO_TRUST) return 3;
+  const dailyRate = sold / RESTOCK_LOOKBACK_DAYS;
+  const target = Math.ceil(dailyRate * RESTOCK_TARGET_DAYS);
+  return Math.max(1, target - (p.stock||0));
+}
 async function addProductToRestock(productId, qty){
   const p = state.products.find(x=>x.id===productId);
   if(!p) return;
   const existing = state.restockItems.find(r=>r.productId===productId);
-  const payload = { productId, productName:p.name, productCat:p.cat||'', qty: existing ? existing.qty : (qty||5), supplierId: existing ? existing.supplierId : '', addedAt: existing ? existing.addedAt : new Date().toISOString() };
+  const payload = { productId, productName:p.name, productCat:p.cat||'', qty: existing ? existing.qty : (qty||suggestRestockQty(p)), supplierId: existing ? existing.supplierId : '', addedAt: existing ? existing.addedAt : new Date().toISOString() };
   try{
     await db.collection('restockItems').doc(productId).set(payload);
     if(existing) Object.assign(existing, payload);
@@ -4983,8 +5010,9 @@ async function updateRestockItemSupplier(id, supplierId){
 function copyRestockListForSupplier(supplierId, supplierName){
   const items = state.restockItems.filter(r=>(r.supplierId||'')===(supplierId||''));
   if(!items.length) return;
-  const lines = items.map(r=>`• ${r.productName} — pedir ${r.qty}`).join('\n');
-  const text = `Pedido para ${supplierName}:\n${lines}`;
+  const fecha = new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'});
+  const lines = items.map(r=>`${r.productName}: ${r.qty}`).join('\n');
+  const text = `Pedido — ${supplierName}\n${fecha}\n\n${lines}\n\nTotal: ${items.length} producto${items.length===1?'':'s'}`;
   try{
     navigator.clipboard.writeText(text);
     showToast('Lista copiada — pégala donde la necesites');
@@ -5006,7 +5034,22 @@ function renderReabasto(){
   const q = (state.restockAddSearch||'').trim().toLowerCase();
   const searchResults = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q) && !state.restockItems.find(r=>r.productId===p.id)).slice(0,8) : [];
   const groups = [...state.suppliers.map(s=>({id:s.id, name:s.name})), {id:'', name:'Sin proveedor asignado'}];
+  // Inversión estimada: solo suma los productos que tienen costo registrado (Productos → editar
+  // → "Costo"). Los que no lo tienen se cuentan aparte, para que sepas que ese total es parcial
+  // y no un número inventado.
+  let totalInvestment = 0, missingCostCount = 0;
+  state.restockItems.forEach(r=>{
+    const p = state.products.find(x=>x.id===r.productId);
+    if(p && p.cost>0) totalInvestment += p.cost*r.qty;
+    else missingCostCount++;
+  });
   return `
+    ${state.restockItems.length>0 ? `
+    <div class="panel">
+      <div class="panel-title">Inversión estimada de esta lista</div>
+      <div class="stat-value" style="font-size:26px;">${money(totalInvestment)}</div>
+      ${missingCostCount>0 ? `<div class="note-box" style="margin-top:8px;">${icon('alert-triangle',13)} ${missingCostCount} producto${missingCostCount===1?'':'s'} de la lista no ${missingCostCount===1?'tiene':'tienen'} costo registrado, así que no ${missingCostCount===1?'está incluido':'están incluidos'} en esta suma. Para que cuente, agrégale el costo desde Productos → abre el producto → campo "Costo".</div>` : ''}
+    </div>` : ''}
     <div class="panel">
       <div class="panel-title">Proveedores</div>
       <div style="display:flex;gap:6px;margin-bottom:10px;">
@@ -5022,13 +5065,14 @@ function renderReabasto(){
 
     <div class="panel">
       <div class="panel-title">Agregar cualquier producto a la lista</div>
+      <div class="note-box" style="margin-bottom:10px;">La cantidad ya viene sugerida según tus ventas reales de los últimos 60 días (para cubrir 30 días más a ese ritmo, descontando lo que ya tienes) — siempre la puedes cambiar a mano.</div>
       <input id="restock-add-search" placeholder="Buscar producto por nombre..." value="${state.restockAddSearch}" oninput="state.restockAddSearch=this.value;render()">
       ${searchResults.length>0 ? `
         <div class="img-thumbs" style="margin-top:10px;">
           ${searchResults.map(p=>`
             <div class="list-row" style="margin:0;">
               ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · stock: ${p.stock}</div></div>
+              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · stock: ${p.stock} · sugerido: ${suggestRestockQty(p)}</div></div>
               <button class="btn-outline" onclick="addProductToRestock('${p.id}')">+ Agregar</button>
             </div>
           `).join('')}
@@ -5040,15 +5084,22 @@ function renderReabasto(){
       groups.map(g=>{
         const items = state.restockItems.filter(r=>(r.supplierId||'')===g.id);
         if(!items.length) return '';
+        const groupTotal = items.reduce((s,r)=>{ const p=state.products.find(x=>x.id===r.productId); return s + (p&&p.cost>0 ? p.cost*r.qty : 0); }, 0);
         return `
         <div class="panel">
-          <div class="panel-title">${g.name} <span class="row-sub">(${items.length} producto${items.length===1?'':'s'})</span></div>
-          ${items.map(r=>`
+          <div class="panel-title">${g.name} <span class="row-sub">(${items.length} producto${items.length===1?'':'s'}${groupTotal>0?` · ${money(groupTotal)}`:''})</span></div>
+          ${items.map(r=>{
+            const p = state.products.find(x=>x.id===r.productId);
+            const suggested = p ? suggestRestockQty(p) : null;
+            return `
             <div class="list-row">
-              <div class="row-main"><div class="row-title">${r.productName}</div><div class="row-sub">${r.productCat||''}</div></div>
-              <div style="display:flex;align-items:center;gap:4px;">
-                <span class="row-sub">Pedir</span>
-                <input type="number" min="1" value="${r.qty}" style="width:60px;padding:7px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="updateRestockItemQty('${r.id}', this.value)">
+              <div class="row-main"><div class="row-title">${r.productName}</div><div class="row-sub">${r.productCat||''}${p&&!(p.cost>0)?' · sin costo registrado':''}</div></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span class="row-sub">Pedir</span>
+                  <input type="number" min="1" value="${r.qty}" style="width:60px;padding:7px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="updateRestockItemQty('${r.id}', this.value)">
+                </div>
+                ${suggested!==null && Number(suggested)!==Number(r.qty) ? `<span class="row-sub" style="font-size:10.5px;">sugerido: ${suggested}</span>` : ''}
               </div>
               <select style="max-width:160px;" onchange="updateRestockItemSupplier('${r.id}', this.value)">
                 <option value="" ${!r.supplierId?'selected':''}>Sin proveedor</option>
@@ -5056,7 +5107,7 @@ function renderReabasto(){
               </select>
               <button class="icon-btn danger" onclick="removeRestockItem('${r.id}')">${icon('trash')}</button>
             </div>
-          `).join('')}
+          `;}).join('')}
           <div style="display:flex;gap:8px;margin-top:10px;">
             <button class="btn-outline" style="flex:1;" onclick="copyRestockListForSupplier('${g.id}','${escDescHtml(g.name)}')">${icon('receipt',14)} Copiar lista</button>
             <button class="btn-cancel" style="flex:1;padding:11px;border-radius:10px;" onclick="markSupplierOrderDone('${g.id}')">Ya lo pedí (vaciar)</button>
