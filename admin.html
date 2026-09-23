@@ -445,6 +445,7 @@ const DEFAULT_SETTINGS = {
   socialInstagram:"", socialFacebook:"", contactEmail:"",
   customCss:"",
   storeAddress:"", deliveryWhatsapp:"523413292207", slackWebhookUrl:"",
+  shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
   wholesaleTiers:[],
   coupons:[],
   promotions:[],
@@ -5634,6 +5635,7 @@ function renderOperativoSubpanel(){
     <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}" oninput="state.settings.schedule=this.value"></div>
     <div class="form-field"><label>Dirección de origen (de donde sale cada pedido)</label><input id="set-store-address" value="${s.storeAddress||''}" placeholder="Ej. Miguel Hidalgo 815 interior 22" oninput="state.settings.storeAddress=this.value"></div>
     <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207" oninput="state.settings.deliveryWhatsapp=this.value"></div>
+    <div class="form-field"><label>Aviso de costo de envío (se muestra en el carrito y al confirmar el pedido)</label><input id="set-shipping-note" value="${s.shippingNote||''}" placeholder="El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán." oninput="state.settings.shippingNote=this.value"></div>
     <div class="form-field">
       <label>Webhook de Slack (opcional)</label>
       <input id="set-slack-webhook" value="${s.slackWebhookUrl||''}" placeholder="https://hooks.slack.com/services/..." oninput="state.settings.slackWebhookUrl=this.value">
@@ -5731,6 +5733,7 @@ function handleSaveSettings(){
     schedule: document.getElementById('set-sched').value.trim(),
     storeAddress: document.getElementById('set-store-address').value.trim(),
     deliveryWhatsapp: document.getElementById('set-delivery-wa').value.trim(),
+    shippingNote: document.getElementById('set-shipping-note').value.trim(),
     slackWebhookUrl: document.getElementById('set-slack-webhook').value.trim(),
     historicalOrderCountOffset: Math.max(0, Number(document.getElementById('set-hist-offset').value)||0),
   });

@@ -158,6 +158,17 @@
   .cross-sell-info b{color:var(--primary-deep);}
   .cross-sell-add{flex-shrink:0;background:var(--primary);color:#fff;padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:700;}
 
+  /* ===== SUGERENCIAS GENÉRICAS DEL CARRITO ("también te puede interesar") ===== */
+  .cart-suggestions{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+  .cart-suggestions-label{font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:10px;text-transform:uppercase;letter-spacing:.03em;}
+  .cart-suggestions-row{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;}
+  .cart-suggestions-row::-webkit-scrollbar{display:none;}
+  .suggestion-card{flex-shrink:0;width:118px;cursor:pointer;display:flex;flex-direction:column;gap:4px;}
+  .suggestion-swatch{width:118px;height:118px;border-radius:12px;object-fit:cover;background:linear-gradient(135deg,var(--surface-soft),var(--border));}
+  .suggestion-name{font-size:11.5px;font-weight:600;line-height:1.3;min-height:2.6em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .suggestion-price{font-size:12.5px;font-weight:800;color:var(--primary-deep);}
+  .suggestion-add{width:100%;background:var(--surface-soft);border:1px solid var(--border);color:var(--primary-deep);padding:7px;border-radius:var(--radius-sm);font-size:11px;font-weight:700;margin-top:2px;}
+
   /* ===== PROMO BANNER ===== */
   .promo-banner{margin:0 20px 6px;border-radius:20px;overflow:hidden;background:var(--surface-soft);border:1px solid var(--border);display:flex;flex-direction:column;}
   @media(min-width:640px){.promo-banner{flex-direction:row;align-items:stretch;}}
@@ -376,6 +387,7 @@ const DEFAULT_SETTINGS = {
   theme:{},
   historicalOrderCountOffset:0,
   slackWebhookUrl:"",
+  shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
 let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
@@ -704,6 +716,24 @@ function crossSellSuggestions(){
     .filter(promo=>promo.type==='cross_sell' && inCartIds.has(promo.triggerProductId) && !inCartIds.has(promo.discountProductId))
     .map(promo=>({promo, product: state.products.find(p=>p.id===promo.discountProductId)}))
     .filter(x=>x.product);
+}
+// Sugerencias genéricas del carrito ("también te puede interesar"): a diferencia de
+// crossSellSuggestions (arriba), estas NO dependen de que Ale haya armado una promoción de
+// cruce — solo buscan productos que aún no estén en el carrito, primero de las mismas
+// categorías que ya llevas, luego de los destacados, y si falta completar, cualquier otro con
+// existencias. Se excluyen los que ya aparecen como sugerencia de una promoción, para no
+// repetir el mismo producto dos veces en la misma pantalla.
+function genericCartSuggestions(){
+  const inCartIds = new Set(Object.keys(state.cart).map(key=>{ const {p}=parseCartKey(key); return p?p.id:null; }).filter(Boolean));
+  const promoSuggestedIds = new Set(crossSellSuggestions().map(x=>x.product.id));
+  const cartCats = new Set();
+  Object.keys(state.cart).forEach(key=>{ const {p}=parseCartKey(key); if(p) productCats(p).forEach(c=>cartCats.add(c)); });
+  const pool = dailyShuffledProducts().filter(p=>!inCartIds.has(p.id) && !promoSuggestedIds.has(p.id) && p.stock>0);
+  const featuredIds = state.settings.featuredProductIds||[];
+  const sameCat = pool.filter(p=>productCats(p).some(c=>cartCats.has(c)));
+  const featured = pool.filter(p=>featuredIds.includes(p.id) && !sameCat.includes(p));
+  const rest = pool.filter(p=>!sameCat.includes(p) && !featured.includes(p));
+  return [...sameCat, ...featured, ...rest].slice(0,4);
 }
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
@@ -1452,6 +1482,21 @@ function renderCartDrawer(){
           <button class="cross-sell-add" onclick="addToCart('${product.id}')">Agregar</button>
         </div>
       `).join('')}
+      ${entries.length>0 && genericCartSuggestions().length>0 ? `
+        <div class="cart-suggestions">
+          <div class="cart-suggestions-label">También te puede interesar</div>
+          <div class="cart-suggestions-row">
+            ${genericCartSuggestions().map(p=>`
+              <div class="suggestion-card" onclick="openProductDetail('${p.id}')">
+                ${p.images&&p.images.length ? `<img class="suggestion-swatch" src="${p.images[0]}">` : `<div class="suggestion-swatch" style="background:${catColor(p.cat)}"></div>`}
+                <div class="suggestion-name">${p.name}</div>
+                <div class="suggestion-price">${money(automaticDiscountedPrice(p))}</div>
+                <button class="suggestion-add" onclick="event.stopPropagation();addToCart('${p.id}')">+ Agregar</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
       ${entries.length>0 ? `
         <div class="form-field" style="margin-top:14px;">
           <label>¿Tienes un código de descuento?</label>
@@ -1471,6 +1516,7 @@ function renderCartDrawer(){
       ` : ''}
     </div>
     <div class="drawer-foot">
+      ${state.settings.shippingNote ? `<div class="note-box" style="margin-bottom:10px;">${icon('package',14)} ${state.settings.shippingNote}</div>` : ''}
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
       <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="state.cartOpen=false;state.checkoutOpen=true;trackEvent('checkout_start',{cartTotal: cartTotal()});render()">Continuar pedido</button>
     </div>`;
@@ -1482,6 +1528,8 @@ function renderCheckoutDrawer(){
     <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">Pago contra entrega. Tu pedido llega en empaque neutro, sin ningún logo visible.</div>
+      ${state.settings.shippingNote ? `<div class="note-box">${icon('package',14)} ${state.settings.shippingNote}</div>` : ''}
+      <div class="note-box">${icon('banknote',14)} También aceptamos pago con tarjeta o transferencia — eso lo coordinamos directo por WhatsApp.</div>
       <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
       <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
       <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" placeholder="Calle, número, colonia, referencias" oninput="scheduleAbandonedCartSave()">${p.address||''}</textarea></div>
