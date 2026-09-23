@@ -4958,7 +4958,6 @@ async function addProductToRestock(productId, qty){
     await db.collection('restockItems').doc(productId).set(payload);
     if(existing) Object.assign(existing, payload);
     else state.restockItems.push({id: productId, ...payload});
-    state.restockAddSearch = '';
     showToast('Agregado a la lista de reabasto');
     render();
   }catch(e){ console.error(e); showToast('No se pudo agregar'); }
