@@ -3962,6 +3962,24 @@ function setTransferQty(pid, qty){
   if(qty===0) delete state.transferCart[pid]; else state.transferCart[pid] = qty;
   render();
 }
+// "Transferir todo": deja cada producto (de los que se ven en este momento, según el filtro de
+// texto) con toda su existencia disponible en el centro de origen. Si luego filtras y vuelves a
+// usarlo, no borra lo que ya habías marcado fuera de ese filtro — solo agrega/actualiza lo que
+// se ve ahora.
+function selectAllTransfer(){
+  if(!state.transferFrom) return;
+  const q = (state.transferProductSearch||'').trim().toLowerCase();
+  state.products
+    .filter(p=>centerStock(p,state.transferFrom)>0 && (!q || (p.name||'').toLowerCase().includes(q)))
+    .forEach(p=>{ state.transferCart[p.id] = centerStock(p, state.transferFrom); });
+  render();
+}
+function clearAllTransfer(){ state.transferCart = {}; render(); }
+function setTransferFrom(centerId){
+  state.transferFrom = centerId;
+  state.transferCart = {}; // las cantidades ya elegidas eran contra el origen anterior; se limpia para no arrastrar números que ya no aplican
+  render();
+}
 
 /* ============== CLIENTES ============== */
 function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
@@ -5156,14 +5174,17 @@ function renderCenterModal(){
 function renderTransferencias(){
   const activeCenters = state.centers.filter(c=>c.active);
   const q = (state.transferProductSearch||'').trim().toLowerCase();
-  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,12) : [];
-  const cartItems = Object.entries(state.transferCart);
+  const sourceProducts = state.transferFrom
+    ? state.products.filter(p=>centerStock(p,state.transferFrom)>0 && (!q || (p.name||'').toLowerCase().includes(q)))
+    : [];
+  const cartItems = Object.entries(state.transferCart).filter(([id,qty])=>qty>0);
+  const totalPieces = cartItems.reduce((s,[,qty])=>s+qty,0);
   return `
     <div class="panel">
       <div class="panel-title">Nueva transferencia</div>
       <div class="two-col">
         <div class="form-field"><label>Desde</label>
-          <select onchange="state.transferFrom=this.value;render()">
+          <select onchange="setTransferFrom(this.value)">
             <option value="">Selecciona...</option>
             ${activeCenters.map(c=>`<option value="${c.id}" ${state.transferFrom===c.id?'selected':''}>${c.name}</option>`).join('')}
           </select>
@@ -5175,30 +5196,29 @@ function renderTransferencias(){
           </select>
         </div>
       </div>
-      <div class="form-field"><label>Buscar producto para agregar</label>
-        <input id="transfer-search-input" placeholder="Nombre del producto..." value="${state.transferProductSearch}" oninput="onTransferSearchInput(this.value)">
-      </div>
-      ${candidates.length>0 ? `
-        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;">
-          ${candidates.map(p=>`
+      ${!state.transferFrom ? `<div class="empty-state">Elige primero el centro de origen para ver lo que tiene disponible.</div>` : `
+        <div class="form-field"><label>Filtrar la lista (opcional)</label>
+          <input id="transfer-search-input" placeholder="Buscar por nombre..." value="${state.transferProductSearch}" oninput="onTransferSearchInput(this.value)">
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button class="btn-outline" style="flex:1;" onclick="selectAllTransfer()">${icon('check',14)} Transferir todo${q?' (lo filtrado)':''}</button>
+          <button class="btn-cancel" style="flex:1;padding:10px;border-radius:9px;" onclick="clearAllTransfer()">Quitar todo</button>
+        </div>
+        ${sourceProducts.length===0 ? `<div class="empty-state">${q?'No hay productos que coincidan con ese filtro en este centro.':'Este centro no tiene productos con existencias.'}</div>` : `
+        <div style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+          ${sourceProducts.map(p=>{
+            const available = centerStock(p, state.transferFrom);
+            const qty = state.transferCart[p.id]||0;
+            return `
             <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
               ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${state.transferFrom?`Disponible en origen: ${centerStock(p,state.transferFrom)}`:'Elige el centro de origen primero'}</div></div>
-              <button class="icon-btn" onclick="setTransferQty('${p.id}', (state.transferCart['${p.id}']||0)+1)">+</button>
-            </div>
-          `).join('')}
-        </div>
-      ` : ''}
-      ${cartItems.length>0 ? `
-        <div class="panel-title" style="margin-bottom:10px;">Productos a transferir</div>
-        ${cartItems.map(([pid,qty])=>{
-          const p = state.products.find(x=>x.id===pid); if(!p) return '';
-          return `<div class="list-row">
-            <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Disponible en origen: ${state.transferFrom?centerStock(p,state.transferFrom):'—'}</div></div>
-            <input type="number" min="0" value="${qty}" style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setTransferQty('${pid}', this.value)">
-          </div>`;
-        }).join('')}
-      ` : `<div class="empty-state">Busca productos arriba y agrégalos con el botón +.</div>`}
+              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Disponible: ${available}</div></div>
+              <input type="number" min="0" max="${available}" value="${qty}" style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setTransferQty('${p.id}', this.value)">
+            </div>`;
+          }).join('')}
+        </div>`}
+        ${cartItems.length>0 ? `<div class="row-sub">${cartItems.length} producto${cartItems.length===1?'':'s'} seleccionado${cartItems.length===1?'':'s'} · ${totalPieces} pieza${totalPieces===1?'':'s'} en total</div>` : `<div class="row-sub">Ninguno seleccionado todavía — pon una cantidad en el que quieras transferir, o usa "Transferir todo".</div>`}
+      `}
       <div class="form-field" style="margin-top:12px;"><label>Notas (opcional)</label><input value="${state.transferNotes}" oninput="state.transferNotes=this.value" placeholder="Motivo, referencia, etc."></div>
       <button class="btn-primary" onclick="commitTransfer()">Confirmar transferencia</button>
     </div>
