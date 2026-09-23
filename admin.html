@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de administración — La Casa de los Placeres</title>
+<script>
+  // Se aplica antes de pintar nada, para que no haya un parpadeo de claro→oscuro al cargar.
+  try{ if(localStorage.getItem('adminTheme')==='dark') document.documentElement.setAttribute('data-theme','dark'); }catch(e){}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -18,6 +22,18 @@
     --shadow-sm:0 2px 8px -4px rgba(43,22,32,0.14);
     --shadow-md:0 12px 28px -12px rgba(43,22,32,0.20);
     --shadow-lg:0 24px 48px -20px rgba(43,22,32,0.28);
+  }
+  /* Tema oscuro: mismas variables, otros valores — todo lo demás en el CSS ya las usa con
+     var(--xxx), así que no hace falta tocar ninguna otra regla para que el oscuro se aplique
+     en todos lados. Independiente de "Diseño → Colores y tipografía" (eso solo afecta el
+     aspecto de la tienda pública en index.html, nunca este panel). */
+  :root[data-theme="dark"]{
+    --bg:#17111A; --surface:#221A26; --surface-soft:#2C2230; --ink:#F2E8F0; --ink-soft:#B7A2B4;
+    --primary:#B8478E; --primary-deep:#F3B4DE; --rose:#E36E8E; --coral:#F0968F; --amber:#F6B85B;
+    --green:#93CC49; --teal:#4FD2E2; --navy:#0D2E38; --border:#3B2E3A;
+    --shadow-sm:0 2px 8px -4px rgba(0,0,0,0.45);
+    --shadow-md:0 12px 28px -12px rgba(0,0,0,0.55);
+    --shadow-lg:0 24px 48px -20px rgba(0,0,0,0.65);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
@@ -38,7 +54,7 @@
     .admin-top .brand-sub{display:none;}
     .logout-link{font-size:11px;padding:7px 11px;}
   }
-  .admin-tabs{display:flex;gap:4px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;position:sticky;top:0;z-index:20;}
+  .admin-tabs{display:flex;gap:4px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;position:sticky;top:0;z-index:20;}
   .admin-tabs::-webkit-scrollbar{display:none;}
   .admin-tab{padding:9px 15px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;color:var(--ink-soft);white-space:nowrap;transition:all .15s ease;}
   .admin-tab.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
@@ -52,15 +68,47 @@
   .admin-nav-mobile{display:none;}
   @media(max-width:760px){
     .admin-tabs-main{display:none;}
-    .admin-nav-mobile{display:block;position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--border);}
-    .admin-nav-mobile-btn{width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;font-size:14.5px;font-weight:800;color:var(--primary-deep);background:#fff;font-family:'League Spartan',sans-serif;}
+    .admin-nav-mobile{display:block;position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border);}
+    .admin-nav-mobile-btn{width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;font-size:14.5px;font-weight:800;color:var(--primary-deep);background:var(--surface);font-family:'League Spartan',sans-serif;}
     .admin-nav-mobile-sheet{max-height:65vh;overflow-y:auto;padding:4px 14px 16px;border-top:1px solid var(--border);background:var(--bg);}
     .admin-nav-group-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin:14px 2px 7px;}
     .admin-nav-group-row{display:flex;flex-wrap:wrap;gap:7px;}
-    .admin-nav-mobile .admin-tab{background:#fff;border:1.5px solid var(--border);min-height:38px;}
-    .admin-nav-mobile .admin-tab.active{border-color:var(--primary);background:#fff;color:var(--primary-deep);}
+    .admin-nav-mobile .admin-tab{background:var(--surface);border:1.5px solid var(--border);min-height:38px;}
+    .admin-nav-mobile .admin-tab.active{border-color:var(--primary);background:var(--surface);color:var(--primary-deep);}
   }
   .admin-body{padding:20px 20px 60px;}
+
+  /* ===== BARRA LATERAL EN ESCRITORIO =====
+     Mismo menú, mismas funciones (goTab, handleLogout, toggleTheme, openGlobalSearch) que la
+     barra superior + el menú compacto de celular — solo cambia cómo se llega a ellas en
+     pantallas grandes. Por debajo de 761px se sigue usando exactamente el menú compacto de
+     siempre (.admin-nav-mobile), sin tocarlo. */
+  .app-shell{display:block;}
+  .admin-sidebar{display:none;}
+  .admin-main{min-width:0;}
+  @media(min-width:761px){
+    .app-shell{display:flex;align-items:flex-start;max-width:1400px;margin:0 auto;}
+    .admin-sidebar{display:flex;flex-direction:column;width:240px;flex-shrink:0;background:var(--navy);min-height:100vh;position:sticky;top:0;padding:20px 12px;}
+    .admin-main{flex:1;min-width:0;}
+    .app{max-width:none;}
+    .admin-top{display:none;}
+    .admin-tabs-main{display:none;}
+  }
+  .sidebar-brand{padding:8px 10px 18px;border-bottom:1px solid rgba(255,255,255,0.14);margin-bottom:14px;}
+  .sidebar-brand .brand-name{font-size:16px;font-weight:700;font-family:'League Spartan',sans-serif;color:#fff;letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sidebar-brand .brand-sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
+  .sidebar-nav{flex:1;overflow-y:auto;}
+  .sidebar-group-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,0.4);margin:16px 10px 6px;}
+  .sidebar-group-label:first-child{margin-top:0;}
+  .sidebar-link{display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.82);text-align:left;transition:background .15s ease,color .15s ease;margin-bottom:2px;}
+  .sidebar-link svg{flex-shrink:0;opacity:0.85;}
+  .sidebar-link:hover{background:rgba(255,255,255,0.08);color:#fff;}
+  .sidebar-link.active{background:var(--primary);color:#fff;font-weight:700;}
+  .sidebar-link.active svg{opacity:1;}
+  .sidebar-link .tab-badge{margin-left:auto;}
+  .sidebar-footer{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.14);display:flex;flex-direction:column;gap:2px;}
+  .sidebar-footer button,.sidebar-footer a{display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;color:rgba(255,255,255,0.7);text-align:left;background:none;transition:background .15s ease,color .15s ease;}
+  .sidebar-footer button:hover,.sidebar-footer a:hover{background:rgba(255,255,255,0.08);color:#fff;}
 
   .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:24px;}
   @media(min-width:700px){.stat-grid{grid-template-columns:repeat(3,1fr);}}
@@ -77,7 +125,7 @@
   .stat-delta.up{color:var(--green);}
   .stat-delta.down{color:var(--rose);}
 
-  .panel{border:1px solid var(--border);border-radius:var(--radius-md);padding:18px;margin-bottom:20px;background:#fff;box-shadow:var(--shadow-sm);}
+  .panel{border:1px solid var(--border);border-radius:var(--radius-md);padding:18px;margin-bottom:20px;background:var(--surface);box-shadow:var(--shadow-sm);}
   .panel-title{font-size:14.5px;font-weight:700;color:var(--primary-deep);margin-bottom:14px;font-family:'League Spartan',sans-serif;}
   .panel-sub{font-size:11.5px;color:var(--ink-soft);margin-top:-10px;margin-bottom:14px;}
 
@@ -93,7 +141,7 @@
   .hbar-fill{height:100%;border-radius:8px;}
   .hbar-val{width:60px;text-align:right;font-size:11.5px;color:var(--ink-soft);font-weight:700;flex-shrink:0;}
 
-  .list-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:#fff;transition:box-shadow .15s ease;}
+  .list-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s ease;}
   .list-row:hover{box-shadow:var(--shadow-sm);}
   .row-swatch{width:44px;height:44px;border-radius:9px;flex-shrink:0;object-fit:cover;}
   .row-main{flex:1;min-width:0;}
@@ -105,12 +153,17 @@
   .icon-btn:active{transform:scale(0.94);}
   .icon-btn.danger{background:#FBE2E6;color:var(--rose);}
   .icon-btn.danger:hover{background:#f7cdd5;}
-  .status-badge{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);color:#fff;flex-shrink:0;}
+  .status-badge{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);color:#fff;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;}
+  .status-badge svg{flex-shrink:0;}
+  .status-badge.status-out{background:#6b5a63;}
+  .status-badge.status-critical{background:var(--rose);}
+  .status-badge.status-low{background:var(--amber);}
+  .status-badge.status-ok{background:var(--green);}
   .rank-num{width:22px;height:22px;border-radius:50%;background:var(--surface-soft);color:var(--primary-deep);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 
   .btn-add-new{background:var(--primary);color:#fff;padding:11px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;box-shadow:0 8px 18px -10px rgba(153,52,119,0.55);transition:transform .12s ease;}
   .btn-add-new:active{transform:scale(0.97);}
-  .btn-outline{background:#fff;border:1.5px solid var(--primary);color:var(--primary);padding:10px 17px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease;}
+  .btn-outline{background:var(--surface);border:1.5px solid var(--primary);color:var(--primary);padding:10px 17px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease;}
   .btn-outline:hover{background:var(--surface-soft);}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .form-field{margin-bottom:12px;}
@@ -130,7 +183,7 @@
   /* Sistema de botones por nivel: primario (arriba), secundario, terciario, destructivo */
   .btn-tertiary{background:transparent;color:var(--ink-soft);padding:9px 13px;border-radius:var(--radius-sm);font-size:12.5px;font-weight:600;border:1.5px dashed var(--border);display:inline-flex;align-items:center;gap:6px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
   .btn-ver-mas{display:block;width:100%;text-align:center;background:var(--surface-soft);color:var(--primary);padding:11px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;margin-top:8px;border:1.5px solid var(--border);}
-  .btn-ver-mas:hover{background:#fff;border-color:var(--primary);}
+  .btn-ver-mas:hover{background:var(--surface);border-color:var(--primary);}
   .btn-tertiary:hover{background:var(--surface-soft);border-color:var(--primary);color:var(--primary-deep);}
   .btn-tertiary svg{flex-shrink:0;}
   .btn-danger{background:#FBE2E6;color:#A02040;padding:11px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease;}
@@ -138,7 +191,7 @@
   .btn-danger-text{background:transparent;color:#A02040!important;font-weight:700!important;padding:8px 6px;transition:opacity .15s ease;}
   .btn-danger-text:hover{opacity:.75;}
   .toolbar-tools-panel{display:flex;flex-wrap:wrap;gap:8px;background:var(--surface-soft);border-radius:var(--radius-md);padding:12px;margin:-4px 0 12px;}
-  .toolbar-tools-panel .btn-outline{background:#fff;}
+  .toolbar-tools-panel .btn-outline{background:var(--surface);}
   /* Encabezado de sección dentro de formularios largos (ej. modal de producto), para que se
      lean como bloques con propósito (Información principal / Precios / Inventario / etc.)
      en vez de una sola lista continua de campos. */
@@ -147,7 +200,7 @@
 
   .modal-overlay{position:fixed;inset:0;background:rgba(43,22,32,0.55);backdrop-filter:blur(1px);z-index:60;display:flex;align-items:flex-end;justify-content:center;}
   @media(min-width:600px){.modal-overlay{align-items:center;}}
-  .modal{background:#fff;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:22px 20px;box-shadow:0 -20px 50px -20px rgba(43,22,32,0.35);}
+  .modal{background:var(--surface);width:100%;max-width:480px;max-height:88vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:22px 20px;box-shadow:0 -20px 50px -20px rgba(43,22,32,0.35);}
   @media(min-width:600px){.modal{border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);}}
   .modal h3{font-size:17.5px;color:var(--primary-deep);margin-bottom:14px;font-weight:700;font-family:'League Spartan',sans-serif;}
   .modal-actions{display:flex;gap:10px;margin-top:16px;}
@@ -158,8 +211,8 @@
   .login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden;
     background:radial-gradient(1200px 600px at 15% -10%, rgba(237,117,120,0.35), transparent 60%),
                radial-gradient(900px 500px at 110% 110%, rgba(32,183,202,0.22), transparent 55%),
-               linear-gradient(160deg,var(--primary-deep),#3a1332 72%);}
-  .login-card{background:#fff;border-radius:var(--radius-lg);padding:32px 26px;max-width:340px;width:100%;text-align:center;box-shadow:var(--shadow-lg);}
+               linear-gradient(160deg,#5C1F49,#3a1332 72%);}
+  .login-card{background:var(--surface);border-radius:var(--radius-lg);padding:32px 26px;max-width:340px;width:100%;text-align:center;box-shadow:var(--shadow-lg);}
   .login-card h2{color:var(--primary-deep);font-size:20px;margin-bottom:6px;font-weight:700;}
   .login-card p{color:var(--ink-soft);font-size:12.5px;margin-bottom:18px;line-height:1.5;}
   .login-card input{width:100%;font-size:16px;padding:12px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);margin-bottom:10px;transition:border-color .15s ease;background:var(--bg);}
@@ -179,7 +232,7 @@
      de forzar tarjetas (aquí sí importa poder comparar cifras en una fila), se deja scroll
      horizontal pero con la columna de producto fija, para no perder de vista qué fila es cuál. */
   .inventario-table th:first-child,.inventario-table td:first-child{position:sticky;left:0;z-index:1;box-shadow:2px 0 5px -3px rgba(0,0,0,0.12);}
-  .inventario-table td:first-child{background:#fff;font-weight:600;}
+  .inventario-table td:first-child{background:var(--surface);font-weight:600;}
   .inventario-table th:first-child{background:var(--bg);z-index:2;}
   .orders-table tbody tr{transition:background .12s ease;}
   .orders-table tbody tr:hover{background:var(--bg);}
@@ -200,7 +253,7 @@
   .order-actions-cell{position:relative;text-align:right;}
   .order-actions-btn{width:32px;height:32px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;transition:background .15s ease;}
   .order-actions-btn:hover{background:#efd9d3;}
-  .order-actions-menu{position:absolute;top:38px;right:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:170px;padding:6px;white-space:nowrap;}
+  .order-actions-menu{position:absolute;top:38px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:170px;padding:6px;white-space:nowrap;}
   .order-actions-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 10px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink);}
   .order-actions-menu button:hover{background:var(--surface-soft);}
   .order-actions-menu button.active-status{color:var(--primary-deep);font-weight:800;}
@@ -221,7 +274,7 @@
     .pedidos-table tbody tr:not(.products-detail-row){
       display:grid;grid-template-columns:1fr auto;column-gap:12px;row-gap:6px;
       grid-template-areas:"folio status" "customer customer" "total pay" "date products" "actions actions";
-      background:#fff;border:1px solid var(--border);border-radius:var(--radius-md) var(--radius-md) 0 0;
+      background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md) var(--radius-md) 0 0;
       box-shadow:var(--shadow-sm);padding:13px 14px;margin:0 0 12px;
     }
     .pedidos-table tbody tr:not(.products-detail-row):has(+ tr.products-detail-row){
@@ -251,7 +304,7 @@
   }
   .status-filter button{flex-shrink:0;padding:8px 14px;min-height:36px;border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--ink-soft);font-size:12px;font-weight:700;transition:all .15s ease;}
   .status-filter button.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#5C1F49;color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
   .empty-state{padding:40px 20px;text-align:center;color:var(--ink-soft);}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
@@ -267,12 +320,12 @@
   .img-thumb img{width:100%;height:100%;object-fit:cover;}
   .img-thumb-actions{position:absolute;inset:0;background:rgba(43,22,32,0.55);opacity:0;display:flex;align-items:center;justify-content:center;gap:4px;transition:opacity .15s ease;}
   .img-thumb:active .img-thumb-actions, .img-thumb:hover .img-thumb-actions{opacity:1;}
-  .img-thumb-actions button{width:20px;height:20px;border-radius:5px;background:#fff;color:var(--primary-deep);font-size:11px;display:flex;align-items:center;justify-content:center;}
+  .img-thumb-actions button{width:20px;height:20px;border-radius:5px;background:var(--surface);color:var(--primary-deep);font-size:11px;display:flex;align-items:center;justify-content:center;}
   .add-thumb{display:flex;align-items:center;justify-content:center;background:var(--surface-soft);color:var(--primary-deep);font-size:22px;cursor:pointer;}
   .crop-box{width:280px;height:280px;max-width:100%;margin:0 auto;overflow:hidden;position:relative;border-radius:12px;background:#000;touch-action:none;cursor:grab;}
   #crop-img{position:absolute;top:0;left:0;user-select:none;pointer-events:none;}
 
-  .section-row{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:#fff;transition:box-shadow .15s ease;}
+  .section-row{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s ease;}
   .section-row:hover{box-shadow:var(--shadow-sm);}
   .section-row.dragging{opacity:0.4;}
   .drag-handle{color:var(--ink-soft);font-size:15px;letter-spacing:-2px;cursor:grab;flex-shrink:0;user-select:none;padding:4px;}
@@ -705,6 +758,15 @@ function icon(name, size){
     package:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
     palette:'<circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c1.1 0 1.8-1 1.3-2-.3-.6-.1-1.3.4-1.7.6-.5 1.5-.3 2.1.1.7.5 1.7.4 2.1-.3A10 10 0 0 0 12 2Z"/>',
     shield:'<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5Z"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.9 4.9l1.4 1.4"/><path d="M17.7 17.7l1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.9 19.1l1.4-1.4"/><path d="M17.7 6.3l1.4-1.4"/>',
+    moon:'<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/>',
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/>',
+    users:'<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 13c2.5 0 4.5 2 4.5 4.5"/>',
+    'map-pin':'<path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/>',
+    'bar-chart':'<path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/>',
+    menu:'<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
+    'dollar-sign':'<path d="M12 2v20"/><path d="M17 6.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -2180,9 +2242,18 @@ function computeVisitMetrics(){
 }
 
 /* ============== RENDER: LOGIN ============== */
+function isDarkTheme(){ return document.documentElement.getAttribute('data-theme')==='dark'; }
+function toggleTheme(){
+  const next = isDarkTheme() ? 'light' : 'dark';
+  if(next==='dark') document.documentElement.setAttribute('data-theme','dark');
+  else document.documentElement.removeAttribute('data-theme');
+  try{ localStorage.setItem('adminTheme', next); }catch(e){}
+  render();
+}
 function renderLogin(){
   return `
   <div class="login-screen">
+    <button class="logout-link" style="position:absolute;top:16px;right:16px;background:rgba(0,0,0,0.15);" onclick="toggleTheme()" title="${isDarkTheme()?'Cambiar a tema claro':'Cambiar a tema oscuro'}">${isDarkTheme()?icon('sun',13):icon('moon',13)}</button>
     <div class="login-card">
       <h2>Panel de administración</h2>
       <p>Inicia sesión con tu cuenta de administrador</p>
@@ -2204,11 +2275,24 @@ const ADMIN_NAV_GROUPS = [
   {label:'Analítica', tabs:['estadísticas']},
   {label:'Sistema', tabs:['configuración']},
 ];
+const TAB_ICON = {
+  resumen:'grid', pedidos:'receipt', caja:'bag', productos:'package', centros:'map-pin',
+  marketing:'star', diseño:'palette', clientes:'user', mensajes:'message-square',
+  cajeros:'users', estadísticas:'bar-chart', configuración:'sliders',
+};
 function adminTabLabel(t){
   const base = t==='cajeros' ? 'Usuarios' : t[0].toUpperCase()+t.slice(1);
   if(t==='pedidos' && state.newOrderCount>0) return `${base} <span class="tab-badge">${state.newOrderCount}</span>`;
   if(t==='mensajes' && state.newMessageCount>0) return `${base} <span class="tab-badge">${state.newMessageCount}</span>`;
   return base;
+}
+// Mismo criterio de "bajo stock" de siempre (p.stock<=3, ver computeMetrics) — esto solo
+// decide CÓMO se etiqueta cada uno (Agotado/Crítico/Bajo), nunca cuáles productos entran a
+// la lista. El texto y el ícono acompañan al color para que no dependa solo de éste.
+function stockStatusBadge(p){
+  if(p.stock<=0) return `<span class="status-badge status-out">${icon('x',11)} Agotado</span>`;
+  if(p.stock===1) return `<span class="status-badge status-critical">${icon('alert-triangle',11)} Crítico · ${p.stock}</span>`;
+  return `<span class="status-badge status-low">${icon('alert-triangle',11)} Bajo · ${p.stock}</span>`;
 }
 
 function renderAdmin(){
@@ -2218,20 +2302,35 @@ function renderAdmin(){
   ensureNewOrderWatcher(true);
   const goTab = (t) => `state.adminTab='${t}';state.designSubpanel=null;state.marketingSubpanel=null;state.configSubpanel=null;state.adminNavOpen=false;${t==='pedidos'?'state.newOrderCount=0;':''}${t==='mensajes'?'state.newMessageCount=0;':''}render()`;
   return `
+  <div class="app-shell">
+    <aside class="admin-sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-name">${state.settings.storeName}</div>
+        <div class="brand-sub">Panel de administración</div>
+      </div>
+      <nav class="sidebar-nav">
+        ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map(g=>`
+          <div class="sidebar-group-label">${g.label}</div>
+          ${g.tabs.map(t=>`<button class="sidebar-link ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${icon(TAB_ICON[t]||'grid',16)}<span>${adminTabLabel(t)}</span></button>`).join('')}
+        `).join('')}
+      </nav>
+      <div class="sidebar-footer">
+        <button onclick="toggleTheme()">${isDarkTheme()?icon('sun',15):icon('moon',15)}<span>${isDarkTheme()?'Tema claro':'Tema oscuro'}</span></button>
+        <button onclick="openGlobalSearch()">${icon('search',15)}<span>Buscar</span></button>
+        ${!state.myPermissions ? `<a href="pos.html" target="_blank">${icon('bag',15)}<span>Punto de venta</span></a>` : ''}
+        <button onclick="handleLogout()">${icon('x',15)}<span>Cerrar sesión</span></button>
+      </div>
+    </aside>
+    <div class="admin-main">
   <div class="app">
     <div class="admin-top">
       <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Panel de administración</div></div>
       <div class="admin-top-actions">
+        <button class="logout-link" onclick="toggleTheme()" title="${isDarkTheme()?'Cambiar a tema claro':'Cambiar a tema oscuro'}">${isDarkTheme()?icon('sun',13):icon('moon',13)}</button>
         <button class="logout-link" onclick="openGlobalSearch()">${icon('search',13)} Buscar</button>
         ${!state.myPermissions ? `<a class="logout-link" href="pos.html" target="_blank">Punto de venta</a>` : ''}
         <button class="logout-link" onclick="handleLogout()">Cerrar sesión</button>
       </div>
-    </div>
-    <div class="admin-tabs admin-tabs-main">
-      ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map((g,gi)=>`
-        ${gi>0?'<span class="admin-tabs-sep"></span>':''}
-        ${g.tabs.map(t=>`<button class="admin-tab ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${adminTabLabel(t)}</button>`).join('')}
-      `).join('')}
     </div>
     <div class="admin-nav-mobile">
       <button class="admin-nav-mobile-btn" onclick="state.adminNavOpen=!state.adminNavOpen;render()">
@@ -2265,6 +2364,8 @@ function renderAdmin(){
       `}
     </div>
   </div>
+    </div>
+  </div>
   ${state.productModal!==null ? renderProductModal() : ''}
   ${state.importOpen ? renderImportModal() : ''}
   ${state.abandonedCartsOpen ? renderAbandonedCartsModal() : ''}
@@ -2281,12 +2382,12 @@ function renderResumen(){
   const m = computeMetrics();
   return `
     <div class="stat-grid">
-      <div class="stat-card primary"><div class="stat-label">Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
-      <div class="stat-card"><div class="stat-label">Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
-      <div class="stat-card"><div class="stat-label">Ticket promedio</div><div class="stat-value">${money(m.avgOrder)}</div></div>
-      <div class="stat-card"><div class="stat-label">Pedidos activos</div><div class="stat-value">${m.pending}</div></div>
-      <div class="stat-card"><div class="stat-label">Clientes distintos</div><div class="stat-value">${m.uniqueCustomers}</div></div>
-      <div class="stat-card"><div class="stat-label">Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
+      <div class="stat-card primary"><div class="stat-label">${icon('dollar-sign',13)} Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">${icon('bar-chart',13)} Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
+      <div class="stat-card"><div class="stat-label">${icon('receipt',13)} Ticket promedio</div><div class="stat-value">${money(m.avgOrder)}</div></div>
+      <div class="stat-card"><div class="stat-label">${icon('bag',13)} Pedidos activos</div><div class="stat-value">${m.pending}</div></div>
+      <div class="stat-card"><div class="stat-label">${icon('users',13)} Clientes distintos</div><div class="stat-value">${m.uniqueCustomers}</div></div>
+      <div class="stat-card"><div class="stat-label">${icon('alert-triangle',13)} Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
     </div>
     <div class="panel"><div class="panel-title">Ingresos — últimos 7 días</div>${renderBarChart(m.dayRevenue)}</div>
     ${m.lowStock.length>0 ? `
@@ -2296,7 +2397,7 @@ function renderResumen(){
         <div class="list-row">
           ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
           <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
-          <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
+          ${stockStatusBadge(p)}
         </div>
       `).join('')}
     </div>` : ''}
@@ -2622,7 +2723,7 @@ function renderStatsProductos(){
         <div class="list-row">
           ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
           <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
-          <span class="status-badge" style="background:${p.stock===0?'#8a6b78':'var(--amber)'}">${p.stock===0?'Agotado':p.stock+' en stock'}</span>
+          ${stockStatusBadge(p)}
         </div>
       `).join('')}
       ${renderShowMoreButton('lowStockShowMore', remaining)}
