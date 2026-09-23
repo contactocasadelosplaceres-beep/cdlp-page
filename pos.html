@@ -497,16 +497,20 @@ function addToCart(id){
   if(p.variantGroups && p.variantGroups.length){ state.variantPickerProduct = id; render(); return; }
   const available = centerStock(p, state.activeCenter.id);
   if(available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
-  state.cart[id]=(state.cart[id]||0)+1; state.cartCollapsed=false; trackFrequent(id); render();
+  const wasEmpty = cartCount()===0; // primer producto de esta venta: se abre solo para que se note
+  state.cart[id]=(state.cart[id]||0)+1;
+  if(wasEmpty) state.cartCollapsed=false;
+  trackFrequent(id); render();
 }
 function pickVariant(variantId){
   const p = state.products.find(x=>x.id===state.variantPickerProduct);
   const v = (p.variants||[]).find(x=>x.id===variantId);
   const key = cartKey(p.id, variantId);
   if(itemStockPOS(p,v)<=(state.cart[key]||0)){ showToast('Sin existencias suficientes de esta variante'); return; }
+  const wasEmpty = cartCount()===0;
   state.cart[key] = (state.cart[key]||0)+1;
   state.variantPickerProduct = null;
-  state.cartCollapsed = false;
+  if(wasEmpty) state.cartCollapsed = false;
   trackFrequent(p.id);
   render();
 }
@@ -735,7 +739,7 @@ async function chargeSale(){
       try{ await db.collection('couponUsage').add({code: state.manualDiscount.coupon.code, date:new Date().toISOString()}); }
       catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
     }
-    state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.saleDone = true;
+    state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true;
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
     // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin.
     const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
