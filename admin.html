@@ -480,6 +480,7 @@ const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-son
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   totpRequired:false, totpVerified:false, totpSecretForChallenge:null, totpSetup:null, totpDisableCode:"", totpChallengeInput:"", totpChallengeError:"", adminSessions:undefined,
+  changePasswordCurrent:"", changePasswordNew:"", changePasswordConfirm:"", changePasswordError:"", changePasswordSubmitting:false,
   products:[], orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   statsSubview:"general", visitsPeriod:"hoy",
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
@@ -632,27 +633,35 @@ async function checkForNewOrders(){
   if(document.hidden || !state.user || !state.loaded) return;
   const sinceOrders = state.lastOrderCheck || new Date().toISOString();
   const sinceMessages = state.lastMessageCheck || new Date().toISOString();
+  const sinceCarts = state.lastCartCheck || new Date().toISOString();
   try{
-    const [ordersSnap, salesSnap, messagesSnap] = await Promise.all([
+    const [ordersSnap, salesSnap, messagesSnap, cartsSnap] = await Promise.all([
       db.collection('orders').where('date','>',sinceOrders).get(),
       db.collection('sales').where('date','>',sinceOrders).get(),
       db.collection('storeMessages').where('date','>',sinceMessages).get(),
+      db.collection('abandonedCarts').where('updatedAt','>',sinceCarts).get(),
     ]);
     const newCount = ordersSnap.size + salesSnap.size;
     const newMsgCount = messagesSnap.size;
+    const newCartCount = cartsSnap.size;
     state.lastOrderCheck = new Date().toISOString();
     state.lastMessageCheck = new Date().toISOString();
-    if(newCount>0 || newMsgCount>0){
+    state.lastCartCheck = new Date().toISOString();
+    // Antes esta función solo revisaba pedidos/ventas/mensajes — un carrito abandonado nunca
+    // aparecía si el panel ya estaba abierto de antes, porque nada volvía a pedir esa lista
+    // hasta recargar la página entera. Ahora también la revisa (sin sonido ni aviso, porque no
+    // es urgente como un pedido), y refresca los datos en cuanto hay uno nuevo o actualizado.
+    if(newCount>0 || newMsgCount>0 || newCartCount>0){
       if(newCount>0) state.newOrderCount = (state.newOrderCount||0) + newCount;
       if(newMsgCount>0) state.newMessageCount = (state.newMessageCount||0) + newMsgCount;
-      playNewOrderChime();
+      if(newCount>0 || newMsgCount>0) playNewOrderChime();
       const parts = [];
       if(newCount>0) parts.push(`${newCount} pedido${newCount>1?'s':''} nuevo${newCount>1?'s':''}`);
       if(newMsgCount>0) parts.push(`${newMsgCount} mensaje${newMsgCount>1?'s':''} nuevo${newMsgCount>1?'s':''}`);
-      showToast(parts.join(' · '));
+      if(parts.length) showToast(parts.join(' · '));
       await loadData();
     }
-  }catch(e){ console.error('No se pudo revisar pedidos/mensajes nuevos', e); }
+  }catch(e){ console.error('No se pudo revisar pedidos/mensajes/carritos nuevos', e); }
 }
 // Aviso sonoro corto, generado sin archivo de audio (Web Audio API) — dos tonos breves.
 function playNewOrderChime(){
@@ -1136,6 +1145,27 @@ function renderGlobalSearchModal(){
   </div>`;
 }
 
+function normalizePhoneDigits(phone){ return (phone||'').replace(/\D/g,''); }
+// Empareja por teléfono (los últimos 10 dígitos, para no fallar por un "52" o "1" de más al
+// principio) contra tu lista de Clientes. La tienda en línea NUNCA consulta esta lista al
+// recibir un pedido — solo guarda lo que la persona escribió en ese momento — así que esto es
+// lo que te avisa cuando ese teléfono ya lo tenías registrado con otro nombre.
+function findCustomerByPhone(phone){
+  const digits = normalizePhoneDigits(phone).slice(-10);
+  if(digits.length<8) return null;
+  return state.customers.find(c=>normalizePhoneDigits(c.phone).slice(-10)===digits) || null;
+}
+function openCustomerModalFromOrderMismatch(customerId, orderId){
+  const o = state.orders.find(x=>x.id===orderId);
+  if(!o) return;
+  openCustomerModal(customerId);
+  const isPos = o.source==='pos';
+  state.customerModal.name = (isPos ? o.customerName : o.customer) || state.customerModal.name;
+  state.customerModal.phone = orderContactPhone(o) || state.customerModal.phone;
+  const newAddress = isPos ? orderContactAddress(o) : o.address;
+  if(newAddress) state.customerModal.address = newAddress;
+  render();
+}
 function renderOrderDetailModal(){
   const o = state.orders.find(x=>x.id===state.orderDetailModal);
   if(!o){ return ''; }
@@ -1211,6 +1241,18 @@ function renderOrderDetailModal(){
           ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
         </div>
       `}
+      ${(()=>{
+        const contactPhone = orderContactPhone(o);
+        const matched = contactPhone ? findCustomerByPhone(contactPhone) : null;
+        const orderName = (isPos ? o.customerName : o.customer) || '';
+        const mismatch = matched && orderName && matched.name.trim().toLowerCase() !== orderName.trim().toLowerCase();
+        if(!mismatch) return '';
+        return `
+        <div class="note-box" style="background:#FFF6E0;color:#8a6300;margin-bottom:14px;">
+          ${icon('alert-triangle',14)} Ya tienes registrada a <strong>${escDescHtml(matched.name)}</strong> con este mismo teléfono, pero en este pedido puso el nombre "${escDescHtml(orderName)}".
+          <button class="btn-outline" style="margin-top:8px;width:100%;" onclick="openCustomerModalFromOrderMismatch('${matched.id}','${o.id}')">Actualizar datos de este cliente con lo de este pedido</button>
+        </div>`;
+      })()}
 
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${orderContactPhone(o) ? `
@@ -1473,6 +1515,31 @@ async function handleTotpChallenge(){
   state.totpVerified = true; state.totpChallengeInput=''; render();
   if(!state.loaded) loadData();
 }
+// Cambiar contraseña: Firebase invalida automáticamente las sesiones de TODOS los demás
+// dispositivos en cuanto la contraseña cambia (comportamiento propio de Firebase, no requiere
+// servidor). OJO con el tiempo real: el dispositivo donde ya tenías la sesión abierta puede
+// tardar hasta 1 hora en pedir iniciar sesión de nuevo (así es como Firebase revisa la validez
+// de la sesión), no es instantáneo.
+async function handleChangePassword(){
+  state.changePasswordError = '';
+  const current = state.changePasswordCurrent, next = state.changePasswordNew, confirm = state.changePasswordConfirm;
+  if(!current || !next){ state.changePasswordError = 'Completa todos los campos.'; render(); return; }
+  if(next.length<6){ state.changePasswordError = 'La contraseña nueva debe tener al menos 6 caracteres.'; render(); return; }
+  if(next !== confirm){ state.changePasswordError = 'Las contraseñas nuevas no coinciden.'; render(); return; }
+  state.changePasswordSubmitting = true; render();
+  try{
+    const credential = firebase.auth.EmailAuthProvider.credential(state.user.email, current);
+    await state.user.reauthenticateWithCredential(credential);
+    await state.user.updatePassword(next);
+    state.changePasswordCurrent=''; state.changePasswordNew=''; state.changePasswordConfirm=''; state.changePasswordSubmitting=false;
+    showToast('Contraseña actualizada. Las demás sesiones se cerrarán solas en un rato (hasta 1 hora).');
+    render();
+  }catch(e){
+    state.changePasswordSubmitting = false;
+    state.changePasswordError = (e.code==='auth/wrong-password'||e.code==='auth/invalid-credential') ? 'Tu contraseña actual no es correcta.' : 'No se pudo cambiar la contraseña, intenta de nuevo.';
+    render();
+  }
+}
 function forgetThisDeviceTotp(){
   try{ localStorage.removeItem(totpTrustKey(state.user.email)); }catch(e){}
   showToast('Listo — este navegador volverá a pedir el código la próxima vez que inicies sesión');
@@ -1512,6 +1579,15 @@ function renderTotpSubpanel(){
     ` : `
       <button class="btn-primary" onclick="openTotpSetup()">Activar verificación en dos pasos</button>
     `}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Cambiar contraseña</div>
+    <div class="note-box">Al cambiarla, Firebase cierra automáticamente la sesión en todos tus demás dispositivos — puede tardar hasta 1 hora en notarse ahí (así revisa Firebase si la sesión sigue siendo válida), no es instantáneo. Este dispositivo sigue con la sesión iniciada normalmente.</div>
+    <div class="form-field"><label>Contraseña actual</label><input type="password" value="${state.changePasswordCurrent}" oninput="state.changePasswordCurrent=this.value"></div>
+    <div class="form-field"><label>Contraseña nueva</label><input type="password" value="${state.changePasswordNew}" oninput="state.changePasswordNew=this.value"></div>
+    <div class="form-field"><label>Repite la contraseña nueva</label><input type="password" value="${state.changePasswordConfirm}" oninput="state.changePasswordConfirm=this.value" onkeydown="if(event.key==='Enter')handleChangePassword()"></div>
+    ${state.changePasswordError ? `<div class="login-error">${state.changePasswordError}</div>` : ''}
+    <button class="btn-primary" ${state.changePasswordSubmitting?'disabled':''} onclick="handleChangePassword()">${state.changePasswordSubmitting?'Cambiando…':'Cambiar contraseña'}</button>
   </div>
   <div class="panel">
     <div class="panel-title">Dónde has iniciado sesión</div>
@@ -3578,7 +3654,12 @@ function renderOrderRow(o){
         <div class="order-date-sub">${new Date(o.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
       </td>
       <td>
-        <div>${o.customer || (isPos?'Venta en tienda física':'Cliente')}</div>
+        <div>${o.customer || (isPos?'Venta en tienda física':'Cliente')} ${(()=>{
+          const matched = orderContactPhone(o) ? findCustomerByPhone(orderContactPhone(o)) : null;
+          const orderName = (isPos ? o.customerName : o.customer) || '';
+          const mismatch = matched && orderName && matched.name.trim().toLowerCase() !== orderName.trim().toLowerCase();
+          return mismatch ? `<span title="Ya tienes registrada a ${escDescHtml(matched.name)} con este teléfono">${icon('alert-triangle',13)}</span>` : '';
+        })()}</div>
         <div class="order-source-tag">${isPos?`${icon('receipt')} ${o.cashierName||'Punto de venta'}`:icon('bag')+' Tienda online'}</div>
       </td>
       <td><strong>${money(o.total)}</strong></td>
