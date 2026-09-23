@@ -60,7 +60,7 @@
   .admin-tabs::-webkit-scrollbar{display:none;}
   .admin-tab{padding:9px 15px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;color:var(--ink-soft);white-space:nowrap;transition:all .15s ease;}
   .admin-tab.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
-  .tab-badge{display:inline-block;background:var(--rose);color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:2px;}
+  .tab-badge{display:inline-block;background:#BC355C;color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:2px;}
   .admin-tabs-sep{width:1px;flex-shrink:0;background:var(--border);margin:6px 4px;}
 
   /* Navegación agrupada del admin en celular: reemplaza la franja de 15 pestañas por un
@@ -158,9 +158,9 @@
   .status-badge{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);color:#fff;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;}
   .status-badge svg{flex-shrink:0;}
   .status-badge.status-out{background:#6b5a63;}
-  .status-badge.status-critical{background:var(--rose);}
-  .status-badge.status-low{background:var(--amber);}
-  .status-badge.status-ok{background:var(--green);}
+  .status-badge.status-critical{background:#BC355C;color:#fff;}
+  .status-badge.status-low{background:var(--amber);color:#2B1620;}
+  .status-badge.status-ok{background:var(--green);color:#2B1620;}
   .rank-num{width:22px;height:22px;border-radius:50%;background:var(--surface-soft);color:var(--primary-deep);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 
   .btn-add-new{background:var(--primary);color:#fff;padding:11px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;box-shadow:0 8px 18px -10px rgba(153,52,119,0.55);transition:transform .12s ease,opacity .12s ease;}
@@ -169,7 +169,7 @@
   .btn-outline{background:var(--surface);border:1.5px solid var(--primary);color:var(--primary);padding:10px 17px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease,opacity .15s ease;}
   .btn-outline:hover{background:var(--surface-soft);}
   .btn-outline:disabled{opacity:.45;}
-  .btn-success{background:var(--green);color:#fff;padding:12px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;box-shadow:0 8px 18px -10px rgba(122,183,26,0.45);transition:transform .12s ease,opacity .12s ease;}
+  .btn-success{background:var(--green);color:#2B1620;padding:12px 18px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;box-shadow:0 8px 18px -10px rgba(122,183,26,0.45);transition:transform .12s ease,opacity .12s ease;}
   .btn-success:active{transform:scale(0.98);}
   .btn-success:disabled{opacity:.45;box-shadow:none;}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
@@ -396,6 +396,9 @@ const DEFAULT_NEEDS = [
 ];
 const STATUS_FLOW = ["Nuevo","Preparando","En camino","Entregado","Cancelado"];
 const STATUS_COLOR = {"Nuevo":"#BC355C","Preparando":"#F6A030","En camino":"#1AA0B2","Entregado":"#6E9E1A","Cancelado":"#8a6b78"};
+// Texto oscuro donde el fondo es demasiado claro para que el blanco se lea bien (verificado con
+// la fórmula de contraste WCAG): "Preparando", "En camino" y "Entregado" fallan con texto blanco.
+const STATUS_TEXT_COLOR = {"Nuevo":"#fff","Preparando":"#2B1620","En camino":"#2B1620","Entregado":"#2B1620","Cancelado":"#fff"};
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
 function cashDiffLabel(diff){
   diff = diff||0;
@@ -1146,7 +1149,7 @@ function renderOrderDetailModal(){
       </div>
 
       <div class="two-col" style="margin-bottom:14px;">
-        <div><div class="row-sub">Estado</div><span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'}">${o.status||'—'}</span></div>
+        <div><div class="row-sub">Estado</div><span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'};color:${STATUS_TEXT_COLOR[o.status]||'#fff'}">${o.status||'—'}</span></div>
         <div><div class="row-sub">Total</div><strong style="font-size:16px;">${money(o.total)}</strong></div>
       </div>
 
@@ -1211,12 +1214,12 @@ function renderOrderDetailModal(){
 
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${orderContactPhone(o) ? `
-          <a class="btn-primary" style="background:var(--teal);display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;" href="${waLink(orderContactPhone(o), buildCustomerMessage(o))}" target="_blank">
+          <a class="btn-primary" style="background:var(--teal);color:#2B1620;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;" href="${waLink(orderContactPhone(o), buildCustomerMessage(o))}" target="_blank">
             <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
             Escribir al cliente
           </a>
         ` : ''}
-        <button class="btn-primary" style="background:var(--green);display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sendToDelivery('${o.id}')">
+        <button class="btn-primary" style="background:var(--green);color:#2B1620;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sendToDelivery('${o.id}')">
           <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
           Enviar al repartidor
         </button>
@@ -3441,7 +3444,7 @@ function renderOrderRow(o){
       </td>
       <td><span class="order-pay-pill ${isSplitPay?'split':''}" ${isSplitPay?`title="${payLabelFull.replace(/"/g,'&quot;')}"`:''}>${isSplitPay?icon('layers',12):'$'} ${payLabel}</span></td>
       <td>
-        <span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'}">${o.status||'—'}</span>
+        <span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'};color:${STATUS_TEXT_COLOR[o.status]||'#fff'}">${o.status||'—'}</span>
         <div class="order-ship-sub">${shipSub}</div>
       </td>
       <td class="order-actions-cell">
@@ -3480,6 +3483,7 @@ function renderOrderRow(o){
    firestore.rules). Cada mensaje trae nombre, teléfono, un tipo (pregunta/sugerencia/queja/otro)
    y el texto; aquí se pueden marcar como leídos/respondidos y responder por WhatsApp en un clic. */
 const MESSAGE_STATUS_COLOR = {nuevo:'#bc355c', leido:'#c9a227', respondido:'#4CAF7D'};
+const MESSAGE_STATUS_TEXT_COLOR = {nuevo:'#fff', leido:'#2B1620', respondido:'#2B1620'};
 const MESSAGE_STATUS_LABEL = {nuevo:'Nuevo', leido:'Leído', respondido:'Respondido'};
 const MESSAGE_TYPE_LABEL = {pregunta:'Pregunta', sugerencia:'Sugerencia', queja:'Queja', otro:'Otro'};
 function messageWhatsappLink(m){
@@ -3534,11 +3538,11 @@ function renderMensajes(){
         return `
         <div class="list-row" style="align-items:flex-start;">
           <div class="row-main">
-            <div class="row-title">${m.name||'Sin nombre'} <span class="status-badge" style="background:var(--teal);">${MESSAGE_TYPE_LABEL[m.type]||'Otro'}</span></div>
+            <div class="row-title">${m.name||'Sin nombre'} <span class="status-badge" style="background:var(--teal);color:#2B1620;">${MESSAGE_TYPE_LABEL[m.type]||'Otro'}</span></div>
             <div class="row-sub">${m.date ? new Date(m.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''} ${m.phone?`· ${m.phone}`:''}</div>
             <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5;">${(m.message||'').replace(/</g,'&lt;')}</div>
             <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
-              <span class="status-badge" style="background:${MESSAGE_STATUS_COLOR[status]}">${MESSAGE_STATUS_LABEL[status]}</span>
+              <span class="status-badge" style="background:${MESSAGE_STATUS_COLOR[status]};color:${MESSAGE_STATUS_TEXT_COLOR[status]}">${MESSAGE_STATUS_LABEL[status]}</span>
               ${status!=='leido' ? `<button class="btn-tertiary" style="padding:4px 10px;" onclick="updateMessageStatus('${m.id}','leido')">Marcar leído</button>` : ''}
               ${status!=='respondido' ? `<button class="btn-tertiary" style="padding:4px 10px;" onclick="updateMessageStatus('${m.id}','respondido')">Marcar respondido</button>` : ''}
             </div>
@@ -3575,8 +3579,8 @@ function renderCajeros(){
           <div class="row-sub">${c.email||'Sin email'} · PIN: ${c.pin||'—'}</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
             <span class="status-badge" style="background:var(--primary);">${ROLE_LABEL[c.role]||'Cajero'}</span>
-            ${c.role==='colaborador' ? PERMISSION_DEFS.filter(p=>c.permissions&&c.permissions[p.key]).map(p=>`<span class="status-badge" style="background:var(--teal);">${p.label.split(' (')[0]}</span>`).join('') : ''}
-            ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--amber);">${NOTIF_LABEL[k]||k}</span>`).join('')}
+            ${c.role==='colaborador' ? PERMISSION_DEFS.filter(p=>c.permissions&&c.permissions[p.key]).map(p=>`<span class="status-badge" style="background:var(--teal);color:#2B1620;">${p.label.split(' (')[0]}</span>`).join('') : ''}
+            ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--amber);color:#2B1620;">${NOTIF_LABEL[k]||k}</span>`).join('')}
           </div>
         </div>
       `).join('')
@@ -4627,7 +4631,7 @@ function renderCajaDetailModal(){
         <div style="max-height:150px;overflow-y:auto;margin-bottom:14px;">
           ${movs.map(m=>`<div class="order-detail" style="margin-bottom:6px;"><div><span>${m.type==='retiro'?icon('arrow-down')+' Retiro':icon('arrow-up')+' Ingreso'}${m.note?` — ${m.note}`:''}</span><span>${m.type==='retiro'?'-':''}${money(m.amount)}</span></div></div>`).join('')}
         </div>` : ''}
-      ${r.status==='abierta' ? `<button class="btn-primary" style="background:var(--rose);margin-bottom:14px;" onclick="adminForceCloseCash('${r.id}')">Cerrar caja manualmente</button>` : ''}
+      ${r.status==='abierta' ? `<button class="btn-primary" style="background:#BC355C;margin-bottom:14px;" onclick="adminForceCloseCash('${r.id}')">Cerrar caja manualmente</button>` : ''}
       <div class="modal-actions"><button class="btn-cancel" onclick="state.cajaDetail=null;render()">Cerrar</button></div>
     </div>
   </div>`;
