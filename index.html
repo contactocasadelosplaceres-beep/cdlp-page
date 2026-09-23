@@ -360,9 +360,9 @@ function visibleCategories(){
 
 const DEFAULT_SECTIONS = [
   {key:"hero", label:"Mensaje de bienvenida", visible:true},
+  {key:"promoBanner", label:"Banner promocional", visible:false},
   {key:"featured", label:"Más vendidos", visible:false},
   {key:"categories", label:"Categorías principales", visible:true},
-  {key:"promoBanner", label:"Banner promocional", visible:false},
   {key:"grid", label:"Catálogo completo", visible:true},
   {key:"testimonials", label:"Testimonios", visible:false},
   {key:"newsletter", label:"Contacto directo por WhatsApp", visible:false},
@@ -1557,7 +1557,14 @@ function renderSuccess(){
 }
 
 function renderStore(){
-  const order = ['hero','featured','categories','promoBanner','grid','testimonials','newsletter','footer'];
+  // El orden real de la tienda ahora sí sigue lo que se guardó en Diseño → Secciones (arrastrar
+  // o usar las flechas) — antes ese orden solo servía para mostrar/ocultar, nunca para la
+  // posición real, así que reacomodar cualquier sección (el banner incluido) no cambiaba nada
+  // en la tienda por más que se moviera ahí. Si aparece una sección nueva que una configuración
+  // guardada de antes no conocía todavía, se agrega al final por default, para no perderla.
+  const savedSections = (state.settings.sections && state.settings.sections.length) ? state.settings.sections : DEFAULT_SECTIONS;
+  const knownKeys = new Set(savedSections.map(s=>s.key));
+  const order = [...savedSections.map(s=>s.key), ...DEFAULT_SECTIONS.filter(s=>!knownKeys.has(s.key)).map(s=>s.key)];
   const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
   const after = { hero: ['trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
   const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
