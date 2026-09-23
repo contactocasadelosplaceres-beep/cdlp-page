@@ -5099,7 +5099,7 @@ function renderReabasto(){
                   <span class="row-sub">Pedir</span>
                   <input type="number" min="1" value="${r.qty}" style="width:60px;padding:7px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="updateRestockItemQty('${r.id}', this.value)">
                 </div>
-                ${suggested!==null && Number(suggested)!==Number(r.qty) ? `<span class="row-sub" style="font-size:10.5px;">sugerido: ${suggested}</span>` : ''}
+                ${suggested!==null ? `<span class="row-sub" style="font-size:10.5px;">sugerido: ${suggested}</span>` : ''}
               </div>
               <select style="max-width:160px;" onchange="updateRestockItemSupplier('${r.id}', this.value)">
                 <option value="" ${!r.supplierId?'selected':''}>Sin proveedor</option>
