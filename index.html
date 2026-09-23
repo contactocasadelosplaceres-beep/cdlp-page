@@ -1219,7 +1219,15 @@ function renderCategoriesSection(){
 
 /* ============== PROMO BANNER ============== */
 function renderPromoBannerSection(){
-  const p = state.settings.promoBanner;
+  const presets = state.settings.promoBannerPresets||[];
+  const activeId = state.settings.activePromoBannerId||'';
+  let p = presets.find(x=>x.id===activeId);
+  // Respaldo mientras el panel de administración no haya migrado todavía un banner viejo (de
+  // antes de que existieran las promociones guardadas) a esta nueva forma — así no desaparece
+  // de la tienda solo por el orden en que se abrieron admin.html e index.html la primera vez.
+  if(!p && !presets.length && state.settings.promoBanner && (state.settings.promoBanner.title||state.settings.promoBanner.text||state.settings.promoBanner.image)){
+    p = state.settings.promoBanner;
+  }
   if(!p || (!p.title && !p.text && !p.image)) return '';
   return `
   <div class="promo-banner">
