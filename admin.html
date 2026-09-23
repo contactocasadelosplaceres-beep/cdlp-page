@@ -420,9 +420,9 @@ const DEFAULT_PRODUCTS = [
 ];
 const DEFAULT_SECTIONS = [
   {key:"hero", label:"Mensaje de bienvenida", visible:true},
-  {key:"categories", label:"Categorías principales", visible:true},
   {key:"promoBanner", label:"Banner promocional", visible:false},
-  {key:"featured", label:"Productos destacados", visible:false},
+  {key:"featured", label:"Más vendidos", visible:false},
+  {key:"categories", label:"Categorías principales", visible:true},
   {key:"grid", label:"Catálogo completo", visible:true},
   {key:"testimonials", label:"Testimonios", visible:false},
   {key:"newsletter", label:"Contacto directo por WhatsApp", visible:false},
@@ -5747,7 +5747,7 @@ function renderPromoSubpanel(){
     <div class="two-col">
       <div class="form-field"><label>Texto del botón</label><input id="promo-btn-text" value="${p.buttonText||''}" placeholder="Ver catálogo" oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).buttonText=this.value"></div>
       <div class="form-field"><label>Categoría a la que enlaza</label>
-        <select id="promo-btn-link">
+        <select id="promo-btn-link" onchange="(state.settings.promoBanner=state.settings.promoBanner||{}).buttonLink=this.value">
           <option value="">Sin enlace</option>
           ${state.settings.categories.map(c=>`<option value="${c}" ${p.buttonLink===c?'selected':''}>${c}</option>`).join('')}
         </select>
@@ -5756,6 +5756,7 @@ function renderPromoSubpanel(){
     <div class="form-field"><label>Imagen (opcional)</label>
       ${p.image?`<img src="${p.image}" style="width:100%;max-width:220px;border-radius:10px;margin-bottom:8px;display:block;">`:''}
       <input type="file" accept="image/*" onchange="handlePromoImage(this)">
+      ${p.image?`<button class="btn-tertiary" style="margin-top:6px;" onclick="removePromoImage()">Quitar imagen</button>`:''}
     </div>
     <button class="btn-primary" onclick="savePromoBanner()">Guardar banner</button>
   </div>`;
@@ -5769,6 +5770,13 @@ function handlePromoImage(input){
     render();
   };
   reader.readAsDataURL(file);
+}
+function removePromoImage(){
+  if(!state.settings.promoBanner) return;
+  state.settings.promoBanner.image = '';
+  saveSettings();
+  showToast('Imagen del banner quitada');
+  render();
 }
 function savePromoBanner(){
   state.settings.promoBanner = {
