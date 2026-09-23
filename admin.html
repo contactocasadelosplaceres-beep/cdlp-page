@@ -40,7 +40,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
   h1,h2,h3{font-family:'League Spartan',sans-serif;letter-spacing:0.01em;margin:0;}
-  a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;touch-action:manipulation;} select,input,textarea{font-family:inherit;}
+  a{color:inherit;} button{font-family:inherit;cursor:pointer;border:none;background:none;touch-action:manipulation;} select,input,textarea{font-family:inherit;}
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
   .app{max-width:1100px;margin:0 auto;min-height:100vh;background:var(--surface);}
@@ -102,7 +102,7 @@
   .sidebar-nav{flex:1;overflow-y:auto;}
   .sidebar-group-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,0.4);margin:16px 10px 6px;}
   .sidebar-group-label:first-child{margin-top:0;}
-  .sidebar-link{display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.82);text-align:left;transition:background .15s ease,color .15s ease;margin-bottom:2px;}
+  .sidebar-link{display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.82);text-align:left;background:transparent;transition:background .15s ease,color .15s ease;margin-bottom:2px;}
   .sidebar-link svg{flex-shrink:0;opacity:0.85;}
   .sidebar-link:hover{background:rgba(255,255,255,0.08);color:#fff;}
   .sidebar-link.active{background:var(--primary);color:#fff;font-weight:700;}
@@ -479,9 +479,9 @@ const DEFAULT_AI_SETTINGS = { provider:"anthropic", apiKey:"", model:"claude-son
 
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
-  totpRequired:false, totpVerified:false, totpSecretForChallenge:null, totpSetup:null, totpDisableCode:"", totpChallengeInput:"", totpChallengeError:"",
+  totpRequired:false, totpVerified:false, totpSecretForChallenge:null, totpSetup:null, totpDisableCode:"", totpChallengeInput:"", totpChallengeError:"", adminSessions:undefined,
   products:[], orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
-  statsSubview:"general",
+  statsSubview:"general", visitsPeriod:"hoy",
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   importOpen:false, importPreview:[], importText:"", importFileName:"", importResult:null, newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
@@ -1015,7 +1015,7 @@ function renderAbandonedCartsModal(){
   const list = pendingAbandonedCarts();
   const recentHidden = recentHiddenAbandonedCarts();
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.abandonedCartsOpen=false;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:640px;">
       <h3>Carritos abandonados</h3>
       <div class="note-box">Clientes que empezaron su pedido en la tienda (ya escribieron nombre y teléfono) pero no lo completaron. "Recuperar por WhatsApp" abre un mensaje ya redactado para invitarlos a terminar su compra. Por diseño, uno recién dejado tarda hasta 15 minutos en aparecer aquí — para no interrumpir a alguien que sigue comprando en ese momento.</div>
@@ -1097,7 +1097,7 @@ function renderGlobalSearchModal(){
   const hasQuery = !!r.q;
   const totalResults = r.products.length + r.orders.length + r.customers.length;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closeGlobalSearch();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:560px;">
       <h3>${icon('search',16)} Buscar en el panel</h3>
       <input id="global-search-input" type="search" placeholder="Buscar productos, pedidos o clientes..." value="${(state.globalSearchQuery||'').replace(/"/g,'&quot;')}" oninput="state.globalSearchQuery=this.value;render()" style="margin-bottom:14px;">
@@ -1141,7 +1141,7 @@ function renderOrderDetailModal(){
   if(!o){ return ''; }
   const isPos = o.source==='pos';
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closeOrderDetailModal();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:560px;">
       <h3>${formatFolio(o.orderNumber)} · ${o.customer||(isPos?'Venta en tienda física':'Cliente')}</h3>
       <div class="panel-sub" style="margin:-8px 0 14px;">
@@ -1333,6 +1333,92 @@ async function verifyTotpCode(secretBase32, userCode){
   return false;
 }
 function totpDocId(email){ return (email||'').trim().toLowerCase(); }
+/* ============== VISIBILIDAD DE SESIONES ABIERTAS ==============
+   Registra, para la cuenta que inició sesión, en qué navegadores/dispositivos se ha usado el
+   panel (ej. "Safari en iPhone"), para que puedas notar algo raro. LÍMITE REAL: esto es solo
+   VISIBILIDAD, no control remoto — como esta tienda no tiene servidor propio, no existe forma
+   de "cerrar sesión a la fuerza" en otro dispositivo desde aquí; solo se puede quitar el
+   registro de la lista (deja de aparecer, pero si esa sesión sigue con la contraseña guardada
+   ahí, seguiría funcionando hasta que alguien cierre sesión manualmente en ese dispositivo).
+*/
+function getDeviceId(){
+  try{
+    let id = localStorage.getItem('admin_device_id');
+    if(!id){ id = 'dev_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10); localStorage.setItem('admin_device_id', id); }
+    return id;
+  }catch(e){ return 'dev_unknown'; }
+}
+function describeDevice(ua){
+  ua = ua||'';
+  let os = 'Dispositivo desconocido';
+  if(/iPhone/.test(ua)) os = 'iPhone';
+  else if(/iPad/.test(ua)) os = 'iPad';
+  else if(/Android/.test(ua)) os = /Mobile/.test(ua) ? 'Celular Android' : 'Tablet Android';
+  else if(/Macintosh|Mac OS X/.test(ua)) os = 'Mac';
+  else if(/Windows/.test(ua)) os = 'Windows';
+  else if(/Linux/.test(ua)) os = 'Linux';
+  let browser = 'Navegador desconocido';
+  if(/Edg\//.test(ua)) browser = 'Edge';
+  else if(/OPR\//.test(ua)) browser = 'Opera';
+  else if(/Chrome\//.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome';
+  else if(/CriOS/.test(ua)) browser = 'Chrome';
+  else if(/FxiOS/.test(ua)) browser = 'Firefox';
+  else if(/Firefox\//.test(ua)) browser = 'Firefox';
+  else if(/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari';
+  return `${browser} en ${os}`;
+}
+async function recordAdminSession(email){
+  try{
+    const deviceId = getDeviceId();
+    const docId = totpDocId(email)+'__'+deviceId;
+    const existing = await db.collection('admin_sessions').doc(docId).get();
+    await db.collection('admin_sessions').doc(docId).set({
+      email: totpDocId(email), deviceId, userAgent: navigator.userAgent, label: describeDevice(navigator.userAgent),
+      firstSeen: existing.exists ? existing.data().firstSeen : new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+    });
+  }catch(e){ console.error('No se pudo registrar la sesión', e); }
+}
+function timeAgo(iso){
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs/60000);
+  if(mins<1) return 'justo ahora';
+  if(mins<60) return `hace ${mins} min`;
+  const hrs = Math.floor(mins/60);
+  if(hrs<24) return `hace ${hrs} h`;
+  const days = Math.floor(hrs/24);
+  if(days<30) return `hace ${days} día${days===1?'':'s'}`;
+  return new Date(iso).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+}
+async function loadAdminSessions(){
+  try{
+    const snap = await db.collection('admin_sessions').where('email','==',totpDocId(state.user.email)).get();
+    state.adminSessions = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> new Date(b.lastActive)-new Date(a.lastActive));
+  }catch(e){ console.error('No se pudieron cargar las sesiones', e); state.adminSessions = null; }
+  render();
+}
+async function forgetAdminSession(docId){
+  try{
+    await db.collection('admin_sessions').doc(docId).delete();
+    state.adminSessions = (state.adminSessions||[]).filter(s=>s.id!==docId);
+    showToast('Se quitó de la lista');
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo quitar'); }
+}
+// "Recordar este dispositivo 30 días": guardado solo en este navegador (localStorage), no en
+// Firestore — cada dispositivo/navegador donde se inicia sesión pide el código de nuevo la
+// primera vez, y luego no lo vuelve a pedir hasta que pasen 30 días desde esa vez.
+const TOTP_TRUST_DAYS = 30;
+function totpTrustKey(email){ return 'totp_trust_'+totpDocId(email); }
+function isTotpTrusted(email){
+  try{
+    const until = Number(localStorage.getItem(totpTrustKey(email)));
+    return !!until && Date.now() < until;
+  }catch(e){ return false; }
+}
+function setTotpTrusted(email){
+  try{ localStorage.setItem(totpTrustKey(email), String(Date.now() + TOTP_TRUST_DAYS*24*60*60*1000)); }catch(e){}
+}
 function openTotpSetup(){
   const secret = generateTotpSecret();
   state.totpSetup = { secret, confirmCode:'', error:'' };
@@ -1348,6 +1434,7 @@ async function confirmTotpSetup(){
   try{
     await db.collection('security_totp').doc(totpDocId(state.user.email)).set({ secret:s.secret, enabled:true, updatedAt:new Date().toISOString() });
     state.totpRequired = true; state.totpSetup = null;
+    setTotpTrusted(state.user.email); // ya probaste tener la app en este momento: este navegador queda confiado 30 días
     showToast('Verificación en dos pasos activada'); render();
   }catch(e){ console.error(e); state.totpSetup.error = 'No se pudo guardar, intenta de nuevo.'; render(); }
 }
@@ -1381,17 +1468,26 @@ async function handleTotpChallenge(){
     state.totpChallengeError = 'Código incorrecto o expirado. Intenta con el código actual de tu app.';
     render(); return;
   }
+  setTotpTrusted(state.user.email);
+  recordAdminSession(state.user.email);
   state.totpVerified = true; state.totpChallengeInput=''; render();
   if(!state.loaded) loadData();
 }
+function forgetThisDeviceTotp(){
+  try{ localStorage.removeItem(totpTrustKey(state.user.email)); }catch(e){}
+  showToast('Listo — este navegador volverá a pedir el código la próxima vez que inicies sesión');
+}
 function renderTotpSubpanel(){
   const enabled = !!state.totpRequired;
+  if(state.adminSessions===undefined){ state.adminSessions=null; loadAdminSessions(); }
+  const myDeviceId = getDeviceId();
   return `
   <div class="panel">
     <div class="panel-title">Verificación en dos pasos</div>
-    <div class="note-box">Le agrega, a <strong>tu</strong> cuenta (${escDescHtml(state.user.email)}), un código de 6 dígitos de una app como Google Authenticator, además de tu contraseña normal. Cada persona con acceso al panel activa esto por separado, para su propia cuenta. <strong>Importante:</strong> como esta tienda no tiene servidor propio, esto es un obstáculo adicional en el navegador, no algo que Firebase mismo exija — alguien que ya tenga tu contraseña y sepa usar las herramientas de desarrollador del navegador podría saltárselo. Sí frena a alguien que solo consiguió tu contraseña sin más.</div>
+    <div class="note-box">Le agrega, a <strong>tu</strong> cuenta (${escDescHtml(state.user.email)}), un código de 6 dígitos de una app como Google Authenticator, además de tu contraseña normal. Una vez que lo confirmes en este navegador, no te lo vuelve a pedir aquí durante 30 días — pasado ese tiempo, o si inicias sesión desde otro dispositivo, te lo pide de nuevo. Cada persona con acceso al panel activa esto por separado, para su propia cuenta. <strong>Importante:</strong> como esta tienda no tiene servidor propio, esto es un obstáculo adicional en el navegador, no algo que Firebase mismo exija — alguien que ya tenga tu contraseña y sepa usar las herramientas de desarrollador del navegador podría saltárselo. Sí frena a alguien que solo consiguió tu contraseña sin más.</div>
     ${enabled ? `
       <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Activada en esta cuenta.</div>
+      <button class="btn-tertiary" style="margin-bottom:14px;" onclick="forgetThisDeviceTotp()">Olvidar este dispositivo (pedir el código de nuevo la próxima vez)</button>
       <div class="form-field"><label>Para desactivarla, escribe el código actual de tu app</label>
         <input id="totp-disable-code" inputmode="numeric" maxlength="6" placeholder="000000" value="${state.totpDisableCode||''}" oninput="state.totpDisableCode=this.value">
       </div>
@@ -1416,6 +1512,23 @@ function renderTotpSubpanel(){
     ` : `
       <button class="btn-primary" onclick="openTotpSetup()">Activar verificación en dos pasos</button>
     `}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Dónde has iniciado sesión</div>
+    <div class="note-box">Lista de navegadores/dispositivos donde se ha iniciado sesión con tu cuenta (${escDescHtml(state.user.email)}) en este panel. Solo es informativo: como esta tienda no tiene servidor propio, quitar uno de aquí no cierra esa sesión a la fuerza si sigue con la contraseña guardada ahí — para eso, cierra sesión manualmente desde ese mismo dispositivo.</div>
+    ${state.adminSessions===null ? `<div class="empty-state">Cargando…</div>` :
+      state.adminSessions.length===0 ? `<div class="empty-state">Sin registros todavía.</div>` :
+      state.adminSessions.map(s=>`
+        <div class="list-row">
+          <div class="row-swatch" style="background:var(--surface-soft);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;">${icon(s.deviceId===myDeviceId?'shield':'user',18)}</div>
+          <div class="row-main">
+            <div class="row-title">${s.label||'Dispositivo desconocido'} ${s.deviceId===myDeviceId?'<span class="status-badge" style="background:var(--green);color:#2B1620;">Este dispositivo</span>':''}</div>
+            <div class="row-sub">Última actividad: ${timeAgo(s.lastActive)} · Desde: ${timeAgo(s.firstSeen)}</div>
+          </div>
+          <button class="icon-btn danger" title="Quitar de la lista" onclick="forgetAdminSession('${s.id}')">${icon('trash')}</button>
+        </div>
+      `).join('')
+    }
   </div>`;
 }
 auth.onAuthStateChanged(async user=>{
@@ -1426,9 +1539,11 @@ auth.onAuthStateChanged(async user=>{
     const doc = await db.collection('security_totp').doc(totpDocId(user.email)).get();
     if(doc.exists && doc.data().enabled){
       state.totpRequired = true; state.totpSecretForChallenge = doc.data().secret;
-      render(); return;
+      if(isTotpTrusted(user.email)){ state.totpVerified = true; recordAdminSession(user.email); }
+      else{ render(); return; }
     }
   }catch(e){ console.error('No se pudo verificar la configuración de dos pasos, se deja pasar para no bloquear el acceso a la tienda', e); }
+  if(!state.totpRequired) recordAdminSession(user.email);
   if(!state.loaded) loadData(); else render();
 });
 async function handleLogin(){
@@ -1893,7 +2008,7 @@ function renderBgFixModal(){
   const cands = state.bgFixCandidates;
   const checkedCount = cands.filter(c=>c.checked).length;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this && !state.bgFixProcessing){closeBgFixTool();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:640px;">
       <h3>Corregir fondo negro en fotos</h3>
       <div class="note-box">Busca fotos de producto que quedaron con fondo negro por un error del recorte anterior (fotos con fondo transparente que se convirtieron a JPEG sin relleno). Revisa la vista previa y desmarca cualquiera que en realidad tenga fondo negro a propósito, antes de corregir.</div>
@@ -2240,18 +2355,46 @@ function computeMetrics(){
     dayRevenue,monthRevenue,revDelta,catUnitRows,catRevRows,maxCatUnit,maxCatRev,topByUnits,topByRevenue,noSales,
     weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length};
 }
+const VISIT_PERIODS = [
+  {key:'hoy', label:'Hoy'},
+  {key:'semana', label:'Esta semana'},
+  {key:'mes', label:'Este mes'},
+  {key:'semana_pasada', label:'Semana pasada'},
+];
+function getVisitsPeriodRange(period){
+  const now = new Date();
+  const startOfToday = new Date(now); startOfToday.setHours(0,0,0,0);
+  if(period==='semana'){
+    const dow = (now.getDay()+6)%7; // lunes=0
+    const start = new Date(startOfToday); start.setDate(start.getDate()-dow);
+    return {start, end: now};
+  }
+  if(period==='mes'){
+    return {start: new Date(now.getFullYear(), now.getMonth(), 1), end: now};
+  }
+  if(period==='semana_pasada'){
+    const dow = (now.getDay()+6)%7;
+    const startThisWeek = new Date(startOfToday); startThisWeek.setDate(startThisWeek.getDate()-dow);
+    const start = new Date(startThisWeek); start.setDate(start.getDate()-7);
+    return {start, end: startThisWeek};
+  }
+  return {start: startOfToday, end: now}; // 'hoy' por default
+}
 function computeVisitMetrics(){
-  const totalVisits = state.visits.length;
+  const period = state.visitsPeriod || 'hoy';
+  const {start, end} = getVisitsPeriodRange(period);
+  const periodVisits = state.visits.filter(v=>{ const d=new Date(v.date); return d>=start && d<=end; });
+  const totalVisits = periodVisits.length;
   const days = []; for(let i=6;i>=0;i--){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); days.push(d); }
   const visitsByDay = days.map(d=>{ const next=new Date(d); next.setDate(d.getDate()+1);
     const count = state.visits.filter(v=>{const vd=new Date(v.date); return vd>=d && vd<next;}).length;
     return {label: d.toLocaleDateString('es-MX',{weekday:'short'}), value: count}; });
   const hourCounts = new Array(24).fill(0);
-  state.visits.forEach(v=>{ const h = new Date(v.date).getHours(); hourCounts[h]++; });
+  periodVisits.forEach(v=>{ const h = new Date(v.date).getHours(); hourCounts[h]++; });
   const visitsByHour = hourCounts.map((c,h)=>({label: h+'h', value:c}));
   const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
   const last24h = state.visits.filter(v=>(Date.now()-new Date(v.date).getTime())<86400000).length;
-  return {totalVisits, visitsByDay, visitsByHour, peakHour, last24h};
+  return {totalVisits, visitsByDay, visitsByHour, peakHour, last24h, period};
 }
 
 /* ============== RENDER: LOGIN ============== */
@@ -2807,14 +2950,16 @@ function renderStatsTiempoReal(){
 }
 function renderStatsVisitas(){
   const v = computeVisitMetrics();
+  const periodLabel = VISIT_PERIODS.find(p=>p.key===(state.visitsPeriod||'hoy')).label;
   return `
+    <div class="status-filter">${VISIT_PERIODS.map(p=>`<button class="${(state.visitsPeriod||'hoy')===p.key?'active':''}" onclick="state.visitsPeriod='${p.key}';render()">${p.label}</button>`).join('')}</div>
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-label">Visitas totales</div><div class="stat-value">${v.totalVisits}</div></div>
+      <div class="stat-card primary"><div class="stat-label">Visitas · ${periodLabel}</div><div class="stat-value">${v.totalVisits}</div></div>
       <div class="stat-card"><div class="stat-label">Visitas últimas 24h</div><div class="stat-value">${v.last24h}</div></div>
-      <div class="stat-card"><div class="stat-label">Hora con más tráfico</div><div class="stat-value" style="font-size:16px;">${v.peakHour}:00–${v.peakHour+1}:00</div></div>
+      <div class="stat-card"><div class="stat-label">Hora con más tráfico (${periodLabel.toLowerCase()})</div><div class="stat-value" style="font-size:16px;">${v.peakHour}:00–${v.peakHour+1}:00</div></div>
     </div>
     <div class="panel"><div class="panel-title">Visitas — últimos 7 días</div>${renderBarChart(v.visitsByDay, false)}</div>
-    <div class="panel"><div class="panel-title">Visitas por hora del día</div><div class="panel-sub">Para saber cuándo tu tienda tiene más tráfico</div>${renderBarChart(v.visitsByHour, false)}</div>
+    <div class="panel"><div class="panel-title">Visitas por hora — ${periodLabel.toLowerCase()}</div><div class="panel-sub">Para saber cuándo tu tienda tiene más tráfico</div>${renderBarChart(v.visitsByHour, false)}</div>
     <div class="note-box">Cada vez que alguien abre la tienda se registra una visita anónima (solo fecha y hora, sin datos personales).</div>
   `;
 }
@@ -3086,7 +3231,7 @@ function renderImportModal(){
   const checkedCount = rows.filter(r=>r.checked && !r.ambiguous).length;
   const kindLabel = {simple:'CSV simple (nombre, categoría, precio, stock, descripción)', tiendanube:'CSV de Tiendanube (descripciones y variantes)', json:'JSON (formato de "Exportar productos")', empty:''}[res?res.kind:''] || '';
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closeImportModal();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:760px;">
       <h3>Importar archivo</h3>
       <div class="note-box">Sube un archivo <strong>CSV</strong> (simple o exportado desde Tiendanube) o el <strong>JSON</strong> que genera "Exportar productos", o pega el contenido abajo. El formato se detecta solo y se arma una vista previa por producto con una casilla para elegir qué aplicar — nada se guarda sin que la revises primero.</div>
@@ -3333,7 +3478,7 @@ function renderCategoryImportModal(){
   const matched = ci ? (ci.matched||[]) : [];
   const checkedCount = matched.filter(r=>r.checked).length;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.catImportOpen=false;state.catImport=null;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:720px;">
       <h3>Importar categorías desde Tiendanube</h3>
       <div class="note-box">Sube el mismo CSV de exportación de Tiendanube. Lee la columna "Categorías" (pueden ser varias separadas por coma) y la compara con la categoría que tiene cada producto ahora mismo. Se empareja por nombre de producto igual que los otros importadores. Cualquier categoría del CSV que no exista todavía en tu tienda se agrega automáticamente.</div>
@@ -3605,7 +3750,7 @@ function renderCashierModal(){
   const NOTIF_OPTIONS = [{key:'ventas',label:'Ventas nuevas (Punto de Venta)'},{key:'pedidos',label:'Pedidos nuevos (tienda online)'},{key:'stockBajo',label:'Alertas de stock bajo'}];
   const isColaborador = c.role==='colaborador';
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.cashierModal=null;render();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>${c.id?'Editar usuario':'Nuevo usuario'}</h3>
       <div class="form-field"><label>Nombre</label><input id="cash-name" value="${c.name||''}" oninput="state.cashierModal.name=this.value"></div>
@@ -3945,7 +4090,7 @@ function renderClientes(){
 function renderCustomerModal(){
   const c = state.customerModal;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closeCustomerModal();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>${c.id?'Editar cliente':'Nuevo cliente'}</h3>
       <div class="form-field"><label>Nombre</label><input id="cm-name" value="${c.name||''}" oninput="state.customerModal.name=this.value"></div>
@@ -3969,7 +4114,7 @@ function renderCustomerModal(){
 }
 function renderCustomerImportModal(){
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.customerImportOpen=false;state.customerImportPreview=[];state.customerImportText='';render();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>Importar clientes</h3>
       <div class="note-box">Sube un <strong>CSV</strong> o pega el contenido con columnas: nombre, telefono, email, ciudad, estado, pais, notas (encabezado obligatorio, ese orden no importa).</div>
@@ -4110,7 +4255,7 @@ function renderWholesaleModal(){
   const q = (state.wholesaleProductSearch||'').trim().toLowerCase();
   const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closeWholesaleModal();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:520px;">
       <h3>${t.name?'Editar':'Nueva'} tabla de precios de mayoreo</h3>
       <div class="form-field"><label>Nombre</label><input id="wt-name" value="${t.name||''}" placeholder="Ej. Mayoristas chicos" oninput="state.wholesaleModal.name=this.value"></div>
@@ -4255,7 +4400,7 @@ function renderCouponModal(){
   const q = (state.couponProductSearch||'').trim().toLowerCase();
   const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closeCouponModal();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:520px;">
       <h3>${c.code?'Editar':'Nuevo'} cupón</h3>
       <div class="two-col">
@@ -4464,7 +4609,7 @@ function renderPromoScopePicker(p){
 function renderPromoModal(){
   const p = state.promoModal;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){closePromoModal();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:560px;">
       <h3>${p.name?'Editar':'Nueva'} promoción</h3>
       <div class="form-field"><label>Nombre (uso interno, no lo ven tus clientes)</label><input id="pr-name" value="${p.name||''}" oninput="state.promoModal.name=this.value"></div>
@@ -4609,7 +4754,7 @@ function renderCajaDetailModal(){
   if(!r) return '';
   const movs = r.movements||[];
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.cajaDetail=null;render();}">
+  <div class="modal-overlay">
     <div class="modal" style="max-width:480px;">
       <h3>${r.cashierName} · ${r.centerName}</h3>
       <div class="panel-sub" style="margin:-8px 0 14px;">Apertura: ${new Date(r.openedAt).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
@@ -4711,7 +4856,7 @@ function renderCentrosList(){
 function renderCenterModal(){
   const c = state.centerModal;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.centerModal=null;render();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>Editar centro</h3>
       <div class="form-field"><label>Nombre</label><input id="center-name-input" value="${c.name||''}" oninput="state.centerModal.name=this.value"></div>
@@ -5580,7 +5725,7 @@ function renderProductModal(){
   const margin = effective>0 ? Math.round(((effective-cost)/effective)*1000)/10 : 0;
   const profit = Math.round((effective-cost)*100)/100;
   return `
-  <div class="modal-overlay" onclick="if(event.target===this){state.productModal=null;render();}">
+  <div class="modal-overlay">
     <div class="modal">
       <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
 
