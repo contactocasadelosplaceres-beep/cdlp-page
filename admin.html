@@ -440,6 +440,7 @@ const DEFAULT_SETTINGS = {
   headerSubtitle:"Discreto · Confidencial · A domicilio",
   showHeaderSubtitle:true,
   promoBanner:{title:"", text:"", image:"", buttonText:"", buttonLink:""},
+  promoBannerPresets:[], activePromoBannerId:"",
   featuredProductIds:[],
   testimonials:[],
   socialInstagram:"", socialFacebook:"", contactEmail:"",
@@ -507,6 +508,7 @@ let state = {
   globalSearchOpen:false, globalSearchQuery:"",
   histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
   newOrderCount:0, lastOrderCheck:null, healthOpen:null, healthShowDismissed:false,
+  promoBannerEditId:null, promoBannerDraft:null,
   storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null,
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
@@ -567,6 +569,18 @@ async function loadData(){
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
+    if(!state.settings.promoBannerPresets) state.settings.promoBannerPresets = [];
+    // Migración de una sola vez: si ya tenías un banner escrito de cuando solo existía "uno" y
+    // todavía no lo has convertido en una promoción guardada, se guarda solo como tu primera
+    // promoción (usando su propio título como nombre) y queda activa — así no se pierde nada de
+    // lo que ya habías escrito.
+    if(!state.settings.promoBannerPresets.length && state.settings.promoBanner && (state.settings.promoBanner.title||state.settings.promoBanner.text||state.settings.promoBanner.image)){
+      const migrated = { id: uid('promo_'), name: state.settings.promoBanner.title || 'Mi promoción', ...state.settings.promoBanner };
+      state.settings.promoBannerPresets = [migrated];
+      state.settings.activePromoBannerId = migrated.id;
+      saveSettings();
+    }
+    if(!state.settings.activePromoBannerId) state.settings.activePromoBannerId = "";
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
     if(!state.settings.testimonials) state.settings.testimonials = [];
     if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
@@ -5756,17 +5770,41 @@ function saveHeaderSettings(){
 }
 
 function renderPromoSubpanel(){
-  const p = state.settings.promoBanner || {};
+  const presets = state.settings.promoBannerPresets||[];
+  const activeId = state.settings.activePromoBannerId||'';
   return `
   <div class="panel">
     <div class="panel-title">Banner promocional</div>
-    <div class="note-box">Actívalo desde "Secciones de la página de inicio" para que se muestre en la tienda. Útil para anunciar una promoción temporal, un combo o una categoría nueva.</div>
-    <div class="form-field"><label>Título</label><input id="promo-title" value="${p.title||''}" placeholder="Ej. 2x1 en lubricantes" oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).title=this.value"></div>
-    <div class="form-field"><label>Texto</label><textarea id="promo-text" placeholder="Detalles de la promoción..." oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).text=this.value">${p.text||''}</textarea></div>
+    <div class="note-box">Actívalo desde "Secciones de la página de inicio" para que se muestre en la tienda. Guarda cada promoción con su propio nombre — puedes tener varias armadas (una para cada temporada, combo, etc.) y solo una a la vez se muestra en tu tienda. Para quitarla de la tienda no hace falta borrar nada, solo desactívala.</div>
+    ${presets.length===0 ? `<div class="empty-state">Aún no tienes ninguna promoción guardada.</div>` : presets.map(preset=>`
+      <div class="list-row">
+        <div class="row-main">
+          <div class="row-title">${preset.name||'(sin nombre)'} ${preset.id===activeId?`<span class="status-badge status-ok">${icon('check',11)} Activa en la tienda</span>`:''}</div>
+          <div class="row-sub">${preset.title||'Sin título'}</div>
+        </div>
+        <button class="btn-outline" onclick="editPromoBannerPreset('${preset.id}')">Editar</button>
+        ${preset.id===activeId
+          ? `<button class="btn-cancel" style="padding:9px 14px;border-radius:9px;" onclick="deactivatePromoBanner()">Desactivar</button>`
+          : `<button class="btn-tertiary" onclick="activatePromoBanner('${preset.id}')">Activar</button>`}
+        <button class="icon-btn danger" onclick="deletePromoBannerPreset('${preset.id}')">${icon('trash')}</button>
+      </div>
+    `).join('')}
+    <button class="btn-primary" style="margin-top:12px;" onclick="startNewPromoBannerPreset()">+ Nueva promoción</button>
+  </div>
+  ${state.promoBannerEditId ? renderPromoBannerEditForm() : ''}`;
+}
+function renderPromoBannerEditForm(){
+  const p = state.promoBannerDraft||{};
+  return `
+  <div class="panel">
+    <div class="panel-title">${state.promoBannerEditId==='new'?'Nueva promoción':'Editar promoción'}</div>
+    <div class="form-field"><label>Nombre de esta promoción (solo para ti, no aparece en la tienda)</label><input id="promo-name" value="${p.name||''}" placeholder="Ej. 10% masturbadores - septiembre" oninput="state.promoBannerDraft.name=this.value"></div>
+    <div class="form-field"><label>Título</label><input id="promo-title" value="${p.title||''}" placeholder="Ej. 2x1 en lubricantes" oninput="state.promoBannerDraft.title=this.value"></div>
+    <div class="form-field"><label>Texto</label><textarea id="promo-text" placeholder="Detalles de la promoción..." oninput="state.promoBannerDraft.text=this.value">${p.text||''}</textarea></div>
     <div class="two-col">
-      <div class="form-field"><label>Texto del botón</label><input id="promo-btn-text" value="${p.buttonText||''}" placeholder="Ver catálogo" oninput="(state.settings.promoBanner=state.settings.promoBanner||{}).buttonText=this.value"></div>
+      <div class="form-field"><label>Texto del botón</label><input id="promo-btn-text" value="${p.buttonText||''}" placeholder="Ver catálogo" oninput="state.promoBannerDraft.buttonText=this.value"></div>
       <div class="form-field"><label>Categoría a la que enlaza</label>
-        <select id="promo-btn-link" onchange="(state.settings.promoBanner=state.settings.promoBanner||{}).buttonLink=this.value">
+        <select id="promo-btn-link" onchange="state.promoBannerDraft.buttonLink=this.value">
           <option value="">Sin enlace</option>
           ${state.settings.categories.map(c=>`<option value="${c}" ${p.buttonLink===c?'selected':''}>${c}</option>`).join('')}
         </select>
@@ -5777,35 +5815,79 @@ function renderPromoSubpanel(){
       <input type="file" accept="image/*" onchange="handlePromoImage(this)">
       ${p.image?`<button class="btn-tertiary" style="margin-top:6px;" onclick="removePromoImage()">Quitar imagen</button>`:''}
     </div>
-    <button class="btn-primary" onclick="savePromoBanner()">Guardar banner</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="flex:1;" onclick="savePromoBannerPreset()">Guardar promoción</button>
+      <button class="btn-cancel" style="flex:1;padding:13px;border-radius:10px;" onclick="cancelPromoBannerEdit()">Cancelar</button>
+    </div>
   </div>`;
 }
-function handlePromoImage(input){
-  const file = input.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = e=>{
-    if(!state.settings.promoBanner) state.settings.promoBanner = {};
-    state.settings.promoBanner.image = e.target.result;
-    render();
-  };
-  reader.readAsDataURL(file);
-}
-function removePromoImage(){
-  if(!state.settings.promoBanner) return;
-  state.settings.promoBanner.image = '';
-  saveSettings();
-  showToast('Imagen del banner quitada');
+function startNewPromoBannerPreset(){
+  state.promoBannerEditId = 'new';
+  state.promoBannerDraft = { id: uid('promo_'), name:'', title:'', text:'', buttonText:'', buttonLink:'', image:'' };
   render();
 }
-function savePromoBanner(){
-  state.settings.promoBanner = {
-    ...state.settings.promoBanner,
+function editPromoBannerPreset(id){
+  const preset = (state.settings.promoBannerPresets||[]).find(x=>x.id===id);
+  if(!preset) return;
+  state.promoBannerEditId = id;
+  state.promoBannerDraft = {...preset};
+  render();
+}
+function cancelPromoBannerEdit(){ state.promoBannerEditId=null; state.promoBannerDraft=null; render(); }
+async function savePromoBannerPreset(){
+  const name = document.getElementById('promo-name').value.trim();
+  if(!name){ showToast('Ponle un nombre a la promoción para poder identificarla después'); return; }
+  const draft = {
+    ...state.promoBannerDraft,
+    name,
     title: document.getElementById('promo-title').value.trim(),
     text: document.getElementById('promo-text').value.trim(),
     buttonText: document.getElementById('promo-btn-text').value.trim(),
     buttonLink: document.getElementById('promo-btn-link').value,
   };
-  saveSettings(); showToast('Banner guardado'); render();
+  if(!state.settings.promoBannerPresets) state.settings.promoBannerPresets = [];
+  const idx = state.settings.promoBannerPresets.findIndex(x=>x.id===draft.id);
+  if(idx>=0) state.settings.promoBannerPresets[idx] = draft; else state.settings.promoBannerPresets.push(draft);
+  await saveSettings();
+  state.promoBannerEditId = null; state.promoBannerDraft = null;
+  showToast('Promoción guardada');
+  render();
+}
+async function deletePromoBannerPreset(id){
+  if(!confirm('¿Eliminar esta promoción? No se puede deshacer.')) return;
+  state.settings.promoBannerPresets = (state.settings.promoBannerPresets||[]).filter(x=>x.id!==id);
+  if(state.settings.activePromoBannerId===id) state.settings.activePromoBannerId = '';
+  if(state.promoBannerEditId===id){ state.promoBannerEditId=null; state.promoBannerDraft=null; }
+  await saveSettings();
+  showToast('Promoción eliminada');
+  render();
+}
+async function activatePromoBanner(id){
+  state.settings.activePromoBannerId = id;
+  await saveSettings();
+  showToast('Promoción activada en la tienda');
+  render();
+}
+async function deactivatePromoBanner(){
+  state.settings.activePromoBannerId = '';
+  await saveSettings();
+  showToast('Banner desactivado en la tienda');
+  render();
+}
+function handlePromoImage(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    if(!state.promoBannerDraft) return;
+    state.promoBannerDraft.image = e.target.result;
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+function removePromoImage(){
+  if(!state.promoBannerDraft) return;
+  state.promoBannerDraft.image = '';
+  render();
 }
 
 function renderFeaturedSubpanel(){
