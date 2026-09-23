@@ -57,8 +57,10 @@
   .field-input{width:100%;padding:12px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);margin-bottom:10px;font-size:16px;transition:border-color .15s ease;}
   .field-input:focus{border-color:var(--primary);outline:none;}
   .cashier-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
-  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px;border-radius:var(--radius-md);font-size:14.5px;font-weight:700;transition:background .15s ease,transform .1s ease;}
+  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px 16px;border-radius:var(--radius-md);font-size:14.5px;font-weight:700;transition:background .15s ease,transform .1s ease;display:flex;align-items:center;justify-content:space-between;text-align:left;}
   .cashier-item:active{transform:scale(0.98);}
+  .cashier-item:hover{background:#efd9d3;}
+  .cashier-item svg{opacity:.5;flex-shrink:0;}
 
   .pos-body{flex:1;min-height:0;display:flex;flex-direction:column;}
   .toolbar{padding:14px 16px 0;display:flex;flex-direction:column;gap:10px;}
@@ -227,6 +229,7 @@ function icon(name, size){
     star:'<path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L6 21l1.6-7-5.4-4.7 7.1-.6L12 2Z"/>',
     'alert-triangle':'<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>',
+    'chevron-right':'<path d="m9 18 6-6-6-6"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -801,7 +804,7 @@ function renderCashierSelect(){
     <h2>¿Quién está atendiendo?</h2>
     <p>Selecciona tu nombre para comenzar</p>
     <div class="cashier-list">
-      ${state.cashiers.map(c=>`<button class="cashier-item" onclick='selectCashier(${JSON.stringify(c).replace(/'/g,"&apos;")})'>${c.name}</button>`).join('')}
+      ${state.cashiers.map(c=>`<button class="cashier-item" onclick='selectCashier(${JSON.stringify(c).replace(/'/g,"&apos;")})'><span>${c.name}</span>${icon('chevron-right',18)}</button>`).join('')}
     </div>
   </div></div>`;
 }
@@ -828,7 +831,7 @@ function renderCenterSelect(){
     <h2>¿Desde qué centro vas a trabajar?</h2>
     <p>El inventario y las ventas se descuentan de este centro. Este celular/terminal recordará tu elección.</p>
     <div class="cashier-list">
-      ${state.centers.map(c=>`<button class="cashier-item" onclick="selectCenter('${c.id}')">${c.name}${c.isDefault?' (Principal)':''}</button>`).join('')}
+      ${state.centers.map(c=>`<button class="cashier-item" onclick="selectCenter('${c.id}')"><span>${c.name}${c.isDefault?' (Principal)':''}</span>${icon('chevron-right',18)}</button>`).join('')}
     </div>
   </div></div>`;
 }
