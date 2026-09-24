@@ -513,7 +513,7 @@ let state = {
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
-  testimonialDraftName:'', testimonialDraftText:'',
+  testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -3192,7 +3192,7 @@ function renderTagAssignPanel(kind, value, label){
   const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,30) : [];
   return `
     <div style="margin-bottom:10px;">
-      <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Ocultar buscador':'+ Agregar o quitar productos de'} "${label}"</button>
+      <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Cerrar buscador':'+ Agregar o quitar productos de'} "${label}"</button>
       ${state[openKey] ? `
         <div class="panel" style="margin-top:8px;background:var(--bg);">
           <input id="tag-assign-search-input" placeholder="Buscar producto por nombre..." value="${(state[searchKey]||'').replace(/"/g,'&quot;')}" oninput="state.${searchKey}=this.value;render()">
@@ -3326,7 +3326,7 @@ function renderProductos(){
     ${(daysSinceExport===null || daysSinceExport>30) ? `<div class="note-box" style="margin-bottom:12px;">${daysSinceExport===null ? 'Nunca has exportado un respaldo de tu catálogo.' : `No exportas un respaldo de tu catálogo hace ${daysSinceExport} días.`} <button class="btn-tertiary" style="margin-left:6px;" onclick="exportProductsJSON()">Exportar ahora</button></div>` : ''}
     <div class="toolbar">
       <button class="btn-add-new" onclick="state.productModal={images:[], sku:generateSKU({})};render()">+ Nuevo producto</button>
-      <button class="btn-tertiary" onclick="state.productToolsOpen=!state.productToolsOpen;render()">${icon('sliders',14)} ${state.productToolsOpen?'Ocultar herramientas':'Más herramientas'}</button>
+      <button class="btn-tertiary" onclick="state.productToolsOpen=!state.productToolsOpen;render()">${icon('sliders',14)} ${state.productToolsOpen?'Cerrar herramientas':'Más herramientas'}</button>
     </div>
     ${state.productToolsOpen ? `
     <div class="toolbar-tools-panel">
@@ -3347,8 +3347,8 @@ function renderProductos(){
       ${needsList.map(n=>`<button class="${needFilter===n.key?'active':''}" onclick="state.productNeedFilter='${n.key}';resetShowMore('productListShowMore');render()">${n.label}</button>`).join('')}
     </div>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn-tertiary" onclick="state.catManageOpen=!state.catManageOpen;render()">${state.catManageOpen?'Ocultar edición de categorías':icon('edit',14)+' Editar categorías'}</button>
-      <button class="btn-tertiary" onclick="state.needsManageOpen=!state.needsManageOpen;render()">${state.needsManageOpen?'Ocultar edición de etiquetas':icon('edit',14)+' Editar etiquetas "para quién"'}</button>
+      <button class="btn-tertiary" onclick="state.catManageOpen=!state.catManageOpen;render()">${state.catManageOpen?'Cerrar edición de categorías':icon('edit',14)+' Editar categorías'}</button>
+      <button class="btn-tertiary" onclick="state.needsManageOpen=!state.needsManageOpen;render()">${state.needsManageOpen?'Cerrar edición de etiquetas':icon('edit',14)+' Editar etiquetas "para quién"'}</button>
       <button class="btn-tertiary" onclick="state.catImportOpen=true;render()">${icon('folder',14)} Importar categorías (Tiendanube)</button>
     </div>
     ${state.catManageOpen ? renderCategoriesManagePanel() : ''}
@@ -5892,17 +5892,25 @@ function removePromoImage(){
 
 function renderFeaturedSubpanel(){
   const ids = state.settings.featuredProductIds || [];
+  const q = (state.featuredSearch||'').trim().toLowerCase();
+  const featuredProducts = state.products.filter(p=>ids.includes(p.id));
+  const list = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)) : featuredProducts;
   return `
   <div class="panel">
     <div class="panel-title">Productos destacados</div>
-    <div class="panel-sub">Elige qué productos aparecen en la sección de destacados (actívala en "Secciones").</div>
-    ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
-      state.products.map(p=>`
-        <label class="checkbox-row">
-          <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleFeatured('${p.id}', this.checked)">
-          <span>${p.name}</span>
-        </label>
-      `).join('')}
+    <div class="panel-sub">Elige qué productos aparecen en la sección de destacados (actívala en "Secciones"). Actualmente: ${featuredProducts.length} producto${featuredProducts.length===1?'':'s'}.</div>
+    <input id="featured-search-input" placeholder="Buscar producto por nombre..." value="${state.featuredSearch||''}" oninput="state.featuredSearch=this.value;render()">
+    <div style="margin-top:10px;">
+      ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
+        list.length===0 ? `<div class="empty-state">Sin resultados para "${state.featuredSearch}".</div>` :
+        list.map(p=>`
+          <label class="checkbox-row">
+            <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleFeatured('${p.id}', this.checked)">
+            <span>${p.name}</span>
+          </label>
+        `).join('')}
+      ${!q && featuredProducts.length===0 ? `<div class="panel-sub">Busca arriba para encontrar productos y marcarlos como destacados.</div>` : ''}
+    </div>
   </div>`;
 }
 function toggleFeatured(id, checked){
@@ -5914,6 +5922,8 @@ function toggleFeatured(id, checked){
 
 function renderTestimonialsSubpanel(){
   const list = state.settings.testimonials || [];
+  const editIdx = state.testimonialEditIdx;
+  const isEditing = editIdx!==null && editIdx!==undefined;
   return `
   <div class="panel">
     <div class="panel-title">Testimonios</div>
@@ -5921,25 +5931,59 @@ function renderTestimonialsSubpanel(){
     ${list.length===0 ? `<div class="empty-state">Aún no has agregado testimonios.</div>` :
       list.map((t,idx)=>`
         <div class="list-row">
-          <div class="row-main"><div class="row-title">${t.name||'Cliente anónimo'}</div><div class="row-sub">${t.text}</div></div>
+          <div class="row-main"><div class="row-title">${t.name||'Cliente anónimo'} <span style="color:var(--amber);">${'★'.repeat(Number(t.rating)||5)}</span></div><div class="row-sub">${t.text}</div></div>
+          <button class="btn-outline" onclick="editTestimonial(${idx})">Editar</button>
           <button class="icon-btn danger" onclick="removeTestimonial(${idx})">${icon('trash')}</button>
         </div>
       `).join('')}
     <div class="form-field" style="margin-top:14px;"><label>Nombre o iniciales (opcional)</label><input id="test-name" placeholder="Ej. J.R." value="${state.testimonialDraftName||''}" oninput="state.testimonialDraftName=this.value"></div>
     <div class="form-field"><label>Testimonio</label><textarea id="test-text" placeholder="Excelente atención y muy discretos..." oninput="state.testimonialDraftText=this.value">${state.testimonialDraftText||''}</textarea></div>
-    <button class="btn-primary" onclick="addTestimonial()">+ Agregar testimonio</button>
+    <div class="form-field"><label>Calificación</label>
+      <select id="test-rating" onchange="state.testimonialDraftRating=this.value">
+        ${[5,4,3,2,1].map(n=>`<option value="${n}" ${Number(state.testimonialDraftRating||5)===n?'selected':''}>${'★'.repeat(n)}${'☆'.repeat(5-n)} (${n})</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="flex:1;" onclick="${isEditing?'saveTestimonialEdit()':'addTestimonial()'}">${isEditing?'Guardar cambios':'+ Agregar testimonio'}</button>
+      ${isEditing?`<button class="btn-cancel" style="flex:1;padding:13px;border-radius:10px;" onclick="cancelTestimonialEdit()">Cancelar</button>`:''}
+    </div>
   </div>`;
+}
+function editTestimonial(idx){
+  const t = state.settings.testimonials[idx]; if(!t) return;
+  state.testimonialEditIdx = idx;
+  state.testimonialDraftName = t.name||'';
+  state.testimonialDraftText = t.text||'';
+  state.testimonialDraftRating = t.rating||5;
+  render();
+}
+function cancelTestimonialEdit(){
+  state.testimonialEditIdx = null;
+  state.testimonialDraftName=''; state.testimonialDraftText=''; state.testimonialDraftRating=5;
+  render();
+}
+function saveTestimonialEdit(){
+  const text = (state.testimonialDraftText||'').trim();
+  if(!text){ showToast('Escribe el texto del testimonio'); return; }
+  const t = state.settings.testimonials[state.testimonialEditIdx]; if(!t) return;
+  t.name = (state.testimonialDraftName||'').trim();
+  t.text = text;
+  t.rating = Number(state.testimonialDraftRating||5);
+  state.testimonialEditIdx = null;
+  state.testimonialDraftName=''; state.testimonialDraftText=''; state.testimonialDraftRating=5;
+  saveSettings(); showToast('Testimonio actualizado'); render();
 }
 function addTestimonial(){
   const name = (state.testimonialDraftName||'').trim();
   const text = (state.testimonialDraftText||'').trim();
   if(!text){ showToast('Escribe el texto del testimonio'); return; }
   if(!state.settings.testimonials) state.settings.testimonials = [];
-  state.settings.testimonials.push({name, text});
-  state.testimonialDraftName=''; state.testimonialDraftText='';
+  state.settings.testimonials.push({name, text, rating: Number(state.testimonialDraftRating||5)});
+  state.testimonialDraftName=''; state.testimonialDraftText=''; state.testimonialDraftRating=5;
   saveSettings(); showToast('Testimonio agregado'); render();
 }
 function removeTestimonial(idx){
+  if(state.testimonialEditIdx===idx){ state.testimonialEditIdx=null; state.testimonialDraftName=''; state.testimonialDraftText=''; state.testimonialDraftRating=5; }
   state.settings.testimonials.splice(idx,1);
   saveSettings(); render();
 }
