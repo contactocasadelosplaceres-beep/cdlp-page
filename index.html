@@ -390,7 +390,7 @@ const DEFAULT_SETTINGS = {
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
 
 async function loadData(){
   try{
@@ -428,13 +428,32 @@ async function loadData(){
   if(cssTag) cssTag.textContent = state.settings.customCss || '';
   applyThemeVars();
   trackVisit();
-  // En segundo plano, sin bloquear la primera pantalla: trae el resto del catálogo
-  // completo para que la búsqueda y los filtros funcionen sobre todos los productos.
-  if(!state.loadError){
-    db.collection('products').orderBy('name').get().then(fullSnap=>{
-      state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
+  // En segundo plano, sin bloquear la primera pantalla: trae el resto del catálogo completo
+  // (arriba solo se cargaron los primeros 40, para que la primera pantalla aparezca rápido).
+  // Antes, si esto fallaba (señal débil, la app pasó a segundo plano, etc.) no se reintentaba
+  // ni se avisaba nada — la persona se quedaba viendo solo esos 40 productos (los primeros en
+  // orden alfabético) para siempre, sin enterarse. Si por casualidad ninguno de esos 40 coincidía
+  // con la categoría que tenía abierta, o con nada relacionado a lo que llevaba en el carrito,
+  // se sentía como si "no hubiera productos" o "no aparecieran sugerencias" — cuando en realidad
+  // sí existían, solo que no habían terminado de cargar. Ahora si falla, reintenta solo unas
+  // cuantas veces, y si de plano no puede, avisa con un botón para intentar de nuevo a mano.
+  if(!state.loadError) loadFullCatalogWithRetry();
+}
+async function loadFullCatalogWithRetry(attempt){
+  attempt = attempt || 1;
+  try{
+    const fullSnap = await db.collection('products').orderBy('name').get();
+    state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
+    state.catalogIncomplete = false;
+    render();
+  }catch(e){
+    console.error(`No se pudo completar el catálogo en segundo plano (intento ${attempt})`, e);
+    if(attempt < 3){
+      setTimeout(()=>loadFullCatalogWithRetry(attempt+1), 2000*attempt);
+    } else {
+      state.catalogIncomplete = true;
       render();
-    }).catch(e=>console.error('No se pudo completar el catálogo en segundo plano', e));
+    }
   }
 }
 function trackVisit(){
@@ -1601,6 +1620,7 @@ function renderStore(){
     <div class="topbar">${renderHeader()}</div>
     <div class="topbar-spacer" id="topbar-spacer"></div>
     ${state.loadError ? `<div class="note-box" style="margin:14px 20px 0;">No pudimos conectar con el servidor, intenta recargar la página.</div>` : ''}
+    ${state.catalogIncomplete ? `<div class="note-box" style="margin:14px 20px 0;">Puede que falten algunos productos por cargar. <button class="btn-tertiary" style="margin-left:4px;" onclick="state.catalogIncomplete=false;render();loadFullCatalogWithRetry();">Reintentar</button></div>` : ''}
     ${body}
     <div class="mobile-cart-spacer ${showBar?'show':''}"></div>
   </div>
