@@ -1205,7 +1205,11 @@ function renderNeedsSection(){
 
 /* ============== MÁS VENDIDOS (featured, data-driven) ============== */
 function renderFeaturedSection(){
-  const manualIds = state.settings.featuredProductIds||[];
+  // Si tienes marcados productos a mano, esos van primero — pero solo cuentan los que en
+  // verdad siguen existiendo. Un ID guardado de un producto ya eliminado (o de una prueba
+  // vieja) antes dejaba toda la sección vacía en vez de usar la lista automática de "más
+  // vendidos" — ahora, si lo marcado a mano ya no aplica a nada real, cae solo en automático.
+  const manualIds = (state.settings.featuredProductIds||[]).filter(id=>state.products.some(p=>p.id===id));
   // Si no eligió nada a mano, usa la lista automática de "más vendidos" (calculada sola en el
   // panel de administración a partir de las ventas reales, actualizada cada semana).
   const ids = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);

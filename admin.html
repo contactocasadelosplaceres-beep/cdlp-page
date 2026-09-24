@@ -6064,6 +6064,7 @@ function renderFeaturedSubpanel(){
   <div class="panel">
     <div class="panel-title">Productos destacados (elegidos a mano)</div>
     <div class="panel-sub">Opcional. Si eliges algunos aquí, estos reemplazan a los "más vendidos" automáticos en esa sección de tu tienda.</div>
+    ${ids.length > featuredProducts.length ? `<div class="note-box">${icon('alert-triangle',13)} Tienes ${ids.length-featuredProducts.length} producto(s) marcado(s) que ya no existen (seguramente de una prueba vieja o un producto que se eliminó) — por eso no se ven abajo. Tu tienda ya los ignora sola y usa la lista automática en su lugar, pero puedes limpiarlos del todo con el botón de abajo.</div>` : ''}
     <input id="featured-search-input" placeholder="Buscar producto por nombre..." value="${state.featuredSearch||''}" oninput="state.featuredSearch=this.value;render()">
     <div style="margin-top:10px;">
       ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
@@ -6076,7 +6077,14 @@ function renderFeaturedSubpanel(){
         `).join('')}
       ${!q && featuredProducts.length===0 ? `<div class="panel-sub">Busca arriba para encontrar productos y marcarlos como destacados.</div>` : ''}
     </div>
+    ${ids.length>0 ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="clearManualFeatured()">Quitar toda la selección a mano (volver a usar solo lo automático)</button>` : ''}
   </div>`;
+}
+async function clearManualFeatured(){
+  state.settings.featuredProductIds = [];
+  await saveSettings();
+  showToast('Ahora tu tienda usa solo la lista automática de más vendidos');
+  render();
 }
 async function recalculateBestSellersNow(){
   await refreshBestSellersIfStale(true);
