@@ -390,7 +390,7 @@ const DEFAULT_SETTINGS = {
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
 
 async function loadData(){
   try{
@@ -533,6 +533,7 @@ function icon(name, size){
     'message-circle':'<path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.4 0-2.7-.3-3.9-.9L3 21l1.4-4.9A8.5 8.5 0 1 1 21 12Z"/>',
     gift:'<rect x="3" y="8" width="18" height="13" rx="1"/><path d="M12 8v13"/><path d="M3 12h18"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
     'chevron-down':'<path d="M6 9l6 6 6-6"/>',
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -833,11 +834,14 @@ function changeQty(key,delta){ const cur=state.cart[key]||0; const next=cur+delt
 function removeFromCart(key){ delete state.cart[key]; render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
-function goHome(){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+function goHome(){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; state.activeBestSellers=false; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+// "Ver más vendidos" ya no lleva a una sección fija de la página — filtra el catálogo para
+// mostrar solo esos productos, igual que al elegir una categoría, con un botón claro para
+// quitar el filtro y ver todo de nuevo (ver renderGridSection).
 function goToFeatured(){
-  const el = document.getElementById('destacados');
-  if(el){ el.scrollIntoView({behavior:'smooth', block:'start'}); }
-  else { goToCatalog('Todos'); }
+  state.activeBestSellers = true; state.activeCat = 'Todos'; state.activeNeed = null; state.searchQuery = ''; state.gridRenderLimit = 20;
+  render();
+  requestAnimationFrame(()=>scrollToId('catalogo'));
 }
 function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={}; trackEvent('product_view', {productId:id}); render(); }
 function closeProductDetail(){ state.detailProductId=null; render(); }
@@ -873,9 +877,9 @@ function detailTouchEnd(e){
   if(Math.abs(delta) < 40) return;
   if(delta < 0) detailNextImage(); else detailPrevImage();
 }
-function goToCatalog(cat){ state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function filterByNeed(key){ state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function onSearchInput(v){ state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
+function goToCatalog(cat){ state.activeBestSellers=false; state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function filterByNeed(key){ state.activeBestSellers=false; state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function onSearchInput(v){ state.activeBestSellers=false; state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
 
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([key,qty])=>{
@@ -1314,8 +1318,16 @@ function dailyShuffledProducts(){
 function renderGridSection(){
   let filtered = dailyShuffledProducts();
   let heading = 'Catálogo completo';
+  let showClearBtn = false;
   let emptyMsg = `No encontramos productos que coincidan. Prueba con otra búsqueda o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
-  if(state.searchQuery.trim()){
+  if(state.activeBestSellers){
+    const manualIds = (state.settings.featuredProductIds||[]).filter(id=>state.products.some(p=>p.id===id));
+    const idsList = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);
+    filtered = idsList.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+    heading = 'Más vendidos';
+    showClearBtn = true;
+    emptyMsg = `Todavía no tenemos suficientes ventas para armar esta lista. Mientras tanto, <a style="color:var(--primary);font-weight:700;" onclick="goToCatalog('Todos')">conoce el catálogo completo</a>.`;
+  } else if(state.searchQuery.trim()){
     const q = state.searchQuery.trim().toLowerCase();
     filtered = filtered.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q));
     heading = `Resultados para "${state.searchQuery.trim()}"`;
@@ -1336,9 +1348,12 @@ function renderGridSection(){
   const hasMore = filtered.length > shown.length;
   return `
   <div id="catalogo" class="section-block" style="padding-top:10px;">
-    <div class="section-heading" style="margin-bottom:14px;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</div>
+    <div class="section-head-row" style="margin-bottom:14px;align-items:center;">
+      <div class="section-heading" style="margin-bottom:0;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</div>
+      ${showClearBtn ? `<button class="btn-tertiary" onclick="goToCatalog('Todos')">${icon('grid',14)} Ver catálogo completo</button>` : ''}
+    </div>
     ${filtered.length
-      ? `<div class="grid">${shown.map(p=>renderProductCard(p)).join('')}</div>
+      ? `<div class="grid">${shown.map(p=>renderProductCard(p, state.activeBestSellers)).join('')}</div>
          ${hasMore ? `
            <div class="load-more-wrap">
              <button class="load-more-btn" onclick="loadMoreProducts()">Ver más productos <span class="lm-chev">${icon('chevron-down',16)}</span></button>
