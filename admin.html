@@ -518,6 +518,7 @@ let state = {
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
+  recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
 };
 
@@ -1979,7 +1980,7 @@ function cropSetZoom(val){
   cropCtx.zoom = parseFloat(val);
   clampCropOffsets(); updateCropImgTransform();
 }
-const MAX_IMG_BYTES = 250*1024; // límite de peso por imagen (plan Blaze: cada byte guardado en Firestore se paga)
+const MAX_IMG_BYTES = 90*1024; // peso máximo por imagen — más ajustado que antes para que el catálogo pese bastante menos en total, sin recurrir a un servicio de imágenes aparte
 function dataUrlBytes(dataUrl){
   const b64 = dataUrl.slice(dataUrl.indexOf(',')+1);
   const len = b64.length;
@@ -1995,6 +1996,111 @@ function canvasToLimitedJpeg(canvas, maxBytes){
     if(dataUrlBytes(url) <= maxBytes) return url;
   }
   return null;
+}
+// "Aligerar fotos ya guardadas": recorre las fotos que ya están en tus productos y, a las que
+// pesan más de lo necesario (por ejemplo, subidas antes de este ajuste), las vuelve a comprimir
+// con el mismo tope nuevo — sin volver a pedirte que las recortes, solo achicando el archivo.
+function scanForRecompress(){
+  const candidates = [];
+  state.products.forEach(p=>{
+    (p.images||[]).forEach((img,idx)=>{
+      if(typeof img==='string' && img.startsWith('data:image')){
+        const bytes = dataUrlBytes(img);
+        if(bytes > MAX_IMG_BYTES) candidates.push({productId:p.id, productName:p.name, imageIndex:idx, originalBytes:bytes});
+      }
+    });
+  });
+  state.recompressCandidates = candidates;
+  state.recompressScanning = false;
+  render();
+}
+function openRecompressTool(){
+  state.recompressOpen = true; state.recompressScanning = true; state.recompressCandidates = []; state.recompressResult = null;
+  render();
+  setTimeout(scanForRecompress, 30); // deja pintar el modal con el aviso de "buscando" antes de escanear
+}
+function closeRecompressTool(){
+  if(state.recompressProcessing) return;
+  state.recompressOpen=false; state.recompressCandidates=[]; state.recompressResult=null; render();
+}
+function recompressOneImage(dataUrl){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const size = Math.min(img.width, img.height, CROP_OUT); // nunca agranda, solo achica o deja igual
+      const canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,size,size);
+      ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, size, size);
+      let out = canvasToLimitedJpeg(canvas, MAX_IMG_BYTES);
+      if(!out){
+        const canvas2 = document.createElement('canvas'); canvas2.width=300; canvas2.height=300;
+        const ctx2 = canvas2.getContext('2d');
+        ctx2.fillStyle='#ffffff'; ctx2.fillRect(0,0,300,300);
+        ctx2.drawImage(img,0,0,img.width,img.height,0,0,300,300);
+        out = canvas2.toDataURL('image/jpeg', 0.3);
+      }
+      resolve(out);
+    };
+    img.onerror = ()=>resolve(null);
+    img.src = dataUrl;
+  });
+}
+async function applyRecompress(){
+  state.recompressProcessing = true; state.recompressProgress = 0; render();
+  let savedBytes = 0, fixedCount = 0;
+  const byProduct = {};
+  state.recompressCandidates.forEach(c=>{ (byProduct[c.productId]=byProduct[c.productId]||[]).push(c); });
+  const productIds = Object.keys(byProduct);
+  for(let i=0;i<productIds.length;i++){
+    const pid = productIds[i];
+    const p = state.products.find(x=>x.id===pid);
+    if(p){
+      for(const c of byProduct[pid]){
+        const original = p.images[c.imageIndex];
+        if(!original) continue;
+        const newUrl = await recompressOneImage(original);
+        if(newUrl){
+          const newBytes = dataUrlBytes(newUrl);
+          if(newBytes < c.originalBytes){
+            savedBytes += (c.originalBytes - newBytes);
+            p.images[c.imageIndex] = newUrl;
+            fixedCount++;
+          }
+        }
+      }
+      try{ await db.collection('products').doc(pid).update({images: p.images}); }
+      catch(e){ console.error('No se pudo guardar', pid, e); }
+    }
+    state.recompressProgress = i+1; render();
+  }
+  state.recompressProcessing = false;
+  state.recompressResult = { count: fixedCount, savedMB: (savedBytes/1024/1024).toFixed(1), products: productIds.length };
+  render();
+}
+function renderRecompressModal(){
+  const cands = state.recompressCandidates||[];
+  const byProduct = {}; cands.forEach(c=>{ (byProduct[c.productId]=byProduct[c.productId]||[]).push(c); });
+  const productCount = Object.keys(byProduct).length;
+  const totalOriginalMB = (cands.reduce((s,c)=>s+c.originalBytes,0)/1024/1024).toFixed(1);
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:480px;">
+      <h3>Aligerar fotos ya guardadas</h3>
+      ${state.recompressScanning ? `<div class="empty-state">Buscando fotos pesadas…</div>` :
+        state.recompressResult ? `
+          <div class="note-box" style="color:var(--green);">Listo: se aligeraron ${state.recompressResult.count} foto(s) en ${state.recompressResult.products} producto(s), ahorrando ~${state.recompressResult.savedMB} MB en total.</div>
+        ` : cands.length===0 ? `
+          <div class="empty-state">Todas tus fotos ya están dentro del peso ideal — no hay nada que aligerar.</div>
+        ` : `
+          <div class="note-box">Se encontraron ${cands.length} foto(s) en ${productCount} producto(s) más pesadas de lo necesario (suman ~${totalOriginalMB} MB). Se van a achicar un poco en tamaño y calidad — se siguen viendo bien, solo pesan menos. Puede tardar varios minutos según cuántas sean; no cierres esta ventana mientras corre.</div>
+        `}
+      <div class="modal-actions">
+        <button class="btn-cancel" ${state.recompressProcessing?'disabled':''} onclick="closeRecompressTool()">Cerrar</button>
+        ${!state.recompressScanning && !state.recompressResult && cands.length>0 ? `<button class="btn-primary" style="flex:1;" ${state.recompressProcessing?'disabled':''} onclick="applyRecompress()">${state.recompressProcessing?`Aligerando… ${state.recompressProgress}/${productCount}`:'Aligerar ahora'}</button>` : ''}
+      </div>
+    </div>
+  </div>`;
 }
 function applyCrop(){
   const scale = cropCtx.baseScale*cropCtx.zoom;
@@ -2692,6 +2798,7 @@ function renderAdmin(){
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
   ${state.bgFixOpen ? renderBgFixModal() : ''}
+  ${state.recompressOpen ? renderRecompressModal() : ''}
   `;
 }
 
@@ -3403,6 +3510,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
       <button class="btn-outline" onclick="openBgFixTool()">Corregir fondo negro en fotos</button>
       <button class="btn-outline" onclick="fixStrayQuestionMarks()">Corregir signos "?" sueltos en descripciones</button>
+      <button class="btn-outline" onclick="openRecompressTool()">Aligerar fotos ya guardadas</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
