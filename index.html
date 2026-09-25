@@ -428,6 +428,7 @@ async function loadData(){
   if(cssTag) cssTag.textContent = state.settings.customCss || '';
   applyThemeVars();
   trackVisit();
+  openProductFromURL();
   // En segundo plano, sin bloquear la primera pantalla: trae el resto del catálogo completo
   // (arriba solo se cargaron los primeros 40, para que la primera pantalla aparezca rápido).
   // Antes, si esto fallaba (señal débil, la app pasó a segundo plano, etc.) no se reintentaba
@@ -438,6 +439,30 @@ async function loadData(){
   // sí existían, solo que no habían terminado de cargar. Ahora si falla, reintenta solo unas
   // cuantas veces, y si de plano no puede, avisa con un botón para intentar de nuevo a mano.
   if(!state.loadError) loadFullCatalogWithRetry();
+}
+// Enlace directo a un producto (ej. compartido por WhatsApp): ?producto=ID en la URL. Si ese
+// producto no viene entre los primeros 40 que se cargaron de entrada, se trae solo, sin esperar
+// a que termine de bajar el catálogo completo — así el enlace abre rápido sin importar qué tan
+// grande sea el catálogo. Antes no existía forma de mandar a alguien directo a un producto: todo
+// enlace compartido caía en la página principal y la persona tenía que buscarlo desde cero.
+async function openProductFromURL(){
+  const params = new URLSearchParams(location.search);
+  const id = params.get('producto');
+  if(!id) return;
+  let p = state.products.find(x=>x.id===id);
+  if(!p){
+    try{
+      const doc = await db.collection('products').doc(id).get();
+      if(doc.exists){
+        p = {id: doc.id, ...doc.data()};
+        if(!state.products.find(x=>x.id===p.id)) state.products.push(p);
+      }
+    }catch(e){ console.error('No se pudo cargar el producto del enlace directo', e); }
+  }
+  const url = new URL(location.href); url.searchParams.delete('producto');
+  history.replaceState({}, '', url.toString());
+  if(p && !p.hidden){ openProductDetail(p.id); }
+  else { showToast('Ese producto ya no está disponible'); }
 }
 async function loadFullCatalogWithRetry(attempt){
   attempt = attempt || 1;
