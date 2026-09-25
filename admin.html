@@ -1754,6 +1754,33 @@ async function fixStrayQuestionMarks(){
     showToast(`${affected.length} producto(s) corregido(s)`); render();
   }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
 }
+// Separa palabras que quedaron pegadas entre sí en la descripción (ej. "RecargableSilencioso")
+// — pasa cuando una lista de características pierde sus separadores originales (saltos de
+// línea, viñetas) al importar productos desde otra plataforma. Solo inserta un espacio donde
+// una minúscula queda pegada directo a una mayúscula seguida de otra minúscula — nunca toca
+// siglas como "SXO" o "AA" porque esas van en mayúsculas seguidas, no encajan en el patrón.
+function fixRunTogetherWords(text){
+  if(!text) return text;
+  return text.replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '$1 $2');
+}
+async function fixRunTogetherWordsTool(){
+  const affected = state.products.filter(p=>p.desc && fixRunTogetherWords(p.desc) !== p.desc);
+  if(!affected.length){ showToast('No se encontró ninguno para corregir'); return; }
+  if(!confirm(`Se encontraron ${affected.length} producto(s) con palabras pegadas en la descripción (probablemente separadores perdidos de una importación). ¿Corregirlos ahora?`)) return;
+  try{
+    for(let i=0;i<affected.length;i+=400){
+      const chunk = affected.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(p=>{
+        const newDesc = fixRunTogetherWords(p.desc);
+        p.desc = newDesc;
+        batch.update(db.collection('products').doc(p.id), {desc:newDesc});
+      });
+      await batch.commit();
+    }
+    showToast(`${affected.length} producto(s) corregido(s)`); render();
+  }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
+}
 function looksTruncatedDesc(desc){
   const d = (desc||'').trim();
   if(!d) return false;
@@ -3510,6 +3537,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
       <button class="btn-outline" onclick="openBgFixTool()">Corregir fondo negro en fotos</button>
       <button class="btn-outline" onclick="fixStrayQuestionMarks()">Corregir signos "?" sueltos en descripciones</button>
+      <button class="btn-outline" onclick="fixRunTogetherWordsTool()">Separar palabras pegadas en descripciones</button>
       <button class="btn-outline" onclick="openRecompressTool()">Aligerar fotos ya guardadas</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
