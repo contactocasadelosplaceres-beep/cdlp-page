@@ -1721,6 +1721,38 @@ async function generateMissingSKUs(){
     showToast(`${missing.length} SKU generados`); render();
   }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
 }
+// Limpia signos de interrogación sueltos en las descripciones — típicos de emojis (❄️💧✨ etc.)
+// que se dañaron al importar productos desde otra plataforma y quedaron convertidos en "?".
+// Solo quita un "?" que esté SEPARADO por un espacio de la palabra anterior (o al inicio del
+// texto) y seguido de espacio/puntuación/fin — un signo de interrogación de una pregunta real
+// en español siempre va pegado a la última palabra ("¿todo bien?"), así que nunca se toca.
+function stripStrayQuestionMarks(text){
+  if(!text) return text;
+  return text
+    .replace(/\s+\?(?=\s|[,.!)]|$)/g, '')
+    .replace(/^\?\s*/g, '')
+    .replace(/[ \t]+([,.!)])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+async function fixStrayQuestionMarks(){
+  const affected = state.products.filter(p=>p.desc && stripStrayQuestionMarks(p.desc) !== p.desc);
+  if(!affected.length){ showToast('No se encontró ninguno para corregir'); return; }
+  if(!confirm(`Se encontraron ${affected.length} producto(s) con signos de interrogación sueltos en la descripción (probablemente emojis dañados de una importación). ¿Corregirlos ahora?`)) return;
+  try{
+    for(let i=0;i<affected.length;i+=400){
+      const chunk = affected.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(p=>{
+        const newDesc = stripStrayQuestionMarks(p.desc);
+        p.desc = newDesc;
+        batch.update(db.collection('products').doc(p.id), {desc:newDesc});
+      });
+      await batch.commit();
+    }
+    showToast(`${affected.length} producto(s) corregido(s)`); render();
+  }catch(e){ console.error(e); showToast('No se pudo completar, intenta de nuevo'); }
+}
 function looksTruncatedDesc(desc){
   const d = (desc||'').trim();
   if(!d) return false;
@@ -3370,6 +3402,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="exportProductsJSON()">Exportar productos</button>
       <button class="btn-outline" onclick="generateMissingSKUs()">Generar SKU faltantes</button>
       <button class="btn-outline" onclick="openBgFixTool()">Corregir fondo negro en fotos</button>
+      <button class="btn-outline" onclick="fixStrayQuestionMarks()">Corregir signos "?" sueltos en descripciones</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
