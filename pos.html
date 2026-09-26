@@ -185,6 +185,7 @@ let state = {
   manualDiscount:null, discountModalOpen:false, discountType:"fixed", discountValueInput:"", discountCouponInput:"", discountReasonInput:"", discountError:"",
   saleNotes:"", notesModalOpen:false, notesDraft:"",
   barcodeScannerOpen:false,
+  salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -235,6 +236,7 @@ function icon(name, size){
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>',
     'chevron-right':'<path d="m9 18 6-6-6-6"/>',
     camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>',
+    receipt:'<path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 2Z"/><path d="M8 7h8M8 11h8M8 15h5"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -302,6 +304,56 @@ function renderBarcodeScannerModal(){
       <div class="panel-sub">Apunta la cámara al código del producto.</div>
       <div id="barcode-scanner-view" style="margin:14px 0;border-radius:12px;overflow:hidden;"></div>
       <button class="btn-cancel" style="width:100%;" onclick="closeBarcodeScanner()">Cancelar</button>
+    </div>
+  </div>`;
+}
+/* ---- Lista de ventas del día, sin salir del Punto de Venta ---- */
+function openSalesList(){
+  state.salesListOpen = true; state.salesListLoading = true; state.salesListItems = []; state.salesListDetailId = null;
+  render();
+  loadSalesList();
+}
+async function loadSalesList(){
+  try{
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const snap = await db.collection('sales').where('centerId','==', state.activeCenter.id).get();
+    const items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(s=> new Date(s.date) >= todayStart);
+    items.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    state.salesListItems = items;
+  }catch(e){ console.error('No se pudo cargar la lista de ventas', e); state.salesListItems = []; }
+  state.salesListLoading = false; render();
+}
+function closeSalesList(){ state.salesListOpen = false; state.salesListDetailId = null; render(); }
+function renderSalesListModal(){
+  const total = state.salesListItems.reduce((s,v)=>s+(v.total||0),0);
+  const detail = state.salesListDetailId ? state.salesListItems.find(v=>v.id===state.salesListDetailId) : null;
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
+      ${detail ? `
+        <h3>Venta ${detail.orderNumber?'#'+String(detail.orderNumber).padStart(4,'0'):''}</h3>
+        <div class="panel-sub">${new Date(detail.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})} · ${detail.cashierName||''}</div>
+        <div style="margin:12px 0;">
+          ${(detail.items||[]).map(it=>`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;border-top:1px solid var(--border);padding-top:10px;">
+          <span>Total (${detail.paymentMethod||''})</span><span>${money(detail.total)}</span>
+        </div>
+        ${detail.customerName ? `<div class="panel-sub" style="margin-top:8px;">Cliente: ${detail.customerName}</div>` : ''}
+        <button class="btn-secondary" style="margin-top:14px;" onclick="state.salesListDetailId=null;render()">← Volver a la lista</button>
+      ` : `
+        <h3>Ventas de hoy</h3>
+        ${state.salesListLoading ? `<div style="padding:20px 0;text-align:center;color:var(--ink-soft);">Cargando…</div>` :
+          state.salesListItems.length===0 ? `<div style="padding:20px 0;text-align:center;color:var(--ink-soft);">Todavía no hay ventas hoy en ${state.activeCenter.name}.</div>` : `
+          <div class="panel-sub" style="margin-bottom:10px;">${state.salesListItems.length} venta(s) · Total: ${money(total)}</div>
+          ${state.salesListItems.map(v=>`
+            <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;text-align:left;" onclick="state.salesListDetailId='${v.id}';render()">
+              <span>${v.orderNumber?'#'+String(v.orderNumber).padStart(4,'0'):''} · ${new Date(v.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}${v.cashierName?' · '+v.cashierName:''}</span>
+              <span style="font-weight:800;">${money(v.total)}</span>
+            </button>`).join('')}
+        `}
+      `}
+      <button class="btn-secondary" onclick="closeSalesList()">Cerrar</button>
     </div>
   </div>`;
 }
@@ -709,8 +761,10 @@ async function saveNewCustomerPOS(){
 }
 function renderCustomerPickerModal(){
   const q = state.customerSearchPOS.trim().toLowerCase();
-  let list = state.customers;
-  if(q) list = list.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
+  // Solo se muestra algo cuando hay una búsqueda escrita — nunca la lista completa de
+  // clientes de entrada, para que quien registre o revise a un cliente no vea de paso a
+  // todos los demás.
+  let list = q ? state.customers.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)) : [];
   list = list.slice(0,40);
   return `
   <div class="modal-overlay">
@@ -721,7 +775,8 @@ function renderCustomerPickerModal(){
       ${!state.newCustomerMode ? `
         <input id="customer-search-pos-input" class="field-input" type="text" placeholder="Buscar por nombre o teléfono..." value="${state.customerSearchPOS}" oninput="state.customerSearchPOS=this.value;render()">
         <div style="max-height:260px;overflow-y:auto;margin-bottom:12px;">
-          ${list.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` : list.map(c=>`
+          ${!q ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Escribe un nombre o teléfono para buscar.</div>` :
+            list.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` : list.map(c=>`
             <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="selectCustomerPOS('${c.id}')">
               <span>${c.name}</span><span style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">${c.phone||''}</span>
             </button>`).join('')}
@@ -931,6 +986,7 @@ function renderPOS(){
       <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
         <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
+        <button class="pill-btn" onclick="openSalesList()">${icon('receipt')} Ventas</button>
         <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
         <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
@@ -1112,6 +1168,7 @@ function render(){
     if(state.discountModalOpen) html += renderDiscountModal();
     if(state.notesModalOpen) html += renderNotesModal();
     if(state.barcodeScannerOpen) html += renderBarcodeScannerModal();
+    if(state.salesListOpen) html += renderSalesListModal();
     root.innerHTML = html;
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
