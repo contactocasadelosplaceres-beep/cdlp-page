@@ -520,6 +520,7 @@ let state = {
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
   productHistoryOpen:false, productHistoryProductId:null, productHistoryLoading:false, productHistoryItems:[],
+  auditLogOpen:false, auditLogLoading:false, auditLogItems:[],
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -1710,6 +1711,12 @@ async function saveProduct(p){
           const diff = (newSBC[cid]||0) - (oldSBC[cid]||0);
           if(diff) logStockMovement(p.id, 'ajuste_manual', diff, 'Editado a mano en la ficha del producto', cid);
         });
+        if((old.price||0) !== (payload.price||0)){
+          logAdminAction('cambio_precio', 'producto', old.name, `Precio: ${money(old.price||0)} → ${money(payload.price||0)}`);
+        }
+        if((old.promoPrice||0) !== (payload.promoPrice||0)){
+          logAdminAction('cambio_precio_promo', 'producto', old.name, `Precio promocional: ${money(old.promoPrice||0)} → ${money(payload.promoPrice||0)}`);
+        }
       }
       await db.collection('products').doc(p.id).set(payload);
       const idx = state.products.findIndex(x=>x.id===p.id); state.products[idx] = {id:p.id, ...payload};
@@ -1822,9 +1829,11 @@ function exportProductsJSON(){
   saveSettings();
 }
 async function deleteProduct(id){
+  const p = state.products.find(x=>x.id===id);
   try{
     await db.collection('products').doc(id).delete();
     state.products = state.products.filter(x=>x.id!==id);
+    if(p) logAdminAction('eliminacion', 'producto', p.name, `SKU: ${p.sku||'sin SKU'}`);
     showToast('Producto eliminado'); render();
   }catch(e){
     console.error(e);
@@ -1842,11 +1851,25 @@ async function logStockMovement(productId, type, qtyChange, note, centerId){
     });
   }catch(e){ console.error('No se pudo registrar el movimiento de inventario', e); }
 }
+// Guarda un renglón en la bitácora de acciones del panel — pensada para cuando entre más
+// personal: quién cambió qué, y cuándo. targetName es lo que se ve en la lista sin tener que
+// ir a buscar el producto/pedido/persona por su ID.
+async function logAdminAction(action, targetType, targetName, details){
+  try{
+    await db.collection('adminAuditLog').add({
+      action, targetType, targetName: targetName||'', details: details||'',
+      userEmail: state.user ? state.user.email : '', date: new Date().toISOString(),
+    });
+  }catch(e){ console.error('No se pudo registrar en la bitácora', e); }
+}
 async function updateOrderStatus(id,status){
   const o=state.orders.find(x=>x.id===id); if(!o) return;
   const prevStatus = o.status;
   o.status=status;
   await saveOrdersStatus(id,status,o.source);
+  if(status==='Cancelado' && prevStatus!=='Cancelado'){
+    logAdminAction('cancelacion', o.source==='pos'?'venta':'pedido', formatFolio(o.orderNumber), `Total: ${money(o.total)}`);
+  }
   // Cancelar una venta de Punto de Venta debe devolver al inventario lo que esa venta había
   // descontado al momento de cobrarse — si no, ese stock se pierde para siempre. Los pedidos
   // de la tienda en línea NUNCA descuentan stock al crearse (Ale lo ajusta a mano al
@@ -1906,10 +1929,24 @@ async function saveCashierForm(){
   // El acceso real siempre lo decide "staffPermissions", no la lista de cajeros: si el
   // rol dejó de ser "colaborador" o se cambió el correo, hay que revocar el correo anterior.
   await syncStaffPermissions(role==='colaborador' ? email : '', role==='colaborador' ? permissions : {}, oldEmail);
+  if(!existing){
+    logAdminAction('alta_personal', 'persona', name, role==='colaborador' ? `Colaborador · ${email}` : 'Cajero');
+  }else if(role==='colaborador'){
+    const changed = permissionsDiffSummary(existing.permissions||{}, permissions);
+    if(changed) logAdminAction('cambio_permisos', 'persona', name, changed);
+  }
   if(!existing) state.cashiers.push(c);
   else Object.assign(existing, {name, email, role, pin, notify, permissions});
   if(state.user && (state.user.email||'').trim().toLowerCase()===(email||'').trim().toLowerCase()) computeMyPermissions();
   state.cashierModal=null; showToast('Guardado'); render();
+}
+function permissionsDiffSummary(oldPerms, newPerms){
+  const changes = [];
+  PERMISSION_DEFS.forEach(def=>{
+    const before = !!oldPerms[def.key], after = !!newPerms[def.key];
+    if(before !== after) changes.push(`${def.label.split(' (')[0]}: ${before?'sí':'no'}→${after?'sí':'no'}`);
+  });
+  return changes.join(', ');
 }
 async function toggleCashierActive(id){
   const c = state.cashiers.find(x=>x.id===id); if(!c) return;
@@ -1917,6 +1954,7 @@ async function toggleCashierActive(id){
   // Desactivar a un colaborador debe revocar su acceso real de inmediato, no solo la
   // etiqueta visual — si no, su cuenta de Firebase seguiría entrando con sus permisos viejos.
   if(c.role==='colaborador') await syncStaffPermissions(c.active ? c.email : '', c.active ? (c.permissions||{}) : {}, c.active ? null : c.email);
+  logAdminAction(c.active?'activacion_personal':'desactivacion_personal', 'persona', c.name);
   computeMyPermissions(); render();
 }
 async function deleteCashier(id){
@@ -1926,6 +1964,7 @@ async function deleteCashier(id){
     // Igual que al desactivar: si era colaborador, hay que revocarle el acceso real,
     // no solo quitarlo de esta lista.
     if(c && c.role==='colaborador' && c.email) await syncStaffPermissions('', {}, c.email);
+    if(c) logAdminAction('eliminacion_personal', 'persona', c.name);
     state.cashiers = state.cashiers.filter(c=>c.id!==id);
     showToast('Eliminado'); render();
   }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
@@ -2099,6 +2138,54 @@ async function loadProductHistory(id){
   state.productHistoryLoading = false; render();
 }
 function closeProductHistory(){ state.productHistoryOpen=false; state.productHistoryProductId=null; render(); }
+const ADMIN_ACTION_LABELS = {
+  cambio_precio: 'Cambió el precio',
+  cambio_precio_promo: 'Cambió el precio promocional',
+  eliminacion: 'Eliminó un producto',
+  eliminacion_lote: 'Eliminó varios productos',
+  cancelacion: 'Canceló',
+  alta_personal: 'Agregó a una persona',
+  cambio_permisos: 'Cambió permisos',
+  activacion_personal: 'Reactivó a una persona',
+  desactivacion_personal: 'Desactivó a una persona',
+  eliminacion_personal: 'Eliminó a una persona',
+};
+function openAuditLog(){
+  state.auditLogOpen = true; state.auditLogLoading = true; state.auditLogItems = [];
+  render();
+  loadAuditLog();
+}
+async function loadAuditLog(){
+  try{
+    const snap = await db.collection('adminAuditLog').get();
+    const items = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    items.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    state.auditLogItems = items.slice(0,150);
+  }catch(e){ console.error('No se pudo cargar la bitácora', e); state.auditLogItems = []; }
+  state.auditLogLoading = false; render();
+}
+function closeAuditLog(){ state.auditLogOpen=false; render(); }
+function renderAuditLogModal(){
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto;">
+      <h3>Bitácora de acciones del panel</h3>
+      <div class="panel-sub" style="margin-top:-6px;">Quién hizo qué, y cuándo — útil para cuando haya más de una persona con acceso.</div>
+      ${state.auditLogLoading ? `<div class="empty-state">Cargando…</div>` :
+        state.auditLogItems.length===0 ? `<div class="empty-state">Todavía no hay nada registrado (empieza a guardarse desde que subiste esta actualización — lo de antes no quedó registrado).</div>` :
+        state.auditLogItems.map(a=>`
+          <div class="list-row" style="padding:10px 0;">
+            <div class="row-main">
+              <div class="row-title" style="font-size:13px;">${ADMIN_ACTION_LABELS[a.action]||a.action}${a.targetName?`: ${a.targetName}`:''}</div>
+              <div class="row-sub">${new Date(a.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})} · ${a.userEmail||'—'}${a.details?` · ${a.details}`:''}</div>
+            </div>
+          </div>`).join('')}
+      <div class="modal-actions">
+        <button class="btn-cancel" style="flex:1;" onclick="closeAuditLog()">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
+}
 function renderProductHistoryModal(){
   const p = state.products.find(x=>x.id===state.productHistoryProductId);
   return `
@@ -2918,6 +3005,7 @@ function renderAdmin(){
   ${state.bgFixOpen ? renderBgFixModal() : ''}
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
+  ${state.auditLogOpen ? renderAuditLogModal() : ''}
   `;
 }
 
@@ -3156,6 +3244,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='trafico'?'active':''}" onclick="${goSub('trafico')}">Fuentes de tráfico</button>
       <button class="admin-tab ${sub==='tiemporeal'?'active':''}" onclick="${goSub('tiemporeal')}">Tiempo real</button>
       <button class="admin-tab ${sub==='visitas'?'active':''}" onclick="${goSub('visitas')}">Visitas</button>
+      <button class="admin-tab ${sub==='margen'?'active':''}" onclick="${goSub('margen')}">Margen por categoría</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -3163,6 +3252,64 @@ function renderEstadisticas(){
     ${sub==='trafico' ? renderStatsTrafico() : ''}
     ${sub==='tiemporeal' ? renderStatsTiempoReal() : ''}
     ${sub==='visitas' ? renderStatsVisitas() : ''}
+    ${sub==='margen' ? renderStatsMargen() : ''}
+  `;
+}
+// Cruza lo vendido en los últimos "days" con el costo guardado de cada producto, agrupado por
+// categoría — para saber qué categoría deja más ganancia real, no solo más ventas. Se excluye
+// lo cancelado. Un producto puede tener varias categorías: para no contar la misma venta dos
+// veces, cada línea vendida se atribuye solo a la PRIMERA categoría del producto.
+function computeCategoryMargins(days){
+  days = days || 30;
+  const since = Date.now() - days*86400000;
+  const byCat = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    if(new Date(o.date).getTime() < since) return;
+    (o.items||[]).forEach(it=>{
+      if(!it.id || it.id==='promo_buyxpayy') return;
+      const p = state.products.find(x=>x.id===it.id);
+      const cat = p ? ((p.categories&&p.categories[0]) || p.cat || 'Sin categoría') : 'Producto eliminado';
+      const cost = p ? (p.cost||0) : 0;
+      if(!byCat[cat]) byCat[cat] = {revenue:0, cost:0, units:0};
+      byCat[cat].revenue += (it.price||0)*it.qty;
+      byCat[cat].cost += cost*it.qty;
+      byCat[cat].units += it.qty;
+    });
+  });
+  return Object.entries(byCat).map(([cat,d])=>({
+    cat, revenue:d.revenue, cost:d.cost, units:d.units,
+    margin: d.revenue-d.cost,
+    marginPct: d.revenue>0 ? ((d.revenue-d.cost)/d.revenue*100) : 0,
+  })).sort((a,b)=>b.margin-a.margin);
+}
+function renderStatsMargen(){
+  const rows = computeCategoryMargins(30);
+  const totalRevenue = rows.reduce((s,r)=>s+r.revenue,0);
+  const totalCost = rows.reduce((s,r)=>s+r.cost,0);
+  const noCostWarning = state.products.filter(p=>!(p.cost>0)).length;
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Margen por categoría (últimos 30 días)</div>
+    <div class="panel-sub" style="margin-bottom:14px;">Ganancia real (venta menos costo) según lo que llevas capturado en "Costo" de cada producto.</div>
+    ${noCostWarning>0 ? `<div class="note-box">${noCostWarning} producto(s) no tienen costo registrado — sus ventas se cuentan con $0 de costo, así que el margen real de esas categorías puede ser más bajo de lo que se ve aquí. Agrégaselos en Productos → Costo para que este reporte sea exacto.</div>` : ''}
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Ventas (30 días)</div><div class="stat-value">${money(totalRevenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Costo (30 días)</div><div class="stat-value">${money(totalCost)}</div></div>
+      <div class="stat-card primary"><div class="stat-label">Ganancia (30 días)</div><div class="stat-value">${money(totalRevenue-totalCost)}</div></div>
+    </div>
+    ${rows.length===0 ? `<div class="empty-state">Sin ventas en los últimos 30 días.</div>` :
+      rows.map(r=>`
+        <div class="list-row">
+          <div class="row-main">
+            <div class="row-title">${r.cat}</div>
+            <div class="row-sub">${r.units} vendido(s) · Ventas: ${money(r.revenue)} · Costo: ${money(r.cost)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:800;color:${r.margin>=0?'var(--green)':'var(--rose)'};">${money(r.margin)}</div>
+            <div class="row-sub">${r.marginPct.toFixed(0)}% margen</div>
+          </div>
+        </div>
+      `).join('')}
   `;
 }
 function renderStatsGeneral(){
@@ -3765,6 +3912,7 @@ async function bulkDeleteProducts(){
       chunk.forEach(id=>batch.delete(db.collection('products').doc(id)));
       await batch.commit();
     }
+    logAdminAction('eliminacion_lote', 'producto', `${ids.length} producto(s)`, ids.map(id=>{const p=state.products.find(x=>x.id===id); return p?p.name:id;}).join(', ').slice(0,500));
     state.products = state.products.filter(p=>!ids.includes(p.id));
     state.selectedProducts = [];
     showToast(`${ids.length} producto(s) eliminado(s)`);
@@ -4326,6 +4474,7 @@ function renderCajeros(){
   return `
     <div class="note-box">Aquí administras a las personas que trabajan contigo: cajeros que usan el Punto de Venta con su PIN, colaboradores con acceso limitado y personalizable al panel, y quién debería enterarse de qué (ventas nuevas, pedidos, stock bajo). Crear la cuenta de acceso (administrador o colaborador) todavía se hace desde la consola de Firebase — aquí solo defines qué puede ver y hacer una vez que entra.</div>
     <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.cashierModal={role:'cajero',notify:{},permissions:{}};render()">+ Agregar</button>
+    <button class="btn-outline" style="margin-bottom:14px;margin-left:8px;" onclick="openAuditLog()">${icon('history',14)} Ver bitácora de acciones</button>
     <div class="panel-title" style="margin-bottom:12px;">Usuarios (${state.cashiers.length})</div>
     ${state.cashiers.length===0 ? `<div class="empty-state">Aún no has agregado a nadie.</div>` :
       state.cashiers.map(c=>`
