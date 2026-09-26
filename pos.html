@@ -4,11 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Punto de venta — La Casa de los Placeres</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
@@ -69,8 +71,9 @@
      propio, borde y sombra más marcados al usarlo. */
   .search-row{position:relative;}
   .search-row svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-soft);pointer-events:none;}
-  .search-row input{width:100%;padding:14px 14px 14px 42px;border-radius:var(--radius-md);border:1.5px solid var(--border);font-size:16px;font-weight:500;background:var(--surface);transition:border-color .15s ease,box-shadow .15s ease;box-shadow:var(--shadow-sm);}
+  .search-row input{width:100%;padding:14px 46px 14px 42px;border-radius:var(--radius-md);border:1.5px solid var(--border);font-size:16px;font-weight:500;background:var(--surface);transition:border-color .15s ease,box-shadow .15s ease;box-shadow:var(--shadow-sm);}
   .search-row input:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px rgba(153,52,119,0.14);}
+  .search-row .scan-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);}
   .cats{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;}
   .cats::-webkit-scrollbar{display:none;}
   .cat-chip{flex-shrink:0;padding:8px 14px;min-height:38px;display:inline-flex;align-items:center;border-radius:var(--radius-sm);background:var(--surface);border:1.5px solid var(--border);color:var(--ink-soft);font-size:12.5px;font-weight:600;white-space:nowrap;transition:all .15s ease;}
@@ -181,6 +184,7 @@ let state = {
   newCustomerMode:false, newCustomerName:"", newCustomerPhone:"", newCustomerAddress:"",
   manualDiscount:null, discountModalOpen:false, discountType:"fixed", discountValueInput:"", discountCouponInput:"", discountReasonInput:"", discountError:"",
   saleNotes:"", notesModalOpen:false, notesDraft:"",
+  barcodeScannerOpen:false,
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -230,6 +234,7 @@ function icon(name, size){
     'alert-triangle':'<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>',
     'chevron-right':'<path d="m9 18 6-6-6-6"/>',
+    camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -240,6 +245,65 @@ function onPosSearchInput(v){
   render();
   const i = document.getElementById('pos-search-input');
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+// Un escáner de código de barras físico (USB o Bluetooth) casi siempre funciona como si fuera
+// un teclado: "escribe" el código carácter por carácter y al final manda un Enter, solo. Por
+// eso basta con que el buscador esté enfocado — no hace falta ninguna integración especial más
+// que reconocer ese Enter y, si el texto coincide exacto con el SKU de un producto, agregarlo
+// solo al carrito en vez de dejarlo como una búsqueda de texto cualquiera.
+function handlePosSearchKeydown(e){
+  if(e.key !== 'Enter') return;
+  const raw = state.search.trim();
+  if(!raw) return;
+  const match = state.products.find(p=>p.sku && p.sku.toLowerCase()===raw.toLowerCase());
+  if(!match){ showToast('Ningún producto tiene ese código'); return; }
+  addToCart(match.id);
+  state.search = ''; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render();
+  const i = document.getElementById('pos-search-input');
+  if(i) i.focus();
+}
+/* ---- Escaneo con la cámara del celular (para cuando no tienes un lector físico a la mano) ---- */
+let posScannerInstance = null;
+function openBarcodeScanner(){
+  state.barcodeScannerOpen = true; render();
+  setTimeout(()=>{
+    if(typeof Html5Qrcode === 'undefined'){ showToast('No se pudo cargar el lector de cámara — revisa tu conexión'); closeBarcodeScanner(); return; }
+    posScannerInstance = new Html5Qrcode('barcode-scanner-view');
+    posScannerInstance.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 260, height: 140 } },
+      (decodedText)=> onBarcodeScanned(decodedText),
+      ()=>{} // errores de "no encontré nada en este cuadro" — normales mientras apunta, se ignoran
+    ).catch(()=>{
+      showToast('No se pudo abrir la cámara — revisa que le hayas dado permiso a este sitio');
+      closeBarcodeScanner();
+    });
+  }, 80);
+}
+function onBarcodeScanned(code){
+  const match = state.products.find(p=>p.sku && p.sku.toLowerCase()===code.trim().toLowerCase());
+  closeBarcodeScanner();
+  if(!match){ showToast(`Código "${code}" no coincide con ningún producto`); return; }
+  addToCart(match.id);
+  showToast(`Agregado: ${match.name}`);
+}
+function closeBarcodeScanner(){
+  state.barcodeScannerOpen = false;
+  if(posScannerInstance){
+    posScannerInstance.stop().then(()=>{ posScannerInstance.clear(); posScannerInstance=null; }).catch(()=>{ posScannerInstance=null; });
+  }
+  render();
+}
+function renderBarcodeScannerModal(){
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:380px;text-align:center;">
+      <h3>Escanear código de barras</h3>
+      <div class="panel-sub">Apunta la cámara al código del producto.</div>
+      <div id="barcode-scanner-view" style="margin:14px 0;border-radius:12px;overflow:hidden;"></div>
+      <button class="btn-cancel" style="width:100%;" onclick="closeBarcodeScanner()">Cancelar</button>
+    </div>
+  </div>`;
 }
 // El catálogo puede tener cientos de productos: en vez de dibujar todas las tarjetas
 // de golpe (lento en tablets y hace scroll interminable), se muestran de a poco con
@@ -690,6 +754,17 @@ function renderNotesModal(){
   </div>`;
 }
 
+// Igual que en admin.html: registra cada movimiento de inventario para el historial por
+// producto ("Ver movimientos" en su ficha, dentro del panel de administración).
+async function logStockMovement(productId, type, qtyChange, note, centerId){
+  if(!qtyChange) return;
+  try{
+    await db.collection('stockMovements').add({
+      productId, type, qtyChange, note: note||'', centerId: centerId||null,
+      date: new Date().toISOString(), userEmail: state.activeCashier ? state.activeCashier.name : '',
+    });
+  }catch(e){ console.error('No se pudo registrar el movimiento de inventario', e); }
+}
 async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
   if(!state.activeCashRegister){ showToast('Abre la caja antes de vender'); return; }
@@ -719,6 +794,7 @@ async function chargeSale(){
     const orderNumber = await getNextOrderNumber();
     await Promise.all(items.map(it=>{
       const p = state.products.find(x=>x.id===it.id);
+      logStockMovement(it.id, 'venta_pos', -it.qty, `Venta #${String(orderNumber).padStart(4,'0')}`, centerId);
       if(it.variantId){
         const v = (p.variants||[]).find(x=>x.id===it.variantId);
         v.stock = Math.max(0, (v.stock||0) - it.qty);
@@ -867,7 +943,7 @@ function renderPOS(){
     </div>` : ''}
     <div class="pos-body">
       <div class="toolbar">
-        <div class="search-row">${icon('search',17)}<input id="pos-search-input" placeholder="Buscar producto..." value="${state.search}" oninput="onPosSearchInput(this.value)"></div>
+        <div class="search-row">${icon('search',17)}<input id="pos-search-input" placeholder="Buscar o escanear código..." value="${state.search}" oninput="onPosSearchInput(this.value)" onkeydown="handlePosSearchKeydown(event)"><button class="icon-btn scan-btn" title="Escanear con la cámara" onclick="openBarcodeScanner()">${icon('camera',18)}</button></div>
         <div class="cats">
           ${frequentIds.length ? `<button class="cat-chip ${state.activeCat===FREQUENT_CAT?'active':''}" onclick="state.activeCat='${FREQUENT_CAT}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${icon('star',13)} Frecuentes</button>` : ''}
           ${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${c}</button>`).join('')}
@@ -1035,6 +1111,7 @@ function render(){
     if(state.customerPickerOpen) html += renderCustomerPickerModal();
     if(state.discountModalOpen) html += renderDiscountModal();
     if(state.notesModalOpen) html += renderNotesModal();
+    if(state.barcodeScannerOpen) html += renderBarcodeScannerModal();
     root.innerHTML = html;
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }

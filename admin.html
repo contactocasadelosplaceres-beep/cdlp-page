@@ -519,6 +519,7 @@ let state = {
   storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null,
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
+  productHistoryOpen:false, productHistoryProductId:null, productHistoryLoading:false, productHistoryItems:[],
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -819,6 +820,7 @@ function icon(name, size){
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
     check:'<path d="M20 6 9 17l-5-5"/>',
+    history:'<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>',
     link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     'eye-off':'<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><path d="M2 2l20 20"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>',
     trash:'<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
@@ -1691,7 +1693,7 @@ async function saveProduct(p){
   const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
   if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
   const payload = {
-    name:p.name, sku:p.sku||'', location:p.location||'', cat:p.cat, categories:p.categories||[p.cat],
+    name:p.name, sku:p.sku||'', location:p.location||'', expirationDate:p.expirationDate||'', cat:p.cat, categories:p.categories||[p.cat],
     price:p.price, promoPrice:p.promoPrice||0, cost:p.cost||0,
     stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[],
     stockByCenter:p.stockByCenter||{}, hidden: !!p.hidden,
@@ -1699,6 +1701,16 @@ async function saveProduct(p){
   };
   try{
     if(p.id){
+      const old = state.products.find(x=>x.id===p.id);
+      if(old){
+        const oldSBC = old.stockByCenter||{};
+        const newSBC = payload.stockByCenter||{};
+        const centerIds = new Set([...Object.keys(oldSBC), ...Object.keys(newSBC)]);
+        centerIds.forEach(cid=>{
+          const diff = (newSBC[cid]||0) - (oldSBC[cid]||0);
+          if(diff) logStockMovement(p.id, 'ajuste_manual', diff, 'Editado a mano en la ficha del producto', cid);
+        });
+      }
       await db.collection('products').doc(p.id).set(payload);
       const idx = state.products.findIndex(x=>x.id===p.id); state.products[idx] = {id:p.id, ...payload};
     }else{
@@ -1819,6 +1831,17 @@ async function deleteProduct(id){
     showToast('No se pudo eliminar: ' + (e.message||'error desconocido'));
   }
 }
+// Guarda un renglón en el historial de movimientos de un producto — la base del "Ver
+// movimientos" que se ve desde su ficha. qtyChange positivo = entró inventario, negativo = salió.
+async function logStockMovement(productId, type, qtyChange, note, centerId){
+  if(!qtyChange) return;
+  try{
+    await db.collection('stockMovements').add({
+      productId, type, qtyChange, note: note||'', centerId: centerId||null,
+      date: new Date().toISOString(), userEmail: state.user ? state.user.email : '',
+    });
+  }catch(e){ console.error('No se pudo registrar el movimiento de inventario', e); }
+}
 async function updateOrderStatus(id,status){
   const o=state.orders.find(x=>x.id===id); if(!o) return;
   const prevStatus = o.status;
@@ -1844,6 +1867,7 @@ async function adjustStockForSale(sale, sign){
     if(!it.id || it.id==='promo_buyxpayy') return;
     const p = state.products.find(x=>x.id===it.id);
     if(!p) return;
+    logStockMovement(p.id, sign>0?'cancelacion_pos':'reactivacion_pos', sign*it.qty, `Venta ${formatFolio(sale.orderNumber)}`);
     if(it.variantId){
       const v = (p.variants||[]).find(x=>x.id===it.variantId);
       if(v) v.stock = Math.max(0, (v.stock||0) + sign*it.qty);
@@ -2044,6 +2068,62 @@ function scanForRecompress(){
   state.recompressCandidates = candidates;
   state.recompressScanning = false;
   render();
+}
+const STOCK_MOVEMENT_LABELS = {
+  venta_pos: 'Venta en Punto de Venta',
+  cancelacion_pos: 'Venta cancelada (se restauró)',
+  reactivacion_pos: 'Venta reactivada (se descontó de nuevo)',
+  ajuste_manual: 'Editado a mano en la ficha',
+  transferencia_salida: 'Salió por transferencia',
+  transferencia_entrada: 'Entró por transferencia',
+  auditoria: 'Ajuste por auditoría de inventario',
+};
+function openProductHistory(id){
+  state.productHistoryOpen = true;
+  state.productHistoryProductId = id;
+  state.productHistoryLoading = true;
+  state.productHistoryItems = [];
+  render();
+  loadProductHistory(id);
+}
+async function loadProductHistory(id){
+  try{
+    // Sin orderBy en la consulta a propósito: combinar where + orderBy en campos distintos pide
+    // crear un índice compuesto en Firestore la primera vez — ordenamos aquí mismo para
+    // evitarte ese paso.
+    const snap = await db.collection('stockMovements').where('productId','==',id).get();
+    const items = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    items.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    state.productHistoryItems = items.slice(0,100);
+  }catch(e){ console.error('No se pudo cargar el historial de este producto', e); state.productHistoryItems = []; }
+  state.productHistoryLoading = false; render();
+}
+function closeProductHistory(){ state.productHistoryOpen=false; state.productHistoryProductId=null; render(); }
+function renderProductHistoryModal(){
+  const p = state.products.find(x=>x.id===state.productHistoryProductId);
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:520px;max-height:80vh;overflow-y:auto;">
+      <h3>Historial de movimientos</h3>
+      <div class="panel-sub" style="margin-top:-6px;">${p ? p.name : ''}</div>
+      ${state.productHistoryLoading ? `<div class="empty-state">Cargando…</div>` :
+        state.productHistoryItems.length===0 ? `<div class="empty-state">Todavía no hay movimientos registrados para este producto (los movimientos se empiezan a guardar desde ahora — lo que pasó antes de hoy no queda aquí).</div>` :
+        state.productHistoryItems.map(m=>{
+          const center = state.centers.find(c=>c.id===m.centerId);
+          return `
+          <div class="list-row" style="padding:10px 0;">
+            <div class="row-main">
+              <div class="row-title" style="font-size:13px;">${STOCK_MOVEMENT_LABELS[m.type]||m.type}${center?` · ${center.name}`:''}</div>
+              <div class="row-sub">${new Date(m.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}${m.note?` · ${m.note}`:''}</div>
+            </div>
+            <div style="font-weight:800;color:${m.qtyChange>0?'var(--green)':'var(--red)'};">${m.qtyChange>0?'+':''}${m.qtyChange}</div>
+          </div>`;
+        }).join('')}
+      <div class="modal-actions">
+        <button class="btn-cancel" style="flex:1;" onclick="closeProductHistory()">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
 }
 function openRecompressTool(){
   state.recompressOpen = true; state.recompressScanning = true; state.recompressCandidates = []; state.recompressResult = null;
@@ -2748,6 +2828,13 @@ function stockStatusBadge(p){
   if(p.stock<=3) return `<span class="status-badge status-low">${icon('alert-triangle',11)} Bajo · ${p.stock}</span>`;
   return `<span class="status-badge status-ok">${icon('check',11)} Disponible · ${p.stock}</span>`;
 }
+function expirationBadge(p){
+  if(!p.expirationDate) return '';
+  const days = Math.ceil((new Date(p.expirationDate+'T00:00:00') - new Date())/86400000);
+  if(days < 0) return `<span class="status-badge status-out">${icon('alert-triangle',11)} Caducado</span>`;
+  if(days <= 30) return `<span class="status-badge status-low">${icon('alert-triangle',11)} Caduca en ${days} día${days===1?'':'s'}</span>`;
+  return '';
+}
 
 function renderAdmin(){
   // El refresco automático de "Tiempo real" solo debe seguir corriendo mientras esa
@@ -2830,6 +2917,7 @@ function renderAdmin(){
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
   ${state.bgFixOpen ? renderBgFixModal() : ''}
   ${state.recompressOpen ? renderRecompressModal() : ''}
+  ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
   `;
 }
 
@@ -2971,6 +3059,8 @@ const HEALTH_CHECKS_DEF = [
   {key:'noPrice', label:'Sin precio'},
   {key:'duplicateSku', label:'SKU repetido en más de un producto'},
   {key:'outOfStockVisible', label:'Agotado y aún visible en la tienda'},
+  {key:'expiringSoon', label:'Caduca en los próximos 30 días'},
+  {key:'expired', label:'Ya caducado'},
 ];
 function healthDismissKey(productId, checkKey){ return productId+'::'+checkKey; }
 function computeCatalogHealth(){
@@ -2984,6 +3074,12 @@ function computeCatalogHealth(){
     noPrice: state.products.filter(p=>!(p.price>0)),
     duplicateSku: state.products.filter(p=>p.sku&&p.sku.trim()&&skuCounts[p.sku.trim()]>1),
     outOfStockVisible: state.products.filter(p=>!p.hidden && (p.stock||0)<=0),
+    expiringSoon: state.products.filter(p=>{
+      if(!p.expirationDate) return false;
+      const days = Math.ceil((new Date(p.expirationDate+'T00:00:00') - new Date())/86400000);
+      return days>=0 && days<=30;
+    }),
+    expired: state.products.filter(p=>p.expirationDate && new Date(p.expirationDate+'T00:00:00') < new Date()),
   };
   const dismissedSet = new Set(state.settings.dismissedHealthItems||[]);
   return HEALTH_CHECKS_DEF.map(c=>{
@@ -3599,7 +3695,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter){
         <div class="row-main">
           <div class="row-title">${p.name} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
           <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
-          <div style="margin-top:5px;">${stockStatusBadge(p)}</div>
+          <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">${stockStatusBadge(p)}${expirationBadge(p)}</div>
         </div>
         <div class="row-actions">
           ${catFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de la categoría ${catFilter}" onclick="removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x')}</button>` : ''}
@@ -4370,6 +4466,8 @@ async function commitTransfer(){
     if(!p.stockByCenter) p.stockByCenter = {};
     p.stockByCenter[state.transferFrom] = (p.stockByCenter[state.transferFrom]||0) - qty;
     p.stockByCenter[state.transferTo] = (p.stockByCenter[state.transferTo]||0) + qty;
+    logStockMovement(pid, 'transferencia_salida', -qty, `Transferencia a ${toCenter.name}`, state.transferFrom);
+    logStockMovement(pid, 'transferencia_entrada', qty, `Transferencia desde ${fromCenter.name}`, state.transferTo);
     batch.update(db.collection('products').doc(pid), {stockByCenter: p.stockByCenter});
     transferItems.push({productId:pid, name:p.name, qty});
   });
@@ -5740,8 +5838,10 @@ async function commitAudit(applyAdjustment){
         const p = state.products.find(x=>x.id===r.pid);
         if(!p) return;
         if(!p.stockByCenter) p.stockByCenter = {};
+        const before = p.stockByCenter[state.auditCenter]||0;
         p.stockByCenter[state.auditCenter] = r.counted;
         p.stock = totalStock(p);
+        if(r.counted !== before) logStockMovement(r.pid, 'auditoria', r.counted-before, `Auditoría en ${center.name}`, state.auditCenter);
         batch.update(db.collection('products').doc(r.pid), {stockByCenter:p.stockByCenter, stock:p.stock});
       });
       batch.set(ref, auditDoc);
@@ -6651,6 +6751,15 @@ function renderProductModal(){
         </div>
       </div>
 
+      <div class="two-col">
+        <div class="form-field"><label>Fecha de caducidad (opcional)</label>
+          <input id="pf-expiration" type="date" value="${p.expirationDate||''}" oninput="state.productModal.expirationDate=this.value">
+        </div>
+        <div class="form-field"><label>Historial de este producto</label>
+          <button class="btn-outline" style="width:100%;" onclick="openProductHistory('${p.id}')">${icon('history',14)} Ver movimientos</button>
+        </div>
+      </div>
+
       <div class="form-field" style="margin-bottom:16px;">
         <label>Código de barras</label>
         ${p.sku ? `
@@ -6962,6 +7071,7 @@ function handleSaveProduct(existingId){
   const name = document.getElementById('pf-name').value.trim();
   const sku = document.getElementById('pf-sku').value.trim();
   const location = document.getElementById('pf-location').value.trim();
+  const expirationDate = document.getElementById('pf-expiration').value || '';
   const price = Number(document.getElementById('pf-price').value)||0;
   const promoPrice = Number(document.getElementById('pf-promo').value)||0;
   const cost = Number(document.getElementById('pf-cost').value)||0;
@@ -6973,7 +7083,7 @@ function handleSaveProduct(existingId){
   const stockByCenter = state.productModal.stockByCenter || {};
   const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
   saveProduct({
-    id: existingId||null, name, sku, location, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
+    id: existingId||null, name, sku, location, expirationDate, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
     variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
   });
