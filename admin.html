@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de administración — La Casa de los Placeres</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <script>
   // Se aplica antes de pintar nada, para que no haya un parpadeo de claro→oscuro al cargar.
   try{ if(localStorage.getItem('adminTheme')==='dark') document.documentElement.setAttribute('data-theme','dark'); }catch(e){}
@@ -13,6 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"></script>
 <style>
   :root{
     --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
@@ -455,7 +457,7 @@ const DEFAULT_SETTINGS = {
   wholesaleTiers:[],
   coupons:[],
   promotions:[],
-  logoUrl:"",
+  logoUrl:"logo.png",
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -1689,7 +1691,7 @@ async function saveProduct(p){
   const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
   if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
   const payload = {
-    name:p.name, sku:p.sku||'', cat:p.cat, categories:p.categories||[p.cat],
+    name:p.name, sku:p.sku||'', location:p.location||'', cat:p.cat, categories:p.categories||[p.cat],
     price:p.price, promoPrice:p.promoPrice||0, cost:p.cost||0,
     stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[],
     stockByCenter:p.stockByCenter||{}, hidden: !!p.hidden,
@@ -3524,7 +3526,7 @@ function renderProductos(){
   const needFilter = state.productNeedFilter || 'Todas';
   const needsList = state.settings.needs || DEFAULT_NEEDS;
   let filtered = state.products;
-  if(q) filtered = filtered.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  if(q) filtered = filtered.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
   if(catFilter!=='Todas') filtered = filtered.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
   if(needFilter!=='Todas') filtered = filtered.filter(p => (p.needs||[]).includes(needFilter));
   const filterCount = (q?1:0) + (catFilter!=='Todas'?1:0) + (needFilter!=='Todas'?1:0);
@@ -3546,7 +3548,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="openRecompressTool()">Aligerar fotos ya guardadas</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
-      <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría o SKU..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
+      <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría, SKU o ubicación..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
     </div>
     <div class="status-filter">
       <button class="${catFilter==='Todas'?'active':''}" onclick="state.productCatFilter='Todas';resetShowMore('productListShowMore');render()">Todas las categorías</button>
@@ -3578,6 +3580,7 @@ function renderProductos(){
         ${selected.length>0 ? `
           <div class="bulk-actions-bar">
             <span>${selected.length} seleccionado${selected.length===1?'':'s'}</span>
+            <button class="btn-tertiary" onclick='printProductLabelsBulk(${JSON.stringify(selected)})'>${icon('printer',14)} Imprimir etiquetas</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(true)">Ocultar</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(false)">Mostrar</button>
             <button class="btn-danger-text" onclick="bulkDeleteProducts()">${icon('trash',14)} Eliminar</button>
@@ -3595,7 +3598,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter){
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main">
           <div class="row-title">${p.name} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
-          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
+          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
           <div style="margin-top:5px;">${stockStatusBadge(p)}</div>
         </div>
         <div class="row-actions">
@@ -6639,11 +6642,27 @@ function renderProductModal(){
       <div class="two-col">
         <div class="form-field"><label>SKU</label>
           <div style="display:flex;gap:6px;">
-            <input id="pf-sku" value="${p.sku||''}" style="flex:1;" oninput="state.productModal.sku=this.value">
+            <input id="pf-sku" value="${p.sku||''}" style="flex:1;" oninput="state.productModal.sku=this.value;render()">
             <button class="btn-outline" style="padding:0 12px;white-space:nowrap;" onclick="regenerateSKU()">Generar</button>
           </div>
         </div>
-        <div class="form-field"><label>Categorías</label>
+        <div class="form-field"><label>Ubicación en almacén</label>
+          <input id="pf-location" placeholder="Ej. Pasillo 2, Estante C" value="${p.location||''}" oninput="state.productModal.location=this.value">
+        </div>
+      </div>
+
+      <div class="form-field" style="margin-bottom:16px;">
+        <label>Código de barras</label>
+        ${p.sku ? `
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--bg);border-radius:10px;padding:10px;">
+            <svg id="pf-barcode-svg"></svg>
+            <button class="btn-outline" onclick="printProductLabel('${p.id}')">${icon('printer',14)} Imprimir etiqueta</button>
+          </div>
+        ` : `<div class="panel-sub" style="margin:4px 0 0;">Genera o escribe un SKU arriba para poder crear su código de barras.</div>`}
+      </div>
+
+      <div class="form-field">
+        <label>Categorías</label>
           <div style="max-height:110px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;">
             ${state.settings.categories.map(c=>`
               <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
@@ -6651,7 +6670,6 @@ function renderProductModal(){
                 ${c}
               </label>`).join('')}
           </div>
-        </div>
       </div>
 
       <div class="form-section-label">Precio</div>
@@ -6815,8 +6833,60 @@ function generateSKU(product){
 function regenerateSKU(){
   const name = document.getElementById('pf-name').value.trim();
   const sku = generateSKU({name, categories: state.productModal.categories, cat: state.productModal.cat});
-  document.getElementById('pf-sku').value = sku;
   state.productModal.sku = sku;
+  render();
+}
+// Dibuja el código de barras (Code128, a partir del SKU) dentro del modal de edición de
+// producto. Se llama de nuevo después de cada render mientras el modal esté abierto, porque
+// render() reconstruye todo el HTML y el dibujo del código de barras no sobrevive a eso.
+function drawProductBarcode(){
+  try{ JsBarcode('#pf-barcode-svg', state.productModal.sku, {format:'CODE128', displayValue:true, fontSize:13, height:44, margin:4}); }
+  catch(e){ console.error('No se pudo generar el código de barras', e); }
+}
+function printProductLabel(id){
+  const p = state.products.find(x=>x.id===id) || state.productModal;
+  if(!p || !p.sku){ showToast('Este producto no tiene SKU todavía'); return; }
+  const w = window.open('', '_blank', 'width=420,height=320');
+  if(!w){ showToast('Tu navegador bloqueó la ventana de impresión — permite ventanas emergentes para este sitio'); return; }
+  w.document.write(`<html><head><title>Etiqueta — ${(p.name||'').replace(/</g,'&lt;')}</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"><\/script>
+    <style>body{font-family:sans-serif;text-align:center;padding:16px;} .name{font-size:13px;font-weight:700;margin-bottom:4px;} .price{font-size:16px;font-weight:800;margin-top:6px;}</style>
+    </head><body>
+    <div class="name">${(p.name||'').replace(/</g,'&lt;')}</div>
+    <svg id="lbl"></svg>
+    <div class="price">${money(p.promoPrice>0?p.promoPrice:p.price)}</div>
+    <script>
+      JsBarcode("#lbl", ${JSON.stringify(p.sku)}, {format:"CODE128", displayValue:true, fontSize:12, height:42, margin:2});
+      window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };
+    <\/script>
+    </body></html>`);
+  w.document.close();
+}
+function printProductLabelsBulk(ids){
+  const products = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const withSku = products.filter(p=>p.sku);
+  if(!withSku.length){ showToast('Ninguno de los seleccionados tiene SKU todavía — genera SKU primero'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Tu navegador bloqueó la ventana de impresión — permite ventanas emergentes para este sitio'); return; }
+  w.document.write(`<html><head><title>Etiquetas (${withSku.length})</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"><\/script>
+    <style>
+      body{font-family:sans-serif;margin:10px;}
+      .sheet{display:flex;flex-wrap:wrap;gap:10px;}
+      .label{width:180px;border:1px dashed #999;text-align:center;padding:8px;page-break-inside:avoid;}
+      .name{font-size:11px;font-weight:700;line-height:1.3;}
+      .price{font-size:13px;font-weight:800;margin-top:2px;}
+    </style></head><body>
+    <div class="sheet">
+      ${withSku.map((p,i)=>`<div class="label"><div class="name">${(p.name||'').replace(/</g,'&lt;')}</div><svg id="lbl${i}"></svg><div class="price">${money(p.promoPrice>0?p.promoPrice:p.price)}</div></div>`).join('')}
+    </div>
+    <script>
+      ${withSku.map((p,i)=>`JsBarcode("#lbl${i}", ${JSON.stringify(p.sku)}, {format:"CODE128", displayValue:true, fontSize:10, height:32, margin:2, width:1.4});`).join('\n')}
+      window.onload = function(){ setTimeout(function(){ window.print(); }, 300); };
+    <\/script>
+    </body></html>`);
+  w.document.close();
+  if(withSku.length < products.length) showToast(`Se imprimieron ${withSku.length} de ${products.length} — a los demás les falta SKU`);
 }
 
 /* ---- Variantes ---- */
@@ -6891,6 +6961,7 @@ function setVariantField(variantId, field, value){
 function handleSaveProduct(existingId){
   const name = document.getElementById('pf-name').value.trim();
   const sku = document.getElementById('pf-sku').value.trim();
+  const location = document.getElementById('pf-location').value.trim();
   const price = Number(document.getElementById('pf-price').value)||0;
   const promoPrice = Number(document.getElementById('pf-promo').value)||0;
   const cost = Number(document.getElementById('pf-cost').value)||0;
@@ -6902,7 +6973,7 @@ function handleSaveProduct(existingId){
   const stockByCenter = state.productModal.stockByCenter || {};
   const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
   saveProduct({
-    id: existingId||null, name, sku, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
+    id: existingId||null, name, sku, location, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
     variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
   });
@@ -6981,6 +7052,7 @@ function render(){
   if(state.totpRequired && !state.totpVerified){ root.innerHTML = renderTotpChallenge(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
+  if(state.productModal && document.getElementById('pf-barcode-svg')){ drawProductBarcode(); }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   const pinField = document.getElementById('pin-field'); if(pinField && !focusInfo) pinField.focus();
   const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
