@@ -186,6 +186,7 @@ let state = {
   saleNotes:"", notesModalOpen:false, notesDraft:"",
   barcodeScannerOpen:false,
   salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
+  exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null,
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -237,6 +238,7 @@ function icon(name, size){
     'chevron-right':'<path d="m9 18 6-6-6-6"/>',
     camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>',
     receipt:'<path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 2Z"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+    'refresh-cw':'<path d="M21 12a9 9 0 0 1-15.5 6.3L3 15"/><path d="M3 12a9 9 0 0 1 15.5-6.3L21 9"/><path d="M21 3v6h-6"/><path d="M3 21v-6h6"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
@@ -264,7 +266,90 @@ function handlePosSearchKeydown(e){
   const i = document.getElementById('pos-search-input');
   if(i) i.focus();
 }
-/* ---- Escaneo con la cámara del celular (para cuando no tienes un lector físico a la mano) ---- */
+/* ---- Cambio de producto/talla: "esto por aquello", sin cancelar y volver a cobrar ---- */
+function openExchangeModal(){
+  state.exchangeModalOpen = true; state.exchangeSearchOut=''; state.exchangeSearchIn=''; state.exchangeOut=null; state.exchangeIn=null;
+  render();
+}
+function closeExchangeModal(){ state.exchangeModalOpen = false; render(); }
+function pickExchangeProduct(side, id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  const entry = {id:p.id, name:p.name, price: effectivePrice(p), qty:1};
+  if(side==='out'){ state.exchangeOut = entry; state.exchangeSearchOut=''; }
+  else{ state.exchangeIn = entry; state.exchangeSearchIn=''; }
+  render();
+}
+function setExchangeQty(side, qty){
+  qty = Math.max(1, qty);
+  if(side==='out' && state.exchangeOut) state.exchangeOut.qty = qty;
+  if(side==='in' && state.exchangeIn) state.exchangeIn.qty = qty;
+  render();
+}
+async function confirmExchange(){
+  const out = state.exchangeOut, inp = state.exchangeIn;
+  if(!out || !inp){ showToast('Elige el producto que regresa y el que se lleva'); return; }
+  const pIn = state.products.find(x=>x.id===inp.id);
+  const availableIn = centerStock(pIn, state.activeCenter.id);
+  if(availableIn < inp.qty){ showToast(`Solo hay ${availableIn} disponible(s) de "${inp.name}" en ${state.activeCenter.name}`); return; }
+  const diff = (inp.price*inp.qty) - (out.price*out.qty);
+  try{
+    const pOut = state.products.find(x=>x.id===out.id);
+    if(pOut){
+      pOut.stockByCenter[state.activeCenter.id] = (pOut.stockByCenter[state.activeCenter.id]||0) + out.qty;
+      pOut.stock = Object.values(pOut.stockByCenter).reduce((s,n)=>s+(n||0),0);
+      await db.collection('products').doc(pOut.id).update({stockByCenter:pOut.stockByCenter, stock:pOut.stock});
+      logStockMovement(pOut.id, 'cambio_producto', out.qty, `Cambio: regresó por "${inp.name}"`, state.activeCenter.id);
+    }
+    pIn.stockByCenter[state.activeCenter.id] = (pIn.stockByCenter[state.activeCenter.id]||0) - inp.qty;
+    pIn.stock = Object.values(pIn.stockByCenter).reduce((s,n)=>s+(n||0),0);
+    await db.collection('products').doc(pIn.id).update({stockByCenter:pIn.stockByCenter, stock:pIn.stock});
+    logStockMovement(pIn.id, 'cambio_producto', -inp.qty, `Cambio: se llevó en vez de "${out.name}"`, state.activeCenter.id);
+    await db.collection('productExchanges').add({
+      date: new Date().toISOString(), centerId: state.activeCenter.id, cashierName: state.activeCashier.name,
+      outProduct: out, inProduct: inp, priceDifference: diff,
+    });
+    showToast(diff>0 ? `Cambio registrado — el cliente paga ${money(diff)} más` : diff<0 ? `Cambio registrado — se le regresan ${money(-diff)}` : 'Cambio registrado — sin diferencia de precio');
+    closeExchangeModal();
+  }catch(e){ console.error('No se pudo registrar el cambio', e); showToast('No se pudo completar el cambio'); }
+}
+function renderExchangeModal(){
+  const diff = (state.exchangeOut&&state.exchangeIn) ? (state.exchangeIn.price*state.exchangeIn.qty) - (state.exchangeOut.price*state.exchangeOut.qty) : null;
+  function pickerBlock(side, label, entry, searchVal){
+    const q = searchVal.trim().toLowerCase();
+    const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,8) : [];
+    return `
+      <div class="form-field"><label>${label}</label>
+        ${entry ? `
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;">
+            <span>${entry.name}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="icon-btn" onclick="setExchangeQty('${side}', ${entry.qty-1})">−</button>
+              <span>${entry.qty}</span>
+              <button class="icon-btn" onclick="setExchangeQty('${side}', ${entry.qty+1})">+</button>
+              <button class="icon-btn danger" onclick="state.exchange${side==='out'?'Out':'In'}=null;render()">${icon('x',14)}</button>
+            </div>
+          </div>
+        ` : `
+          <input class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${searchVal}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render()">
+          ${results.length>0 ? `<div style="max-height:160px;overflow-y:auto;margin-top:6px;">${results.map(p=>`
+            <button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="pickExchangeProduct('${side}','${p.id}')">${p.name} — ${money(effectivePrice(p))}</button>
+          `).join('')}</div>` : ''}
+        `}
+      </div>`;
+  }
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:420px;">
+      <h3>Cambio de producto</h3>
+      <div class="panel-sub">Para cuando alguien se lleva otra cosa (u otra talla) en vez de lo que compró — sin cancelar la venta original.</div>
+      ${pickerBlock('out', 'Producto que regresa', state.exchangeOut, state.exchangeSearchOut)}
+      ${pickerBlock('in', 'Producto que se lleva', state.exchangeIn, state.exchangeSearchIn)}
+      ${diff!==null ? `<div class="panel-sub" style="font-weight:700;margin:10px 0;">${diff>0?`El cliente paga ${money(diff)} más`:diff<0?`Se le regresan ${money(-diff)}`:'Sin diferencia de precio'}</div>` : ''}
+      <button class="btn-primary" style="width:100%;margin-top:6px;" onclick="confirmExchange()">Confirmar cambio</button>
+      <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="closeExchangeModal()">Cancelar</button>
+    </div>
+  </div>`;
+}
 let posScannerInstance = null;
 function openBarcodeScanner(){
   state.barcodeScannerOpen = true; render();
@@ -987,6 +1072,7 @@ function renderPOS(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
         <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
         <button class="pill-btn" onclick="openSalesList()">${icon('receipt')} Ventas</button>
+        <button class="pill-btn" onclick="openExchangeModal()">${icon('refresh-cw')} Cambio</button>
         <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
         <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
