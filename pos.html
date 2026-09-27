@@ -332,7 +332,7 @@ function renderExchangeModal(){
             </div>
           </div>
         ` : `
-          <input class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${searchVal}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render()">
+          <input id="exchange-search-${side}" class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${searchVal}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render()">
           ${results.length>0 ? `<div style="max-height:160px;overflow-y:auto;margin-top:6px;">${results.map(p=>`
             <button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="pickExchangeProduct('${side}','${p.id}')">${p.name} — ${money(effectivePrice(p))}</button>
           `).join('')}</div>` : ''}
@@ -382,7 +382,7 @@ function renderWarehouseModal(){
     <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
       <h3>Almacén</h3>
       <p class="panel-sub">Busca un producto para ver dónde está ubicado. Si no coincide con lo que ves, deja una nota — le llega directo a Mensajes.</p>
-      <input class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
+      <input id="warehouse-search-input" class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
       <div style="margin-top:10px;">
         ${!q ? '' : results.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` :
           results.map(p=>`
