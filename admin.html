@@ -1812,7 +1812,7 @@ async function saveProduct(p){
   const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
   if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
   const payload = {
-    name:p.name, sku:p.sku||'', location:p.location||'', expirationDate:p.expirationDate||'', cat:p.cat, categories:p.categories||[p.cat],
+    name:p.name, sku:p.sku||'', location:p.location||'', expirationDate:p.expirationDate||'', lowStockThreshold:p.lowStockThreshold||0, cat:p.cat, categories:p.categories||[p.cat],
     price:p.price, promoPrice:p.promoPrice||0, cost:p.cost||0,
     stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[],
     stockByCenter:p.stockByCenter||{}, hidden: !!p.hidden,
@@ -2907,7 +2907,7 @@ function computeMetrics(){
   const avgOrder = valid.length ? totalRevenue/valid.length : 0;
   const avgItems = valid.length ? valid.reduce((s,o)=>s+o.items.reduce((a,it)=>a+it.qty,0),0)/valid.length : 0;
   const pending = state.orders.filter(o=>['Nuevo','Preparando','En camino'].includes(o.status)).length;
-  const lowStock = state.products.filter(p=>p.stock<=3);
+  const lowStock = state.products.filter(p=>p.stock<=(p.lowStockThreshold>0?p.lowStockThreshold:3));
   const cancelRate = state.orders.length ? Math.round((cancelled.length/state.orders.length)*100) : 0;
 
   const byPhone = {};
@@ -3069,13 +3069,16 @@ function adminTabLabel(t){
   if(t==='mensajes' && state.newMessageCount>0) return `${base} <span class="tab-badge">${state.newMessageCount}</span>`;
   return base;
 }
-// Mismo criterio de "bajo stock" de siempre (p.stock<=3, ver computeMetrics) — esto solo
-// decide CÓMO se etiqueta cada uno (Agotado/Crítico/Bajo), nunca cuáles productos entran a
-// la lista. El texto y el ícono acompañan al color para que no dependa solo de éste.
+// El umbral de "bajo stock" es personalizable por producto (lowStockThreshold, editable en su
+// ficha) — si no se ha puesto uno, se usa 3 como antes. Esto solo decide CÓMO se etiqueta cada
+// uno (Agotado/Crítico/Bajo), nunca cuáles productos entran a la lista de Reabastecer pronto,
+// que usa el mismo criterio (ver computeMetrics). El texto y el ícono acompañan al color para
+// que no dependa solo de éste.
 function stockStatusBadge(p){
+  const threshold = p.lowStockThreshold>0 ? p.lowStockThreshold : 3;
   if(p.stock<=0) return `<span class="status-badge status-out">${icon('x',11)} Agotado</span>`;
   if(p.stock===1) return `<span class="status-badge status-critical">${icon('alert-triangle',11)} Crítico · ${p.stock}</span>`;
-  if(p.stock<=3) return `<span class="status-badge status-low">${icon('alert-triangle',11)} Bajo · ${p.stock}</span>`;
+  if(p.stock<=threshold) return `<span class="status-badge status-low">${icon('alert-triangle',11)} Bajo · ${p.stock}</span>`;
   return `<span class="status-badge status-ok">${icon('check',11)} Disponible · ${p.stock}</span>`;
 }
 function expirationBadge(p){
@@ -3186,7 +3189,20 @@ function computeMonthProgress(){
   const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
   const dayOfMonth = now.getDate();
   const expectedPct = (dayOfMonth/daysInMonth)*100;
-  return { revenue, goal, pct, onTrack: goal===0 || pct>=expectedPct-5, monthName: now.toLocaleDateString('es-MX',{month:'long'}) };
+  // Desglose semanal: cuánto llevas vendido ESTA semana (lunes a hoy) contra cuánto necesitarías
+  // vender por semana, en promedio, en lo que queda del mes para sí llegar a la meta.
+  const daysSinceMonday = (now.getDay()+6)%7; // lunes=0 ... domingo=6
+  const weekStart = new Date(now); weekStart.setHours(0,0,0,0); weekStart.setDate(now.getDate()-daysSinceMonday);
+  const weekRevenue = state.orders
+    .filter(o=>o.status!=='Cancelado' && new Date(o.date) >= weekStart)
+    .reduce((s,o)=>s+(o.total||0), 0);
+  const daysLeftInMonth = daysInMonth - dayOfMonth + 1; // incluye hoy
+  const weeksLeft = Math.max(daysLeftInMonth/7, 1/7);
+  const remainingGoal = Math.max(0, goal-revenue);
+  const neededPerWeek = goal>0 ? remainingGoal/weeksLeft : 0;
+  const weekPct = neededPerWeek>0 ? Math.min(100,(weekRevenue/neededPerWeek)*100) : (goal>0?100:0);
+  return { revenue, goal, pct, onTrack: goal===0 || pct>=expectedPct-5, monthName: now.toLocaleDateString('es-MX',{month:'long'}),
+    weekRevenue, neededPerWeek, weekPct };
 }
 async function saveSalesGoal(){
   const val = Number(document.getElementById('sales-goal-input').value)||0;
@@ -3215,6 +3231,15 @@ function renderResumen(){
           <div style="height:100%;border-radius:999px;background:${g.onTrack?'var(--green)':'var(--amber)'};width:${g.pct}%;transition:width .3s;"></div>
         </div>
         <div class="panel-sub" style="margin-top:8px;">${money(g.revenue)} de ${money(g.goal)} (${g.pct.toFixed(0)}%) ${g.onTrack?'— vas bien':'— un poco atrás de lo esperado a estas alturas del mes'}</div>
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft);margin-bottom:4px;">
+            <span>Esta semana (lun-hoy)</span><span>Necesitas ~${money(g.neededPerWeek)}/semana para llegar</span>
+          </div>
+          <div style="background:var(--bg);border-radius:999px;height:14px;overflow:hidden;">
+            <div style="height:100%;border-radius:999px;background:${g.weekPct>=100?'var(--green)':'var(--primary)'};width:${g.weekPct}%;transition:width .3s;"></div>
+          </div>
+          <div class="panel-sub" style="margin-top:6px;">${money(g.weekRevenue)} llevas esta semana</div>
+        </div>
       `}
     </div>
     <div class="stat-grid">
@@ -7238,9 +7263,14 @@ function renderProductModal(){
         <div class="form-field"><label>Fecha de caducidad (opcional)</label>
           <input id="pf-expiration" type="date" value="${p.expirationDate||''}" oninput="state.productModal.expirationDate=this.value">
         </div>
-        <div class="form-field"><label>Historial de este producto</label>
-          <button class="btn-outline" style="width:100%;" onclick="openProductHistory('${p.id}')">${icon('history',14)} Ver movimientos</button>
+        <div class="form-field"><label>Avisarme cuando queden (opcional)</label>
+          <input id="pf-low-stock-threshold" type="number" min="1" placeholder="3 (por default)" value="${p.lowStockThreshold||''}">
         </div>
+      </div>
+
+      <div class="form-field">
+        <label>Historial de este producto</label>
+        <button class="btn-outline" style="width:100%;" onclick="openProductHistory('${p.id}')">${icon('history',14)} Ver movimientos</button>
       </div>
 
       <div class="form-field" style="margin-bottom:16px;">
@@ -7556,6 +7586,7 @@ function handleSaveProduct(existingId){
   const sku = document.getElementById('pf-sku').value.trim();
   const location = document.getElementById('pf-location').value.trim();
   const expirationDate = document.getElementById('pf-expiration').value || '';
+  const lowStockThreshold = Number(document.getElementById('pf-low-stock-threshold').value) || 0;
   const price = Number(document.getElementById('pf-price').value)||0;
   const promoPrice = Number(document.getElementById('pf-promo').value)||0;
   const cost = Number(document.getElementById('pf-cost').value)||0;
@@ -7567,7 +7598,7 @@ function handleSaveProduct(existingId){
   const stockByCenter = state.productModal.stockByCenter || {};
   const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
   saveProduct({
-    id: existingId||null, name, sku, location, expirationDate, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
+    id: existingId||null, name, sku, location, expirationDate, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
     variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
   });
