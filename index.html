@@ -456,9 +456,19 @@ async function loadData(){
 // a que termine de bajar el catálogo completo — así el enlace abre rápido sin importar qué tan
 // grande sea el catálogo. Antes no existía forma de mandar a alguien directo a un producto: todo
 // enlace compartido caía en la página principal y la persona tenía que buscarlo desde cero.
+// También soporta ?categoria=NombreDeCategoria, para compartir el catálogo ya filtrado a una
+// categoría completa (ej. "todo lo de Ropa femenina") en vez de un solo producto.
 async function openProductFromURL(){
   const params = new URLSearchParams(location.search);
   const id = params.get('producto');
+  const catParam = params.get('categoria');
+  if(catParam){
+    const url = new URL(location.href); url.searchParams.delete('categoria');
+    history.replaceState({}, '', url.toString());
+    const match = visibleCategories().find(c=>c.toLowerCase()===catParam.toLowerCase());
+    if(match) goToCatalog(match);
+    else showToast('Esa categoría ya no está disponible');
+  }
   if(!id) return;
   let p = state.products.find(x=>x.id===id);
   if(!p){
