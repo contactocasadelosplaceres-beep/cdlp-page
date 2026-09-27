@@ -459,6 +459,7 @@ const DEFAULT_SETTINGS = {
   promotions:[],
   logoUrl:"logo.png",
   salesGoalMonthly: 0,
+  checkoutReminderProducts: [],
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -524,6 +525,7 @@ let state = {
   auditLogOpen:false, auditLogLoading:false, auditLogItems:[],
   editingGoal:false,
   commissionAgents:[], commissionAgentModal:null, assignCommissionOrderId:null,
+  checkoutReminderSearch:'',
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -5183,6 +5185,7 @@ const MARKETING_SUBPANELS = [
   {key:'mayoreo', icon:icon('package'), label:'Precios de mayoreo'},
   {key:'cupones', icon:icon('tag'), label:'Cupones de descuento'},
   {key:'promociones', icon:icon('star'), label:'Promociones automáticas'},
+  {key:'recordatorio', icon:icon('bell'), label:'Recordatorio al cobrar (POS)'},
 ];
 function renderMarketing(){
   if(state.marketingSubpanel) return renderMarketingSubpanel(state.marketingSubpanel);
@@ -5200,7 +5203,7 @@ function renderMarketing(){
 }
 function renderMarketingSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.marketingSubpanel=null;render()">‹ Volver a Marketing</button>`;
-  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones};
+  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 
@@ -6739,6 +6742,33 @@ function toggleFeatured(id, checked){
   ids = checked ? [...new Set([...ids, id])] : ids.filter(x=>x!==id);
   state.settings.featuredProductIds = ids;
   saveSettings(); render();
+}
+function toggleCheckoutReminderProduct(id, checked){
+  let ids = state.settings.checkoutReminderProducts || [];
+  ids = checked ? [...new Set([...ids, id])] : ids.filter(x=>x!==id);
+  state.settings.checkoutReminderProducts = ids;
+  saveSettings(); render();
+}
+function renderCheckoutReminderSubpanel(){
+  const ids = state.settings.checkoutReminderProducts || [];
+  const q = (state.checkoutReminderSearch||'').trim().toLowerCase();
+  const chosen = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q)).slice(0,30) : chosen;
+  return `
+  <div class="panel">
+    <div class="panel-title">Recordatorio al cobrar (Punto de Venta)</div>
+    <div class="panel-sub">Si una venta no lleva ninguno de estos productos, el Punto de Venta se detiene un momento — antes de marcar el método de pago — para sugerirle al cajero ofrecerlos. Útil para no dejar de ofrecer lubricante u otros básicos.</div>
+    <input id="checkout-reminder-search" placeholder="Buscar producto por nombre..." value="${state.checkoutReminderSearch||''}" oninput="state.checkoutReminderSearch=this.value;render()" style="margin:10px 0;">
+    <div style="max-height:320px;overflow-y:auto;">
+      ${results.length===0 ? `<div class="empty-state">${q?'Sin resultados.':'Aún no has agregado ninguno — busca arriba para empezar.'}</div>` :
+        results.map(p=>`
+          <label class="checkbox-row">
+            <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleCheckoutReminderProduct('${p.id}', this.checked)">
+            <span>${p.name}</span>
+          </label>
+        `).join('')}
+    </div>
+  </div>`;
 }
 
 function renderTestimonialsSubpanel(){

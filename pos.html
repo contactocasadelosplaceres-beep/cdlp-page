@@ -187,6 +187,7 @@ let state = {
   barcodeScannerOpen:false,
   salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
   exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null,
+  checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -681,6 +682,54 @@ function parseCartKey(key){
   const v = (parts[1] && p) ? (p.variants||[]).find(x=>x.id===parts[1]) : null;
   return {p, v};
 }
+// Aviso al elegir método de pago: si la venta no lleva ninguno de los productos que Ale marcó
+// como "para recordar ofrecer" (lubricante, condones, etc.), se detiene un momento antes de
+// marcar el método de pago para sugerirlos — una sola vez por venta, no cada vez que se toque
+// un botón de método de pago.
+function cartHasReminderProduct(){
+  const reminderIds = state.settings.checkoutReminderProducts || [];
+  if(!reminderIds.length) return true; // sin lista configurada, no hay nada que recordar
+  return Object.keys(state.cart).some(key=>{
+    const {p} = parseCartKey(key);
+    return p && reminderIds.includes(p.id);
+  });
+}
+function selectPayMethod(m){
+  if(!state.checkoutReminderShown && !cartHasReminderProduct()){
+    state.pendingPayMethod = m;
+    state.checkoutReminderOpen = true;
+    render();
+    return;
+  }
+  state.payMethod = m;
+  render();
+}
+function addReminderProductAndContinue(id){
+  addToCart(id);
+  closeCheckoutReminder(true);
+}
+function closeCheckoutReminder(applyPending){
+  state.checkoutReminderOpen = false;
+  state.checkoutReminderShown = true; // no volver a interrumpir en esta misma venta
+  if(applyPending && state.pendingPayMethod){ state.payMethod = state.pendingPayMethod; }
+  state.pendingPayMethod = null;
+  render();
+}
+function renderCheckoutReminderModal(){
+  const items = (state.settings.checkoutReminderProducts||[]).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:380px;">
+      <h3>Antes de cobrar…</h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 14px;">¿Ya le preguntaste si necesita algo más? A veces un lubricante hace toda la diferencia.</p>
+      ${items.map(p=>`
+        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="addReminderProductAndContinue('${p.id}')">
+          <span>${p.name}</span><span style="font-weight:800;">${money(effectivePrice(p))}</span>
+        </button>`).join('')}
+      <button class="btn-secondary" style="margin-top:6px;" onclick="closeCheckoutReminder(true)">Ya se lo ofrecí, continuar</button>
+    </div>
+  </div>`;
+}
 function itemPrice(p, v){ return v && v.priceOverride>0 ? v.priceOverride : effectivePrice(p); }
 function itemStockPOS(p, v){ return v ? (v.stock||0) : centerStock(p, state.activeCenter.id); }
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
@@ -964,7 +1013,7 @@ async function chargeSale(){
       try{ await db.collection('couponUsage').add({code: state.manualDiscount.coupon.code, date:new Date().toISOString()}); }
       catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
     }
-    state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true;
+    state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true; state.checkoutReminderShown = false;
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
     // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin.
     const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
@@ -976,7 +1025,7 @@ async function chargeSale(){
   }
   state.sending = false; render();
 }
-function newSale(){ state.saleDone=false; render(); }
+function newSale(){ state.saleDone=false; state.checkoutReminderShown=false; render(); }
 function renderVariantPickerModal(){
   const p = state.products.find(x=>x.id===state.variantPickerProduct);
   if(!p) return '';
@@ -1142,7 +1191,7 @@ function renderPOS(){
           <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
         ` : ''}
         <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
-        <div class="pay-row">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="state.payMethod='${m}';render()">${m}</button>`).join('')}</div>
+        <div class="pay-row">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
         ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
         <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
       </div>
@@ -1255,6 +1304,8 @@ function render(){
     if(state.notesModalOpen) html += renderNotesModal();
     if(state.barcodeScannerOpen) html += renderBarcodeScannerModal();
     if(state.salesListOpen) html += renderSalesListModal();
+    if(state.exchangeModalOpen) html += renderExchangeModal();
+    if(state.checkoutReminderOpen) html += renderCheckoutReminderModal();
     root.innerHTML = html;
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
