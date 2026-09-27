@@ -208,6 +208,12 @@
   .testimonial-row{display:grid;grid-template-columns:1fr;gap:12px;padding:0 20px 6px;}
   @media(min-width:640px){.testimonial-row{grid-template-columns:repeat(2,1fr);}}
   @media(min-width:980px){.testimonial-row{grid-template-columns:repeat(3,1fr);}}
+  .faq-list{padding:0 20px;display:flex;flex-direction:column;gap:10px;}
+  .faq-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;}
+  .faq-question{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px;text-align:left;font-weight:700;font-size:14.5px;color:var(--ink);background:none;border:none;cursor:pointer;}
+  .faq-chevron{flex-shrink:0;color:var(--ink-soft);transition:transform .2s ease;}
+  .faq-chevron.open{transform:rotate(180deg);}
+  .faq-answer{padding:0 16px 16px;font-size:13.5px;color:var(--ink-soft);line-height:1.5;}
   .testimonial-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;font-size:13px;color:var(--ink);line-height:1.5;}
   .testimonial-card .stars{color:var(--amber);font-size:12px;margin-bottom:6px;display:block;}
   .testimonial-card p{margin:0;}
@@ -376,6 +382,7 @@ const DEFAULT_SECTIONS = [
   {key:"categories", label:"Categorías principales", visible:true},
   {key:"grid", label:"Catálogo completo", visible:true},
   {key:"testimonials", label:"Testimonios", visible:false},
+  {key:"faq", label:"Preguntas frecuentes sobre discreción", visible:false},
   {key:"newsletter", label:"Contacto directo por WhatsApp", visible:false},
   {key:"footer", label:"Pie de página", visible:true},
 ];
@@ -394,14 +401,14 @@ const DEFAULT_SETTINGS = {
   featuredProductIds:[],
   testimonials:[],
   socialInstagram:"", socialFacebook:"", contactEmail:"",
-  customCss:"", logoUrl:"logo.png",
+  customCss:"", logoUrl:"logo.png", faqItems:[],
   theme:{},
   historicalOrderCountOffset:0,
   slackWebhookUrl:"",
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null };
 
 async function loadData(){
   try{
@@ -1492,6 +1499,26 @@ function renderProductCard(p, forceBest){
 // El resumen de estrellas (rating-line) ya no vive aquí: se movió a una franja fija justo
 // arriba del catálogo (ver renderRatingLineBlock más abajo) para que sea lo primero que se
 // vea antes de los precios. Aquí solo quedan las tarjetas con el detalle de cada opinión.
+/* ============== PREGUNTAS FRECUENTES SOBRE DISCRECIÓN ============== */
+function renderFaqSection(){
+  const items = state.settings.faqItems||[];
+  if(!items.length) return '';
+  return `
+  <div class="section-block">
+    <div class="section-heading" style="margin-bottom:14px;">Preguntas frecuentes</div>
+    <div class="faq-list">
+      ${items.map((item,i)=>`
+        <div class="faq-item">
+          <button class="faq-question" onclick="state.openFaqIndex=state.openFaqIndex===${i}?null:${i};render()">
+            <span>${item.question}</span>
+            <span class="faq-chevron ${state.openFaqIndex===i?'open':''}">${icon('chevron-down',18)}</span>
+          </button>
+          ${state.openFaqIndex===i ? `<div class="faq-answer">${item.answer}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  </div>`;
+}
 function renderTestimonialsSection(){
   const list = state.settings.testimonials||[];
   if(!list.length) return '';
@@ -1571,6 +1598,7 @@ const SECTION_RENDERERS = {
   promoBanner: renderPromoBannerSection,
   grid: renderGridSection,
   testimonials: renderTestimonialsSection,
+  faq: renderFaqSection,
   newsletter: renderNewsletterSection,
   footer: renderFooterSection,
 };

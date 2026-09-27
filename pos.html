@@ -190,6 +190,7 @@ let state = {
   checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
   warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
   scannerContext:'checkout',
+  posSessionReported:false,
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -535,7 +536,34 @@ function confirmCashierPin(){
   if(state.pinInput === state.activeCashier.pin){ state.pinConfirmed=true; state.pinInput=''; state.pinError=''; render(); }
   else{ state.pinError='PIN incorrecto'; state.pinInput=''; render(); }
 }
+/* ---- Reporta qué cajero está usando el POS ahora mismo, para que se vea en el panel de
+   administración (pestaña Caja). Se guarda un documento por cajero, con un "latido" cada minuto
+   para que el panel sepa si la sesión sigue realmente activa o ya se quedó abandonada. ---- */
+let posHeartbeatTimer = null;
+async function reportActivePosSession(){
+  state.posSessionReported = true;
+  const docId = state.activeCashier.id || state.activeCashier.name;
+  try{
+    await db.collection('activePosSessions').doc(docId).set({
+      cashierName: state.activeCashier.name, centerId: state.activeCenter.id, centerName: state.activeCenter.name,
+      startedAt: new Date().toISOString(), lastActive: new Date().toISOString(),
+    });
+  }catch(e){ console.error('No se pudo reportar la sesión activa del POS', e); }
+  if(posHeartbeatTimer) clearInterval(posHeartbeatTimer);
+  posHeartbeatTimer = setInterval(()=>{
+    db.collection('activePosSessions').doc(docId).set({lastActive: new Date().toISOString()}, {merge:true}).catch(()=>{});
+  }, 60000);
+}
+async function clearActivePosSession(){
+  if(posHeartbeatTimer){ clearInterval(posHeartbeatTimer); posHeartbeatTimer=null; }
+  const wasReported = state.posSessionReported;
+  state.posSessionReported = false;
+  if(!wasReported || !state.activeCashier) return;
+  const docId = state.activeCashier.id || state.activeCashier.name;
+  try{ await db.collection('activePosSessions').doc(docId).delete(); }catch(e){ console.error('No se pudo cerrar la sesión activa del POS', e); }
+}
 function changeCashier(){
+  clearActivePosSession();
   state.activeCashier=null; state.pinConfirmed=false; state.cart={};
   state.activeCashRegister=null; state.cashRegisterChecked=false;
   render();
@@ -731,6 +759,7 @@ async function confirmCashClose(){
     await db.collection('cashRegisters').doc(state.activeCashRegister.id).update(payload);
   }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); return; }
   showToast('Caja cerrada');
+  clearActivePosSession();
   state.activeCashRegister=null; state.cashRegisterChecked=false; state.closingOpen=false; state.closingSummary=null;
   state.activeCashier=null; state.pinConfirmed=false; state.cart={};
   render();
@@ -1360,6 +1389,7 @@ function render(){
   }
   else if(!state.activeCashRegister){ root.innerHTML = renderCashOpenScreen(); }
   else{
+    if(!state.posSessionReported) reportActivePosSession();
     let html = state.saleDone ? renderReceipt() : (state.closingLoading ? `<div class="loading-screen">Preparando cierre…</div>` : (state.closingOpen ? renderCashCloseScreen() : renderPOS()));
     if(state.cashPanelOpen) html += renderCashPanelModal();
     if(state.movementModalOpen) html += renderMovementModal();
