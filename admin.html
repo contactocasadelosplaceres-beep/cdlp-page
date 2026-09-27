@@ -505,7 +505,7 @@ let state = {
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   suppliers:[], restockItems:[], newSupplierInput:"", restockAddSearch:"", restockPickedProductId:null, restockPickedQty:"", restockPickedSupplierId:"",
   wholesaleModal:null, wholesaleProductSearch:"",
-  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas"},
+  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas",inactive:false},
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   couponModal:null, couponProductSearch:"", couponUsage:[],
   promoModal:null, promoProductSearch:"", promoProductSearch2:"",
@@ -526,6 +526,7 @@ let state = {
   editingGoal:false,
   commissionAgents:[], commissionAgentModal:null, assignCommissionOrderId:null,
   checkoutReminderSearch:'',
+  priceHistoryOpen:false, priceHistoryProductId:null, priceHistoryLoading:false, priceHistoryItems:[],
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -1829,10 +1830,10 @@ async function saveProduct(p){
           if(diff) logStockMovement(p.id, 'ajuste_manual', diff, 'Editado a mano en la ficha del producto', cid);
         });
         if((old.price||0) !== (payload.price||0)){
-          logAdminAction('cambio_precio', 'producto', old.name, `Precio: ${money(old.price||0)} → ${money(payload.price||0)}`);
+          logAdminAction('cambio_precio', 'producto', old.name, `Precio: ${money(old.price||0)} → ${money(payload.price||0)}`, p.id);
         }
         if((old.promoPrice||0) !== (payload.promoPrice||0)){
-          logAdminAction('cambio_precio_promo', 'producto', old.name, `Precio promocional: ${money(old.promoPrice||0)} → ${money(payload.promoPrice||0)}`);
+          logAdminAction('cambio_precio_promo', 'producto', old.name, `Precio promocional: ${money(old.promoPrice||0)} → ${money(payload.promoPrice||0)}`, p.id);
         }
       }
       await db.collection('products').doc(p.id).set(payload);
@@ -1971,10 +1972,10 @@ async function logStockMovement(productId, type, qtyChange, note, centerId){
 // Guarda un renglón en la bitácora de acciones del panel — pensada para cuando entre más
 // personal: quién cambió qué, y cuándo. targetName es lo que se ve en la lista sin tener que
 // ir a buscar el producto/pedido/persona por su ID.
-async function logAdminAction(action, targetType, targetName, details){
+async function logAdminAction(action, targetType, targetName, details, targetId){
   try{
     await db.collection('adminAuditLog').add({
-      action, targetType, targetName: targetName||'', details: details||'',
+      action, targetType, targetName: targetName||'', details: details||'', targetId: targetId||null,
       userEmail: state.user ? state.user.email : '', date: new Date().toISOString(),
     });
   }catch(e){ console.error('No se pudo registrar en la bitácora', e); }
@@ -2234,6 +2235,45 @@ const STOCK_MOVEMENT_LABELS = {
   transferencia_entrada: 'Entró por transferencia',
   auditoria: 'Ajuste por auditoría de inventario',
 };
+function openProductPriceHistory(id){
+  state.priceHistoryOpen = true; state.priceHistoryProductId = id; state.priceHistoryLoading = true; state.priceHistoryItems = [];
+  render();
+  loadProductPriceHistory(id);
+}
+async function loadProductPriceHistory(id){
+  try{
+    const snap = await db.collection('adminAuditLog').where('targetId','==',id).get();
+    const items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(a=>a.action==='cambio_precio' || a.action==='cambio_precio_promo');
+    items.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    state.priceHistoryItems = items;
+  }catch(e){ console.error('No se pudo cargar el historial de precio', e); state.priceHistoryItems = []; }
+  state.priceHistoryLoading = false; render();
+}
+function closeProductPriceHistory(){ state.priceHistoryOpen=false; state.priceHistoryProductId=null; render(); }
+function renderProductPriceHistoryModal(){
+  const p = state.products.find(x=>x.id===state.priceHistoryProductId);
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:460px;max-height:80vh;overflow-y:auto;">
+      <h3>Historial de precio</h3>
+      <div class="panel-sub" style="margin-top:-6px;">${p ? p.name : ''} — precio actual: ${p ? money(p.price) : ''}${p&&p.promoPrice>0?` (promo: ${money(p.promoPrice)})`:''}</div>
+      ${state.priceHistoryLoading ? `<div class="empty-state">Cargando…</div>` :
+        state.priceHistoryItems.length===0 ? `<div class="empty-state">Todavía no hay cambios de precio registrados para este producto (se empezó a guardar desde que subiste esta actualización).</div>` :
+        state.priceHistoryItems.map(a=>`
+          <div class="list-row" style="padding:10px 0;">
+            <div class="row-main">
+              <div class="row-title" style="font-size:13px;">${a.action==='cambio_precio_promo'?'Precio promocional':'Precio regular'}</div>
+              <div class="row-sub">${new Date(a.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})} · ${a.userEmail||''}</div>
+            </div>
+            <div style="font-weight:700;text-align:right;">${a.details}</div>
+          </div>
+        `).join('')}
+      <div class="modal-actions">
+        <button class="btn-cancel" style="flex:1;" onclick="closeProductPriceHistory()">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
+}
 function openProductHistory(id){
   state.productHistoryOpen = true;
   state.productHistoryProductId = id;
@@ -3131,6 +3171,7 @@ function renderAdmin(){
   ${state.auditLogOpen ? renderAuditLogModal() : ''}
   ${state.commissionAgentModal ? renderCommissionAgentModal() : ''}
   ${state.assignCommissionOrderId ? renderAssignCommissionModal() : ''}
+  ${state.priceHistoryOpen ? renderProductPriceHistoryModal() : ''}
   `;
 }
 
@@ -3933,6 +3974,7 @@ function renderCategoriesManagePanel(){
           <button class="icon-btn" ${idx===cats.length-1?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},1)">${icon('arrow-down')}</button>
           <input value="${c.replace(/"/g,'&quot;')}" style="flex:1;padding:9px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="renameCategory('${c.replace(/'/g,"\\'")}',this.value)">
           <button class="visibility-toggle ${isHidden?'off':'on'}" onclick="toggleCategoryHidden('${c.replace(/'/g,"\\'")}')">${isHidden?'Oculta':'Visible'}</button>
+          <button class="icon-btn" title="Copiar enlace directo a esta categoría" onclick="copyCategoryLink('${c.replace(/'/g,"\\'")}')">${icon('link',16)}</button>
           <button class="icon-btn danger" onclick="removeCategory('${c.replace(/'/g,"\\'")}')">${icon('trash')}</button>
         </div>
       `;}).join('')}
@@ -4045,6 +4087,13 @@ function copyProductLink(id){
   try{
     navigator.clipboard.writeText(url);
     showToast('Enlace copiado — pégalo donde quieras compartirlo');
+  }catch(e){ showToast('No se pudo copiar el enlace'); }
+}
+function copyCategoryLink(cat){
+  const url = location.href.replace(/admin\.html.*$/, 'index.html') + '?categoria=' + encodeURIComponent(cat);
+  try{
+    navigator.clipboard.writeText(url);
+    showToast('Enlace de la categoría copiado');
   }catch(e){ showToast('No se pudo copiar el enlace'); }
 }
 function toggleProductSelection(id){
@@ -4933,6 +4982,12 @@ function filteredCustomers(){
     const days = {'Último día':1,'Últimos 7 días':7,'Últimos 30 días':30}[f.regDate];
     if(days){ const cutoff = Date.now()-days*86400000; list = list.filter(c=>c.registeredAt && new Date(c.registeredAt).getTime()>=cutoff); }
   }
+  // "Clientes que dejaron de comprar": alguien que compraba seguido (2+ veces) y ya no ha
+  // vuelto en 60+ días — vale más la pena recuperarlo que a alguien que solo compró una vez.
+  if(f.inactive){
+    const cutoff = Date.now()-60*86400000;
+    list = list.filter(c=>c.purchaseCount>=2 && c.lastDate && new Date(c.lastDate).getTime()<cutoff);
+  }
   return list;
 }
 function distinctCustomerValues(field){
@@ -5041,6 +5096,10 @@ function renderClientes(){
         ${['Todas','Último día','Últimos 7 días','Últimos 30 días'].map(d=>`<option ${state.customerFilters.regDate===d?'selected':''}>${d}</option>`).join('')}
       </select>
     </div>
+    <label class="checkbox-row" style="margin-bottom:16px;">
+      <input type="checkbox" ${state.customerFilters.inactive?'checked':''} onchange="state.customerFilters.inactive=this.checked;resetShowMore('customersShowMore');render()">
+      <span>Solo clientes que dejaron de comprar (2+ compras antes, nada en los últimos 60 días)</span>
+    </label>
     <div class="two-col" style="margin-bottom:16px;">
       <select onchange="state.customerFilters.country=this.value;resetShowMore('customersShowMore');render()">
         <option>Todos</option>${distinctCustomerValues('country').map(v=>`<option ${state.customerFilters.country===v?'selected':''}>${v}</option>`).join('')}
@@ -5060,7 +5119,7 @@ function renderClientes(){
         <div class="list-row">
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
             <div class="row-title">${c.name}${c.isManual?'':' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(automático)</span>'}</div>
-            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · `:'Sin compras · '}${c.purchaseCount} compra(s)</div>
+            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}${state.customerFilters.inactive?` (hace ${Math.floor((Date.now()-new Date(c.lastDate).getTime())/86400000)} días)`:''} · `:'Sin compras · '}${c.purchaseCount} compra(s)</div>
           </div>
           <div style="text-align:right;margin-right:10px;">
             <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
@@ -7217,6 +7276,7 @@ function renderProductModal(){
           <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="font-size:16px;color:var(--primary-deep);">${margin}%</strong></div>
           <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="font-size:16px;color:var(--green);">${money(profit)}</strong></div>
         </div>
+        ${p.id ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="openProductPriceHistory('${p.id}')">${icon('history',13)} Ver historial de precio</button>` : ''}
       </div>
 
       <div class="form-section-label">Inventario</div>
