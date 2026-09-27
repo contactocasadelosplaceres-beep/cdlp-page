@@ -188,6 +188,7 @@ let state = {
   salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
   exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null,
   checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
+  warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -352,6 +353,60 @@ function renderExchangeModal(){
   </div>`;
 }
 let posScannerInstance = null;
+/* ---- Almacén: dónde está ubicado cada producto (la ubicación se edita solo desde el panel de
+   administración; aquí el cajero solo la consulta y puede dejar una nota si algo no cuadra) ---- */
+function openWarehouseView(){
+  state.warehouseOpen = true; state.warehouseSearch=''; state.warehouseNoteProductId=null; state.warehouseNoteText='';
+  render();
+}
+function closeWarehouseView(){ state.warehouseOpen = false; render(); }
+async function sendWarehouseNote(productId){
+  const text = state.warehouseNoteText.trim();
+  if(!text){ showToast('Escribe la nota antes de enviarla'); return; }
+  const p = state.products.find(x=>x.id===productId);
+  try{
+    await db.collection('storeMessages').add({
+      date: new Date().toISOString(), name: state.activeCashier.name, phone: '', type: 'almacen',
+      message: `Sobre "${p?p.name:productId}"${p&&p.location?` (ubicación registrada: ${p.location})`:''}: ${text}`,
+      status: 'nuevo',
+    });
+    showToast('Nota enviada — llegará a Mensajes en el panel');
+    state.warehouseNoteProductId = null; state.warehouseNoteText=''; render();
+  }catch(e){ console.error('No se pudo enviar la nota', e); showToast('No se pudo enviar la nota'); }
+}
+function renderWarehouseModal(){
+  const q = state.warehouseSearch.trim().toLowerCase();
+  const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,30) : [];
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
+      <h3>Almacén</h3>
+      <p class="panel-sub">Busca un producto para ver dónde está ubicado. Si no coincide con lo que ves, deja una nota — le llega directo a Mensajes.</p>
+      <input class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
+      <div style="margin-top:10px;">
+        ${!q ? '' : results.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` :
+          results.map(p=>`
+            <div class="list-row" style="flex-direction:column;align-items:stretch;padding:10px 0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-weight:700;">${p.name}</div>
+                  <div class="panel-sub" style="margin:2px 0 0;">${p.location ? `${icon('map-pin',13)} ${p.location}` : 'Sin ubicación registrada'}</div>
+                </div>
+                <button class="icon-btn" title="Dejar una nota sobre este producto" onclick="state.warehouseNoteProductId=state.warehouseNoteProductId==='${p.id}'?null:'${p.id}';state.warehouseNoteText='';render()">${icon('message-circle',18)}</button>
+              </div>
+              ${state.warehouseNoteProductId===p.id ? `
+                <div style="margin-top:8px;">
+                  <textarea class="field-input" rows="2" placeholder="Ej. lo encontré en el estante 4, no en el 2..." oninput="state.warehouseNoteText=this.value">${state.warehouseNoteText}</textarea>
+                  <button class="btn-primary" style="width:100%;margin-top:6px;" onclick="sendWarehouseNote('${p.id}')">Enviar nota</button>
+                </div>
+              ` : ''}
+            </div>
+          `).join('')}
+      </div>
+      <button class="btn-secondary" style="margin-top:10px;" onclick="closeWarehouseView()">Cerrar</button>
+    </div>
+  </div>`;
+}
 function openBarcodeScanner(){
   state.barcodeScannerOpen = true; render();
   setTimeout(()=>{
@@ -1122,6 +1177,7 @@ function renderPOS(){
         <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
         <button class="pill-btn" onclick="openSalesList()">${icon('receipt')} Ventas</button>
         <button class="pill-btn" onclick="openExchangeModal()">${icon('refresh-cw')} Cambio</button>
+        <button class="pill-btn" onclick="openWarehouseView()">${icon('map-pin')} Almacén</button>
         <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
         <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
         <button class="pill-btn" onclick="handleLogout()">Salir</button>
@@ -1306,6 +1362,7 @@ function render(){
     if(state.salesListOpen) html += renderSalesListModal();
     if(state.exchangeModalOpen) html += renderExchangeModal();
     if(state.checkoutReminderOpen) html += renderCheckoutReminderModal();
+    if(state.warehouseOpen) html += renderWarehouseModal();
     root.innerHTML = html;
   }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }

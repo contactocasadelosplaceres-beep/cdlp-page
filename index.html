@@ -4,16 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>La Casa de los Placeres — Catálogo</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <!-- Vista previa al compartir el enlace (WhatsApp, redes, etc.) — antes no existía ninguna,
-     así que un enlace compartido se veía como un cuadro gris sin nombre ni descripción. Falta
-     la foto (og:image necesita una imagen con URL real, no como las que se guardan ahora mismo
-     dentro de cada producto) — en cuanto haya una imagen de marca así, se agrega aquí. -->
+     así que un enlace compartido se veía como un cuadro gris sin nombre ni descripción. -->
 <meta property="og:title" content="La Casa de los Placeres">
 <meta property="og:description" content="Tu catálogo con total discreción. Explora, arma tu pedido y recíbelo en la puerta de tu casa.">
 <meta property="og:type" content="website">
+<meta property="og:image" content="https://contactocasadelosplaceres-beep.github.io/cdlp-page/logo.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="La Casa de los Placeres">
 <meta name="twitter:description" content="Tu catálogo con total discreción. Explora, arma tu pedido y recíbelo en la puerta de tu casa.">
+<meta name="twitter:image" content="https://contactocasadelosplaceres-beep.github.io/cdlp-page/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://www.gstatic.com">
@@ -393,14 +394,14 @@ const DEFAULT_SETTINGS = {
   featuredProductIds:[],
   testimonials:[],
   socialInstagram:"", socialFacebook:"", contactEmail:"",
-  customCss:"", logoUrl:"",
+  customCss:"", logoUrl:"logo.png",
   theme:{},
   historicalOrderCountOffset:0,
   slackWebhookUrl:"",
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''} };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false };
 
 async function loadData(){
   try{
@@ -799,6 +800,51 @@ function parseCartKey(key){
   return {p, v};
 }
 function itemStock(p, v){ return v ? (v.stock||0) : (p ? p.stock : 0); }
+// Aviso antes de pasar al checkout: si el carrito no lleva ninguno de los productos que Ale
+// marcó como "para recordar ofrecer" (lubricante, condones, etc.) en el panel, se detiene un
+// momento para sugerirlos — igual que en el Punto de Venta, pero aquí lo ve la clienta
+// directamente, así que el tono es una sugerencia amable, no una instrucción a un cajero.
+function cartHasReminderProduct(){
+  const reminderIds = state.settings.checkoutReminderProducts || [];
+  if(!reminderIds.length) return true;
+  return Object.keys(state.cart).some(key=>{
+    const {p} = parseCartKey(key);
+    return p && reminderIds.includes(p.id);
+  });
+}
+function proceedToCheckout(){
+  if(!state.checkoutReminderShown && !cartHasReminderProduct()){
+    state.checkoutReminderOpen = true;
+    render();
+    return;
+  }
+  state.cartOpen=false; state.checkoutOpen=true; trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
+}
+function addReminderProductToCart(id){
+  addToCart(id);
+  state.checkoutReminderShown = true;
+  state.checkoutReminderOpen = false;
+  render();
+}
+function continueCheckoutWithoutReminder(){
+  state.checkoutReminderShown = true;
+  state.checkoutReminderOpen = false;
+  state.cartOpen=false; state.checkoutOpen=true; trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
+}
+function renderCheckoutReminderDrawer(){
+  const items = (state.settings.checkoutReminderProducts||[]).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  return `
+    <div class="drawer-head"><h2>¿Se te olvidó algo?</h2><button class="close-x" onclick="continueCheckoutWithoutReminder()">${icon('x')}</button></div>
+    <div class="drawer-body">
+      <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;">Muchas veces un lubricante hace toda la diferencia — aquí tienes algunas opciones, por si quieres agregar una:</p>
+      ${items.map(p=>`
+        <button class="suggestion-add" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:12px 14px;margin-bottom:8px;border-radius:12px;background:var(--bg);border:1px solid var(--border);text-align:left;" onclick="addReminderProductToCart('${p.id}')">
+          <span>${p.name}</span><span style="font-weight:800;">${money(effectivePrice(p))}</span>
+        </button>`).join('')}
+    </div>
+    <div class="drawer-foot"><button class="btn-primary" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button></div>
+  `;
+}
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
 // Aplica los colores/tipografía/estilo elegidos en Diseño → Apariencia (admin.html). Se
 // escriben como propiedades inline en <html>, que siempre le ganan a cualquier valor de
@@ -1602,7 +1648,7 @@ function renderCartDrawer(){
     <div class="drawer-foot">
       ${state.settings.shippingNote ? `<div class="note-box" style="margin-bottom:10px;">${icon('package',14)} ${state.settings.shippingNote}</div>` : ''}
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
-      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="state.cartOpen=false;state.checkoutOpen=true;trackEvent('checkout_start',{cartTotal: cartTotal()});render()">Continuar pedido</button>
+      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="proceedToCheckout()">Continuar pedido</button>
     </div>`;
 }
 
@@ -1685,12 +1731,13 @@ function renderStore(){
     </div>
     <button class="mobile-cart-bar-btn" onclick="state.cartOpen=true;render()">Ver carrito</button>
   </div>
-  <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId||state.profileOpen||state.messageDrawerOpen?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;state.profileOpen=false;closeMessageDrawer();closeProductDetail();"></div>
+  <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId||state.profileOpen||state.messageDrawerOpen||state.checkoutReminderOpen?'open':''}" onclick="state.cartOpen=false;state.checkoutOpen=false;state.profileOpen=false;closeMessageDrawer();closeProductDetail();"></div>
   <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
   <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
   <div class="drawer drawer-detail ${state.detailProductId?'open':''}">${state.detailProductId ? renderProductDetailDrawer() : ''}</div>
   <div class="drawer ${state.profileOpen?'open':''}">${state.profileOpen ? renderProfileDrawer() : ''}</div>
   <div class="drawer ${state.messageDrawerOpen?'open':''}">${state.messageDrawerOpen ? renderMessageDrawer() : ''}</div>
+  <div class="drawer ${state.checkoutReminderOpen?'open':''}">${state.checkoutReminderOpen ? renderCheckoutReminderDrawer() : ''}</div>
   `;
 }
 

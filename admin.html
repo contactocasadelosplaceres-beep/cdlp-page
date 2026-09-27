@@ -4579,7 +4579,7 @@ function renderOrderRow(o){
 const MESSAGE_STATUS_COLOR = {nuevo:'#bc355c', leido:'#c9a227', respondido:'#4CAF7D'};
 const MESSAGE_STATUS_TEXT_COLOR = {nuevo:'#fff', leido:'#2B1620', respondido:'#2B1620'};
 const MESSAGE_STATUS_LABEL = {nuevo:'Nuevo', leido:'Leído', respondido:'Respondido'};
-const MESSAGE_TYPE_LABEL = {pregunta:'Pregunta', sugerencia:'Sugerencia', queja:'Queja', otro:'Otro'};
+const MESSAGE_TYPE_LABEL = {pregunta:'Pregunta', sugerencia:'Sugerencia', queja:'Queja', otro:'Otro', almacen:'Nota de almacén'};
 function messageWhatsappLink(m){
   const num = normalizePhone(m.phone);
   if(!num) return null;
@@ -6238,6 +6238,7 @@ function renderAuditorias(){
               <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
                 ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
                 <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
+                <button class="icon-btn" title="Editar este producto" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit',16)}</button>
                 <input id="audit-count-${p.id}" type="number" min="0" placeholder="Conteo" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
               </div>
             `).join('')}
