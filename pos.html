@@ -189,6 +189,7 @@ let state = {
   exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null,
   checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
   warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
+  scannerContext:'checkout',
 };
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 
@@ -383,6 +384,7 @@ function renderWarehouseModal(){
       <h3>Almacén</h3>
       <p class="panel-sub">Busca un producto para ver dónde está ubicado. Si no coincide con lo que ves, deja una nota — le llega directo a Mensajes.</p>
       <input id="warehouse-search-input" class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
+      <button class="btn-outline" style="width:100%;margin-top:8px;" onclick="openBarcodeScanner('warehouse')">${icon('camera',16)} Escanear código de barras</button>
       <div style="margin-top:10px;">
         ${!q ? '' : results.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` :
           results.map(p=>`
@@ -407,7 +409,8 @@ function renderWarehouseModal(){
     </div>
   </div>`;
 }
-function openBarcodeScanner(){
+function openBarcodeScanner(context){
+  state.scannerContext = context || 'checkout';
   state.barcodeScannerOpen = true; render();
   setTimeout(()=>{
     if(typeof Html5Qrcode === 'undefined'){ showToast('No se pudo cargar el lector de cámara — revisa tu conexión'); closeBarcodeScanner(); return; }
@@ -425,8 +428,13 @@ function openBarcodeScanner(){
 }
 function onBarcodeScanned(code){
   const match = state.products.find(p=>p.sku && p.sku.toLowerCase()===code.trim().toLowerCase());
+  const context = state.scannerContext;
   closeBarcodeScanner();
   if(!match){ showToast(`Código "${code}" no coincide con ningún producto`); return; }
+  if(context==='warehouse'){
+    state.warehouseOpen = true; state.warehouseSearch = match.name; render();
+    return;
+  }
   addToCart(match.id);
   showToast(`Agregado: ${match.name}`);
 }

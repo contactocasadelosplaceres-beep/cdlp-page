@@ -2932,9 +2932,15 @@ function computeMetrics(){
   const statusCounts = {}; STATUS_FLOW.forEach(s=>statusCounts[s]=0);
   state.orders.forEach(o=>statusCounts[o.status]=(statusCounts[o.status]||0)+1);
 
+  const expiringOrExpired = state.products.filter(p=>{
+    if(!p.expirationDate) return false;
+    const days = Math.ceil((new Date(p.expirationDate+'T00:00:00') - new Date())/86400000);
+    return days<=30;
+  }).length;
+
   return {totalRevenue,avgOrder,avgItems,pending,lowStock,cancelRate,uniqueCustomers,repeatCustomers,repeatRate,topCustomers,
     dayRevenue,monthRevenue,revDelta,catUnitRows,catRevRows,maxCatUnit,maxCatRev,topByUnits,topByRevenue,noSales,
-    weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length};
+    weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length,expiringOrExpired};
 }
 const VISIT_PERIODS = [
   {key:'hoy', label:'Hoy'},
@@ -3177,6 +3183,7 @@ function renderResumen(){
       <div class="stat-card"><div class="stat-label">${icon('bag',13)} Pedidos activos</div><div class="stat-value">${m.pending}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('users',13)} Clientes distintos</div><div class="stat-value">${m.uniqueCustomers}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('alert-triangle',13)} Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
+      <div class="stat-card" style="cursor:pointer;" onclick="state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"><div class="stat-label">${icon('alert-triangle',13)} Por caducar o caducado</div><div class="stat-value">${m.expiringOrExpired}</div></div>
     </div>
     <div class="panel"><div class="panel-title">Ingresos — últimos 7 días</div>${renderBarChart(m.dayRevenue)}</div>
     ${m.lowStock.length>0 ? `
