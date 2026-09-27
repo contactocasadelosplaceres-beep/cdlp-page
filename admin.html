@@ -458,6 +458,7 @@ const DEFAULT_SETTINGS = {
   coupons:[],
   promotions:[],
   logoUrl:"logo.png",
+  salesGoalMonthly: 0,
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -521,6 +522,8 @@ let state = {
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
   productHistoryOpen:false, productHistoryProductId:null, productHistoryLoading:false, productHistoryItems:[],
   auditLogOpen:false, auditLogLoading:false, auditLogItems:[],
+  editingGoal:false,
+  commissionAgents:[], commissionAgentModal:null, assignCommissionOrderId:null,
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -543,7 +546,7 @@ async function loadData(){
     }
     state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
-    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap, suppliersSnap, restockItemsSnap] = await Promise.all([
+    const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap, suppliersSnap, restockItemsSnap, commissionAgentsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
       db.collection('orders').orderBy('date','desc').get(),
       db.collection('sales').orderBy('date','desc').get(),
@@ -571,6 +574,10 @@ async function loadData(){
       // movimiento de stock.
       db.collection('suppliers').get(),
       db.collection('restockItems').get(),
+      // Personas que venden por comisión: nombre y su porcentaje por default (Usuarios →
+      // Comisionistas). El porcentaje real de cada venta se guarda en el pedido/venta misma
+      // (commissionPct), por si alguna vez se negocia distinto para una venta en particular.
+      db.collection('commissionAgents').get(),
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
@@ -609,6 +616,7 @@ async function loadData(){
     state.storeMessages = storeMessagesSnap.docs.map(d=>({id:d.id, status:'nuevo', ...d.data()}));
     state.suppliers = suppliersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.restockItems = restockItemsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.commissionAgents = commissionAgentsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -640,7 +648,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -752,6 +760,111 @@ async function saveCashierDoc(c){
   else{ const ref = await db.collection('cashiers').add(payload); c.id = ref.id; }
 }
 async function deleteCashierDoc(id){ await db.collection('cashiers').doc(id).delete(); }
+/* ============== COMISIONISTAS ============== */
+async function saveCommissionAgent(){
+  const name = document.getElementById('agent-name').value.trim();
+  const pct = Number(document.getElementById('agent-pct').value)||0;
+  if(!name){ showToast('Ponle un nombre'); return; }
+  const existing = state.commissionAgentModal.id;
+  const payload = {name, defaultPct: pct};
+  try{
+    if(existing){
+      await db.collection('commissionAgents').doc(existing).set(payload);
+      Object.assign(state.commissionAgents.find(a=>a.id===existing), payload);
+    }else{
+      const ref = await db.collection('commissionAgents').add(payload);
+      state.commissionAgents.push({id:ref.id, ...payload});
+    }
+    logAdminAction(existing?'edicion_comisionista':'alta_comisionista', 'comisionista', name, `${pct}%`);
+    state.commissionAgentModal = null; showToast('Guardado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo guardar'); }
+}
+async function deleteCommissionAgent(id){
+  const a = state.commissionAgents.find(x=>x.id===id);
+  if(!confirm(`¿Eliminar a ${a?a.name:'este comisionista'}? Las ventas que ya se le asignaron conservan su nombre y porcentaje, solo no podrás asignarle ventas nuevas.`)) return;
+  try{
+    await db.collection('commissionAgents').doc(id).delete();
+    state.commissionAgents = state.commissionAgents.filter(x=>x.id!==id);
+    if(a) logAdminAction('eliminacion_comisionista', 'comisionista', a.name);
+    showToast('Eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar'); }
+}
+// Asigna (o quita) un comisionista a UN pedido/venta. Se guarda en la colección real de la que
+// viene ese registro (orders para tienda, sales para POS) — state.orders solo los junta para
+// verlos igual en la lista, pero cada uno vive en su propia colección en Firestore.
+async function assignCommission(orderId, agentId, pct){
+  const o = state.orders.find(x=>x.id===orderId); if(!o) return;
+  const agent = agentId ? state.commissionAgents.find(a=>a.id===agentId) : null;
+  const payload = agent
+    ? { commissionAgentId: agent.id, commissionAgentName: agent.name, commissionPct: pct, commissionAmount: Math.round((o.total||0)*pct/100 * 100)/100 }
+    : { commissionAgentId: null, commissionAgentName: null, commissionPct: 0, commissionAmount: 0 };
+  Object.assign(o, payload);
+  try{
+    await db.collection(o.source==='pos' ? 'sales' : 'orders').doc(orderId).set(payload, {merge:true});
+  }catch(e){ console.error('No se pudo asignar el comisionista', e); showToast('No se pudo guardar'); return; }
+  state.assignCommissionOrderId = null;
+  showToast(agent ? `Asignado a ${agent.name}` : 'Comisionista quitado'); render();
+}
+async function bulkAssignCommission(agentId, pct){
+  const ids = [...(state.selectedOrders||[])];
+  const agent = agentId ? state.commissionAgents.find(a=>a.id===agentId) : null;
+  for(const id of ids){ await assignCommission(id, agentId, pct); }
+  logAdminAction('asignacion_comision_lote', 'comisionista', agent?agent.name:'Ninguno', `${ids.length} venta(s)`);
+  state.selectedOrders = [];
+  showToast(`${ids.length} venta(s) asignada(s)`); render();
+}
+function computeCommissionsReport(days){
+  days = days || 30;
+  const since = Date.now() - days*86400000;
+  const byAgent = {};
+  state.orders.forEach(o=>{
+    if(!o.commissionAgentId || o.status==='Cancelado') return;
+    if(new Date(o.date).getTime() < since) return;
+    if(!byAgent[o.commissionAgentId]) byAgent[o.commissionAgentId] = {name:o.commissionAgentName, sales:0, total:0, commission:0};
+    byAgent[o.commissionAgentId].sales += 1;
+    byAgent[o.commissionAgentId].total += (o.total||0);
+    byAgent[o.commissionAgentId].commission += (o.commissionAmount||0);
+  });
+  return Object.values(byAgent).sort((a,b)=>b.commission-a.commission);
+}
+function renderCommissionAgentModal(){
+  const a = state.commissionAgentModal;
+  return `
+  <div class="modal-overlay">
+    <div class="modal">
+      <h3>${a.id?'Editar':'Agregar'} comisionista</h3>
+      <div class="form-field"><label>Nombre</label><input id="agent-name" value="${a.name||''}"></div>
+      <div class="form-field"><label>Porcentaje por default</label><input id="agent-pct" type="number" min="0" max="100" step="0.5" value="${a.defaultPct||''}" placeholder="Ej. 10"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.commissionAgentModal=null;render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" onclick="saveCommissionAgent()">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderAssignCommissionModal(){
+  const o = state.orders.find(x=>x.id===state.assignCommissionOrderId);
+  if(!o) return '';
+  const currentAgent = o.commissionAgentId;
+  return `
+  <div class="modal-overlay">
+    <div class="modal">
+      <h3>Asignar comisionista</h3>
+      <div class="panel-sub">${formatFolio(o.orderNumber)} · ${money(o.total)}</div>
+      ${state.commissionAgents.length===0 ? `<div class="empty-state">Aún no tienes comisionistas — agrega uno primero en Usuarios → Comisionistas.</div>` : `
+        ${state.commissionAgents.map(ag=>`
+          <label class="checkbox-row" style="justify-content:space-between;">
+            <span><input type="radio" name="commission-agent" ${currentAgent===ag.id?'checked':''} onchange="document.getElementById('commission-pct-input').value=${ag.defaultPct}" value="${ag.id}"> ${ag.name}</span>
+          </label>
+        `).join('')}
+        <div class="form-field"><label>Porcentaje para esta venta</label><input id="commission-pct-input" type="number" min="0" max="100" step="0.5" value="${o.commissionPct || (state.commissionAgents[0]?state.commissionAgents[0].defaultPct:0)}"></div>
+        <button class="btn-primary" style="width:100%;margin-top:8px;" onclick="const sel=document.querySelector('input[name=commission-agent]:checked'); if(sel) assignCommission('${o.id}', sel.value, Number(document.getElementById('commission-pct-input').value)||0); else showToast('Elige un comisionista');">Guardar</button>
+      `}
+      ${currentAgent ? `<button class="btn-danger-text" style="width:100%;margin-top:8px;" onclick="assignCommission('${o.id}', null, 0)">Quitar comisionista de esta venta</button>` : ''}
+      <button class="btn-cancel" style="width:100%;margin-top:8px;" onclick="state.assignCommissionOrderId=null;render()">Cerrar</button>
+    </div>
+  </div>`;
+}
 
 /* ============== PERMISOS DE COLABORADOR ==============
    El rol "colaborador" da acceso a admin.html con su propia cuenta de Firebase (creada
@@ -821,6 +934,8 @@ function icon(name, size){
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
     check:'<path d="M20 6 9 17l-5-5"/>',
+    percent:'<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+    download:'<path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/>',
     history:'<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>',
     link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     'eye-off':'<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><path d="M2 2l20 20"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>',
@@ -3006,12 +3121,53 @@ function renderAdmin(){
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
   ${state.auditLogOpen ? renderAuditLogModal() : ''}
+  ${state.commissionAgentModal ? renderCommissionAgentModal() : ''}
+  ${state.assignCommissionOrderId ? renderAssignCommissionModal() : ''}
   `;
 }
 
+function computeMonthProgress(){
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const revenue = state.orders
+    .filter(o=>o.status!=='Cancelado' && new Date(o.date) >= monthStart)
+    .reduce((s,o)=>s+(o.total||0), 0);
+  const goal = state.settings.salesGoalMonthly||0;
+  const pct = goal>0 ? Math.min(100, (revenue/goal*100)) : 0;
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const dayOfMonth = now.getDate();
+  const expectedPct = (dayOfMonth/daysInMonth)*100;
+  return { revenue, goal, pct, onTrack: goal===0 || pct>=expectedPct-5, monthName: now.toLocaleDateString('es-MX',{month:'long'}) };
+}
+async function saveSalesGoal(){
+  const val = Number(document.getElementById('sales-goal-input').value)||0;
+  state.settings.salesGoalMonthly = val;
+  await saveSettings();
+  state.editingGoal = false;
+  showToast('Meta guardada'); render();
+}
 function renderResumen(){
   const m = computeMetrics();
+  const g = computeMonthProgress();
   return `
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="panel-title" style="margin:0;">Meta de venta de ${g.monthName}</div>
+        ${!state.editingGoal ? `<button class="btn-tertiary" onclick="state.editingGoal=true;render()">${g.goal>0?'Editar':'Poner meta'}</button>` : ''}
+      </div>
+      ${state.editingGoal ? `
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="sales-goal-input" type="number" min="0" step="500" value="${g.goal||''}" placeholder="Ej. 50000" style="flex:1;">
+          <button class="btn-primary" style="width:auto;padding:0 16px;" onclick="saveSalesGoal()">Guardar</button>
+          <button class="btn-cancel" style="width:auto;padding:0 16px;" onclick="state.editingGoal=false;render()">Cancelar</button>
+        </div>
+      ` : g.goal===0 ? `<div class="panel-sub">Aún no has puesto una meta para este mes.</div>` : `
+        <div style="background:var(--bg);border-radius:999px;height:22px;overflow:hidden;position:relative;">
+          <div style="height:100%;border-radius:999px;background:${g.onTrack?'var(--green)':'var(--amber)'};width:${g.pct}%;transition:width .3s;"></div>
+        </div>
+        <div class="panel-sub" style="margin-top:8px;">${money(g.revenue)} de ${money(g.goal)} (${g.pct.toFixed(0)}%) ${g.onTrack?'— vas bien':'— un poco atrás de lo esperado a estas alturas del mes'}</div>
+      `}
+    </div>
     <div class="stat-grid">
       <div class="stat-card primary"><div class="stat-label">${icon('dollar-sign',13)} Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('bar-chart',13)} Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
@@ -3245,6 +3401,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='tiemporeal'?'active':''}" onclick="${goSub('tiemporeal')}">Tiempo real</button>
       <button class="admin-tab ${sub==='visitas'?'active':''}" onclick="${goSub('visitas')}">Visitas</button>
       <button class="admin-tab ${sub==='margen'?'active':''}" onclick="${goSub('margen')}">Margen por categoría</button>
+      <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -3253,6 +3410,25 @@ function renderEstadisticas(){
     ${sub==='tiemporeal' ? renderStatsTiempoReal() : ''}
     ${sub==='visitas' ? renderStatsVisitas() : ''}
     ${sub==='margen' ? renderStatsMargen() : ''}
+    ${sub==='comisiones' ? renderStatsComisiones() : ''}
+  `;
+}
+function renderStatsComisiones(){
+  const rows = computeCommissionsReport(30);
+  const totalCommission = rows.reduce((s,r)=>s+r.commission,0);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Comisiones (últimos 30 días)</div>
+    <div class="panel-sub" style="margin-bottom:14px;">Lo que le debes a cada comisionista, según las ventas que le asignaste desde Pedidos.</div>
+    <div class="stat-grid">
+      <div class="stat-card primary"><div class="stat-label">Total a pagar</div><div class="stat-value">${money(totalCommission)}</div></div>
+    </div>
+    ${rows.length===0 ? `<div class="empty-state">Sin ventas asignadas a comisionistas en los últimos 30 días.</div>` :
+      rows.map(r=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${r.name}</div><div class="row-sub">${r.sales} venta(s) · Total vendido: ${money(r.total)}</div></div>
+          <div style="font-weight:800;color:var(--green);">${money(r.commission)}</div>
+        </div>
+      `).join('')}
   `;
 }
 // Cruza lo vendido en los últimos "days" con el costo guardado de cada producto, agrupado por
@@ -4264,6 +4440,11 @@ function renderPedidos(){
           ${STATUS_FLOW.map(s=>`<option value="${s}">${s}</option>`).join('')}
         </select>
         <button class="btn-tertiary" onclick="bulkArchiveOrders(${!state.showArchived})">${state.showArchived?'Restaurar':'Archivar'}</button>
+        ${state.commissionAgents.length>0 ? `
+        <select onchange="if(this.value){const ag=state.commissionAgents.find(a=>a.id===this.value); bulkAssignCommission(this.value, ag.defaultPct);this.value='';}">
+          <option value="">Asignar comisionista...</option>
+          ${state.commissionAgents.map(a=>`<option value="${a.id}">${a.name} (${a.defaultPct}%)</option>`).join('')}
+        </select>` : ''}
         <button class="btn-danger-text" onclick="bulkDeleteOrders()">${icon('trash',14)} Eliminar</button>
         <button class="btn-tertiary" onclick="state.selectedOrders=[];render()">Cancelar</button>
       </div>` : ''}
@@ -4365,6 +4546,7 @@ function renderOrderRow(o){
             ${STATUS_FLOW.map(s=>`<button class="${o.status===s?'active-status':''}" onclick="state.orderActionsMenu=null;updateOrderStatus('${o.id}','${s}')">${o.status===s?icon('check')+' ':''}${s}</button>`).join('')}
             <hr>
             ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
+            <button onclick="state.orderActionsMenu=null;state.assignCommissionOrderId='${o.id}';render()">${icon('percent',14)} ${o.commissionAgentName?`Comisión: ${o.commissionAgentName}`:'Asignar comisionista'}</button>
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
             <button class="btn-danger-text" onclick="state.orderActionsMenu=null;deleteOrder('${o.id}','${o.source}')">${icon('trash',14)} Eliminar</button>
           </div>
@@ -4496,6 +4678,19 @@ function renderCajeros(){
         </div>
       `).join('')
     }
+    <div class="panel-title" style="margin:20px 0 12px;">Comisionistas (${state.commissionAgents.length})</div>
+    <div class="note-box">Personas que te ayudan a vender por un porcentaje — asígnalas a ventas específicas desde Pedidos.</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.commissionAgentModal={};render()">+ Agregar comisionista</button>
+    ${state.commissionAgents.length===0 ? `<div class="empty-state">Aún no tienes comisionistas.</div>` :
+      state.commissionAgents.map(a=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${a.name}</div><div class="row-sub">${a.defaultPct}% por default</div></div>
+          <div class="row-actions">
+            <button class="icon-btn" onclick='state.commissionAgentModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(a))}"));render()'>${icon('edit')}</button>
+            <button class="icon-btn danger" onclick="deleteCommissionAgent('${a.id}')">${icon('trash')}</button>
+          </div>
+        </div>
+      `).join('')}
   `;
 }
 function toggleCashierNotify(key, checked){
@@ -6655,7 +6850,49 @@ const CONFIG_SUBPANELS = [
   {key:'asistente', icon:icon('message-circle'), label:'Asistente IA'},
   {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
   {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
+  {key:'exportar', icon:icon('download'), label:'Exportar tus datos', ownerOnly:true},
 ];
+function downloadCSV(filename, rows){
+  const csvContent = rows.map(row => row.map(cell => {
+    const s = (cell===null||cell===undefined) ? '' : String(cell);
+    if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }).join(',')).join('\r\n');
+  // El BOM (\ufeff) al inicio es para que Excel reconozca acentos y "ñ" correctamente al abrirlo.
+  const blob = new Blob(['\ufeff' + csvContent], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportProductsCSV(){
+  const rows = [['Nombre','SKU','Categoría','Ubicación','Precio','Precio promocional','Costo','Stock total','Caducidad','Oculto']];
+  state.products.forEach(p=>{
+    rows.push([p.name, p.sku||'', (p.categories||[p.cat]).join('; '), p.location||'', p.price||0, p.promoPrice||0, p.cost||0, p.stock||0, p.expirationDate||'', p.hidden?'Sí':'No']);
+  });
+  downloadCSV(`productos_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  logAdminAction('exportacion', 'productos', `${state.products.length} producto(s)`);
+}
+function exportOrdersCSV(){
+  const rows = [['Folio','Fecha','Origen','Estado','Total','Método de pago','Cliente','Teléfono']];
+  state.orders.forEach(o=>{
+    rows.push([formatFolio(o.orderNumber), new Date(o.date).toLocaleString('es-MX'), o.source==='pos'?'Punto de venta':'Tienda en línea', o.status||'', o.total||0, paymentMethodLabel(o), o.customer||o.customerName||'', o.phone||o.customerPhone||'']);
+  });
+  downloadCSV(`ventas_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  logAdminAction('exportacion', 'ventas', `${state.orders.length} registro(s)`);
+}
+function renderExportSubpanel(){
+  return `
+    <div class="panel-title">Exportar tus datos</div>
+    <div class="note-box">Descarga tus datos en un archivo que se abre directo en Excel — como respaldo aparte de la plataforma, o para compartir con tu contador.</div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn-outline" onclick="exportProductsCSV()">${icon('download',14)} Exportar productos (${state.products.length})</button>
+      <button class="btn-outline" onclick="exportOrdersCSV()">${icon('download',14)} Exportar ventas y pedidos (${state.orders.length})</button>
+      <button class="btn-outline" onclick="exportCustomersCSV()">${icon('download',14)} Exportar clientes (${state.customers.length})</button>
+    </div>
+  `;
+}
 function renderConfig(){
   if(state.configSubpanel) return renderConfigSubpanel(state.configSubpanel);
   const items = CONFIG_SUBPANELS.filter(sp=> !sp.ownerOnly || !state.myPermissions);
@@ -6674,7 +6911,7 @@ function renderConfig(){
 }
 function renderConfigSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.configSubpanel=null;render()">‹ Volver a Configuración</button>`;
-  const map = {operativo: renderOperativoSubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel};
+  const map = {operativo: renderOperativoSubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 function renderOperativoSubpanel(){
