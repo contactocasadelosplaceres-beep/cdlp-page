@@ -192,7 +192,41 @@ let state = {
   scannerContext:'checkout',
   posSessionReported:false,
 };
-function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
+// Para un kit, "existencia en este centro" es lo que alcance para armarlo SOLO con lo que hay
+// en ese centro (no se puede armar un kit combinando piezas de dos sucursales distintas) — por
+// eso centerStock() se apoya en computeKitStockAtCenter() para los kits, y así el buscador, la
+// cuadrícula de productos y addToCart (que ya usan centerStock) funcionan igual sin más cambios.
+function centerStock(p, centerId){
+  if(p && p.isKit) return computeKitStockAtCenter(p, centerId);
+  return (p.stockByCenter && p.stockByCenter[centerId]) || 0;
+}
+function totalStock(p){ return p.stockByCenter ? Object.values(p.stockByCenter).reduce((s,n)=>s+(n||0),0) : (p.stock||0); }
+function computeKitStockAtCenter(p, centerId){
+  const items = p.kitItems||[];
+  if(!items.length) return 0;
+  let min = Infinity;
+  items.forEach(ki=>{
+    const comp = state.products.find(x=>x.id===ki.productId);
+    const need = ki.qty||1;
+    const avail = comp ? Math.floor(((comp.stockByCenter&&comp.stockByCenter[centerId])||0)/need) : 0;
+    if(avail < min) min = avail;
+  });
+  return min===Infinity ? 0 : Math.max(0, min);
+}
+// Mismo cálculo que admin.html (agregado de todos los centros): usado para el "stock" que se
+// guarda en el producto del kit y que ve la tienda en línea (index.html no distingue centros).
+function computeKitStock(p){
+  const items = p.kitItems||[];
+  if(!items.length) return 0;
+  let min = Infinity;
+  items.forEach(ki=>{
+    const comp = state.products.find(x=>x.id===ki.productId);
+    const need = ki.qty||1;
+    const avail = comp ? Math.floor(totalStock(comp)/need) : 0;
+    if(avail < min) min = avail;
+  });
+  return min===Infinity ? 0 : Math.max(0, min);
+}
 
 async function loadData(){
   try{
@@ -1073,9 +1107,24 @@ async function chargeSale(){
   }
   try{
     const orderNumber = await getNextOrderNumber();
+    const touchedComponentIds = new Set();
     await Promise.all(items.map(it=>{
       const p = state.products.find(x=>x.id===it.id);
       logStockMovement(it.id, 'venta_pos', -it.qty, `Venta #${String(orderNumber).padStart(4,'0')}`, centerId);
+      if(p && p.isKit){
+        // Un kit se vende como un solo ítem, pero descuenta el inventario real de cada
+        // producto que lo compone — el kit en sí no guarda existencias propias.
+        return Promise.all((p.kitItems||[]).map(ki=>{
+          const comp = state.products.find(x=>x.id===ki.productId);
+          if(!comp) return Promise.resolve();
+          if(!comp.stockByCenter) comp.stockByCenter = {};
+          comp.stockByCenter[centerId] = Math.max(0, (comp.stockByCenter[centerId]||0) - (ki.qty||1)*it.qty);
+          comp.stock = totalStock(comp);
+          touchedComponentIds.add(comp.id);
+          logStockMovement(comp.id, 'venta_pos_kit', -(ki.qty||1)*it.qty, `Componente de "${p.name}" — Venta #${String(orderNumber).padStart(4,'0')}`, centerId);
+          return db.collection('products').doc(comp.id).update({stockByCenter: comp.stockByCenter, stock: comp.stock});
+        }));
+      }
       if(it.variantId){
         const v = (p.variants||[]).find(x=>x.id===it.variantId);
         v.stock = Math.max(0, (v.stock||0) - it.qty);
@@ -1085,8 +1134,18 @@ async function chargeSale(){
       if(!p.stockByCenter) p.stockByCenter = {};
       p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) - it.qty);
       p.stock = Math.max(0, (p.stock||0) - it.qty);
+      touchedComponentIds.add(it.id);
       return db.collection('products').doc(it.id).update({stockByCenter: p.stockByCenter, stock: p.stock});
     }));
+    // Refresca el stock cacheado de cualquier kit (incluido el que se acaba de vender) cuyos
+    // componentes se hayan movido, para que se muestre "Agotado" en cuanto ya no alcance.
+    if(touchedComponentIds.size){
+      const kitsToRefresh = state.products.filter(k=>k.isKit && (k.kitItems||[]).some(ki=>touchedComponentIds.has(ki.productId)));
+      await Promise.all(kitsToRefresh.map(k=>{
+        k.stock = computeKitStock(k);
+        return db.collection('products').doc(k.id).update({stock:k.stock});
+      })).catch(e=>console.error('No se pudo refrescar el stock de kits', e));
+    }
     await db.collection('sales').add({
       date: new Date().toISOString(), orderNumber, source:"pos",
       cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,

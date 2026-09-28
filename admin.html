@@ -469,6 +469,7 @@ const DEFAULT_SETTINGS = {
     "¿Hay algo que podamos mejorar?",
   ],
   seasonCustomEvents: [], seasonHidden: [],
+  repurchaseProductIds: [], repurchaseDays: 45, repurchaseNotified: {},
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -550,6 +551,8 @@ let state = {
   priceHistoryOpen:false, priceHistoryProductId:null, priceHistoryLoading:false, priceHistoryItems:[],
   faqEditIdx:null, faqDraftQuestion:'', faqDraftAnswer:'',
   surveyEditIdx:null, surveyDraftQuestion:'',
+  kitProductSearch:'', repurchaseProductSearch:'',
+  customerMessagesLoading:false, customerMessagesItems:[],
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -708,6 +711,9 @@ async function loadData(){
   // Punto de partida para la bitácora de cambios de configuración/diseño: a partir de aquí,
   // cualquier saveSettings() compara contra esta "foto" para saber qué campos cambiaron.
   _settingsAuditBaseline = JSON.stringify(state.settings);
+  // Red de seguridad para kits: recalcula su stock contra las existencias reales de sus
+  // componentes cada vez que se abre el panel, por si algo lo dejó desactualizado.
+  refreshAllKitStocks();
   state.loaded = true; render();
 }
 // "Más vendidos" automático: analiza lo vendido de verdad (tienda + POS, sin lo cancelado) en
@@ -821,10 +827,11 @@ const SETTINGS_FIELD_LABELS = {
   logoUrl:'Logo', salesGoalMonthly:'Meta de venta mensual', checkoutReminderProducts:'Recordatorio de checkout',
   faqItems:'Preguntas frecuentes', seasonCustomEvents:'Temporadas personalizadas', seasonHidden:'Temporadas ocultas',
   theme:'Apariencia (colores/tipografía)', deliverySurveyQuestions:'Preguntas de la encuesta post-entrega',
+  repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
-const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt']);
+const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified']);
 async function saveSettings(){
   try{
     if(_settingsAuditBaseline){
@@ -1259,6 +1266,38 @@ async function removeOrderDiscount(id, source){
     showToast('Ajuste eliminado'); render();
   }catch(e){ console.error(e); showToast('No se pudo eliminar el ajuste'); }
 }
+/* ============== HISTORIAL DE CONVERSACIÓN POR CLIENTE ==============
+   Cada vez que se manda un WhatsApp a un cliente desde el panel (recordatorio de recompra,
+   encuesta, recuperación de carrito, aviso de restock, "Escribir al cliente" en un pedido,
+   responder un mensaje del buzón) se guarda un renglón aquí — no el contenido de lo que el
+   cliente responda (eso sigue pasando en WhatsApp), solo lo que Ale le mandó y cuándo, para no
+   perder el hilo. Se guarda por teléfono, así aparece sin importar si esa venta fue de la
+   tienda en línea o del Punto de Venta. */
+async function logCustomerMessage(phone, name, text, kind){
+  const cleanPhone = (phone||'').replace(/\D/g,'');
+  if(!cleanPhone) return;
+  try{
+    await db.collection('customerMessages').add({
+      phone: cleanPhone, name: name||'', text: text||'', kind: kind||'',
+      date: new Date().toISOString(), userEmail: state.user ? state.user.email : '',
+    });
+  }catch(e){ console.error('No se pudo registrar el mensaje en el historial del cliente', e); }
+}
+const CUSTOMER_MESSAGE_KIND_LABELS = {
+  recompra:'Recordatorio de recompra', encuesta:'Encuesta post-entrega', carrito:'Recuperación de carrito',
+  restock:'Aviso de restock', pedido:'Sobre un pedido', mensaje:'Respuesta a un mensaje',
+};
+async function loadCustomerMessageHistory(phone){
+  const cleanPhone = (phone||'').replace(/\D/g,'');
+  state.customerMessagesLoading = true; state.customerMessagesItems = []; render();
+  try{
+    const snap = await db.collection('customerMessages').where('phone','==',cleanPhone).get();
+    const items = snap.docs.map(d=>d.data());
+    items.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    state.customerMessagesItems = items;
+  }catch(e){ console.error('No se pudo cargar el historial de conversación', e); }
+  state.customerMessagesLoading = false; render();
+}
 function waLink(phone, text){
   const num = (phone||'').replace(/\D/g,'');
   return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
@@ -1267,6 +1306,12 @@ function waLink(phone, text){
 // una venta de Punto de Venta (o.customerPhone) — para que "Escribir al cliente" y "Enviar al
 // repartidor" funcionen igual sin importar dónde se hizo la venta.
 function orderContactPhone(o){ return o.phone || o.customerPhone || ''; }
+// Envoltura del botón "Escribir al cliente" del detalle de pedido: solo registra en el
+// historial de conversación, el enlace de WhatsApp lo sigue abriendo el href del propio botón.
+function logCustomerMessageForOrder(orderId){
+  const o = state.orders.find(x=>x.id===orderId); if(!o) return;
+  logCustomerMessage(orderContactPhone(o), (o.source==='pos'?o.customerName:o.customer)||'', buildCustomerMessage(o), 'pedido');
+}
 // Dirección de contacto del pedido: la de la tienda online (o.address) o, si la venta se hizo
 // en el Punto de Venta con un cliente asignado, la que tiene guardada ese cliente (o.customerAddress).
 function orderContactAddress(o){ return o.address || o.customerAddress || ''; }
@@ -1324,7 +1369,9 @@ function buildAbandonedCartMessage(c){
 function recoverAbandonedCart(id){
   const c = (state.abandonedCarts||[]).find(x=>x.id===id);
   if(!c) return;
-  window.open(waLink(c.phone, buildAbandonedCartMessage(c)), '_blank');
+  const msg = buildAbandonedCartMessage(c);
+  window.open(waLink(c.phone, msg), '_blank');
+  logCustomerMessage(c.phone, c.name, msg, 'carrito');
 }
 async function dismissAbandonedCart(id){
   try{ await db.collection('abandonedCarts').doc(id).delete(); }catch(e){ console.error(e); }
@@ -1567,7 +1614,7 @@ function renderOrderDetailModal(){
 
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${orderContactPhone(o) ? `
-          <a class="btn-primary" style="background:var(--teal);color:#2B1620;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;" href="${waLink(orderContactPhone(o), buildCustomerMessage(o))}" target="_blank">
+          <a class="btn-primary" style="background:var(--teal);color:#2B1620;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;" href="${waLink(orderContactPhone(o), buildCustomerMessage(o))}" target="_blank" onclick="logCustomerMessageForOrder('${o.id}')">
             <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
             Escribir al cliente
           </a>
@@ -2054,16 +2101,27 @@ function computeFrequentlyBoughtTogether(productId, limit){
 async function saveProduct(p){
   const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
   if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
+  const old = p.id ? state.products.find(x=>x.id===p.id) : null;
+  const isKit = !!p.isKit;
+  const kitItems = isKit ? (p.kitItems||[]).filter(ki=>ki.productId && ki.qty>0) : [];
   const payload = {
     name:p.name, sku:p.sku||'', location:p.location||'', supplierId:p.supplierId||'', expirationDate:p.expirationDate||'', lowStockThreshold:p.lowStockThreshold||0, cat:p.cat, categories:p.categories||[p.cat],
     price:p.price, promoPrice:p.promoPrice||0, cost:p.cost||0,
-    stock:p.stock, desc:p.desc, images:p.images||[], needs:p.needs||[],
-    stockByCenter:p.stockByCenter||{}, hidden: !!p.hidden,
+    // Un kit no tiene existencias propias por centro: su stock se calcula solo a partir de lo
+    // que alcance con sus productos componentes (ver computeKitStock).
+    stock: isKit ? computeKitStock({kitItems}) : p.stock,
+    desc:p.desc, images:p.images||[], needs:p.needs||[],
+    stockByCenter: isKit ? {} : (p.stockByCenter||{}), hidden: !!p.hidden,
     variantGroups: p.variantGroups||[], variants: p.variants||[],
+    isKit, kitItems,
+    // .set() reemplaza el documento completo, así que cualquier campo que no se mande aquí se
+    // pierde — el orden manual dentro de categorías (ver moveProductInCategory) y la fecha de
+    // creación (para la etiqueta "Nuevo") se preservan explícitamente por eso.
+    categorySortOrder: p.categorySortOrder || (old && old.categorySortOrder) || {},
+    createdAt: (old && old.createdAt) || p.createdAt || new Date().toISOString(),
   };
   try{
     if(p.id){
-      const old = state.products.find(x=>x.id===p.id);
       if(old){
         const oldSBC = old.stockByCenter||{};
         const newSBC = payload.stockByCenter||{};
@@ -2100,6 +2158,9 @@ async function saveProduct(p){
       const ref = await db.collection('products').add(payload);
       state.products.push({id:ref.id, ...payload});
     }
+    // Si este producto es componente de algún kit, el guardado pudo haber cambiado su
+    // existencia (o el kit se acaba de crear con él) — refresca el stock de esos kits.
+    recomputeKitStocksFor([p.id]);
   }catch(e){ console.error(e); showToast('No se pudo guardar (revisa el tamaño de las imágenes)'); return; }
   state.productModal=null; showToast('Producto guardado'); render();
 }
@@ -2262,12 +2323,25 @@ async function updateOrderStatus(id,status){
 async function adjustStockForSale(sale, sign){
   const centerId = sale.centerId;
   const updates = [];
+  const touchedComponentIds = [];
   (sale.items||[]).forEach(it=>{
     if(!it.id || it.id==='promo_buyxpayy') return;
     const p = state.products.find(x=>x.id===it.id);
     if(!p) return;
     logStockMovement(p.id, sign>0?'cancelacion_pos':'reactivacion_pos', sign*it.qty, `Venta ${formatFolio(sale.orderNumber)}`);
-    if(it.variantId){
+    if(p.isKit){
+      // Un kit no tiene stock propio por centro: cancelar/reactivar su venta ajusta a cada uno
+      // de sus productos componentes, igual que se descontaron al venderse (ver chargeSale).
+      (p.kitItems||[]).forEach(ki=>{
+        const comp = state.products.find(x=>x.id===ki.productId);
+        if(!comp) return;
+        if(!comp.stockByCenter) comp.stockByCenter = {};
+        if(centerId) comp.stockByCenter[centerId] = Math.max(0, (comp.stockByCenter[centerId]||0) + sign*(ki.qty||1)*it.qty);
+        comp.stock = totalStock(comp);
+        touchedComponentIds.push(comp.id);
+        updates.push(db.collection('products').doc(comp.id).update({stockByCenter: comp.stockByCenter, stock: comp.stock}));
+      });
+    } else if(it.variantId){
       const v = (p.variants||[]).find(x=>x.id===it.variantId);
       if(v) v.stock = Math.max(0, (v.stock||0) + sign*it.qty);
       p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
@@ -2277,10 +2351,15 @@ async function adjustStockForSale(sale, sign){
       if(centerId) p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) + sign*it.qty);
       p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
       updates.push(db.collection('products').doc(p.id).update({stockByCenter: p.stockByCenter, stock: p.stock}));
+      touchedComponentIds.push(p.id);
     }
   });
   if(!updates.length) return;
-  try{ await Promise.all(updates); showToast(sign>0 ? 'Inventario restaurado' : 'Inventario descontado de nuevo'); }
+  try{
+    await Promise.all(updates);
+    if(touchedComponentIds.length) await recomputeKitStocksFor(touchedComponentIds);
+    showToast(sign>0 ? 'Inventario restaurado' : 'Inventario descontado de nuevo');
+  }
   catch(e){ console.error('No se pudo ajustar el inventario de esta venta', e); showToast('No se pudo ajustar el inventario de esta venta'); }
 }
 async function toggleArchiveOrder(id,archived,silent){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); if(!silent){ showToast(archived?'Pedido archivado':'Pedido restaurado'); render(); } }
@@ -4485,6 +4564,10 @@ function renderProductos(){
   if(q) filtered = filtered.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
   if(catFilter!=='Todas') filtered = filtered.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
   if(needFilter!=='Todas') filtered = filtered.filter(p => (p.needs||[]).includes(needFilter));
+  // Con una sola categoría filtrada (y sin buscar/filtrar por etiqueta) se muestra en el orden
+  // manual que se haya fijado para esa categoría, para poder reordenar con las flechas.
+  const canReorder = catFilter!=='Todas' && needFilter==='Todas' && !q;
+  if(canReorder) filtered = sortByCategoryOrder(filtered, catFilter);
   const filterCount = (q?1:0) + (catFilter!=='Todas'?1:0) + (needFilter!=='Todas'?1:0);
   const daysSinceExport = state.settings.lastExportAt ? Math.floor((Date.now()-new Date(state.settings.lastExportAt).getTime())/86400000) : null;
   return `
@@ -4545,24 +4628,32 @@ function renderProductos(){
             <button class="btn-danger-text" onclick="bulkDeleteProducts()">${icon('trash',14)} Eliminar</button>
             <button class="btn-tertiary" onclick="state.selectedProducts=[];render()">Cancelar</button>
           </div>` : ''}
-        ${shown.map(p=>renderProductRow(p, selected.includes(p.id), catFilter, needFilter)).join('')}
+        ${canReorder ? `<div class="note-box" style="margin-bottom:10px;">Usa las flechas para fijar el orden de esta categoría en la tienda. Los productos sin orden fijado se siguen mezclando solos cada día, pero los que ordenes aquí siempre van primero, en este orden.</div>` : ''}
+        ${shown.map((p,i)=>renderProductRow(p, selected.includes(p.id), catFilter, needFilter, canReorder, i>0, i<shown.length-1)).join('')}
         ${renderShowMoreButton('productListShowMore', remaining)}`;
       })()}
   `;
 }
-function renderProductRow(p, isSelected, catFilter, needFilter){
+function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canUp, canDown){
   return `
       <div class="list-row" style="${p.hidden?'opacity:.55;':''}">
+        ${canReorder ? `
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <button class="icon-btn" style="padding:2px;" title="Subir" ${canUp?'':'disabled'} onclick="moveProductInCategory('${p.id}','${catFilter.replace(/'/g,"\\'")}',-1)">${icon('arrow-up',14)}</button>
+            <button class="icon-btn" style="padding:2px;" title="Bajar" ${canDown?'':'disabled'} onclick="moveProductInCategory('${p.id}','${catFilter.replace(/'/g,"\\'")}',1)">${icon('arrow-down',14)}</button>
+          </div>
+        ` : ''}
         <input type="checkbox" ${isSelected?'checked':''} onchange="toggleProductSelection('${p.id}')">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main">
-          <div class="row-title">${p.name} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
-          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}</div>
+          <div class="row-title">${p.name} ${p.isKit?'<span class="status-badge" style="background:var(--teal);">Kit</span>':''} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
+          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}${p.isKit?` · ${(p.kitItems||[]).length} producto(s) en el kit`:''}</div>
           <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">${stockStatusBadge(p)}${expirationBadge(p)}</div>
         </div>
         <div class="row-actions">
           ${catFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de la categoría ${catFilter}" onclick="removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x')}</button>` : ''}
           ${needFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de esta etiqueta" onclick="removeProductTag('${p.id}','need','${needFilter}')">${icon('x')}</button>` : ''}
+          <button class="icon-btn" title="Duplicar producto" onclick="duplicateProduct('${p.id}')">${icon('copy',16)}</button>
           <button class="icon-btn" title="Crear publicación para estados de WhatsApp" onclick="openPostModal('${p.id}')">${icon('share',16)}</button>
           <button class="icon-btn" title="Copiar enlace directo a este producto" onclick="copyProductLink('${p.id}')">${icon('link',16)}</button>
           <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
@@ -4572,6 +4663,22 @@ function renderProductRow(p, isSelected, catFilter, needFilter){
 }
 // Arma el enlace directo a un producto (para compartir por WhatsApp, redes, donde sea) y lo
 // copia — la clienta que lo abra cae directo en ese producto, no en la página principal.
+// Clona un producto existente (precio, imágenes, variantes, categorías...) y abre la ficha del
+// clon para solo ajustar nombre/detalles antes de guardar — no crea nada en Firestore hasta que
+// se le dé "Guardar", igual que "+ Nuevo producto".
+function duplicateProduct(id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  const clone = JSON.parse(JSON.stringify(p));
+  delete clone.id;
+  clone.name = (p.name||'') + ' (copia)';
+  clone.sku = ''; // el SKU debe ser único por producto; se genera uno nuevo al guardar
+  clone.categorySortOrder = {}; // el orden manual no se hereda, para no pelear posición con el original
+  clone.createdAt = new Date().toISOString();
+  clone.hidden = true; // se crea oculta por default, para revisarla antes de publicarla
+  state.productModal = clone;
+  showToast('Producto duplicado — revisa y guarda para crearlo');
+  render();
+}
 function copyProductLink(id){
   const url = location.href.replace(/admin\.html.*$/, 'index.html') + '?producto=' + encodeURIComponent(id);
   try{
@@ -5126,6 +5233,11 @@ const MESSAGE_STATUS_COLOR = {nuevo:'#bc355c', leido:'#c9a227', respondido:'#4CA
 const MESSAGE_STATUS_TEXT_COLOR = {nuevo:'#fff', leido:'#2B1620', respondido:'#2B1620'};
 const MESSAGE_STATUS_LABEL = {nuevo:'Nuevo', leido:'Leído', respondido:'Respondido'};
 const MESSAGE_TYPE_LABEL = {pregunta:'Pregunta', sugerencia:'Sugerencia', queja:'Queja', otro:'Otro', almacen:'Nota de almacén'};
+function logStoreMessageReply(id){
+  const m = state.storeMessages.find(x=>x.id===id); if(!m) return;
+  const msg = `Hola ${m.name||''}, soy de ${state.settings.storeName}. Vi tu mensaje: "${(m.message||'').slice(0,180)}" — `;
+  logCustomerMessage(m.phone, m.name, msg, 'mensaje');
+}
 function messageWhatsappLink(m){
   const num = normalizePhone(m.phone);
   if(!num) return null;
@@ -5198,7 +5310,7 @@ function renderMessageRow(m){
         </div>
       </div>
       <div class="row-actions">
-        ${wa ? `<a class="icon-btn" href="${wa}" target="_blank" title="Responder por WhatsApp" onclick="updateMessageStatus('${m.id}','respondido')">
+        ${wa ? `<a class="icon-btn" href="${wa}" target="_blank" title="Responder por WhatsApp" onclick="updateMessageStatus('${m.id}','respondido');logStoreMessageReply('${m.id}')">
           <svg width="15" height="15" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
         </a>` : ''}
         <button class="icon-btn danger" onclick="deleteStoreMessage('${m.id}')">${icon('trash')}</button>
@@ -5339,6 +5451,134 @@ function renderCashierModal(){
 /* ============== CENTROS DE DISTRIBUCIÓN ============== */
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
 function totalStock(p){ return p.stockByCenter ? Object.values(p.stockByCenter).reduce((s,n)=>s+(n||0),0) : (p.stock||0); }
+
+/* ============== KITS / COMBOS ==============
+   Un kit es un producto normal (mismo id, precio, imágenes, categorías) pero marcado con
+   isKit:true y una lista kitItems:[{productId,qty}] de los productos que lo componen. No tiene
+   existencias propias por centro: su "stock" se calcula solo, como el mínimo de lo que
+   alcanza para armar más kits con lo que hay de cada componente — y se recalcula cada vez que
+   se guarda el kit, cada vez que se vende uno en el Punto de Venta (que descuenta de los
+   productos reales, no del kit) y como red de seguridad al cargar el panel. Así, un kit se
+   muestra "Agotado" solo con la lógica que ya existe para cualquier producto (p.stock<=0), sin
+   tocar nada más de la tienda ni del POS.
+   */
+// Cuántas veces se ha visto un producto en la tienda en los últimos N días — reutiliza los
+// mismos eventos "product_view" que ya alimentan Estadísticas, solo que aquí filtrados a uno
+// solo y a una ventana de tiempo, para mostrarlo en la propia ficha del producto.
+function productViewsInLastDays(productId, days){
+  const cutoff = Date.now() - (days||30)*86400000;
+  return (state.analyticsEvents||[]).filter(e=>e.type==='product_view' && e.productId===productId && new Date(e.date).getTime()>=cutoff).length;
+}
+function computeKitStock(p){
+  const items = p.kitItems||[];
+  if(!items.length) return 0;
+  let min = Infinity;
+  items.forEach(ki=>{
+    const comp = state.products.find(x=>x.id===ki.productId);
+    const need = ki.qty||1;
+    const avail = comp ? Math.floor(totalStock(comp)/need) : 0;
+    if(avail < min) min = avail;
+  });
+  return min===Infinity ? 0 : Math.max(0, min);
+}
+// Después de una venta (o de cancelarla/reactivarla) que movió el stock de estos productos,
+// refresca el stock cacheado de cualquier kit que los use como componente.
+async function refreshAllKitStocks(){
+  const kits = state.products.filter(p=>p.isKit);
+  if(!kits.length) return;
+  const batch = db.batch();
+  let changed = 0;
+  kits.forEach(k=>{
+    const newStock = computeKitStock(k);
+    if(newStock !== (k.stock||0)){ k.stock = newStock; batch.update(db.collection('products').doc(k.id), {stock:newStock}); changed++; }
+  });
+  if(changed) try{ await batch.commit(); }catch(e){ console.error('No se pudo refrescar el stock de kits al cargar', e); }
+}
+async function recomputeKitStocksFor(componentIds){
+  const ids = new Set(componentIds||[]);
+  const kits = state.products.filter(p=>p.isKit && (p.kitItems||[]).some(ki=>ids.has(ki.productId)));
+  if(!kits.length) return;
+  const batch = db.batch();
+  kits.forEach(k=>{ k.stock = computeKitStock(k); batch.update(db.collection('products').doc(k.id), {stock:k.stock}); });
+  try{ await batch.commit(); }catch(e){ console.error('No se pudo actualizar el stock de los kits/combos', e); }
+}
+/* ============== ORDEN MANUAL DE PRODUCTOS DENTRO DE UNA CATEGORÍA ==============
+   Por default el catálogo público se mezcla solo cada día (dailyShuffledProducts en index.html)
+   para que no se vea siempre igual. Aquí se permite fijar un orden a mano DENTRO de una
+   categoría (p.categorySortOrder[cat] = posición); los productos sin orden fijado siguen
+   mezclándose entre ellos como hasta ahora, pero los que sí tienen posición van primero, en el
+   orden elegido. */
+function productsInCategory(cat){
+  return state.products.filter(p=>(p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(cat));
+}
+function sortByCategoryOrder(list, cat){
+  return [...list].sort((a,b)=>{
+    const ao = (a.categorySortOrder||{})[cat]; const bo = (b.categorySortOrder||{})[cat];
+    if(ao!=null && bo!=null) return ao-bo;
+    if(ao!=null) return -1;
+    if(bo!=null) return 1;
+    return 0;
+  });
+}
+async function moveProductInCategory(id, cat, dir){
+  const ordered = sortByCategoryOrder(productsInCategory(cat), cat);
+  const idx = ordered.findIndex(p=>p.id===id);
+  const target = idx+dir;
+  if(idx<0 || target<0 || target>=ordered.length) return;
+  [ordered[idx], ordered[target]] = [ordered[target], ordered[idx]];
+  const batch = db.batch();
+  ordered.forEach((p,i)=>{
+    p.categorySortOrder = {...(p.categorySortOrder||{}), [cat]: i};
+    batch.update(db.collection('products').doc(p.id), {categorySortOrder: p.categorySortOrder});
+  });
+  try{ await batch.commit(); render(); }
+  catch(e){ console.error('No se pudo guardar el nuevo orden', e); showToast('No se pudo guardar el nuevo orden'); }
+}
+function toggleProductIsKit(checked){
+  state.productModal.isKit = checked;
+  if(checked && !state.productModal.kitItems) state.productModal.kitItems = [];
+  render();
+}
+function addKitComponent(id){
+  if(id===state.productModal.id) { showToast('Un kit no puede contenerse a sí mismo'); return; }
+  const items = state.productModal.kitItems || (state.productModal.kitItems=[]);
+  if(items.some(ki=>ki.productId===id)) return;
+  items.push({productId:id, qty:1});
+  state.kitProductSearch=''; render();
+}
+function removeKitComponent(idx){ state.productModal.kitItems.splice(idx,1); render(); }
+function setKitComponentQty(idx, val){
+  const q = Math.max(1, Number(val)||1);
+  state.productModal.kitItems[idx].qty = q;
+}
+function renderKitEditor(p){
+  const items = p.kitItems || [];
+  const q = (state.kitProductSearch||'').trim().toLowerCase();
+  const candidates = q ? state.products.filter(x=>!x.isKit && x.id!==p.id && (x.name||'').toLowerCase().includes(q)).slice(0,10) : [];
+  const previewStock = computeKitStock({...p, kitItems: items});
+  return `
+  <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
+    <div class="panel-sub" style="margin-top:0;">Agrega los productos que forman este kit y cuántas unidades de cada uno lleva. El stock del kit se calcula solo, según lo que alcance con las existencias reales de esos productos.</div>
+    ${items.length===0 ? `<div class="empty-state">Aún no has agregado ningún producto a este kit.</div>` :
+      items.map((ki,idx)=>{ const comp = state.products.find(x=>x.id===ki.productId); return `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;font-size:13px;">${comp?comp.name:'(producto no encontrado)'}<div class="row-sub">${comp?`Existencia: ${totalStock(comp)}`:''}</div></div>
+          <input type="number" min="1" value="${ki.qty}" style="width:64px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setKitComponentQty(${idx}, this.value)">
+          <button class="icon-btn danger" onclick="removeKitComponent(${idx})">${icon('trash',14)}</button>
+        </div>`; }).join('')}
+    <div class="form-field" style="margin-top:12px;margin-bottom:0;"><label>Agregar producto al kit</label>
+      <input placeholder="Buscar producto por nombre..." value="${state.kitProductSearch||''}" oninput="state.kitProductSearch=this.value;render()">
+    </div>
+    ${candidates.length>0 ? `
+      <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-top:8px;">
+        ${candidates.map(c=>`
+          <div class="list-row" style="margin:0;border-radius:0;cursor:pointer;" onclick="addKitComponent('${c.id}')">
+            <div class="row-main"><div class="row-title" style="font-size:13px;">${c.name}</div><div class="row-sub">Existencia: ${totalStock(c)}</div></div>
+          </div>`).join('')}
+      </div>` : ''}
+    <div class="panel-sub" style="margin-top:12px;margin-bottom:0;">Con lo que hay ahora mismo, alcanza para armar <strong>${previewStock}</strong> kit(s).</div>
+  </div>`;
+}
 
 async function saveCenterDoc(c){
   if(c.id){ await db.collection('distributionCenters').doc(c.id).set({name:c.name, isDefault:!!c.isDefault, active:c.active}); }
@@ -5516,7 +5756,11 @@ function distinctCustomerValues(field){
   return Array.from(vals).sort();
 }
 function openCustomerModal(manualId){
-  if(manualId){ state.customerModal = {...state.customers.find(c=>c.id===manualId)}; }
+  state.customerMessagesItems = []; state.customerMessagesLoading = false;
+  if(manualId){
+    state.customerModal = {...state.customers.find(c=>c.id===manualId)};
+    if(state.customerModal.phone) loadCustomerMessageHistory(state.customerModal.phone);
+  }
   else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'', notesLog:[] }; }
   render();
 }
@@ -5762,6 +6006,10 @@ async function markRequestNotified(id){
   try{
     await db.collection('restockRequests').doc(id).set({notified:true, notifiedAt:new Date().toISOString()}, {merge:true});
     r.notified = true; r.notifiedAt = new Date().toISOString();
+    const storeName = state.settings.storeName || 'nuestra tienda';
+    const link = productShareLink(r.productId);
+    const msg = `Hola ${r.name||''}! 💕 Te escribimos de ${storeName}: ya llegó "${(r.productName||'').replace(/"/g,'')}", el producto que querías. Aquí lo puedes ver: ${link}`;
+    logCustomerMessage(r.phone, r.name, msg, 'restock');
   }catch(e){ console.error('No se pudo marcar como avisado', e); }
   render();
 }
@@ -6456,11 +6704,32 @@ function renderCustomerModal(){
           </div>`}
       </div>
       <div class="form-field"><label>Nota general</label><textarea id="cm-notes" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
+      ${c.id ? renderCustomerMessageHistory() : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCustomerModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveCustomerModal()">Guardar</button>
       </div>
     </div>
+  </div>`;
+}
+// Historial de conversación: todo lo que se le ha mandado por WhatsApp desde el panel
+// (recordatorio de recompra, encuesta, recuperación de carrito, aviso de restock, "Escribir al
+// cliente" en un pedido, respuesta a un mensaje del buzón) — no lo que el cliente responda, eso
+// se sigue viendo directo en WhatsApp.
+function renderCustomerMessageHistory(){
+  const items = state.customerMessagesItems||[];
+  return `
+  <div class="form-field">
+    <label>Historial de conversación (mensajes enviados desde el panel)</label>
+    ${state.customerMessagesLoading ? `<div class="panel-sub">Cargando…</div>` :
+      items.length===0 ? `<div class="panel-sub">Aún no se le ha mandado ningún mensaje desde aquí.</div>` : `
+      <div style="max-height:220px;overflow-y:auto;">
+        ${items.map(m=>`
+          <div style="border-bottom:1px solid var(--border);padding:8px 0;">
+            <div class="row-sub">${new Date(m.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})} · ${CUSTOMER_MESSAGE_KIND_LABELS[m.kind]||m.kind||'Mensaje'}</div>
+            <div style="white-space:pre-wrap;font-size:12.5px;margin-top:2px;color:var(--ink-soft);">${(m.text||'').replace(/</g,'&lt;')}</div>
+          </div>`).join('')}
+      </div>`}
   </div>`;
 }
 function renderCustomerImportModal(){
@@ -6554,6 +6823,7 @@ const MARKETING_SUBPANELS = [
   {key:'cupones', icon:icon('tag'), label:'Cupones de descuento'},
   {key:'promociones', icon:icon('star'), label:'Promociones automáticas'},
   {key:'recordatorio', icon:icon('bell'), label:'Recordatorio al cobrar (POS)'},
+  {key:'recompra', icon:icon('history'), label:'Recordatorio de recompra'},
   {key:'temporadas', icon:icon('calendar'), label:'Calendario de temporadas'},
 ];
 function renderMarketing(){
@@ -6572,7 +6842,7 @@ function renderMarketing(){
 }
 function renderMarketingSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.marketingSubpanel=null;render()">‹ Volver a Marketing</button>`;
-  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, temporadas: renderSeasonsSubpanel};
+  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, recompra: renderRepurchaseSubpanel, temporadas: renderSeasonsSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 
@@ -6917,6 +7187,20 @@ function promoSummary(p){
   if(p.type==='cross_sell'){ const a=state.products.find(x=>x.id===p.triggerProductId), b=state.products.find(x=>x.id===p.discountProductId); return `${a?a.name:'—'} + ${b?b.name:'—'}: ${p.discountPercent}% en el segundo`; }
   return '';
 }
+// Avisa en el panel cuando el producto clave de una promoción de regalo/cruce ya no tiene
+// existencias — la tienda (index.html) ya la oculta sola en ese caso (ver activeGift y
+// crossSellSuggestions), pero Ale también debe verlo aquí para reponer o desactivarla.
+function promoOutOfStockWarning(p){
+  if(p.type==='gift'){
+    const g = state.products.find(x=>x.id===p.giftProductId);
+    if(g && g.stock<=0) return `El producto de regalo ("${g.name}") está agotado`;
+  }
+  if(p.type==='cross_sell'){
+    const b = state.products.find(x=>x.id===p.discountProductId);
+    if(b && b.stock<=0) return `El producto con descuento ("${b.name}") está agotado`;
+  }
+  return '';
+}
 function renderPromociones(){
   const promos = state.settings.promotions||[];
   return `
@@ -6936,6 +7220,7 @@ function renderPromociones(){
           </div>
           <div class="row-sub">${PROMO_TYPES[p.type]}</div>
           <div class="row-sub">${promoSummary(p)}</div>
+          ${p.active && promoOutOfStockWarning(p) ? `<div class="note-box" style="background:#FFF6E0;color:#8a6300;margin-top:6px;">${icon('alert-triangle',14)} ${promoOutOfStockWarning(p)} — en la tienda esta promoción se oculta sola mientras tanto.</div>` : ''}
         </div>
       `).join('')}
     ${state.promoModal ? renderPromoModal() : ''}
@@ -8282,6 +8567,94 @@ function renderCheckoutReminderSubpanel(){
   </div>`;
 }
 
+/* ============== RECORDATORIO AUTOMÁTICO DE RECOMPRA ==============
+   Ale marca qué productos se terminan/usan con regularidad (lubricante, preservativos...). Si
+   un cliente que ya compró uno de esos productos no lo ha vuelto a comprar en los días que se
+   definan, aparece en la lista de "para contactar" con un botón directo a WhatsApp. Una vez
+   contactado, no se le vuelve a mostrar por el mismo periodo (se guarda en
+   settings.repurchaseNotified), para no insistirle todos los días. */
+function toggleRepurchaseProduct(id, checked){
+  let ids = state.settings.repurchaseProductIds || [];
+  ids = checked ? [...new Set([...ids, id])] : ids.filter(x=>x!==id);
+  state.settings.repurchaseProductIds = ids;
+  saveSettings(); render();
+}
+function computeRepurchaseCandidates(){
+  const days = state.settings.repurchaseDays || 45;
+  const ids = state.settings.repurchaseProductIds || [];
+  if(!ids.length) return [];
+  const cutoff = Date.now() - days*86400000;
+  const lastByPhoneProduct = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const phone = (orderContactPhone(o)||'').replace(/\D/g,''); if(!phone) return;
+    const name = o.customer || o.customerName || '';
+    const d = new Date(o.date).getTime();
+    if(isNaN(d)) return;
+    (o.items||[]).forEach(it=>{
+      if(!it.id || !ids.includes(it.id)) return;
+      const key = phone+'|'+it.id;
+      if(!lastByPhoneProduct[key] || d > lastByPhoneProduct[key].date){
+        lastByPhoneProduct[key] = {date:d, phone, name, productId: it.id};
+      }
+    });
+  });
+  const notified = state.settings.repurchaseNotified || {};
+  return Object.values(lastByPhoneProduct)
+    .filter(x=>x.date <= cutoff)
+    .filter(x=>{
+      const notifiedAt = notified[x.phone+'|'+x.productId];
+      if(!notifiedAt) return true;
+      return (Date.now() - new Date(notifiedAt).getTime()) >= days*86400000;
+    })
+    .map(x=>({...x, product: state.products.find(p=>p.id===x.productId), daysSince: Math.floor((Date.now()-x.date)/86400000)}))
+    .filter(x=>x.product)
+    .sort((a,b)=>b.daysSince-a.daysSince);
+}
+function buildRepurchaseMessage(cand){
+  return `Hola ${cand.name||''}! Notamos que hace ${cand.daysSince} días compraste ${cand.product.name} en ${state.settings.storeName||'nuestra tienda'} — pensamos que ya te podría estar por terminar. ¿Te gustaría volver a pedirlo? 💕`;
+}
+async function sendRepurchaseReminder(phone, productId){
+  const cand = computeRepurchaseCandidates().find(c=>c.phone===phone && c.productId===productId);
+  if(!cand) return;
+  const msg = buildRepurchaseMessage(cand);
+  window.open(waLink(phone, msg), '_blank');
+  logCustomerMessage(phone, cand.name, msg, 'recompra');
+  state.settings.repurchaseNotified = {...(state.settings.repurchaseNotified||{}), [phone+'|'+productId]: new Date().toISOString()};
+  await saveSettings(); render();
+}
+function renderRepurchaseSubpanel(){
+  const ids = state.settings.repurchaseProductIds || [];
+  const q = (state.repurchaseProductSearch||'').trim().toLowerCase();
+  const chosen = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q)).slice(0,30) : chosen;
+  const candidates = computeRepurchaseCandidates();
+  return `
+  <div class="panel">
+    <div class="panel-title">Recordatorio de recompra</div>
+    <div class="panel-sub">Marca los productos que se terminan o se usan con regularidad. Si un cliente que ya compró uno de estos no lo ha vuelto a comprar en los días que definas abajo, aparece en la lista para poder escribirle.</div>
+    <div class="form-field" style="max-width:240px;"><label>Días sin recomprar para avisar</label>
+      <input type="number" min="1" value="${state.settings.repurchaseDays||45}" onchange="state.settings.repurchaseDays=Number(this.value)||45;saveSettings();render()">
+    </div>
+    <input id="repurchase-search" placeholder="Buscar producto por nombre..." value="${state.repurchaseProductSearch||''}" oninput="state.repurchaseProductSearch=this.value;render()" style="margin:10px 0;">
+    <div style="max-height:240px;overflow-y:auto;margin-bottom:16px;">
+      ${results.length===0 ? `<div class="empty-state">${q?'Sin resultados.':'Aún no has marcado ninguno — busca arriba para empezar.'}</div>` :
+        results.map(p=>`
+          <label class="checkbox-row">
+            <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleRepurchaseProduct('${p.id}', this.checked)">
+            <span>${p.name}</span>
+          </label>`).join('')}
+    </div>
+    <div class="panel-title">Clientes para contactar (${candidates.length})</div>
+    ${candidates.length===0 ? `<div class="empty-state">Nadie está pendiente de recompra por ahora.</div>` :
+      candidates.map(c=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${c.name||'(sin nombre)'}</div><div class="row-sub">${c.product.name} · hace ${c.daysSince} días · ${c.phone}</div></div>
+          <button class="btn-primary" onclick="sendRepurchaseReminder('${c.phone}','${c.productId}')">${icon('message-circle',14)} WhatsApp</button>
+        </div>`).join('')}
+  </div>`;
+}
+
 function renderFaqSubpanel(){
   const list = state.settings.faqItems || [];
   const editIdx = state.faqEditIdx;
@@ -8608,7 +8981,9 @@ function sendDeliverySurvey(id){
   const o = state.orders.find(x=>x.id===id); if(!o) return;
   const phone = orderContactPhone(o);
   if(!phone){ showToast('Este pedido no tiene teléfono registrado'); return; }
-  window.open(waLink(phone, buildDeliverySurveyMessage(o)), '_blank');
+  const msg = buildDeliverySurveyMessage(o);
+  window.open(waLink(phone, msg), '_blank');
+  logCustomerMessage(phone, o.customer||o.customerName||'', msg, 'encuesta');
 }
 
 function renderHerramientasSubpanel(){
@@ -8780,6 +9155,12 @@ function renderProductModal(){
         Ocultar este producto del catálogo público (sigue existiendo, solo no se muestra en la tienda)
       </label>
 
+      ${!isNew && (p.variants&&p.variants.length) ? '' : `
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
+        <input type="checkbox" id="pf-iskit" ${p.isKit?'checked':''} onchange="toggleProductIsKit(this.checked)">
+        Este producto es un kit o combo (se arma con otros productos ya existentes)
+      </label>`}
+
       <div class="form-section-label">Información principal</div>
       <div class="form-field"><label>Imágenes (máx. 5) — la primera es la portada</label>
         <div class="img-thumbs">
@@ -8867,6 +9248,7 @@ function renderProductModal(){
           <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="font-size:16px;color:var(--primary-deep);">${margin}%</strong></div>
           <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="font-size:16px;color:var(--green);">${money(profit)}</strong></div>
         </div>
+        ${p.id ? `<div class="row-sub" style="margin-top:10px;">Visto en la tienda ${productViewsInLastDays(p.id,30)} vez(es) en los últimos 30 días</div>` : ''}
         ${p.id ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="openProductPriceHistory('${p.id}')">${icon('history',13)} Ver historial de cambios</button>` : ''}
         ${p.id && p.variants && p.variants.length ? (()=>{ const perf = computeVariantPerformance(p.id); const best = perf.length && perf[0].unitsTotal>0 ? perf[0].id : null; return `
           <div style="margin-top:14px;">
@@ -8882,7 +9264,8 @@ function renderProductModal(){
         `; })() : ''}
       </div>
 
-      <div class="form-section-label">Inventario</div>
+      <div class="form-section-label">${p.isKit ? 'Productos del kit' : 'Inventario'}</div>
+      ${p.isKit ? renderKitEditor(p) : `
       <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
         <div class="form-field" style="margin-bottom:0;"><label>Existencias por centro de distribución</label>
           <div style="display:flex;flex-direction:column;gap:8px;">
@@ -8895,7 +9278,7 @@ function renderProductModal(){
           </div>
           <div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Total: <strong id="pf-stock-total">${Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0)}</strong> unidades (se suma automáticamente)</div>
         </div>
-      </div>
+      </div>`}
 
       <div class="form-section-label">Descripción y categorización</div>
       <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea></div>
