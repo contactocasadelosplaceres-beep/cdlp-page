@@ -462,6 +462,7 @@ const DEFAULT_SETTINGS = {
   salesGoalMonthly: 0,
   checkoutReminderProducts: [],
   faqItems: [],
+  seasonCustomEvents: [], seasonHidden: [],
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -531,6 +532,14 @@ let state = {
   receiveGoodsModalOpen:false, receiveGoodsSupplierId:null, receiveGoodsQuantities:{},
   groupMessagesByCustomer:false,
   heatMetric:'count', heatDays:90,
+  loadWarnings:[],
+  expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
+  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'',
+  restockRequests:[], notifyModalProductId:null,
+  searchMisses:[], searchMissDays:30,
+  massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
+  seasonNewName:'', seasonNewMonth:1, seasonNewDay:1,
+  postModalProductId:null, postImageIdx:0, postText:'',
   checkoutReminderSearch:'',
   priceHistoryOpen:false, priceHistoryProductId:null, priceHistoryLoading:false, priceHistoryItems:[],
   faqEditIdx:null, faqDraftQuestion:'', faqDraftAnswer:'',
@@ -632,6 +641,22 @@ async function loadData(){
     state.restockItems = restockItemsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.commissionAgents = commissionAgentsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.activePosSessions = activePosSessionsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    // Colecciones más nuevas: si una falla (por ejemplo porque todavía no se publican las reglas de
+    // Firestore más recientes), el panel sigue cargando normal y solo avisa en Resumen cuál falló.
+    state.loadWarnings = [];
+    const safeGet = async (label, query) => { try{ return await query.get(); }catch(e){ console.error('No se pudo cargar '+label, e); state.loadWarnings.push(label); return {docs:[]}; } };
+    const [expSnap, shrSnap, reqSnap, missSnap, pcbSnap] = await Promise.all([
+      safeGet('gastos', db.collection('expenses').orderBy('date','desc').limit(1500)),
+      safeGet('mermas', db.collection('shrinkage').orderBy('date','desc').limit(1000)),
+      safeGet('avisos "avísame cuando llegue"', db.collection('restockRequests').limit(2000)),
+      safeGet('búsquedas sin resultado', db.collection('searchMisses').orderBy('date','desc').limit(1500)),
+      safeGet('cambios masivos de precio', db.collection('priceChangeBatches').orderBy('date','desc').limit(10)),
+    ]);
+    state.expenses = expSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.shrinkage = shrSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.restockRequests = reqSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.searchMisses = missSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.priceChangeBatches = pcbSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -663,7 +688,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -993,6 +1018,8 @@ function icon(name, size){
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
     check:'<path d="M20 6 9 17l-5-5"/>',
+    calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
     copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     'help-circle':'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><path d="M12 17h.01"/>',
     percent:'<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
@@ -2348,6 +2375,9 @@ const STOCK_MOVEMENT_LABELS = {
   transferencia_salida: 'Salió por transferencia',
   transferencia_entrada: 'Entró por transferencia',
   auditoria: 'Ajuste por auditoría de inventario',
+  merma: 'Merma (baja de inventario)',
+  recepcion_mercancia: 'Mercancía recibida de proveedor',
+  cambio_producto: 'Cambio de producto',
 };
 function openProductPriceHistory(id){
   state.priceHistoryOpen = true; state.priceHistoryProductId = id; state.priceHistoryLoading = true; state.priceHistoryItems = [];
@@ -2430,6 +2460,11 @@ const ADMIN_ACTION_LABELS = {
   asignacion_comision_lote: 'Asignó comisionista a varias ventas',
   pago_comision: 'Marcó comisiones como pagadas',
   deshacer_pago_comision: 'Deshizo un pago de comisiones',
+  gasto: 'Registró un gasto',
+  gasto_eliminado: 'Eliminó un gasto',
+  merma: 'Registró una merma',
+  cambio_precio_masivo: 'Cambió precios en masa',
+  deshacer_cambio_precio_masivo: 'Deshizo un cambio masivo de precios',
 };
 function openAuditLog(){
   state.auditLogOpen = true; state.auditLogLoading = true; state.auditLogItems = [];
@@ -3300,6 +3335,9 @@ function renderAdmin(){
   ${state.assignCommissionOrderId ? renderAssignCommissionModal() : ''}
   ${state.priceHistoryOpen ? renderProductPriceHistoryModal() : ''}
   ${state.receiveGoodsModalOpen ? renderReceiveGoodsModal() : ''}
+  ${state.massPriceModalOpen ? renderMassPriceModal() : ''}
+  ${state.notifyModalProductId ? renderNotifyModal() : ''}
+  ${state.postModalProductId ? renderPostModal() : ''}
   `;
 }
 
@@ -3350,6 +3388,8 @@ function computeBusinessHealth(){
   if(unansweredOld.length>0) issues.push({level:'ambar', text:`${unansweredOld.length} mensaje(s) sin responder hace más de 24 horas.`});
   const g = computeMonthProgress();
   if(g.goal>0 && !g.onTrack) issues.push({level:'ambar', text:'Vas un poco atrás de tu meta de venta de este mes.'});
+  const waitingReady = computeRestockDemand().filter(g=>g.stock>0).reduce((s,g)=>s+g.people.length,0);
+  if(waitingReady>0) issues.push({level:'ambar', text:`${waitingReady} persona(s) esperan productos que ya repusiste — avísales desde Centros → Reabasto.`});
   const level = issues.some(i=>i.level==='rojo') ? 'rojo' : issues.length>0 ? 'ambar' : 'verde';
   return { level, issues };
 }
@@ -3360,6 +3400,7 @@ function renderResumen(){
   const healthColor = {rojo:'var(--rose)', ambar:'var(--amber)', verde:'var(--green)'}[health.level];
   const healthLabel = {rojo:'Necesita atención', ambar:'Con pendientes', verde:'Todo en orden'}[health.level];
   return `
+    ${state.loadWarnings && state.loadWarnings.length ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;">${icon('alert-triangle',14)} No se pudo cargar: ${state.loadWarnings.join(', ')}. Casi seguro falta publicar las reglas de Firestore más recientes (Firebase → Firestore → Reglas → pegar el archivo → Publicar).</div>` : ''}
     <div class="panel" style="border-left:5px solid ${healthColor};">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:${health.issues.length?'10px':'0'};">
         <span style="width:12px;height:12px;border-radius:50%;background:${healthColor};display:inline-block;"></span>
@@ -3394,6 +3435,7 @@ function renderResumen(){
         </div>
       `}
     </div>
+    ${renderUpcomingSeasonsPanel()}
     <div class="stat-grid">
       <div class="stat-card primary"><div class="stat-label">${icon('dollar-sign',13)} Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('bar-chart',13)} Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
@@ -3642,6 +3684,8 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='margen'?'active':''}" onclick="${goSub('margen')}">Margen por categoría</button>
       <button class="admin-tab ${sub==='margenproveedor'?'active':''}" onclick="${goSub('margenproveedor')}">Rentabilidad por proveedor</button>
       <button class="admin-tab ${sub==='mapacalor'?'active':''}" onclick="${goSub('mapacalor')}">Mapa de calor</button>
+      <button class="admin-tab ${sub==='gastos'?'active':''}" onclick="${goSub('gastos')}">Gastos y utilidad</button>
+      <button class="admin-tab ${sub==='busquedas'?'active':''}" onclick="${goSub('busquedas')}">Búsquedas sin resultado</button>
       <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
@@ -3653,6 +3697,8 @@ function renderEstadisticas(){
     ${sub==='margen' ? renderStatsMargen() : ''}
     ${sub==='margenproveedor' ? renderStatsMargenProveedor() : ''}
     ${sub==='mapacalor' ? renderStatsMapaCalor() : ''}
+    ${sub==='gastos' ? renderStatsGastos() : ''}
+    ${sub==='busquedas' ? renderStatsBusquedas() : ''}
     ${sub==='comisiones' ? renderStatsComisiones() : ''}
   `;
 }
@@ -4012,6 +4058,7 @@ function renderStatsProductos(){
                   <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}</div>
                 </div>
                 <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Marcar como leído</button>
+                ${(check.key==='expired'||check.key==='expiringSoon') ? `<button class="btn-tertiary" title="Darlo de baja del inventario" onclick="openShrinkForProduct('${p.id}')">Registrar merma</button>` : ''}
                 ${check.key==='outOfStockVisible' ? `<button class="btn-tertiary" title="Ocultar de la tienda mientras se repone" onclick="if(confirm('¿Ocultar \\'${p.name.replace(/'/g,"\\\\'")}\\' de la tienda?'))quickHideProduct('${p.id}')">${icon('eye-off',13)} Ocultar</button>` : ''}
               </div>
             `).join('')}
@@ -4337,6 +4384,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="fixStrayQuestionMarks()">Corregir signos "?" sueltos en descripciones</button>
       <button class="btn-outline" onclick="fixRunTogetherWordsTool()">Separar palabras pegadas en descripciones</button>
       <button class="btn-outline" onclick="openRecompressTool()">Aligerar fotos ya guardadas</button>
+      ${state.priceChangeBatches.find(b=>!b.undone) ? `<button class="btn-outline" onclick="undoLastMassPriceChange()">Deshacer el último cambio masivo de precios</button>` : ''}
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría, SKU o ubicación..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
@@ -4367,10 +4415,12 @@ function renderProductos(){
         return `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <label class="checkbox-row" style="margin:0;"><input type="checkbox" ${allVisibleSelected?'checked':''} onchange='toggleSelectAllProducts(${JSON.stringify(visibleIds)}, this.checked)'><span>Seleccionar todos los que se ven aquí</span></label>
+          ${filtered.length>visibleIds.length ? `<button class="btn-tertiary" onclick="selectAllFilteredProducts()">Seleccionar los ${filtered.length} del filtro actual</button>` : ''}
         </div>
         ${selected.length>0 ? `
           <div class="bulk-actions-bar">
             <span>${selected.length} seleccionado${selected.length===1?'':'s'}</span>
+            <button class="btn-tertiary" onclick="openMassPriceModal()">${icon('dollar-sign',14)} Cambiar precios</button>
             <button class="btn-tertiary" onclick='printProductLabelsBulk(${JSON.stringify(selected)})'>${icon('printer',14)} Imprimir etiquetas</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(true)">Ocultar</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(false)">Mostrar</button>
@@ -4395,6 +4445,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter){
         <div class="row-actions">
           ${catFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de la categoría ${catFilter}" onclick="removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x')}</button>` : ''}
           ${needFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de esta etiqueta" onclick="removeProductTag('${p.id}','need','${needFilter}')">${icon('x')}</button>` : ''}
+          <button class="icon-btn" title="Crear publicación para estados de WhatsApp" onclick="openPostModal('${p.id}')">${icon('share',16)}</button>
           <button class="icon-btn" title="Copiar enlace directo a este producto" onclick="copyProductLink('${p.id}')">${icon('link',16)}</button>
           <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
           <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">${icon('trash')}</button>
@@ -5351,6 +5402,739 @@ function openCustomerModal(manualId){
   else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'', notesLog:[] }; }
   render();
 }
+
+/* ================================================================
+   GASTOS Y UTILIDAD NETA
+   ================================================================ */
+const EXPENSE_CATEGORIES = ['Renta','Sueldos','Empaque','Publicidad','Servicios (luz, agua, internet)','Transporte y envíos','Otros'];
+function pad2(n){ return String(n).padStart(2,'0'); }
+function localDateStr(d){ d = d||new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function currentMonthKey(){ const d = new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1); }
+function monthRangeOf(key){ const [y,m] = key.split('-').map(Number); return {start:new Date(y,m-1,1), end:new Date(y,m,1)}; }
+function monthLabel(key){ const [y,m] = key.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'}); }
+function lastMonthKeys(n){ const out = []; const d = new Date(); d.setDate(1); for(let i=0;i<n;i++){ out.push(d.getFullYear()+'-'+pad2(d.getMonth()+1)); d.setMonth(d.getMonth()-1); } return out; }
+// Utilidad neta del mes = ventas − costo de lo vendido − gastos (− retiros de caja, si se cuentan).
+// El costo usa el costo ACTUAL de cada producto (no guardamos el costo histórico por venta).
+function computeNetProfit(monthKey){
+  const {start,end} = monthRangeOf(monthKey);
+  let revenue = 0, cogs = 0, soldWithoutCost = 0;
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const d = new Date(o.date);
+    if(isNaN(d.getTime()) || d<start || d>=end) return;
+    revenue += (o.total||0);
+    (o.items||[]).forEach(it=>{
+      if(!it.id || it.id==='promo_buyxpayy') return;
+      const p = state.products.find(x=>x.id===it.id);
+      if(p && p.cost>0) cogs += p.cost*it.qty; else soldWithoutCost += it.qty;
+    });
+  });
+  const expenses = state.expenses.filter(e=>{ const d = new Date(e.date); return d>=start && d<end; });
+  const byCategory = {};
+  expenses.forEach(e=>{ const c = e.category||'Otros'; byCategory[c] = (byCategory[c]||0)+(e.amount||0); });
+  const expensesTotal = expenses.reduce((s,e)=>s+(e.amount||0),0);
+  const withdrawals = [];
+  state.cashRegisters.forEach(r=>(r.movements||[]).forEach(m=>{
+    if(m.type!=='retiro') return;
+    const d = new Date(m.date||r.openedAt);
+    if(d>=start && d<end) withdrawals.push({date:d.toISOString(), amount:m.amount||0, note:m.note||'', cashier:r.cashierName});
+  }));
+  const withdrawalsTotal = withdrawals.reduce((s,w)=>s+w.amount,0);
+  const grossMargin = revenue - cogs;
+  const net = grossMargin - expensesTotal - (state.includeCashWithdrawals ? withdrawalsTotal : 0);
+  return {revenue, cogs, grossMargin, expenses, expensesTotal, byCategory, withdrawals, withdrawalsTotal, net, soldWithoutCost};
+}
+async function addExpense(){
+  const amount = Number((document.getElementById('exp-amount')||{}).value)||0;
+  const category = (document.getElementById('exp-cat')||{}).value || 'Otros';
+  const note = ((document.getElementById('exp-note')||{}).value||'').trim();
+  const dateStr = (document.getElementById('exp-date')||{}).value || localDateStr();
+  if(!(amount>0)){ showToast('Escribe el monto del gasto'); return; }
+  const payload = {date: new Date(dateStr+'T12:00:00').toISOString(), amount, category, note, createdBy: state.user ? state.user.email : ''};
+  try{
+    const ref = await db.collection('expenses').add(payload);
+    state.expenses.unshift({id:ref.id, ...payload});
+    state.expenses.sort((a,b)=>new Date(b.date)-new Date(a.date));
+    logAdminAction('gasto', 'gasto', category+(note?': '+note:''), money(amount));
+    state.expenseDraftAmount=''; state.expenseDraftNote='';
+    const key = dateStr.slice(0,7);
+    if(key !== (state.expenseMonth||currentMonthKey())) showToast(`Gasto guardado en ${monthLabel(key)}`); else showToast('Gasto guardado');
+    render();
+  }catch(e){ console.error('No se pudo guardar el gasto', e); showToast('No se pudo guardar el gasto'); }
+}
+async function deleteExpense(id){
+  const e = state.expenses.find(x=>x.id===id); if(!e) return;
+  if(!confirm(`¿Borrar el gasto de ${money(e.amount)} (${e.category})?`)) return;
+  try{
+    await db.collection('expenses').doc(id).delete();
+    state.expenses = state.expenses.filter(x=>x.id!==id);
+    logAdminAction('gasto_eliminado', 'gasto', e.category+(e.note?': '+e.note:''), money(e.amount));
+    showToast('Gasto borrado'); render();
+  }catch(err){ console.error(err); showToast('No se pudo borrar'); }
+}
+function renderStatsGastos(){
+  const monthKey = state.expenseMonth || currentMonthKey();
+  const np = computeNetProfit(monthKey);
+  const draftDate = state.expenseDraftDate || localDateStr();
+  const catRows = Object.entries(np.byCategory).sort((a,b)=>b[1]-a[1]);
+  const shownExpenses = state.includeCashWithdrawals ? np.expenses : np.expenses;
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Gastos y utilidad neta</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Lo que de verdad te queda del mes: lo que vendiste, menos lo que te costó la mercancía, menos tus gastos (renta, sueldos, empaque, publicidad…).</div>
+    <div class="form-field" style="max-width:280px;">
+      <select onchange="state.expenseMonth=this.value;render()">
+        ${lastMonthKeys(12).map(k=>`<option value="${k}" ${k===monthKey?'selected':''}>${monthLabel(k)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Ventas</div><div class="stat-value">${money(np.revenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Costo de lo vendido</div><div class="stat-value">${money(np.cogs)}</div></div>
+      <div class="stat-card"><div class="stat-label">Margen bruto</div><div class="stat-value">${money(np.grossMargin)}</div></div>
+      <div class="stat-card"><div class="stat-label">Gastos${state.includeCashWithdrawals?' + retiros':''}</div><div class="stat-value">${money(np.expensesTotal + (state.includeCashWithdrawals?np.withdrawalsTotal:0))}</div></div>
+      <div class="stat-card primary"><div class="stat-label">Utilidad neta</div><div class="stat-value">${money(np.net)}</div></div>
+    </div>
+    ${np.soldWithoutCost>0 ? `<div class="note-box">${np.soldWithoutCost} pieza(s) vendidas este mes no tienen costo capturado, así que el costo de lo vendido y la utilidad pueden verse mejor de lo que son. Agrega el costo en cada producto para afinar este número.</div>` : ''}
+    <label class="checkbox-row" style="margin:10px 0 2px;"><input type="checkbox" ${state.includeCashWithdrawals?'checked':''} onchange="state.includeCashWithdrawals=this.checked;render()"><span>Contar como gasto los retiros de caja del mes (${money(np.withdrawalsTotal)})</span></label>
+    <div class="panel-sub" style="margin:0 0 14px;">Los retiros son lo que sacas de la caja (ej. "pago albañil"). Si además registras aquí ese mismo gasto, apaga esta casilla para no contarlo dos veces.</div>
+    <div class="panel">
+      <div class="panel-title">Registrar un gasto</div>
+      <div class="two-col">
+        <div class="form-field"><label>Fecha</label><input id="exp-date" type="date" value="${draftDate}" onchange="state.expenseDraftDate=this.value"></div>
+        <div class="form-field"><label>Monto</label><input id="exp-amount" type="number" min="0" step="0.01" placeholder="0.00" value="${state.expenseDraftAmount||''}" oninput="state.expenseDraftAmount=this.value"></div>
+      </div>
+      <div class="two-col">
+        <div class="form-field"><label>Categoría</label><select id="exp-cat" onchange="state.expenseDraftCategory=this.value">${EXPENSE_CATEGORIES.map(c=>`<option ${state.expenseDraftCategory===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Nota (opcional)</label><input id="exp-note" placeholder="Ej. Renta de octubre" value="${(state.expenseDraftNote||'').replace(/"/g,'&quot;')}" oninput="state.expenseDraftNote=this.value"></div>
+      </div>
+      <button class="btn-primary" style="width:100%;" onclick="addExpense()">+ Agregar gasto</button>
+    </div>
+    ${catRows.length>0 ? `<div class="panel"><div class="panel-title">Gastos por categoría</div>${catRows.map(([c,v])=>`<div class="list-row"><div class="row-main"><div class="row-title">${c}</div></div><div style="font-weight:700;">${money(v)}</div></div>`).join('')}</div>` : ''}
+    <div class="panel">
+      <div class="panel-title">Gastos de ${monthLabel(monthKey)} (${shownExpenses.length})</div>
+      ${shownExpenses.length===0 ? `<div class="empty-state">Todavía no registras gastos en este mes.</div>` : shownExpenses.map(e=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${e.category}${e.note?` · ${e.note.replace(/</g,'&lt;')}`:''}</div><div class="row-sub">${new Date(e.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}${e.createdBy?` · ${e.createdBy}`:''}</div></div>
+          <div style="font-weight:700;">${money(e.amount)}</div>
+          <button class="icon-btn danger" onclick="deleteExpense('${e.id}')">${icon('trash',14)}</button>
+        </div>`).join('')}
+      ${np.withdrawals.length>0 ? `<div class="panel-sub" style="margin-top:12px;"><strong>Retiros de caja del mes:</strong> ${np.withdrawals.map(w=>`${money(w.amount)}${w.note?` (${w.note.replace(/</g,'&lt;')})`:''}`).join(' · ')}</div>` : ''}
+    </div>
+  `;
+}
+
+/* ================================================================
+   MERMAS (baja de inventario con motivo)
+   ================================================================ */
+const SHRINK_REASONS = ['Dañado','Caducado','Perdido / robo','Muestra o regalo','Otro'];
+function openShrinkForProduct(productId){
+  const p = state.products.find(x=>x.id===productId);
+  state.adminTab = 'centros'; state.centersSubview = 'mermas';
+  state.shrinkProductId = productId; state.shrinkSearch = '';
+  render();
+  const r = document.getElementById('shrink-reason');
+  if(r && p && p.expirationDate && new Date(p.expirationDate+'T00:00:00') < new Date(Date.now()+30*86400000)) r.value = 'Caducado';
+}
+async function registerShrinkage(){
+  const p = state.products.find(x=>x.id===state.shrinkProductId);
+  if(!p){ showToast('Elige primero el producto'); return; }
+  if(p.variants && p.variants.length){ showToast('Este producto maneja variantes: ajusta el stock de la variante en su ficha.'); return; }
+  const centerId = state.shrinkCenterId || (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id;
+  const center = state.centers.find(c=>c.id===centerId);
+  const qty = Math.floor(Number((document.getElementById('shrink-qty')||{}).value)||0);
+  const reason = (document.getElementById('shrink-reason')||{}).value || 'Otro';
+  const note = ((document.getElementById('shrink-note')||{}).value||'').trim();
+  const available = (p.stockByCenter && p.stockByCenter[centerId]) || 0;
+  if(qty<=0){ showToast('Escribe cuántas piezas'); return; }
+  if(qty>available){ showToast(`Solo hay ${available} pieza(s) de "${p.name}" en ${center?center.name:'ese centro'}`); return; }
+  try{
+    p.stockByCenter[centerId] = available - qty;
+    p.stock = totalStock(p);
+    await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock});
+    const unitCost = p.cost||0;
+    const rec = {date:new Date().toISOString(), productId:p.id, productName:p.name, qty, reason, note, centerId, centerName:center?center.name:'', unitCost, totalCost:unitCost*qty, user: state.user ? state.user.email : ''};
+    const ref = await db.collection('shrinkage').add(rec);
+    state.shrinkage.unshift({id:ref.id, ...rec});
+    logStockMovement(p.id, 'merma', -qty, `Merma: ${reason}${note?' — '+note:''}`, centerId);
+    logAdminAction('merma', 'producto', p.name, `${qty} pza · ${reason} · ${money(unitCost*qty)}`, p.id);
+    state.shrinkProductId = null; state.shrinkSearch = '';
+    showToast('Merma registrada y descontada del inventario');
+    render();
+  }catch(e){ console.error('No se pudo registrar la merma', e); showToast('No se pudo registrar la merma'); }
+}
+function renderMermas(){
+  const q = (state.shrinkSearch||'').trim().toLowerCase();
+  const results = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q)).slice(0,8) : [];
+  const p = state.products.find(x=>x.id===state.shrinkProductId);
+  const centerId = state.shrinkCenterId || (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id || '';
+  const available = p ? ((p.stockByCenter && p.stockByCenter[centerId]) || 0) : 0;
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const monthly = state.shrinkage.filter(s=>new Date(s.date)>=monthStart);
+  const byReason = {}; monthly.forEach(s=>{ byReason[s.reason] = (byReason[s.reason]||0)+(s.totalCost||0); });
+  const monthTotal = monthly.reduce((s,m)=>s+(m.totalCost||0),0);
+  return `
+  <div class="panel">
+    <div class="panel-title">Registrar una merma</div>
+    <div class="panel-sub">Producto dañado, caducado, perdido o regalado como muestra. Se descuenta del inventario y queda el motivo y el costo, en vez de ajustar el stock a mano sin dejar rastro.</div>
+    ${p ? `
+      <div class="list-row"><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Hay ${available} en ${(state.centers.find(c=>c.id===centerId)||{}).name||'este centro'}${p.cost>0?` · Costo ${money(p.cost)} c/u`:' · Sin costo capturado'}</div></div><button class="btn-tertiary" onclick="state.shrinkProductId=null;render()">Cambiar</button></div>
+      <div class="two-col" style="margin-top:10px;">
+        <div class="form-field"><label>Centro</label><select onchange="state.shrinkCenterId=this.value;render()">${state.centers.map(c=>`<option value="${c.id}" ${c.id===centerId?'selected':''}>${c.name}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Piezas</label><input id="shrink-qty" type="number" min="1" placeholder="1"></div>
+      </div>
+      <div class="two-col">
+        <div class="form-field"><label>Motivo</label><select id="shrink-reason">${SHRINK_REASONS.map(r=>`<option>${r}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Nota (opcional)</label><input id="shrink-note" placeholder="Ej. Llegó roto el empaque"></div>
+      </div>
+      <button class="btn-primary" style="width:100%;" onclick="registerShrinkage()">Dar de baja</button>
+    ` : `
+      <input id="shrink-search" placeholder="Buscar producto por nombre o SKU..." value="${(state.shrinkSearch||'').replace(/"/g,'&quot;')}" oninput="state.shrinkSearch=this.value;render()">
+      ${results.map(r=>`<button class="cashier-item" style="width:100%;text-align:left;margin-top:6px;" onclick="state.shrinkProductId='${r.id}';render()">${r.name} <span style="color:var(--ink-soft);">· stock ${r.stock||0}</span></button>`).join('')}
+    `}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Lo perdido este mes: ${money(monthTotal)}</div>
+    ${Object.keys(byReason).length===0 ? `<div class="empty-state">Sin mermas registradas este mes.</div>` : Object.entries(byReason).sort((a,b)=>b[1]-a[1]).map(([r,v])=>`<div class="list-row"><div class="row-main"><div class="row-title">${r}</div></div><div style="font-weight:700;">${money(v)}</div></div>`).join('')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Últimas mermas</div>
+    ${state.shrinkage.length===0 ? `<div class="empty-state">Aún no hay mermas registradas.</div>` : state.shrinkage.slice(0,30).map(s=>`
+      <div class="list-row"><div class="row-main"><div class="row-title">${s.qty} × ${s.productName}</div><div class="row-sub">${s.reason}${s.note?` — ${s.note.replace(/</g,'&lt;')}`:''} · ${new Date(s.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${s.centerName||''}</div></div><div style="font-weight:700;">${money(s.totalCost||0)}</div></div>`).join('')}
+  </div>`;
+}
+
+/* ================================================================
+   "AVÍSAME CUANDO LLEGUE" — lado del panel
+   ================================================================ */
+function waNumberMX(phone){ const d = (phone||'').replace(/\D/g,''); return d.length===10 ? '52'+d : d; }
+function productShareLink(id){ return location.href.replace(/admin\.html.*$/, 'index.html') + '?producto=' + encodeURIComponent(id); }
+function computeRestockDemand(){
+  const byProduct = {};
+  state.restockRequests.forEach(r=>{
+    if(r.notified) return;
+    const g = byProduct[r.productId] || (byProduct[r.productId] = {productId:r.productId, name:r.productName, people:[]});
+    g.people.push(r);
+  });
+  return Object.values(byProduct).map(g=>{
+    const p = state.products.find(x=>x.id===g.productId);
+    return {...g, product:p, stock: p ? (p.stock||0) : 0};
+  }).sort((a,b)=>b.people.length-a.people.length);
+}
+function renderRestockDemandPanel(){
+  const demand = computeRestockDemand();
+  if(!demand.length) return '';
+  return `
+  <div class="panel">
+    <div class="panel-title">Clientes esperando producto</div>
+    <div class="panel-sub">Personas que dejaron su WhatsApp para que les avises cuando llegue. Arriba están los que más gente espera.</div>
+    ${demand.map(g=>`
+      <div class="list-row" style="flex-wrap:wrap;">
+        <div class="row-main">
+          <div class="row-title">${g.product ? g.product.name : g.name}</div>
+          <div class="row-sub">${g.people.length} persona${g.people.length===1?'':'s'} esperando · ${g.stock>0 ? `Ya hay ${g.stock} en stock — ¡avísales!` : 'Agotado'}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${g.stock<=0 && g.product ? `<button class="btn-outline" onclick="addProductToRestock('${g.productId}', ${Math.max(g.people.length,3)})">${icon('package',14)} Agregar a reabasto</button>` : ''}
+          <button class="btn-primary" style="width:auto;padding:8px 14px;" onclick="state.notifyModalProductId='${g.productId}';render()">Avisar a ${g.people.length}</button>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+async function markRequestNotified(id){
+  const r = state.restockRequests.find(x=>x.id===id); if(!r || r.notified) return;
+  try{
+    await db.collection('restockRequests').doc(id).set({notified:true, notifiedAt:new Date().toISOString()}, {merge:true});
+    r.notified = true; r.notifiedAt = new Date().toISOString();
+  }catch(e){ console.error('No se pudo marcar como avisado', e); }
+  render();
+}
+async function removeRestockRequest(id){
+  if(!confirm('¿Quitar a esta persona de la lista?')) return;
+  try{ await db.collection('restockRequests').doc(id).delete(); state.restockRequests = state.restockRequests.filter(x=>x.id!==id); }
+  catch(e){ console.error(e); showToast('No se pudo quitar'); }
+  render();
+}
+function renderNotifyModal(){
+  const pid = state.notifyModalProductId;
+  const people = state.restockRequests.filter(r=>r.productId===pid && !r.notified);
+  const p = state.products.find(x=>x.id===pid);
+  const link = productShareLink(pid);
+  const storeName = state.settings.storeName || 'nuestra tienda';
+  return `
+  <div class="modal-overlay"><div class="modal" style="max-width:460px;max-height:80vh;overflow-y:auto;">
+    <h3>Avisar: ${p ? p.name : ''}</h3>
+    <p class="panel-sub">Cada botón abre WhatsApp con el mensaje ya escrito. Después de abrirlo, esa persona se marca como avisada.</p>
+    ${people.length===0 ? `<div class="empty-state">Ya avisaste a todos.</div>` : people.map(r=>{
+      const msg = `Hola ${r.name||''}! 💕 Te escribimos de ${storeName}: ya llegó "${(r.productName||'').replace(/"/g,'')}", el producto que querías. Aquí lo puedes ver: ${link}`;
+      return `<div class="list-row"><div class="row-main"><div class="row-title">${r.name||'Sin nombre'}</div><div class="row-sub">${r.phone}</div></div>
+        <a class="btn-primary" style="width:auto;padding:8px 14px;text-decoration:none;" href="${waLink(waNumberMX(r.phone), msg)}" target="_blank" onclick="setTimeout(()=>markRequestNotified('${r.id}'),400)">WhatsApp</a>
+        <button class="icon-btn danger" title="Quitar de la lista" onclick="removeRestockRequest('${r.id}')">${icon('trash',14)}</button></div>`; }).join('')}
+    <div class="modal-actions"><button class="btn-cancel" style="flex:1;" onclick="state.notifyModalProductId=null;render()">Cerrar</button></div>
+  </div></div>`;
+}
+
+/* ================================================================
+   BÚSQUEDAS SIN RESULTADO
+   ================================================================ */
+// Para meter texto libre dentro de onclick="...('...')" sin que comillas o símbolos lo rompan.
+function attrEnc(s){ return encodeURIComponent(s).replace(/'/g,'%27'); }
+function computeSearchMisses(days){
+  const since = Date.now() - days*86400000;
+  const map = {};
+  state.searchMisses.forEach(m=>{
+    if(new Date(m.date).getTime() < since) return;
+    const k = m.normalized || (m.query||'').toLowerCase();
+    const e = map[k] || (map[k] = {term:m.query, normalized:k, count:0, last:m.date, ids:[]});
+    e.count++; e.ids.push(m.id);
+    if(m.date > e.last) e.last = m.date;
+  });
+  return Object.values(map).sort((a,b)=>b.count-a.count || (b.last>a.last?1:-1));
+}
+async function dismissSearchMiss(normalized){
+  const ids = state.searchMisses.filter(m=>(m.normalized||(m.query||'').toLowerCase())===normalized).map(m=>m.id);
+  if(!ids.length) return;
+  try{
+    for(let i=0;i<ids.length;i+=400){
+      const batch = db.batch();
+      ids.slice(i,i+400).forEach(id=>batch.delete(db.collection('searchMisses').doc(id)));
+      await batch.commit();
+    }
+    state.searchMisses = state.searchMisses.filter(m=>!ids.includes(m.id));
+  }catch(e){ console.error(e); showToast('No se pudo descartar'); }
+  render();
+}
+function createProductFromSearch(term){
+  state.adminTab = 'productos';
+  state.productModal = {images:[], sku:generateSKU({}), name: term};
+  render();
+}
+function renderStatsBusquedas(){
+  const days = state.searchMissDays || 30;
+  const rows = computeSearchMisses(days);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Búsquedas sin resultado</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Lo que la gente escribe en el buscador de tu tienda y no encuentra. Es demanda real que hoy se pierde: si algo aparece seguido, quizá vale la pena surtirlo. Es anónimo — solo se guarda el texto buscado, sin datos de la persona.</div>
+    <div class="form-field" style="max-width:240px;"><select onchange="state.searchMissDays=Number(this.value);render()">${[30,90,180].map(d=>`<option value="${d}" ${days===d?'selected':''}>Últimos ${d} días</option>`).join('')}</select></div>
+    ${rows.length===0 ? `<div class="empty-state">Todavía no hay búsquedas sin resultado en este periodo.</div>` : rows.map(r=>`
+      <div class="list-row">
+        <div class="row-main"><div class="row-title">"${(r.term||'').replace(/</g,'&lt;')}"</div><div class="row-sub">${r.count} vez/veces buscado · última: ${new Date(r.last).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}</div></div>
+        <button class="btn-outline" onclick="createProductFromSearch(decodeURIComponent('${attrEnc(r.term||'')}'))">Crear producto</button>
+        <button class="btn-tertiary" title="Ya lo revisé o no me interesa" onclick="dismissSearchMiss(decodeURIComponent('${attrEnc(r.normalized||'')}'))">Descartar</button>
+      </div>`).join('')}
+  `;
+}
+
+/* ================================================================
+   CAMBIO MASIVO DE PRECIOS (con vista previa y deshacer)
+   ================================================================ */
+function getFilteredProducts(){
+  const q = (state.productSearch||'').trim().toLowerCase();
+  const catFilter = state.productCatFilter || 'Todas';
+  const needFilter = state.productNeedFilter || 'Todas';
+  let f = state.products;
+  if(q) f = f.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
+  if(catFilter!=='Todas') f = f.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
+  if(needFilter!=='Todas') f = f.filter(p => (p.needs||[]).includes(needFilter));
+  return f;
+}
+function selectAllFilteredProducts(){ state.selectedProducts = getFilteredProducts().map(p=>p.id); render(); }
+function roundPriceTo(v, mode){
+  if(mode==='0') return Math.round(v*100)/100;
+  const step = Number(mode);
+  return Math.max(step, Math.round(v/step)*step);
+}
+function massPriceValid(){
+  const pct = Number(state.massPricePercent);
+  return state.massPricePercent!=='' && isFinite(pct) && pct!==0 && pct>=-90 && pct<=300;
+}
+function computeMassPricePreview(){
+  if(!massPriceValid()) return [];
+  const pct = Number(state.massPricePercent);
+  const factor = 1 + pct/100;
+  const mode = state.massPriceRounding;
+  const step = mode==='0' ? 1 : Number(mode);
+  return (state.selectedProducts||[]).map(id=>state.products.find(p=>p.id===id)).filter(p=>p && p.price>0).map(p=>{
+    const newPrice = roundPriceTo(p.price*factor, mode);
+    let newPromo = p.promoPrice||0;
+    if(state.massPriceIncludePromo && p.promoPrice>0){
+      newPromo = roundPriceTo(p.promoPrice*factor, mode);
+      if(newPromo >= newPrice) newPromo = Math.max(0, newPrice - step);
+    }
+    return {id:p.id, name:p.name, oldPrice:p.price, newPrice, oldPromo:p.promoPrice||0, newPromo};
+  });
+}
+function openMassPriceModal(){
+  state.massPriceModalOpen = true; state.massPricePercent = ''; state.massPriceRounding = '0'; state.massPriceIncludePromo = true;
+  render();
+}
+function closeMassPriceModal(){ state.massPriceModalOpen = false; render(); }
+async function applyMassPriceChange(){
+  const preview = computeMassPricePreview();
+  if(!preview.length){ showToast('Escribe un porcentaje válido (entre -90 y 300, distinto de 0)'); return; }
+  const pct = Number(state.massPricePercent);
+  if(!confirm(`¿Cambiar el precio de ${preview.length} producto(s) en ${pct>0?'+':''}${pct}%? Podrás deshacerlo después.`)) return;
+  try{
+    for(let i=0;i<preview.length;i+=200){
+      const chunk = preview.slice(i,i+200);
+      const batch = db.batch();
+      chunk.forEach(it=>{
+        batch.update(db.collection('products').doc(it.id), {price:it.newPrice, promoPrice:it.newPromo});
+        batch.set(db.collection('adminAuditLog').doc(), {
+          action:'cambio_precio', targetType:'producto', targetName:it.name, targetId:it.id,
+          details:`Precio: ${money(it.oldPrice)} → ${money(it.newPrice)} (cambio masivo ${pct>0?'+':''}${pct}%)`,
+          userEmail: state.user ? state.user.email : '', date: new Date().toISOString(),
+        });
+      });
+      await batch.commit();
+      chunk.forEach(it=>{ const p = state.products.find(x=>x.id===it.id); if(p){ p.price = it.newPrice; p.promoPrice = it.newPromo; } });
+    }
+    const rec = {date:new Date().toISOString(), percent:pct, rounding:state.massPriceRounding, includePromo:state.massPriceIncludePromo, undone:false, user: state.user ? state.user.email : '', items: preview};
+    const ref = await db.collection('priceChangeBatches').add(rec);
+    state.priceChangeBatches.unshift({id:ref.id, ...rec});
+    logAdminAction('cambio_precio_masivo', 'productos', `${preview.length} producto(s)`, `${pct>0?'+':''}${pct}%`);
+    state.selectedProducts = []; state.massPriceModalOpen = false;
+    showToast(`Precios actualizados en ${preview.length} producto(s)`);
+    render();
+  }catch(e){ console.error('No se pudo aplicar el cambio de precios', e); showToast('No se pudo completar el cambio; revisa y vuelve a intentar'); }
+}
+// Solo revierte los productos cuyo precio sigue siendo el que dejó el cambio masivo — si alguien
+// ya lo volvió a editar a mano, se respeta ese precio y solo se avisa cuántos se omitieron.
+async function undoLastMassPriceChange(){
+  const b = state.priceChangeBatches.find(x=>!x.undone);
+  if(!b){ showToast('No hay un cambio masivo que deshacer'); return; }
+  if(!confirm(`¿Deshacer el último cambio masivo (${b.percent>0?'+':''}${b.percent}%, ${b.items.length} producto(s))?`)) return;
+  let reverted = 0, skipped = 0;
+  try{
+    const todo = [];
+    b.items.forEach(it=>{ const p = state.products.find(x=>x.id===it.id); if(p && p.price===it.newPrice) todo.push({it,p}); else skipped++; });
+    for(let i=0;i<todo.length;i+=200){
+      const chunk = todo.slice(i,i+200);
+      const batch = db.batch();
+      chunk.forEach(({it})=>{
+        batch.update(db.collection('products').doc(it.id), {price:it.oldPrice, promoPrice:it.oldPromo||0});
+        batch.set(db.collection('adminAuditLog').doc(), {
+          action:'cambio_precio', targetType:'producto', targetName:it.name, targetId:it.id,
+          details:`Precio: ${money(it.newPrice)} → ${money(it.oldPrice)} (se deshizo un cambio masivo)`,
+          userEmail: state.user ? state.user.email : '', date: new Date().toISOString(),
+        });
+      });
+      await batch.commit();
+      chunk.forEach(({it,p})=>{ p.price = it.oldPrice; p.promoPrice = it.oldPromo||0; reverted++; });
+    }
+    await db.collection('priceChangeBatches').doc(b.id).set({undone:true, undoneAt:new Date().toISOString()}, {merge:true});
+    b.undone = true;
+    logAdminAction('deshacer_cambio_precio_masivo', 'productos', `${reverted} producto(s)`, `${b.percent}%`);
+    showToast(`${reverted} producto(s) regresaron a su precio anterior${skipped?` · ${skipped} omitido(s) porque ya tenían otro precio`:''}`);
+  }catch(e){ console.error('No se pudo deshacer', e); showToast('No se pudo deshacer por completo; revisa los precios'); }
+  render();
+}
+function renderMassPriceModal(){
+  const preview = computeMassPricePreview();
+  const total = (state.selectedProducts||[]).length;
+  const avgOld = preview.length ? preview.reduce((s,i)=>s+i.oldPrice,0)/preview.length : 0;
+  const avgNew = preview.length ? preview.reduce((s,i)=>s+i.newPrice,0)/preview.length : 0;
+  const undoable = state.priceChangeBatches.find(b=>!b.undone);
+  return `
+  <div class="modal-overlay"><div class="modal" style="max-width:480px;max-height:85vh;overflow-y:auto;">
+    <h3>Cambiar precios (${total} seleccionado${total===1?'':'s'})</h3>
+    <p class="panel-sub">Sube o baja el precio de todos los seleccionados en un porcentaje. Verás cómo quedan antes de aplicar.</p>
+    <div class="two-col">
+      <div class="form-field"><label>Porcentaje (ej. 10 sube, -10 baja)</label><input id="mp-percent" type="number" step="0.5" placeholder="10" value="${state.massPricePercent}" oninput="state.massPricePercent=this.value;render()"></div>
+      <div class="form-field"><label>Redondear a</label>
+        <select onchange="state.massPriceRounding=this.value;render()">
+          <option value="0" ${state.massPriceRounding==='0'?'selected':''}>Sin redondeo</option>
+          <option value="1" ${state.massPriceRounding==='1'?'selected':''}>$1</option>
+          <option value="5" ${state.massPriceRounding==='5'?'selected':''}>$5</option>
+          <option value="10" ${state.massPriceRounding==='10'?'selected':''}>$10</option>
+        </select></div>
+    </div>
+    <label class="checkbox-row"><input type="checkbox" ${state.massPriceIncludePromo?'checked':''} onchange="state.massPriceIncludePromo=this.checked;render()"><span>También ajustar los precios promocionales</span></label>
+    ${state.massPricePercent!=='' && !massPriceValid() ? `<div class="note-box" style="margin-top:10px;">El porcentaje debe estar entre -90 y 300, y no puede ser 0.</div>` : ''}
+    ${preview.length>0 ? `
+      <div class="panel-sub" style="margin:12px 0 6px;">Precio promedio: <strong>${money(avgOld)}</strong> → <strong>${money(avgNew)}</strong></div>
+      <div style="max-height:220px;overflow-y:auto;">
+        ${preview.slice(0,10).map(i=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--border);"><span>${i.name}</span><span style="white-space:nowrap;">${money(i.oldPrice)} → <strong>${money(i.newPrice)}</strong></span></div>`).join('')}
+        ${preview.length>10 ? `<div class="panel-sub" style="margin-top:6px;">…y ${preview.length-10} más.</div>` : ''}
+      </div>` : ''}
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMassPriceModal()">Cancelar</button>
+      <button class="btn-primary" style="flex:1;" ${preview.length===0?'disabled style="opacity:.5"':''} onclick="applyMassPriceChange()">Aplicar a ${preview.length}</button>
+    </div>
+    ${undoable ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="undoLastMassPriceChange()">Deshacer el último cambio masivo (${undoable.percent>0?'+':''}${undoable.percent}%, ${undoable.items.length} productos)</button>` : ''}
+  </div></div>`;
+}
+
+/* ================================================================
+   CALENDARIO DE TEMPORADAS
+   ================================================================ */
+const BUILTIN_SEASONS = [
+  {key:'sanvalentin', name:'San Valentín', rule:{type:'fixed', month:2, day:14}, prepDays:35},
+  {key:'madres', name:'Día de las Madres', rule:{type:'fixed', month:5, day:10}, prepDays:30},
+  {key:'padres', name:'Día del Padre', rule:{type:'nth', month:6, weekday:0, nth:3}, prepDays:30},
+  {key:'halloween', name:'Halloween', rule:{type:'fixed', month:10, day:31}, prepDays:30},
+  {key:'buenfin', name:'El Buen Fin (fecha aproximada)', rule:{type:'nth', month:11, weekday:1, nth:3}, prepDays:35},
+  {key:'navidad', name:'Navidad', rule:{type:'fixed', month:12, day:24}, prepDays:40},
+];
+function nthWeekdayOfMonth(year, month, weekday, nth){
+  const first = new Date(year, month-1, 1);
+  const offset = (weekday - first.getDay() + 7) % 7;
+  return new Date(year, month-1, 1 + offset + (nth-1)*7);
+}
+function seasonDateForYear(ev, year){
+  return ev.rule.type==='fixed' ? new Date(year, ev.rule.month-1, ev.rule.day) : nthWeekdayOfMonth(year, ev.rule.month, ev.rule.weekday, ev.rule.nth);
+}
+function customSeasonToEvent(c){ return {key:'c_'+c.id, id:c.id, name:c.name, rule:{type:'fixed', month:c.month, day:c.day}, prepDays:30, custom:true}; }
+function allSeasonEvents(includeHidden){
+  const hidden = state.settings.seasonHidden || [];
+  const builtin = BUILTIN_SEASONS.filter(e=>includeHidden || !hidden.includes(e.key));
+  return [...builtin, ...(state.settings.seasonCustomEvents||[]).map(customSeasonToEvent)];
+}
+function nextSeasonOccurrence(ev, from){
+  from = from || new Date();
+  const today = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  let d = seasonDateForYear(ev, today.getFullYear());
+  if(d < today) d = seasonDateForYear(ev, today.getFullYear()+1);
+  return d;
+}
+// Lo vendido "por estas fechas" el año pasado: del día 7 antes al día siguiente de la fecha.
+function seasonLastYearStats(ev, occurrence){
+  const ly = seasonDateForYear(ev, occurrence.getFullYear()-1);
+  const start = new Date(ly.getFullYear(), ly.getMonth(), ly.getDate()-7);
+  const end = new Date(ly.getFullYear(), ly.getMonth(), ly.getDate()+2);
+  let revenue = 0, count = 0; const units = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const d = new Date(o.date);
+    if(isNaN(d.getTime()) || d<start || d>=end) return;
+    revenue += (o.total||0); count++;
+    (o.items||[]).forEach(it=>{ if(!it.name) return; const n = it.name.replace(/\s*\(.*\)$/,''); units[n] = (units[n]||0)+(it.qty||0); });
+  });
+  const top = Object.entries(units).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([name,qty])=>({name,qty}));
+  return {revenue, count, top, hasData: count>0};
+}
+function computeUpcomingSeasons(limit, includeHidden){
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return allSeasonEvents(includeHidden).map(ev=>{
+    const date = nextSeasonOccurrence(ev, today);
+    const daysLeft = Math.round((date - start)/86400000);
+    return {ev, date, daysLeft, inPrep: daysLeft<=ev.prepDays, last: seasonLastYearStats(ev, date)};
+  }).sort((a,b)=>a.daysLeft-b.daysLeft).slice(0, limit||99);
+}
+function seasonCountdownLabel(x){ return x.daysLeft===0 ? '¡Es hoy!' : `Faltan ${x.daysLeft} día${x.daysLeft===1?'':'s'}`; }
+function renderUpcomingSeasonsPanel(){
+  const next = computeUpcomingSeasons(2).filter(x=>x.daysLeft<=90);
+  if(!next.length) return '';
+  return `
+  <div class="panel" style="cursor:pointer;" onclick="state.adminTab='marketing';state.marketingSubpanel='temporadas';render()">
+    <div class="panel-title" style="margin-bottom:8px;">Próximas fechas clave</div>
+    ${next.map(x=>`
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;">
+        <div><strong>${x.ev.name}</strong> · ${x.date.toLocaleDateString('es-MX',{day:'numeric',month:'long'})}
+          <div class="panel-sub" style="margin:2px 0 0;">${x.last.hasData ? `El año pasado por estas fechas: ${x.last.count} venta(s), ${money(x.last.revenue)}` : 'Sin ventas registradas el año pasado por estas fechas'}</div></div>
+        <span class="status-badge ${x.inPrep?'status-low':'status-ok'}" style="align-self:flex-start;white-space:nowrap;">${seasonCountdownLabel(x)}${x.inPrep && x.daysLeft>0 ? ' · a preparar' : ''}</span>
+      </div>`).join('')}
+  </div>`;
+}
+async function toggleSeasonHidden(key){
+  const hidden = state.settings.seasonHidden || [];
+  state.settings.seasonHidden = hidden.includes(key) ? hidden.filter(k=>k!==key) : [...hidden, key];
+  await saveSettings(); render();
+}
+async function addCustomSeason(){
+  const name = ((document.getElementById('season-new-name')||{}).value||'').trim();
+  const month = Number((document.getElementById('season-new-month')||{}).value);
+  const day = Number((document.getElementById('season-new-day')||{}).value);
+  if(!name){ showToast('Ponle un nombre a la fecha'); return; }
+  const test = new Date(2024, month-1, day);
+  if(!(day>=1 && day<=31) || test.getMonth()!==month-1){ showToast('Esa fecha no existe en el calendario'); return; }
+  state.settings.seasonCustomEvents = [...(state.settings.seasonCustomEvents||[]), {id:uid('se_'), name, month, day}];
+  state.seasonNewName = '';
+  await saveSettings(); showToast('Fecha agregada'); render();
+}
+async function removeCustomSeason(id){
+  state.settings.seasonCustomEvents = (state.settings.seasonCustomEvents||[]).filter(e=>e.id!==id);
+  await saveSettings(); render();
+}
+function renderSeasonsSubpanel(){
+  const hidden = state.settings.seasonHidden || [];
+  const list = computeUpcomingSeasons(99, true);
+  const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return `
+  <div class="panel">
+    <div class="panel-title">Calendario de temporadas</div>
+    <div class="panel-sub">Fechas en las que se vende más. Te dice cuánto falta, cuánto vendiste por esas fechas el año pasado y qué se movió, para preparar inventario y promociones a tiempo. Las que estén en su etapa de preparación se marcan en ámbar.</div>
+    ${list.map(x=>{ const isHidden = hidden.includes(x.ev.key); return `
+      <div class="list-row" style="align-items:flex-start;${isHidden?'opacity:.55;':''}">
+        <div class="row-main">
+          <div class="row-title">${x.ev.name}</div>
+          <div class="row-sub">${x.date.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+          <div class="row-sub" style="margin-top:4px;">${x.last.hasData ? `El año pasado: ${x.last.count} venta(s) · ${money(x.last.revenue)}${x.last.top.length?` · Lo más vendido: ${x.last.top.map(t=>`${t.name} (${t.qty})`).join(', ')}`:''}` : 'Sin ventas registradas el año pasado por estas fechas'}</div>
+        </div>
+        <div style="text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+          <span class="status-badge ${x.inPrep?'status-low':'status-ok'}" style="white-space:nowrap;">${seasonCountdownLabel(x)}</span>
+          ${x.ev.custom ? `<button class="btn-tertiary" onclick="removeCustomSeason('${x.ev.id}')">Quitar</button>` : `<button class="btn-tertiary" onclick="toggleSeasonHidden('${x.ev.key}')">${isHidden?'Mostrar':'Ocultar'}</button>`}
+        </div>
+      </div>`; }).join('')}
+  </div>
+  <div class="panel">
+    <div class="panel-title">Agregar una fecha propia</div>
+    <div class="panel-sub">Por ejemplo el aniversario de tu tienda. Se repite cada año.</div>
+    <div class="form-field"><label>Nombre</label><input id="season-new-name" placeholder="Ej. Aniversario de la tienda" value="${(state.seasonNewName||'').replace(/"/g,'&quot;')}" oninput="state.seasonNewName=this.value"></div>
+    <div class="two-col">
+      <div class="form-field"><label>Mes</label><select id="season-new-month" onchange="state.seasonNewMonth=Number(this.value)">${MONTHS.map((m,i)=>`<option value="${i+1}" ${state.seasonNewMonth===i+1?'selected':''}>${m}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Día</label><input id="season-new-day" type="number" min="1" max="31" value="${state.seasonNewDay||1}" oninput="state.seasonNewDay=Number(this.value)"></div>
+    </div>
+    <button class="btn-primary" style="width:100%;" onclick="addCustomSeason()">+ Agregar fecha</button>
+  </div>`;
+}
+
+/* ================================================================
+   GENERADOR DE PUBLICACIONES PARA ESTADOS DE WHATSAPP
+   ================================================================ */
+function defaultPostText(p){
+  const promo = p.promoPrice>0 && p.promoPrice<p.price;
+  const priceLine = promo ? `~${money(p.price)}~ *${money(p.promoPrice)}*` : `*${money(p.price)}*`;
+  return `✨ ${p.name}\n${priceLine}\n\nEnvío discreto y pago contra entrega 💕\n👉 ${productShareLink(p.id)}`;
+}
+function openPostModal(id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  state.postModalProductId = id; state.postImageIdx = 0; state.postText = defaultPostText(p);
+  render();
+}
+function closePostModal(){ state.postModalProductId = null; render(); }
+const postImgCache = {};
+function loadPostImage(src){
+  return new Promise(resolve=>{
+    if(!src) return resolve(null);
+    if(postImgCache[src]) return resolve(postImgCache[src]);
+    const im = new Image();
+    im.onload = ()=>{ postImgCache[src] = im; resolve(im); };
+    im.onerror = ()=>resolve(null);
+    im.src = src;
+  });
+}
+function postRoundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y); ctx.closePath();
+}
+function postWrapText(ctx, text, maxW, maxLines){
+  const words = String(text).split(/\s+/); const lines = []; let line = '';
+  words.forEach(w=>{ const test = line ? line+' '+w : w; if(ctx.measureText(test).width>maxW && line){ lines.push(line); line = w; } else line = test; });
+  if(line) lines.push(line);
+  if(lines.length>maxLines){ const cut = lines.slice(0,maxLines); cut[maxLines-1] = cut[maxLines-1].replace(/\s*\S*$/,'')+'…'; return cut; }
+  return lines;
+}
+// Dibuja la tarjeta vertical (1080×1920, el formato de los estados) en el <canvas>. Como cada
+// render() reconstruye el DOM, esta función se vuelve a llamar después de cada render.
+async function drawPostCanvas(){
+  const canvas = document.getElementById('post-canvas'); if(!canvas) return;
+  const p = state.products.find(x=>x.id===state.postModalProductId); if(!p) return;
+  const W = 1080, H = 1920;
+  canvas.width = W; canvas.height = H;
+  let ctx = null; try{ ctx = canvas.getContext('2d'); }catch(e){ ctx = null; }
+  if(!ctx) return;
+  const [img, logo] = await Promise.all([loadPostImage((p.images||[])[state.postImageIdx||0]), loadPostImage(state.settings.logoUrl)]);
+  if(document.getElementById('post-canvas') !== canvas) return; // la pantalla se reconstruyó mientras cargaba la foto: la nueva versión se dibuja sola
+  const FONT = 'Poppins, Inter, Arial, sans-serif';
+  const g = ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,'#4A1642'); g.addColorStop(1,'#993477');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha = 0.08; ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(W-80,220,300,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(60,H-320,260,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  let hx = 90;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  if(logo){ ctx.save(); ctx.beginPath(); ctx.arc(hx+55,150,55,0,Math.PI*2); ctx.clip(); ctx.drawImage(logo,hx,95,110,110); ctx.restore(); hx += 135; }
+  ctx.fillStyle = '#fff'; ctx.font = `700 48px ${FONT}`;
+  ctx.fillText(state.settings.storeName || '', hx, 150);
+  const ix = 90, iy = 290, is = 900;
+  postRoundRect(ctx, ix-12, iy-12, is+24, is+24, 60); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.save(); postRoundRect(ctx, ix, iy, is, is, 48); ctx.clip();
+  if(img){ const s = Math.min(img.width, img.height); ctx.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,ix,iy,is,is); }
+  else { ctx.fillStyle = '#F6E9E6'; ctx.fillRect(ix,iy,is,is); ctx.fillStyle = '#993477'; ctx.font = `700 360px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText((p.name||'?').charAt(0).toUpperCase(), ix+is/2, iy+is/2); ctx.textAlign = 'left'; }
+  ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = `700 70px ${FONT}`; ctx.textBaseline = 'alphabetic';
+  const lines = postWrapText(ctx, p.name||'', 900, 3);
+  let y = 1310; lines.forEach(l=>{ ctx.fillText(l, 90, y); y += 84; });
+  const promo = p.promoPrice>0 && p.promoPrice<p.price;
+  const priceText = money(promo ? p.promoPrice : p.price);
+  ctx.font = `800 92px ${FONT}`;
+  const pw = Math.max(320, ctx.measureText(priceText).width + 90);
+  y += 10;
+  postRoundRect(ctx, 90, y, pw, 130, 65); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.fillStyle = '#993477'; ctx.textBaseline = 'middle'; ctx.fillText(priceText, 135, y+68);
+  if(promo){
+    ctx.font = `600 50px ${FONT}`; ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    const old = money(p.price), ox = 90+pw+30;
+    ctx.fillText(old, ox, y+68);
+    const w = ctx.measureText(old).width;
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(ox,y+68); ctx.lineTo(ox+w,y+68); ctx.stroke();
+  }
+  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = `500 40px ${FONT}`;
+  ctx.fillText('Envío discreto · Pago contra entrega', W/2, H-150);
+  ctx.textAlign = 'left';
+}
+function postFileName(){
+  const p = state.products.find(x=>x.id===state.postModalProductId);
+  const slug = ((p&&p.name)||'producto').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+  return `publicacion_${slug||'producto'}.png`;
+}
+function postCanvasBlob(){
+  const c = document.getElementById('post-canvas');
+  return new Promise(resolve=>{ try{ c.toBlob(b=>resolve(b), 'image/png'); }catch(e){ resolve(null); } });
+}
+async function downloadPostImage(){
+  const blob = await postCanvasBlob();
+  if(!blob){ showToast('No se pudo generar la imagen'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = postFileName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+async function sharePostImage(){
+  const blob = await postCanvasBlob();
+  if(!blob){ showToast('No se pudo generar la imagen'); return; }
+  const file = new File([blob], postFileName(), {type:'image/png'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], text: state.postText}); }catch(e){ /* la persona canceló */ }
+  }else{
+    await downloadPostImage();
+    showToast('Este navegador no comparte directo: se descargó la imagen para que la subas a tu estado');
+  }
+}
+function copyPostText(){
+  try{ navigator.clipboard.writeText(state.postText); showToast('Texto copiado'); }catch(e){ showToast('No se pudo copiar'); }
+}
+function renderPostModal(){
+  const p = state.products.find(x=>x.id===state.postModalProductId); if(!p) return '';
+  const nImgs = (p.images||[]).length;
+  return `
+  <div class="modal-overlay"><div class="modal" style="max-width:420px;max-height:92vh;overflow-y:auto;">
+    <h3>Publicación para estados</h3>
+    <p class="panel-sub">Descarga la imagen (o compártela directo desde tu celular), copia el texto con el enlace y súbelo a tu estado de WhatsApp.</p>
+    <div style="text-align:center;">
+      <canvas id="post-canvas" width="1080" height="1920" style="width:100%;max-width:250px;aspect-ratio:9/16;border-radius:14px;box-shadow:0 10px 30px -12px rgba(0,0,0,.45);"></canvas>
+    </div>
+    ${nImgs>1 ? `<div style="display:flex;justify-content:center;gap:8px;margin:8px 0;">
+      <button class="btn-tertiary" onclick="state.postImageIdx=(state.postImageIdx-1+${nImgs})%${nImgs};render()">‹ Foto anterior</button>
+      <span class="panel-sub" style="align-self:center;">${(state.postImageIdx||0)+1} de ${nImgs}</span>
+      <button class="btn-tertiary" onclick="state.postImageIdx=((state.postImageIdx||0)+1)%${nImgs};render()">Foto siguiente ›</button></div>` : ''}
+    <div class="form-field" style="margin-top:12px;"><label>Texto para acompañar</label>
+      <textarea id="post-text" rows="5" oninput="state.postText=this.value">${(state.postText||'').replace(/</g,'&lt;')}</textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="btn-primary" onclick="downloadPostImage()">Descargar imagen</button>
+      <button class="btn-outline" onclick="sharePostImage()">Compartir…</button>
+      <button class="btn-outline" onclick="copyPostText()">Copiar texto</button>
+      <button class="btn-outline" onclick="copyProductLink('${p.id}')">Copiar enlace</button>
+    </div>
+    <div class="modal-actions"><button class="btn-cancel" style="flex:1;" onclick="closePostModal()">Cerrar</button></div>
+  </div></div>`;
+}
+
 function closeCustomerModal(){ state.customerModal=null; render(); }
 // Bitácora de notas: cada nota queda con fecha y quién la escribió, en vez de una sola nota que
 // se sobrescribe. Si el cliente ya existe se guarda al instante (para que no se pierda si cierras
@@ -5652,6 +6436,7 @@ const MARKETING_SUBPANELS = [
   {key:'cupones', icon:icon('tag'), label:'Cupones de descuento'},
   {key:'promociones', icon:icon('star'), label:'Promociones automáticas'},
   {key:'recordatorio', icon:icon('bell'), label:'Recordatorio al cobrar (POS)'},
+  {key:'temporadas', icon:icon('calendar'), label:'Calendario de temporadas'},
 ];
 function renderMarketing(){
   if(state.marketingSubpanel) return renderMarketingSubpanel(state.marketingSubpanel);
@@ -5669,7 +6454,7 @@ function renderMarketing(){
 }
 function renderMarketingSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.marketingSubpanel=null;render()">‹ Volver a Marketing</button>`;
-  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel};
+  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, temporadas: renderSeasonsSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 
@@ -6308,13 +7093,15 @@ function renderCentros(){
       <button class="admin-tab ${sub==='transferencias'?'active':''}" onclick="state.centersSubview='transferencias';render()">Transferencias</button>
       <button class="admin-tab ${sub==='inventario'?'active':''}" onclick="state.centersSubview='inventario';render()">Inventario por centro</button>
       <button class="admin-tab ${sub==='auditorias'?'active':''}" onclick="state.centersSubview='auditorias';render()">Auditorías</button>
+      <button class="admin-tab ${sub==='mermas'?'active':''}" onclick="state.centersSubview='mermas';render()">Mermas</button>
       <button class="admin-tab ${sub==='reabasto'?'active':''}" onclick="state.centersSubview='reabasto';render()">Reabasto${state.restockItems.length?` <span class="tab-badge">${state.restockItems.length}</span>`:''}</button>
     </div>
     ${sub==='centros' ? renderCentrosList() : ''}
     ${sub==='transferencias' ? renderTransferencias() : ''}
     ${sub==='inventario' ? renderInventarioPorCentro() : ''}
     ${sub==='auditorias' ? renderAuditorias() : ''}
-    ${sub==='reabasto' ? renderReabasto() : ''}
+    ${sub==='mermas' ? renderMermas() : ''}
+    ${sub==='reabasto' ? renderRestockDemandPanel() + renderReabasto() : ''}
     ${state.centerModal ? renderCenterModal() : ''}
   `;
 }
@@ -8269,6 +9056,7 @@ function render(){
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
   if(state.productModal && document.getElementById('pf-barcode-svg')){ drawProductBarcode(); }
+  if(state.postModalProductId && document.getElementById('post-canvas')){ drawPostCanvas(); }
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   const pinField = document.getElementById('pin-field'); if(pinField && !focusInfo) pinField.focus();
   const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }

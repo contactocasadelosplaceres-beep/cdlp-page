@@ -408,7 +408,7 @@ const DEFAULT_SETTINGS = {
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false };
 
 async function loadData(){
   try{
@@ -497,7 +497,7 @@ async function loadFullCatalogWithRetry(attempt){
   try{
     const fullSnap = await db.collection('products').orderBy('name').get();
     state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
-    state.catalogIncomplete = false;
+    state.catalogIncomplete = false; state.fullCatalogLoaded = true;
     render();
   }catch(e){
     console.error(`No se pudo completar el catálogo en segundo plano (intento ${attempt})`, e);
@@ -977,7 +977,28 @@ function detailTouchEnd(e){
 }
 function goToCatalog(cat){ state.activeBestSellers=false; state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
 function filterByNeed(key){ state.activeBestSellers=false; state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function onSearchInput(v){ state.activeBestSellers=false; state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
+// Búsquedas sin resultado: cuando alguien escribe algo en el buscador, se espera a que deje de
+// teclear; si con el catálogo COMPLETO ya cargado no coincide con ningún producto, se guarda solo
+// el texto (anónimo, sin ningún dato de la persona) para que en el panel veas qué te piden y no
+// tienes. Una vez por término por visita, y nunca mientras el catálogo sigue cargando (para no
+// registrar como "sin resultado" algo que sí existe pero todavía no ha llegado).
+let searchMissTimer = null;
+const searchMissLogged = {};
+function normalizeSearchTerm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim(); }
+function scheduleSearchMissCheck(v){
+  clearTimeout(searchMissTimer);
+  const norm = normalizeSearchTerm(v);
+  if(norm.length < 3) return;
+  searchMissTimer = setTimeout(()=>{
+    if(!state.fullCatalogLoaded || searchMissLogged[norm]) return;
+    const q = (v||'').trim().toLowerCase();
+    const found = state.products.some(p=>(p.name||'').toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q));
+    if(found) return;
+    searchMissLogged[norm] = true;
+    try{ db.collection('searchMisses').add({query:(v||'').trim().slice(0,80), normalized:norm.slice(0,80), date:new Date().toISOString()}).catch(()=>{}); }catch(e){}
+  }, 1600);
+}
+function onSearchInput(v){ scheduleSearchMissCheck(v); state.activeBestSellers=false; state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
 
 async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([key,qty])=>{
@@ -1154,6 +1175,42 @@ async function handleSendStoreMessage(){
   }
 }
 
+// "Avísame cuando llegue": para un producto agotado, la persona deja su WhatsApp y el negocio le
+// avisa al reponerlo. El documento se identifica por producto+teléfono, así que pedirlo dos veces
+// no duplica nada (la segunda vez las reglas lo rechazan y se le dice que ya está en la lista).
+function renderNotifyMeBlock(p, v){
+  const sentKey = p.id + (v ? '::'+v.id : '');
+  if(state.notifySent[sentKey]) return `<div class="note-box" style="margin-top:14px;">Listo 💕 Te escribiremos por WhatsApp en cuanto llegue.</div>`;
+  return `
+    <div style="margin-top:16px;padding:14px;border:1px dashed var(--border);border-radius:14px;">
+      <div style="font-weight:700;margin-bottom:4px;">¿Te avisamos cuando llegue?</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">Déjanos tu WhatsApp y te escribimos solo por este producto — nada de spam.</div>
+      <div class="form-field"><label>Tu nombre</label><input id="notify-name" type="text" placeholder="Tu nombre" value="${(state.notifyName||'').replace(/"/g,'&quot;')}" oninput="state.notifyName=this.value"></div>
+      <div class="form-field"><label>Tu WhatsApp</label><input id="notify-phone" type="tel" placeholder="33 1234 5678" value="${(state.notifyPhone||'').replace(/"/g,'&quot;')}" oninput="state.notifyPhone=this.value"></div>
+      <button class="btn-primary" onclick="submitNotifyMe('${p.id}'${v?`,'${v.id}'`:''})">Avísame</button>
+    </div>`;
+}
+async function submitNotifyMe(productId, variantId){
+  const name = ((document.getElementById('notify-name')||{}).value||'').trim();
+  const digits = ((document.getElementById('notify-phone')||{}).value||'').replace(/\D/g,'');
+  if(digits.length < 10){ showToast('Escribe tu WhatsApp con 10 dígitos'); return; }
+  const p = state.products.find(x=>x.id===productId); if(!p) return;
+  const v = variantId ? (p.variants||[]).find(x=>x.id===variantId) : null;
+  const sentKey = productId + (variantId ? '::'+variantId : '');
+  const docId = productId + (variantId ? '_'+variantId : '') + '_' + digits.slice(-10);
+  try{
+    await db.collection('restockRequests').doc(docId).set({
+      productId, productName: p.name + (v ? ` (${variantLabel(v)})` : ''), name: name.slice(0,80), phone: digits.slice(0,15),
+      date: new Date().toISOString(), notified: false,
+    });
+    state.notifySent[sentKey] = true;
+    showToast('¡Listo! Te avisamos en cuanto llegue');
+  }catch(e){
+    if(e && e.code==='permission-denied'){ state.notifySent[sentKey] = true; showToast('Ya estabas en la lista de espera 💕'); }
+    else{ console.error('No se pudo guardar el aviso', e); showToast('No se pudo guardar, intenta de nuevo'); }
+  }
+  render();
+}
 function renderProductDetailDrawer(){
   const p = state.products.find(x=>x.id===state.detailProductId);
   if(!p) return '';
@@ -1217,6 +1274,7 @@ function renderProductDetailDrawer(){
         <button class="btn-primary" onclick="closeProductDetail();state.cartOpen=true;render()">Ver carrito</button>
       ` : `
         <button class="btn-primary" ${stockLeft<=0?'disabled style="opacity:.5"':''} onclick="addToCart('${p.id}'${matchedVariant?`,'${matchedVariant.id}'`:''})">${stockLeft<=0?'Agotado':'Agregar al carrito · '+money(price)}</button>
+        ${stockLeft<=0 ? renderNotifyMeBlock(p, matchedVariant) : ''}
       `}
     </div>`;
 }
