@@ -774,7 +774,14 @@ function cartSubtotalBeforeGift(){
 }
 function activeGift(){
   const subtotal = cartSubtotalBeforeGift();
-  const gift = activePromotions().find(promo=>promo.type==='gift' && subtotal >= (promo.minAmount||0));
+  // Si el producto de regalo ya se agotó, la promoción se "apaga" sola en la tienda en vez de
+  // seguir ofreciendo un regalo que no se puede entregar — Ale no tiene que acordarse de
+  // desactivarla a mano cada vez que se acaba ese producto.
+  const gift = activePromotions().find(promo=>{
+    if(promo.type!=='gift' || subtotal < (promo.minAmount||0)) return false;
+    const product = state.products.find(p=>p.id===promo.giftProductId);
+    return product && product.stock>0;
+  });
   if(!gift) return null;
   const product = state.products.find(p=>p.id===gift.giftProductId);
   return product ? {promo:gift, product} : null;
@@ -788,7 +795,8 @@ function crossSellSuggestions(){
   return activePromotions()
     .filter(promo=>promo.type==='cross_sell' && inCartIds.has(promo.triggerProductId) && !inCartIds.has(promo.discountProductId))
     .map(promo=>({promo, product: state.products.find(p=>p.id===promo.discountProductId)}))
-    .filter(x=>x.product);
+    // Si el producto con descuento ya se agotó, no tiene caso sugerirlo (no se podría agregar).
+    .filter(x=>x.product && x.product.stock>0);
 }
 // Sugerencias genéricas del carrito ("también te puede interesar"): a diferencia de
 // crossSellSuggestions (arriba), estas NO dependen de que Ale haya armado una promoción de
@@ -1494,6 +1502,15 @@ function renderGridSection(){
     emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   } else if(state.activeCat!=="Todos"){
     filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
+    // Si Ale fijó un orden a mano para esta categoría (Productos → filtrar por categoría →
+    // flechas), esos productos van primero en ese orden; el resto sigue mezclándose entre sí
+    // como siempre (sort estable: los sin orden mantienen su posición relativa del shuffle).
+    const cat = state.activeCat;
+    filtered = filtered.slice().sort((a,b)=>{
+      const ao = (a.categorySortOrder||{})[cat]; const bo = (b.categorySortOrder||{})[cat];
+      const av = ao!=null ? ao : Infinity, bv = bo!=null ? bo : Infinity;
+      return av - bv;
+    });
   }
   // Los productos agotados se muestran hasta el final, sin alterar el orden entre sí.
   filtered = filtered
@@ -1522,6 +1539,15 @@ function renderGridSection(){
 const GRID_PAGE_SIZE = 20;
 function loadMoreProducts(){ state.gridRenderLimit += GRID_PAGE_SIZE; render(); }
 
+// Un producto se considera "Nuevo" durante sus primeros NEW_BADGE_DAYS días de vida, contados
+// desde createdAt (solo lo tienen los productos creados desde esta actualización en adelante —
+// no se les inventa una fecha a los que ya existían).
+const NEW_BADGE_DAYS = 14;
+function isNewProduct(p){
+  if(!p.createdAt) return false;
+  const days = (Date.now() - new Date(p.createdAt).getTime()) / 86400000;
+  return days>=0 && days<=NEW_BADGE_DAYS;
+}
 function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
@@ -1536,7 +1562,9 @@ function renderProductCard(p, forceBest){
           <div class="card-image-wrap">
             ${productImageHtml(p)}
             <div class="badge-row">
+              ${isNewProduct(p) ? `<span class="badge badge-best" style="background:var(--teal);">Nuevo</span>` : ''}
               ${isBest ? `<span class="badge badge-best">Más vendido</span>` : ''}
+              ${p.isKit ? `<span class="badge badge-best" style="background:var(--navy);">Combo</span>` : ''}
               ${hasPromo ? `<span class="badge badge-best" style="background:var(--rose);">Oferta</span>` : ''}
               ${wholesaleEligible ? `<span class="badge badge-best" style="background:var(--navy);">${wholesaleUnlocked?'Mayoreo activo':'Mayoreo disponible'}</span>` : ''}
               ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
