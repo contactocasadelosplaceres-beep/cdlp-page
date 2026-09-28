@@ -462,6 +462,12 @@ const DEFAULT_SETTINGS = {
   salesGoalMonthly: 0,
   checkoutReminderProducts: [],
   faqItems: [],
+  deliverySurveyQuestions: [
+    "¿Cómo calificarías tu experiencia de compra del 1 al 5?",
+    "¿El pedido llegó completo y en buen estado?",
+    "¿Qué te pareció el empaque y la discreción?",
+    "¿Hay algo que podamos mejorar?",
+  ],
   seasonCustomEvents: [], seasonHidden: [],
   theme:{},
   historicalOrderCountOffset:0,
@@ -543,6 +549,7 @@ let state = {
   checkoutReminderSearch:'',
   priceHistoryOpen:false, priceHistoryProductId:null, priceHistoryLoading:false, priceHistoryItems:[],
   faqEditIdx:null, faqDraftQuestion:'', faqDraftAnswer:'',
+  surveyEditIdx:null, surveyDraftQuestion:'',
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
@@ -698,6 +705,9 @@ async function loadData(){
   if(!state.lastOrderCheck) state.lastOrderCheck = new Date().toISOString();
   if(!state.lastMessageCheck) state.lastMessageCheck = new Date().toISOString();
   await refreshBestSellersIfStale();
+  // Punto de partida para la bitácora de cambios de configuración/diseño: a partir de aquí,
+  // cualquier saveSettings() compara contra esta "foto" para saber qué campos cambiaron.
+  _settingsAuditBaseline = JSON.stringify(state.settings);
   state.loaded = true; render();
 }
 // "Más vendidos" automático: analiza lo vendido de verdad (tienda + POS, sin lo cancelado) en
@@ -792,7 +802,46 @@ function playNewOrderChime(){
 }
 async function saveOrdersStatus(orderId,status,source){ try{ await db.collection(source==='pos'?'sales':'orders').doc(orderId).update({status}); }catch(e){ console.error(e); showToast('No se pudo actualizar el pedido'); } }
 async function saveOrderArchived(orderId,archived,source){ try{ await db.collection(source==='pos'?'sales':'orders').doc(orderId).update({archived}); }catch(e){ console.error(e); showToast('No se pudo archivar el pedido'); } }
-async function saveSettings(){ try{ await db.collection('settings').doc('store').set(state.settings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración'); } }
+// "Foto" de settings tomada al cargar y después de cada guardado exitoso — sirve para saber
+// qué campos cambiaron la próxima vez que se llame saveSettings(), sin tener que tocar cada
+// uno de los muchos lugares del panel que guardan configuración/diseño.
+let _settingsAuditBaseline = null;
+// Nombres amigables para el detalle de la bitácora. Un campo que no está aquí simplemente se
+// muestra con su nombre técnico — no impide que el cambio quede registrado.
+const SETTINGS_FIELD_LABELS = {
+  storeName:'Nombre de la tienda', whatsapp:'WhatsApp de la tienda', schedule:'Horario',
+  heroTitle:'Título principal', heroSubtitle:'Subtítulo principal', categories:'Categorías',
+  hiddenCategories:'Categorías ocultas', needs:'Necesidades/etiquetas', sections:'Secciones visibles',
+  headerSubtitle:'Subtítulo del encabezado', showHeaderSubtitle:'Mostrar subtítulo del encabezado',
+  promoBanner:'Banner promocional', promoBannerPresets:'Banners guardados', activePromoBannerId:'Banner activo',
+  featuredProductIds:'Productos destacados', testimonials:'Testimonios', socialInstagram:'Instagram',
+  socialFacebook:'Facebook', contactEmail:'Correo de contacto', customCss:'CSS personalizado',
+  storeAddress:'Dirección de origen', deliveryWhatsapp:'WhatsApp del repartidor', slackWebhookUrl:'Webhook de notificaciones',
+  shippingNote:'Nota de envío', wholesaleTiers:'Precios de mayoreo', coupons:'Cupones', promotions:'Promociones',
+  logoUrl:'Logo', salesGoalMonthly:'Meta de venta mensual', checkoutReminderProducts:'Recordatorio de checkout',
+  faqItems:'Preguntas frecuentes', seasonCustomEvents:'Temporadas personalizadas', seasonHidden:'Temporadas ocultas',
+  theme:'Apariencia (colores/tipografía)', deliverySurveyQuestions:'Preguntas de la encuesta post-entrega',
+};
+// Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
+// de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
+const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt']);
+async function saveSettings(){
+  try{
+    if(_settingsAuditBaseline){
+      try{
+        const before = JSON.parse(_settingsAuditBaseline);
+        const changed = [];
+        new Set([...Object.keys(before), ...Object.keys(state.settings)]).forEach(k=>{
+          if(SETTINGS_AUDIT_IGNORE.has(k)) return;
+          if(JSON.stringify(before[k]) !== JSON.stringify(state.settings[k])) changed.push(SETTINGS_FIELD_LABELS[k] || k);
+        });
+        if(changed.length) logAdminAction('cambio_configuracion', 'configuracion', null, `Cambió: ${changed.join(', ')}`);
+      }catch(e){ console.error('No se pudo comparar cambios de configuración para la bitácora', e); }
+    }
+    await db.collection('settings').doc('store').set(state.settings);
+    _settingsAuditBaseline = JSON.stringify(state.settings);
+  }catch(e){ console.error(e); showToast('No se pudo guardar la configuración'); }
+}
 async function saveAiSettingsDoc(){ try{ await db.collection('settings').doc('ai').set(state.aiSettings); }catch(e){ console.error(e); showToast('No se pudo guardar la configuración de IA'); } }
 async function saveCashierDoc(c){
   const payload = {name:c.name, pin:c.pin||'', active:c.active, email:c.email||'', role:c.role||'cajero', notify:c.notify||{}, permissions:c.permissions||{}};
@@ -1528,6 +1577,10 @@ function renderOrderDetailModal(){
           Enviar al repartidor
         </button>
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printPackingSlip('${o.id}')">${icon('printer',16)} Imprimir hoja de preparación</button>
+        <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printOrderReceipt('${o.id}')">${icon('receipt',16)} Recibo en PDF / Imprimir</button>
+        ${o.status==='Entregado' && orderContactPhone(o) ? `
+          <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sendDeliverySurvey('${o.id}')">${icon('message-square',16)} Enviar encuesta por WhatsApp</button>
+        ` : ''}
       </div>
 
       <div class="modal-actions">
@@ -1569,6 +1622,70 @@ function printPackingSlip(id){
       <table>${itemsHtml}</table>
       <div class="total">Total: ${money(o.total)}</div>
       <button onclick="window.print()" style="margin-top:16px;width:100%;padding:12px;font-size:14px;font-weight:700;">Imprimir</button>
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
+}
+// Recibo de venta para el cliente — a diferencia de la hoja de preparación (que es para armar
+// el pedido), este muestra precios unitarios, descuentos y forma de pago, pensado para
+// entregarse o guardarse como comprobante. El botón "Imprimir" de la ventana usa el diálogo de
+// impresión del navegador, que en cualquier computadora o celular ofrece "Guardar como PDF"
+// como una de las impresoras — así no depende de ninguna librería extra para generar el PDF.
+function printOrderReceipt(id){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const isPos = o.source==='pos';
+  const subtotal = o.subtotal!=null ? o.subtotal : o.total;
+  const itemsHtml = (o.items||[]).map(it=>`
+    <tr>
+      <td style="padding:6px 0;border-bottom:1px solid #eee;">${it.qty}x ${it.name}</td>
+      <td style="padding:6px 0;border-bottom:1px solid #eee;text-align:right;">${money(it.price)}</td>
+      <td style="padding:6px 0;border-bottom:1px solid #eee;text-align:right;">${money(it.price*it.qty)}</td>
+    </tr>`).join('');
+  const win = window.open('', '_blank', 'width=460,height=700');
+  if(!win){ showToast('Habilita las ventanas emergentes para imprimir'); return; }
+  win.document.write(`
+    <html><head><title>Recibo ${formatFolio(o.orderNumber)}</title>
+    <meta charset="utf-8">
+    <style>
+      body{font-family:Arial,sans-serif;padding:28px;color:#222;max-width:480px;margin:0 auto;}
+      .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+      .brand img{height:40px;width:auto;object-fit:contain;}
+      h1{font-size:19px;margin:0;}
+      .sub{color:#666;font-size:12.5px;margin-bottom:18px;}
+      table{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:12px;}
+      th{text-align:left;font-size:11px;text-transform:uppercase;color:#888;padding-bottom:6px;border-bottom:2px solid #333;}
+      th:nth-child(2),th:nth-child(3){text-align:right;}
+      .totals div{display:flex;justify-content:space-between;padding:3px 0;font-size:13.5px;}
+      .totals .grand{font-size:17px;font-weight:800;border-top:1.5px solid #333;margin-top:6px;padding-top:8px;}
+      .meta{font-size:12.5px;color:#555;margin-bottom:16px;}
+      .footer{margin-top:22px;text-align:center;font-size:12px;color:#999;}
+      @media print{ button{display:none;} }
+    </style></head><body>
+      <div class="brand">
+        ${state.settings.logoUrl ? `<img src="${state.settings.logoUrl}">` : ''}
+        <h1>${state.settings.storeName||'La Casa de los Placeres'}</h1>
+      </div>
+      <div class="sub">Recibo de compra · ${formatFolio(o.orderNumber)} · ${new Date(o.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      <div class="meta">
+        <strong>Cliente:</strong> ${o.customer || o.customerName || 'Venta en tienda física'}<br>
+        ${orderContactPhone(o) ? `<strong>Teléfono:</strong> ${orderContactPhone(o)}<br>` : ''}
+        ${!isPos ? `<strong>Dirección:</strong> ${o.address||'—'}<br>` : ''}
+        <strong>Forma de pago:</strong> ${paymentMethodLabel(o)}
+      </div>
+      <table>
+        <tr><th>Producto</th><th>P. unit.</th><th>Importe</th></tr>
+        ${itemsHtml}
+      </table>
+      <div class="totals">
+        ${o.manualDiscount ? `
+          <div><span>Subtotal</span><span>${money(subtotal)}</span></div>
+          <div><span>${o.manualDiscount.type==='coupon'?`Cupón ${o.manualDiscount.code}`:'Descuento'}</span><span>-${money(o.manualDiscount.amount)}</span></div>
+        ` : ''}
+        <div class="grand"><span>Total</span><span>${money(o.total)}</span></div>
+      </div>
+      <div class="footer">¡Gracias por tu compra! Empaque discreto, sin logos ni nada que indique qué es.</div>
+      <button onclick="window.print()" style="margin-top:18px;width:100%;padding:12px;font-size:14px;font-weight:700;">Imprimir / Guardar como PDF</button>
     </body></html>
   `);
   win.document.close();
@@ -2465,6 +2582,7 @@ const ADMIN_ACTION_LABELS = {
   merma: 'Registró una merma',
   cambio_precio_masivo: 'Cambió precios en masa',
   deshacer_cambio_precio_masivo: 'Deshizo un cambio masivo de precios',
+  cambio_configuracion: 'Cambió configuración o diseño',
 };
 function openAuditLog(){
   state.auditLogOpen = true; state.auditLogLoading = true; state.auditLogItems = [];
@@ -8325,6 +8443,7 @@ function saveCustomCss(){
    claro en la nota de arriba que el nombre/logo/colores/textos de la tienda viven en Diseño. */
 const CONFIG_SUBPANELS = [
   {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos)'},
+  {key:'encuesta', icon:icon('message-square'), label:'Encuesta post-entrega'},
   {key:'asistente', icon:icon('message-circle'), label:'Asistente IA'},
   {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
   {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
@@ -8389,7 +8508,7 @@ function renderConfig(){
 }
 function renderConfigSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.configSubpanel=null;render()">‹ Volver a Configuración</button>`;
-  const map = {operativo: renderOperativoSubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel};
+  const map = {operativo: renderOperativoSubpanel, encuesta: renderSurveySubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 function renderOperativoSubpanel(){
@@ -8415,6 +8534,83 @@ function renderOperativoSubpanel(){
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
   </div>`;
 }
+/* ============== ENCUESTA POST-ENTREGA ==============
+   Preguntas cortas y editables (Configuración → Encuesta post-entrega) que se mandan por
+   WhatsApp desde el detalle de un pedido/venta una vez entregado, para pedir una opinión
+   rápida sin depender de ninguna plataforma externa. */
+function renderSurveySubpanel(){
+  const list = state.settings.deliverySurveyQuestions || [];
+  const editIdx = state.surveyEditIdx;
+  const isEditing = editIdx!==null && editIdx!==undefined;
+  return `
+  <div class="panel">
+    <div class="panel-title">Encuesta post-entrega</div>
+    <div class="panel-sub">Estas preguntas son las que se mandan por WhatsApp al cliente desde el botón "Enviar encuesta" en el detalle de cada pedido ya entregado. Ordénalas como quieras que se lean.</div>
+    ${list.length===0 ? `<div class="empty-state">Aún no has agregado ninguna pregunta.</div>` :
+      list.map((q,idx)=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${idx+1}. ${q}</div></div>
+          <button class="icon-btn" title="Subir" ${idx===0?'disabled':''} onclick="moveSurveyQuestion(${idx},-1)">${icon('arrow-up',14)}</button>
+          <button class="icon-btn" title="Bajar" ${idx===list.length-1?'disabled':''} onclick="moveSurveyQuestion(${idx},1)">${icon('arrow-down',14)}</button>
+          <button class="btn-outline" onclick="editSurveyQuestion(${idx})">Editar</button>
+          <button class="icon-btn danger" onclick="removeSurveyQuestion(${idx})">${icon('trash')}</button>
+        </div>
+      `).join('')}
+    <div class="form-field" style="margin-top:14px;"><label>Pregunta</label><input id="survey-question" placeholder="Ej. ¿Cómo calificarías tu experiencia de compra del 1 al 5?" value="${(state.surveyDraftQuestion||'').replace(/"/g,'&quot;')}" oninput="state.surveyDraftQuestion=this.value"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" style="flex:1;" onclick="${isEditing?'saveSurveyEdit()':'addSurveyQuestion()'}">${isEditing?'Guardar cambios':'+ Agregar pregunta'}</button>
+      ${isEditing?`<button class="btn-cancel" style="flex:1;padding:13px;border-radius:10px;" onclick="cancelSurveyEdit()">Cancelar</button>`:''}
+    </div>
+  </div>`;
+}
+function editSurveyQuestion(idx){
+  const q = (state.settings.deliverySurveyQuestions||[])[idx]; if(q===undefined) return;
+  state.surveyEditIdx = idx; state.surveyDraftQuestion = q;
+  render();
+}
+function cancelSurveyEdit(){ state.surveyEditIdx=null; state.surveyDraftQuestion=''; render(); }
+async function saveSurveyEdit(){
+  const q = (state.surveyDraftQuestion||'').trim();
+  if(!q){ showToast('Escribe la pregunta'); return; }
+  state.settings.deliverySurveyQuestions[state.surveyEditIdx] = q;
+  await saveSettings();
+  cancelSurveyEdit();
+}
+async function addSurveyQuestion(){
+  const q = (state.surveyDraftQuestion||'').trim();
+  if(!q){ showToast('Escribe la pregunta'); return; }
+  if(!state.settings.deliverySurveyQuestions) state.settings.deliverySurveyQuestions = [];
+  state.settings.deliverySurveyQuestions.push(q);
+  await saveSettings();
+  state.surveyDraftQuestion=''; render();
+}
+async function removeSurveyQuestion(idx){
+  state.settings.deliverySurveyQuestions.splice(idx,1);
+  await saveSettings(); render();
+}
+async function moveSurveyQuestion(idx, dir){
+  const list = state.settings.deliverySurveyQuestions;
+  const target = idx+dir; if(target<0 || target>=list.length) return;
+  [list[idx], list[target]] = [list[target], list[idx]];
+  await saveSettings(); render();
+}
+// Arma el mensaje de WhatsApp con todas las preguntas numeradas, listo para que el cliente
+// responda directamente en el mismo chat.
+function buildDeliverySurveyMessage(o){
+  const folio = formatFolio(o.orderNumber);
+  const nombre = o.customer || o.customerName || '';
+  const questions = state.settings.deliverySurveyQuestions || [];
+  const saludo = `Hola ${nombre}! Gracias por tu compra en ${state.settings.storeName||'nuestra tienda'} (pedido ${folio}). ¿Nos regalas un minuto para saber cómo te fue?`;
+  const lista = questions.map((q,i)=>`${i+1}. ${q}`).join('\n');
+  return questions.length ? `${saludo}\n\n${lista}\n\n¡Gracias por tu tiempo! 💕` : saludo;
+}
+function sendDeliverySurvey(id){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const phone = orderContactPhone(o);
+  if(!phone){ showToast('Este pedido no tiene teléfono registrado'); return; }
+  window.open(waLink(phone, buildDeliverySurveyMessage(o)), '_blank');
+}
+
 function renderHerramientasSubpanel(){
   return `<div class="panel">${renderHistoricalImportPanel()}</div>`;
 }
