@@ -530,6 +530,7 @@ let state = {
   activePosSessions:[],
   receiveGoodsModalOpen:false, receiveGoodsSupplierId:null, receiveGoodsQuantities:{},
   groupMessagesByCustomer:false,
+  heatMetric:'count', heatDays:90,
   checkoutReminderSearch:'',
   priceHistoryOpen:false, priceHistoryProductId:null, priceHistoryLoading:false, priceHistoryItems:[],
   faqEditIdx:null, faqDraftQuestion:'', faqDraftAnswer:'',
@@ -810,8 +811,8 @@ async function assignCommission(orderId, agentId, pct){
   const o = state.orders.find(x=>x.id===orderId); if(!o) return;
   const agent = agentId ? state.commissionAgents.find(a=>a.id===agentId) : null;
   const payload = agent
-    ? { commissionAgentId: agent.id, commissionAgentName: agent.name, commissionPct: pct, commissionAmount: Math.round((o.total||0)*pct/100 * 100)/100 }
-    : { commissionAgentId: null, commissionAgentName: null, commissionPct: 0, commissionAmount: 0 };
+    ? { commissionAgentId: agent.id, commissionAgentName: agent.name, commissionPct: pct, commissionAmount: Math.round((o.total||0)*pct/100 * 100)/100, commissionPaid: false, commissionPaidAt: null }
+    : { commissionAgentId: null, commissionAgentName: null, commissionPct: 0, commissionAmount: 0, commissionPaid: false, commissionPaidAt: null };
   Object.assign(o, payload);
   try{
     await db.collection(o.source==='pos' ? 'sales' : 'orders').doc(orderId).set(payload, {merge:true});
@@ -827,19 +828,63 @@ async function bulkAssignCommission(agentId, pct){
   state.selectedOrders = [];
   showToast(`${ids.length} venta(s) asignada(s)`); render();
 }
+// Comisiones: lo PENDIENTE de pago se cuenta de TODAS las ventas asignadas (sin límite de fecha,
+// para que una comisión de hace dos meses que sigue sin pagarse no desaparezca del reporte); lo
+// ya pagado se muestra solo de los últimos "days" días, como referencia.
 function computeCommissionsReport(days){
   days = days || 30;
   const since = Date.now() - days*86400000;
   const byAgent = {};
   state.orders.forEach(o=>{
     if(!o.commissionAgentId || o.status==='Cancelado') return;
-    if(new Date(o.date).getTime() < since) return;
-    if(!byAgent[o.commissionAgentId]) byAgent[o.commissionAgentId] = {name:o.commissionAgentName, sales:0, total:0, commission:0};
-    byAgent[o.commissionAgentId].sales += 1;
-    byAgent[o.commissionAgentId].total += (o.total||0);
-    byAgent[o.commissionAgentId].commission += (o.commissionAmount||0);
+    const a = byAgent[o.commissionAgentId] || (byAgent[o.commissionAgentId] = {agentId:o.commissionAgentId, name:o.commissionAgentName, sales:0, total:0, commission:0, paidRecent:0, paidRecentSales:0});
+    if(o.commissionPaid){
+      if(o.commissionPaidAt && new Date(o.commissionPaidAt).getTime() >= since){ a.paidRecent += (o.commissionAmount||0); a.paidRecentSales += 1; }
+    }else{
+      a.sales += 1; a.total += (o.total||0); a.commission += (o.commissionAmount||0);
+    }
   });
-  return Object.values(byAgent).sort((a,b)=>b.commission-a.commission);
+  return Object.values(byAgent).sort((a,b)=>b.commission-a.commission || b.paidRecent-a.paidRecent);
+}
+async function writeCommissionPaidState(orders, paid, paidAt){
+  for(let i=0;i<orders.length;i+=400){
+    const chunk = orders.slice(i,i+400);
+    const batch = db.batch();
+    chunk.forEach(o=>{
+      batch.set(db.collection(o.source==='pos' ? 'sales' : 'orders').doc(o.id), {commissionPaid: paid, commissionPaidAt: paid ? paidAt : null}, {merge:true});
+    });
+    await batch.commit();
+    chunk.forEach(o=>{ o.commissionPaid = paid; o.commissionPaidAt = paid ? paidAt : null; });
+  }
+}
+async function markCommissionsPaid(agentId){
+  const pending = state.orders.filter(o=>o.commissionAgentId===agentId && o.status!=='Cancelado' && !o.commissionPaid);
+  if(!pending.length) return;
+  const total = pending.reduce((s,o)=>s+(o.commissionAmount||0),0);
+  const name = pending[0].commissionAgentName || 'comisionista';
+  if(!confirm(`¿Marcar como pagadas ${pending.length} comisión(es) de ${name} por ${money(total)}?`)) return;
+  try{
+    await writeCommissionPaidState(pending, true, new Date().toISOString());
+    logAdminAction('pago_comision', 'comisionista', name, `${pending.length} venta(s) · ${money(total)}`, agentId);
+    showToast(`Comisiones de ${name} marcadas como pagadas`);
+  }catch(e){ console.error('No se pudo marcar como pagadas', e); showToast('No se pudo guardar, intenta de nuevo'); }
+  render();
+}
+// Revierte solo el ÚLTIMO pago (todas las ventas que se marcaron juntas en esa misma acción).
+async function undoLastCommissionPayment(agentId){
+  const paid = state.orders.filter(o=>o.commissionAgentId===agentId && o.commissionPaid && o.commissionPaidAt);
+  if(!paid.length) return;
+  const latest = paid.map(o=>o.commissionPaidAt).sort().slice(-1)[0];
+  const batchOrders = paid.filter(o=>o.commissionPaidAt===latest);
+  const total = batchOrders.reduce((s,o)=>s+(o.commissionAmount||0),0);
+  const name = batchOrders[0].commissionAgentName || 'comisionista';
+  if(!confirm(`¿Deshacer el último pago a ${name} (${batchOrders.length} venta(s), ${money(total)})? Volverán a aparecer como pendientes.`)) return;
+  try{
+    await writeCommissionPaidState(batchOrders, false, null);
+    logAdminAction('deshacer_pago_comision', 'comisionista', name, `${batchOrders.length} venta(s) · ${money(total)}`, agentId);
+    showToast('Pago deshecho');
+  }catch(e){ console.error('No se pudo deshacer el pago', e); showToast('No se pudo guardar, intenta de nuevo'); }
+  render();
 }
 function renderCommissionAgentModal(){
   const a = state.commissionAgentModal;
@@ -1821,6 +1866,27 @@ async function handleLogin(){
 function handleLogout(){ auth.signOut(); state.loaded=false; ensureNewOrderWatcher(false); }
 
 /* ============== PRODUCTOS ============== */
+// Por cada variante (talla, color...) de un producto: cuánto se ha vendido en los últimos 90 días
+// y en total — para ver cuál realmente se mueve y cuál está estancada (incluye las que no se han
+// vendido nunca, que son justo las que interesa detectar).
+function computeVariantPerformance(productId){
+  const p = state.products.find(x=>x.id===productId);
+  if(!p || !(p.variants && p.variants.length)) return [];
+  const since90 = Date.now() - 90*86400000;
+  const rows = p.variants.map(v=>({id:v.id, label:Object.values(v.combo||{}).join(' / ') || '(sin nombre)', stock:v.stock||0, units90:0, unitsTotal:0, revenueTotal:0}));
+  const byId = {}; rows.forEach(r=>{ byId[r.id] = r; });
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const recent = new Date(o.date).getTime() >= since90;
+    (o.items||[]).forEach(it=>{
+      if(it.id!==productId || !it.variantId || !byId[it.variantId]) return;
+      const r = byId[it.variantId];
+      r.unitsTotal += it.qty; r.revenueTotal += (it.price||0)*it.qty;
+      if(recent) r.units90 += it.qty;
+    });
+  });
+  return rows.sort((a,b)=>b.unitsTotal-a.unitsTotal || b.units90-a.units90);
+}
 // Analiza tus ventas reales (no solo la categoría) para saber qué se compra de verdad junto con
 // este producto — útil para armar combos con datos en vez de solo intuición.
 function computeFrequentlyBoughtTogether(productId, limit){
@@ -2356,6 +2422,14 @@ const ADMIN_ACTION_LABELS = {
   activacion_personal: 'Reactivó a una persona',
   desactivacion_personal: 'Desactivó a una persona',
   eliminacion_personal: 'Eliminó a una persona',
+  edicion_producto: 'Editó un producto',
+  exportacion: 'Exportó datos',
+  alta_comisionista: 'Agregó un comisionista',
+  edicion_comisionista: 'Editó un comisionista',
+  eliminacion_comisionista: 'Eliminó un comisionista',
+  asignacion_comision_lote: 'Asignó comisionista a varias ventas',
+  pago_comision: 'Marcó comisiones como pagadas',
+  deshacer_pago_comision: 'Deshizo un pago de comisiones',
 };
 function openAuditLog(){
   state.auditLogOpen = true; state.auditLogLoading = true; state.auditLogItems = [];
@@ -3458,7 +3532,17 @@ const HEALTH_CHECKS_DEF = [
   {key:'outOfStockVisible', label:'Agotado y aún visible en la tienda'},
   {key:'expiringSoon', label:'Caduca en los próximos 30 días'},
   {key:'expired', label:'Ya caducado'},
+  {key:'negativeMargin', label:'Costo igual o mayor al precio de venta'},
+  {key:'lowMargin', label:'Margen menor al 20%'},
 ];
+// Precio al que de verdad se vende hoy (el promocional si está activo) y margen sobre ese precio.
+// Sin costo capturado no se puede calcular, así que esos productos no se marcan aquí.
+function productSellPrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : (p.price||0); }
+function productMarginPct(p){
+  const price = productSellPrice(p);
+  if(!(price>0) || !(p.cost>0)) return null;
+  return (price-p.cost)/price*100;
+}
 function healthDismissKey(productId, checkKey){ return productId+'::'+checkKey; }
 function computeCatalogHealth(){
   const skuCounts = {};
@@ -3477,6 +3561,8 @@ function computeCatalogHealth(){
       return days>=0 && days<=30;
     }),
     expired: state.products.filter(p=>p.expirationDate && new Date(p.expirationDate+'T00:00:00') < new Date()),
+    negativeMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m<=0; }),
+    lowMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m>0 && m<20; }),
   };
   const dismissedSet = new Set(state.settings.dismissedHealthItems||[]);
   return HEALTH_CHECKS_DEF.map(c=>{
@@ -3555,6 +3641,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='visitas'?'active':''}" onclick="${goSub('visitas')}">Visitas</button>
       <button class="admin-tab ${sub==='margen'?'active':''}" onclick="${goSub('margen')}">Margen por categoría</button>
       <button class="admin-tab ${sub==='margenproveedor'?'active':''}" onclick="${goSub('margenproveedor')}">Rentabilidad por proveedor</button>
+      <button class="admin-tab ${sub==='mapacalor'?'active':''}" onclick="${goSub('mapacalor')}">Mapa de calor</button>
       <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
@@ -3565,7 +3652,72 @@ function renderEstadisticas(){
     ${sub==='visitas' ? renderStatsVisitas() : ''}
     ${sub==='margen' ? renderStatsMargen() : ''}
     ${sub==='margenproveedor' ? renderStatsMargenProveedor() : ''}
+    ${sub==='mapacalor' ? renderStatsMapaCalor() : ''}
     ${sub==='comisiones' ? renderStatsComisiones() : ''}
+  `;
+}
+const HEAT_DAY_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+// Cuenta ventas (o ingresos) por día de la semana y hora del día — hora local del navegador,
+// que es la de tu negocio. Lo cancelado no cuenta.
+function computeSalesHeatmap(days, metric){
+  const since = Date.now() - days*86400000;
+  const grid = Array.from({length:7}, ()=>Array(24).fill(0));
+  const counts = Array.from({length:7}, ()=>Array(24).fill(0));
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado' || !o.date) return;
+    const d = new Date(o.date);
+    if(isNaN(d.getTime()) || d.getTime() < since) return;
+    const day = (d.getDay()+6)%7, hour = d.getHours();
+    counts[day][hour] += 1;
+    grid[day][hour] += metric==='revenue' ? (o.total||0) : 1;
+  });
+  let max = 0, total = 0; const cells = [];
+  for(let di=0; di<7; di++) for(let h=0; h<24; h++){
+    const v = grid[di][h];
+    if(v>max) max = v;
+    total += v;
+    if(v>0) cells.push({day:di, hour:h, value:v, count:counts[di][h]});
+  }
+  cells.sort((a,b)=>b.value-a.value);
+  return {grid, counts, max, total, cells, top: cells.slice(0,3)};
+}
+function shortHeatNum(v){ return v>=1000 ? (Math.round(v/100)/10)+'k' : String(Math.round(v)); }
+function renderStatsMapaCalor(){
+  const days = state.heatDays || 90;
+  const metric = state.heatMetric || 'count';
+  const h = computeSalesHeatmap(days, metric);
+  const withData = h.cells.map(c=>c.hour);
+  const minH = Math.min(9, ...(withData.length ? withData : [9]));
+  const maxH = Math.max(20, ...(withData.length ? withData : [20]));
+  const hours = []; for(let x=minH; x<=maxH; x++) hours.push(x);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Mapa de calor de ventas</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Qué días y a qué hora vendes más — para saber cuándo conviene tener más gente atendiendo. Entre más oscuro el cuadro, más actividad.</div>
+    <div class="two-col" style="max-width:520px;margin-bottom:14px;">
+      <select onchange="state.heatMetric=this.value;render()">
+        <option value="count" ${metric==='count'?'selected':''}>Número de ventas</option>
+        <option value="revenue" ${metric==='revenue'?'selected':''}>Monto vendido</option>
+      </select>
+      <select onchange="state.heatDays=Number(this.value);render()">
+        ${[30,90,180].map(d=>`<option value="${d}" ${days===d?'selected':''}>Últimos ${d} días</option>`).join('')}
+      </select>
+    </div>
+    ${h.total===0 ? `<div class="empty-state">Todavía no hay ventas en este periodo.</div>` : `
+      <div class="note-box">Tus momentos más fuertes: ${h.top.map(c=>`<strong>${HEAT_DAY_LABELS[c.day]} ${c.hour}:00–${c.hour+1}:00</strong> (${c.count} venta${c.count===1?'':'s'})`).join(' · ')}</div>
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:separate;border-spacing:3px;">
+          <thead><tr><th></th>${hours.map(x=>`<th style="font-size:10.5px;font-weight:600;color:var(--ink-soft);">${x}h</th>`).join('')}</tr></thead>
+          <tbody>
+            ${HEAT_DAY_LABELS.map((lbl,di)=>`<tr><th style="text-align:right;padding-right:6px;font-size:12px;">${lbl}</th>${hours.map(x=>{
+              const v = h.grid[di][x];
+              const alpha = h.max>0 ? v/h.max : 0;
+              const bg = v>0 ? `rgba(153,52,119,${(0.15+alpha*0.85).toFixed(2)})` : 'var(--bg)';
+              const color = alpha>0.55 ? '#fff' : 'var(--ink)';
+              return `<td title="${lbl} ${x}:00 — ${h.counts[di][x]} venta(s)" style="min-width:34px;height:30px;border-radius:6px;background:${bg};color:${color};text-align:center;font-size:10.5px;font-weight:700;">${v>0 ? (metric==='revenue' ? shortHeatNum(v) : v) : ''}</td>`;
+            }).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
   `;
 }
 function renderStatsMargenProveedor(){
@@ -3599,18 +3751,29 @@ function renderStatsMargenProveedor(){
 }
 function renderStatsComisiones(){
   const rows = computeCommissionsReport(30);
-  const totalCommission = rows.reduce((s,r)=>s+r.commission,0);
+  const totalPending = rows.reduce((s,r)=>s+r.commission,0);
+  const totalPaidRecent = rows.reduce((s,r)=>s+r.paidRecent,0);
   return `
-    <div class="panel-title" style="margin-bottom:4px;">Comisiones (últimos 30 días)</div>
-    <div class="panel-sub" style="margin-bottom:14px;">Lo que le debes a cada comisionista, según las ventas que le asignaste desde Pedidos.</div>
+    <div class="panel-title" style="margin-bottom:4px;">Comisiones</div>
+    <div class="panel-sub" style="margin-bottom:14px;">Lo pendiente incluye TODAS las ventas asignadas que aún no marcas como pagadas (sin importar qué tan viejas sean); lo pagado se muestra de los últimos 30 días.</div>
     <div class="stat-grid">
-      <div class="stat-card primary"><div class="stat-label">Total a pagar</div><div class="stat-value">${money(totalCommission)}</div></div>
+      <div class="stat-card primary"><div class="stat-label">Pendiente de pago</div><div class="stat-value">${money(totalPending)}</div></div>
+      <div class="stat-card"><div class="stat-label">Pagado (30 días)</div><div class="stat-value">${money(totalPaidRecent)}</div></div>
     </div>
-    ${rows.length===0 ? `<div class="empty-state">Sin ventas asignadas a comisionistas en los últimos 30 días.</div>` :
+    ${rows.length===0 ? `<div class="empty-state">Todavía no hay ventas asignadas a comisionistas.</div>` :
       rows.map(r=>`
-        <div class="list-row">
-          <div class="row-main"><div class="row-title">${r.name}</div><div class="row-sub">${r.sales} venta(s) · Total vendido: ${money(r.total)}</div></div>
-          <div style="font-weight:800;color:var(--green);">${money(r.commission)}</div>
+        <div class="list-row" style="flex-wrap:wrap;">
+          <div class="row-main">
+            <div class="row-title">${r.name}</div>
+            <div class="row-sub">${r.sales>0 ? `${r.sales} venta(s) pendientes · Vendido: ${money(r.total)}` : 'Sin comisiones pendientes'}${r.paidRecent>0 ? ` · Pagado en 30 días: ${money(r.paidRecent)}` : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:800;color:${r.commission>0?'var(--green)':'var(--ink-soft)'};">${money(r.commission)}</div>
+            <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap;">
+              ${r.commission>0 ? `<button class="btn-primary" style="width:auto;padding:6px 12px;font-size:12.5px;" onclick="markCommissionsPaid('${r.agentId}')">Marcar como pagadas</button>` : ''}
+              ${r.paidRecent>0 ? `<button class="btn-tertiary" style="padding:6px 10px;" onclick="undoLastCommissionPayment('${r.agentId}')">Deshacer último pago</button>` : ''}
+            </div>
+          </div>
         </div>
       `).join('')}
   `;
@@ -3846,7 +4009,7 @@ function renderStatsProductos(){
             ${shown.map(p=>`
               <div class="list-row">
                 <div class="row-main" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>
-                  <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div>
+                  <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}</div>
                 </div>
                 <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Marcar como leído</button>
                 ${check.key==='outOfStockVisible' ? `<button class="btn-tertiary" title="Ocultar de la tienda mientras se repone" onclick="if(confirm('¿Ocultar \\'${p.name.replace(/'/g,"\\\\'")}\\' de la tienda?'))quickHideProduct('${p.id}')">${icon('eye-off',13)} Ocultar</button>` : ''}
@@ -5185,10 +5348,41 @@ function distinctCustomerValues(field){
 }
 function openCustomerModal(manualId){
   if(manualId){ state.customerModal = {...state.customers.find(c=>c.id===manualId)}; }
-  else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'' }; }
+  else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'', notesLog:[] }; }
   render();
 }
 function closeCustomerModal(){ state.customerModal=null; render(); }
+// Bitácora de notas: cada nota queda con fecha y quién la escribió, en vez de una sola nota que
+// se sobrescribe. Si el cliente ya existe se guarda al instante (para que no se pierda si cierras
+// la ventana sin darle Guardar); si es nuevo, viaja con el resto de sus datos al guardarlo.
+async function addCustomerNote(){
+  const el = document.getElementById('cm-new-note');
+  const text = (el ? el.value : '').trim();
+  if(!text){ showToast('Escribe la nota primero'); return; }
+  const c = state.customerModal;
+  c.notesLog = [{date:new Date().toISOString(), text, author: state.user ? state.user.email : ''}, ...(c.notesLog||[])];
+  if(c.id){
+    try{
+      await db.collection('customers').doc(c.id).set({notesLog:c.notesLog}, {merge:true});
+      const idx = state.customers.findIndex(x=>x.id===c.id);
+      if(idx>=0) state.customers[idx].notesLog = c.notesLog;
+    }catch(e){ console.error('No se pudo guardar la nota', e); showToast('No se pudo guardar la nota'); }
+  }
+  render();
+}
+async function removeCustomerNote(idx){
+  if(!confirm('¿Borrar esta nota?')) return;
+  const c = state.customerModal;
+  c.notesLog = (c.notesLog||[]).filter((_,i)=>i!==idx);
+  if(c.id){
+    try{
+      await db.collection('customers').doc(c.id).set({notesLog:c.notesLog}, {merge:true});
+      const i2 = state.customers.findIndex(x=>x.id===c.id);
+      if(i2>=0) state.customers[i2].notesLog = c.notesLog;
+    }catch(e){ console.error('No se pudo borrar la nota', e); showToast('No se pudo borrar la nota'); }
+  }
+  render();
+}
 async function saveCustomerModal(){
   const name = document.getElementById('cm-name').value.trim();
   const phone = document.getElementById('cm-phone').value.trim();
@@ -5199,7 +5393,7 @@ async function saveCustomerModal(){
   const country = document.getElementById('cm-country').value.trim();
   const notes = document.getElementById('cm-notes').value.trim();
   if(!name){ showToast('Ponle un nombre al cliente'); return; }
-  const payload = { name, phone, email, address, city, state:stateField, country, notes };
+  const payload = { name, phone, email, address, city, state:stateField, country, notes, notesLog: state.customerModal.notesLog || [] };
   try{
     if(state.customerModal.id){
       payload.createdAt = state.customerModal.createdAt || new Date().toISOString();
@@ -5342,7 +5536,24 @@ function renderCustomerModal(){
         <div class="form-field"><label>Estado</label><input id="cm-state" value="${c.state||''}" oninput="state.customerModal.state=this.value"></div>
       </div>
       <div class="form-field"><label>País</label><input id="cm-country" value="${c.country||''}" oninput="state.customerModal.country=this.value"></div>
-      <div class="form-field"><label>Notas</label><textarea id="cm-notes" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
+      <div class="form-field"><label>Bitácora de notas (con fecha)</label>
+        <div style="display:flex;gap:6px;">
+          <input id="cm-new-note" placeholder="Ej. Le interesa lencería talla grande, prefiere que le escriban por la tarde…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomerNote();}">
+          <button class="btn-outline" style="white-space:nowrap;" onclick="addCustomerNote()">Agregar</button>
+        </div>
+        ${(c.notesLog||[]).length===0 ? `<div class="panel-sub" style="margin-top:6px;">Aún no hay notas registradas.</div>` : `
+          <div style="max-height:190px;overflow-y:auto;margin-top:8px;">
+            ${(c.notesLog||[]).map((n,i)=>`
+              <div style="border-bottom:1px solid var(--border);padding:8px 0;display:flex;gap:8px;align-items:flex-start;">
+                <div style="flex:1;">
+                  <div class="row-sub">${new Date(n.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}${n.author?` · ${n.author}`:''}</div>
+                  <div style="white-space:pre-wrap;font-size:13px;margin-top:2px;">${(n.text||'').replace(/</g,'&lt;')}</div>
+                </div>
+                <button class="icon-btn danger" title="Borrar nota" onclick="removeCustomerNote(${i})">${icon('trash',14)}</button>
+              </div>`).join('')}
+          </div>`}
+      </div>
+      <div class="form-field"><label>Nota general</label><textarea id="cm-notes" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCustomerModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveCustomerModal()">Guardar</button>
@@ -7674,6 +7885,12 @@ function renderProductModal(){
           <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="font-size:16px;color:var(--green);">${money(profit)}</strong></div>
         </div>
         ${p.id ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="openProductPriceHistory('${p.id}')">${icon('history',13)} Ver historial de cambios</button>` : ''}
+        ${p.id && p.variants && p.variants.length ? (()=>{ const perf = computeVariantPerformance(p.id); const best = perf.length && perf[0].unitsTotal>0 ? perf[0].id : null; return `
+          <div style="margin-top:14px;">
+            <div class="row-sub" style="margin-bottom:6px;">Rendimiento por variante:</div>
+            ${perf.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:4px 0;gap:8px;"><span>${r.label}${r.id===best?' <span class="status-badge status-ok" style="margin-left:4px;">Más vendida</span>':''}</span><span style="color:var(--ink-soft);text-align:right;">Stock ${r.stock} · ${r.units90} vendida(s) en 90 días · ${r.unitsTotal} en total</span></div>`).join('')}
+          </div>
+        `; })() : ''}
         ${p.id ? (()=>{ const together = computeFrequentlyBoughtTogether(p.id, 3); return together.length===0 ? '' : `
           <div style="margin-top:14px;">
             <div class="row-sub" style="margin-bottom:6px;">Se compra junto con:</div>
