@@ -470,6 +470,7 @@ const DEFAULT_SETTINGS = {
   ],
   seasonCustomEvents: [], seasonHidden: [],
   repurchaseProductIds: [], repurchaseDays: 45, repurchaseNotified: {},
+  churnRiskDays: 60, churnRiskMinPurchases: 2, churnRiskNotified: {},
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -828,10 +829,11 @@ const SETTINGS_FIELD_LABELS = {
   faqItems:'Preguntas frecuentes', seasonCustomEvents:'Temporadas personalizadas', seasonHidden:'Temporadas ocultas',
   theme:'Apariencia (colores/tipografía)', deliverySurveyQuestions:'Preguntas de la encuesta post-entrega',
   repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
+  churnRiskDays:'Días para clientes en riesgo de fuga', churnRiskMinPurchases:'Compras mínimas para riesgo de fuga',
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
-const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified']);
+const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified','churnRiskNotified']);
 async function saveSettings(){
   try{
     if(_settingsAuditBaseline){
@@ -1286,6 +1288,7 @@ async function logCustomerMessage(phone, name, text, kind){
 const CUSTOMER_MESSAGE_KIND_LABELS = {
   recompra:'Recordatorio de recompra', encuesta:'Encuesta post-entrega', carrito:'Recuperación de carrito',
   restock:'Aviso de restock', pedido:'Sobre un pedido', mensaje:'Respuesta a un mensaje',
+  reactivacion:'Reactivación de cliente',
 };
 async function loadCustomerMessageHistory(phone){
   const cleanPhone = (phone||'').replace(/\D/g,'');
@@ -3712,11 +3715,14 @@ function computeProductAnalytics(){
   }));
   const viewsById = {};
   (state.analyticsEvents||[]).forEach(e=>{ if(e.type==='product_view' && e.productId) viewsById[e.productId]=(viewsById[e.productId]||0)+1; });
+  const wishlistById = {};
+  (state.analyticsEvents||[]).forEach(e=>{ if(e.type==='wishlist_add' && e.productId) wishlistById[e.productId]=(wishlistById[e.productId]||0)+1; });
   const withName = (id)=>{ const p = state.products.find(x=>x.id===id); return p ? p.name : '(producto eliminado)'; };
   const soldIds = Object.keys(unitsById);
   const byUnits = soldIds.map(id=>({id,name:withName(id),value:unitsById[id]}));
   const byRevenue = soldIds.map(id=>({id,name:withName(id),value:revenueById[id]}));
   const mostViewed = Object.entries(viewsById).map(([id,v])=>({id,name:withName(id),value:v})).sort((a,b)=>b.value-a.value).slice(0,6);
+  const mostWishlisted = Object.entries(wishlistById).map(([id,v])=>({id,name:withName(id),value:v})).sort((a,b)=>b.value-a.value).slice(0,6);
   const withMargin = state.products.filter(p=>p.cost>0 && p.price>0).map(p=>({
     id:p.id, name:p.name, marginPct: Math.round(((p.price-p.cost)/p.price)*100), profitPerUnit: p.price-p.cost
   }));
@@ -3727,11 +3733,13 @@ function computeProductAnalytics(){
     topByRevenue: [...byRevenue].sort((a,b)=>b.value-a.value).slice(0,6),
     leastByRevenue: [...byRevenue].sort((a,b)=>a.value-b.value).slice(0,6),
     mostViewed,
+    mostWishlisted,
     topMargin: [...withMargin].sort((a,b)=>b.marginPct-a.marginPct).slice(0,6),
     lowMargin: [...withMargin].sort((a,b)=>a.marginPct-b.marginPct).slice(0,6),
     noSales: state.products.filter(p=>!soldIdSet.has(p.id)),
     hasMarginData: withMargin.length>0,
     hasViewData: Object.keys(viewsById).length>0,
+    hasWishlistData: Object.keys(wishlistById).length>0,
   };
 }
 // Reabasto sugerido: cruza ventas de los últimos 30 días (velocidad de venta) con el
@@ -4307,6 +4315,7 @@ function renderStatsProductos(){
       ${m.invRows.map(([cat,val])=>`<div class="hbar-row"><div class="hbar-label">${cat}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(val/m.maxInv*100)}%;background:${catColor(cat)}"></div></div><div class="hbar-val">${money(val)}</div></div>`).join('')}
     </div>
     ${rankList('Más visitados', pa.hasViewData?null:'Se empieza a registrar a partir de esta actualización', pa.mostViewed, r=>`${r.value} vista(s)`)}
+    ${rankList('Más agregados a favoritos', pa.hasWishlistData?null:'Se empieza a registrar a partir de esta actualización — nadie ha guardado un favorito todavía', pa.mostWishlisted, r=>`${r.value} vez/veces`)}
     ${rankList('Más vendidos', null, pa.topByUnits, r=>`${r.value} vendidos`)}
     ${rankList('Menos vendidos', 'Entre los que sí han tenido al menos una venta', pa.leastByUnits, r=>`${r.value} vendidos`)}
     ${rankList('Mayor facturación', null, pa.topByRevenue, r=>money(r.value))}
@@ -6824,6 +6833,7 @@ const MARKETING_SUBPANELS = [
   {key:'promociones', icon:icon('star'), label:'Promociones automáticas'},
   {key:'recordatorio', icon:icon('bell'), label:'Recordatorio al cobrar (POS)'},
   {key:'recompra', icon:icon('history'), label:'Recordatorio de recompra'},
+  {key:'riesgo', icon:icon('alert-triangle'), label:'Clientes en riesgo de fuga'},
   {key:'temporadas', icon:icon('calendar'), label:'Calendario de temporadas'},
 ];
 function renderMarketing(){
@@ -6842,7 +6852,7 @@ function renderMarketing(){
 }
 function renderMarketingSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.marketingSubpanel=null;render()">‹ Volver a Marketing</button>`;
-  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, recompra: renderRepurchaseSubpanel, temporadas: renderSeasonsSubpanel};
+  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, recompra: renderRepurchaseSubpanel, riesgo: renderChurnRiskSubpanel, temporadas: renderSeasonsSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 
@@ -8651,6 +8661,79 @@ function renderRepurchaseSubpanel(){
         <div class="list-row">
           <div class="row-main"><div class="row-title">${c.name||'(sin nombre)'}</div><div class="row-sub">${c.product.name} · hace ${c.daysSince} días · ${c.phone}</div></div>
           <button class="btn-primary" onclick="sendRepurchaseReminder('${c.phone}','${c.productId}')">${icon('message-circle',14)} WhatsApp</button>
+        </div>`).join('')}
+  </div>`;
+}
+
+/* ============== CLIENTES EN RIESGO DE FUGA ==============
+   A diferencia del recordatorio de recompra (que es por un producto puntual que se termina),
+   esto detecta clientes RECURRENTES — que ya compraron varias veces, sin importar qué — y que
+   llevan más tiempo del normal sin volver. Junta pedidos de la tienda y ventas del POS (ambos
+   ya viven en state.orders) por teléfono, y si alguien con historial de compras repetidas no
+   ha vuelto en los días configurados, aparece en la lista con un mensaje de reactivación listo
+   para mandar por WhatsApp. Igual que recompra, una vez contactado no se le vuelve a mostrar
+   por el mismo periodo (settings.churnRiskNotified) — y si de hecho regresa a comprar, su
+   última fecha de compra se actualiza sola y deja de cumplir el filtro de "días sin volver",
+   así que no hace falta limpiar el aviso a mano. */
+function computeChurnRiskCandidates(){
+  const days = state.settings.churnRiskDays || 60;
+  const minPurchases = state.settings.churnRiskMinPurchases || 2;
+  const cutoff = Date.now() - days*86400000;
+  const byPhone = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const phone = (orderContactPhone(o)||'').replace(/\D/g,''); if(!phone) return;
+    const name = (o.source==='pos' ? o.customerName : o.customer) || '';
+    const d = new Date(o.date).getTime();
+    if(isNaN(d)) return;
+    if(!byPhone[phone]) byPhone[phone] = {phone, name, count:0, lastDate:0, totalSpent:0};
+    byPhone[phone].count += 1;
+    byPhone[phone].totalSpent += Number(o.total)||0;
+    if(d > byPhone[phone].lastDate){ byPhone[phone].lastDate = d; byPhone[phone].name = name || byPhone[phone].name; }
+  });
+  const notified = state.settings.churnRiskNotified || {};
+  return Object.values(byPhone)
+    .filter(x=>x.count >= minPurchases && x.lastDate <= cutoff)
+    .filter(x=>{
+      const notifiedAt = notified[x.phone];
+      if(!notifiedAt) return true;
+      return (Date.now() - new Date(notifiedAt).getTime()) >= days*86400000;
+    })
+    .map(x=>({...x, daysSince: Math.floor((Date.now()-x.lastDate)/86400000)}))
+    .sort((a,b)=>b.daysSince-a.daysSince);
+}
+function buildChurnRiskMessage(cand){
+  return `Hola ${cand.name||''}! Te extrañamos por ${state.settings.storeName||'nuestra tienda'} 💕 Ya tiene ${cand.daysSince} días que no nos visitas — si buscas algo en especial o quieres ver las novedades, con gusto te ayudamos por aquí mismo.`;
+}
+async function sendChurnRiskReminder(phone){
+  const cand = computeChurnRiskCandidates().find(c=>c.phone===phone);
+  if(!cand) return;
+  const msg = buildChurnRiskMessage(cand);
+  window.open(waLink(phone, msg), '_blank');
+  logCustomerMessage(phone, cand.name, msg, 'reactivacion');
+  state.settings.churnRiskNotified = {...(state.settings.churnRiskNotified||{}), [phone]: new Date().toISOString()};
+  await saveSettings(); render();
+}
+function renderChurnRiskSubpanel(){
+  const candidates = computeChurnRiskCandidates();
+  return `
+  <div class="panel">
+    <div class="panel-title">Clientes en riesgo de fuga</div>
+    <div class="panel-sub">Clientes que ya te compraron varias veces (tienda o mostrador) y llevan más de lo normal sin volver. A diferencia del recordatorio de recompra, aquí no importa qué compraron — es una señal de que se están enfriando.</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px;">
+      <div class="form-field" style="max-width:220px;"><label>Días sin comprar para avisar</label>
+        <input type="number" min="1" value="${state.settings.churnRiskDays||60}" onchange="state.settings.churnRiskDays=Number(this.value)||60;saveSettings();render()">
+      </div>
+      <div class="form-field" style="max-width:220px;"><label>Compras mínimas para contar como recurrente</label>
+        <input type="number" min="2" value="${state.settings.churnRiskMinPurchases||2}" onchange="state.settings.churnRiskMinPurchases=Math.max(2,Number(this.value)||2);saveSettings();render()">
+      </div>
+    </div>
+    <div class="panel-title">Clientes para contactar (${candidates.length})</div>
+    ${candidates.length===0 ? `<div class="empty-state">Nadie está en riesgo de fuga por ahora.</div>` :
+      candidates.map(c=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${c.name||'(sin nombre)'}</div><div class="row-sub">${c.count} compras · hace ${c.daysSince} días · ${money(c.totalSpent)} en total · ${c.phone}</div></div>
+          <button class="btn-primary" onclick="sendChurnRiskReminder('${c.phone}')">${icon('message-circle',14)} WhatsApp</button>
         </div>`).join('')}
   </div>`;
 }
