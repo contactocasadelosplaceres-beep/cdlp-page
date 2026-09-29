@@ -501,6 +501,35 @@ const DEFAULT_SETTINGS = {
   ageGateEnabled: true,
   termsEnabled: true,
   termsText: "Acepto la política de privacidad y de devoluciones de esta tienda: mis datos se usan solo para procesar mi pedido, el empaque es neutro y discreto, y ante cualquier problema con lo recibido puedo contactar a la tienda por WhatsApp.",
+  privacyPolicyText: `AVISO DE PRIVACIDAD
+
+La Casa de los Placeres, con domicilio en Ciudad Guzmán, Jalisco, México, es responsable del uso y protección de tus datos personales conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.
+
+¿Qué datos recabamos?
+Para procesar tu pedido te pedimos únicamente: nombre, número de WhatsApp o teléfono, dirección de entrega y, si lo indicas, notas adicionales para la entrega. No te pedimos datos de tarjetas ni información bancaria a través de este catálogo: el pago se acuerda directamente contigo al momento de la entrega o por el medio que hayamos hablado por WhatsApp.
+
+¿Para qué usamos tus datos?
+- Confirmar, preparar y entregar tu pedido.
+- Contactarte por WhatsApp para coordinar la entrega o resolver cualquier duda sobre tu compra.
+- Si tú lo autorizas al guardar tu perfil en este dispositivo, recordar tus datos para que tu próxima compra sea más rápida.
+No usamos tus datos para fines distintos a los aquí descritos, y no los usamos con fines publicitarios sin tu consentimiento.
+
+Discreción
+Todos los pedidos se empacan en embalaje neutro, sin logotipos ni indicios del contenido, precisamente para proteger tu privacidad frente a terceros (vecinos, otras personas en tu domicilio, la persona que hace la entrega, etc.).
+
+¿Con quién compartimos tus datos?
+Tus datos no se venden ni se comparten con terceros para fines comerciales. Solo se comparten con la persona encargada de realizar tu entrega, y únicamente los datos necesarios para completarla (nombre, dirección y teléfono de contacto).
+
+¿Dónde se resguardan?
+Tus datos se almacenan de forma electrónica en un sistema con acceso restringido, protegido con las medidas de seguridad razonables para un negocio de este tamaño.
+
+Tus derechos (ARCO)
+Puedes solicitar en cualquier momento el Acceso, Rectificación, Cancelación u Oposición al uso de tus datos personales, así como revocar tu consentimiento, escribiendo por WhatsApp al número de contacto de esta tienda. Atenderemos tu solicitud a la brevedad posible.
+
+Cambios a este aviso
+Este aviso puede actualizarse para reflejar cambios en nuestras prácticas o en la ley aplicable. La versión vigente siempre estará disponible en este catálogo.
+
+Al marcar la casilla de aceptación antes de confirmar tu pedido, declaras que leíste y aceptas este aviso de privacidad.`,
   theme:{},
   historicalOrderCountOffset:0,
   dashboardNotes: [],
@@ -877,7 +906,7 @@ const SETTINGS_FIELD_LABELS = {
   repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
   churnRiskDays:'Días para clientes en riesgo de fuga', churnRiskMinPurchases:'Compras mínimas para riesgo de fuga',
   storePaused:'Tienda en pausa', storePausedMessage:'Mensaje de tienda en pausa', ageGateEnabled:'Verificación de mayoría de edad',
-  termsEnabled:'Aceptación de términos en cada pedido', termsText:'Texto de términos y condiciones',
+  termsEnabled:'Aceptación del aviso de privacidad', termsText:'Texto de la casilla de aceptación', privacyPolicyText:'Aviso de privacidad completo',
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
@@ -9760,14 +9789,17 @@ function renderOperativoSubpanel(){
     </label>
   </div>
   <div class="panel">
-    <div class="panel-title">Aceptación de términos y política de privacidad</div>
-    <div class="panel-sub">En cada pedido, la persona debe marcar una casilla aceptando el texto de abajo antes de poder confirmar la compra — es obligatorio, no se puede enviar el pedido sin marcarla, y se vuelve a pedir en cada compra (no solo la primera vez en ese celular).</div>
+    <div class="panel-title">Aceptación del aviso de privacidad</div>
+    <div class="panel-sub">Es obligatorio: la persona debe marcar la casilla antes de poder confirmar su compra. Solo se le pide una vez por celular/navegador — en cuanto la acepta en su primera compra, queda guardado en ese dispositivo y no se le vuelve a pedir en las siguientes.</div>
     <label class="checkbox-row">
       <input type="checkbox" ${s.termsEnabled!==false?'checked':''} onchange="state.settings.termsEnabled=this.checked;saveSettings();render()">
-      <span>Pedir aceptar términos en cada pedido</span>
+      <span>Pedir aceptar el aviso de privacidad en la primera compra</span>
     </label>
-    <div class="form-field" style="margin-top:8px;"><label>Texto de la casilla de aceptación</label>
+    <div class="form-field" style="margin-top:8px;"><label>Texto corto junto a la casilla</label>
       <textarea id="set-terms-text" rows="3" oninput="state.settings.termsText=this.value">${s.termsText||''}</textarea>
+    </div>
+    <div class="form-field" style="margin-top:8px;"><label>Aviso de privacidad completo (se ve al hacer clic en "Leer el aviso completo")</label>
+      <textarea id="set-privacy-policy-text" rows="10" oninput="state.settings.privacyPolicyText=this.value">${escDescHtml(s.privacyPolicyText||'')}</textarea>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
   </div>

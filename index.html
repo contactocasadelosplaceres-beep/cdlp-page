@@ -440,9 +440,42 @@ const DEFAULT_SETTINGS = {
   historicalOrderCountOffset:0,
   slackWebhookUrl:"",
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
+  // Mismo texto por defecto que en admin.html (DEFAULT_SETTINGS.privacyPolicyText) — se repite
+  // aquí porque la tienda lee sus propios valores por defecto directo de Firestore, sin pasar
+  // por admin.html. Así el enlace "Leer el aviso completo" funciona con algo real desde el
+  // primer día, aunque Ale todavía no haya entrado a Configuración a personalizarlo.
+  privacyPolicyText: `AVISO DE PRIVACIDAD
+
+La Casa de los Placeres, con domicilio en Ciudad Guzmán, Jalisco, México, es responsable del uso y protección de tus datos personales conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.
+
+¿Qué datos recabamos?
+Para procesar tu pedido te pedimos únicamente: nombre, número de WhatsApp o teléfono, dirección de entrega y, si lo indicas, notas adicionales para la entrega. No te pedimos datos de tarjetas ni información bancaria a través de este catálogo: el pago se acuerda directamente contigo al momento de la entrega o por el medio que hayamos hablado por WhatsApp.
+
+¿Para qué usamos tus datos?
+- Confirmar, preparar y entregar tu pedido.
+- Contactarte por WhatsApp para coordinar la entrega o resolver cualquier duda sobre tu compra.
+- Si tú lo autorizas al guardar tu perfil en este dispositivo, recordar tus datos para que tu próxima compra sea más rápida.
+No usamos tus datos para fines distintos a los aquí descritos, y no los usamos con fines publicitarios sin tu consentimiento.
+
+Discreción
+Todos los pedidos se empacan en embalaje neutro, sin logotipos ni indicios del contenido, precisamente para proteger tu privacidad frente a terceros (vecinos, otras personas en tu domicilio, la persona que hace la entrega, etc.).
+
+¿Con quién compartimos tus datos?
+Tus datos no se venden ni se comparten con terceros para fines comerciales. Solo se comparten con la persona encargada de realizar tu entrega, y únicamente los datos necesarios para completarla (nombre, dirección y teléfono de contacto).
+
+¿Dónde se resguardan?
+Tus datos se almacenan de forma electrónica en un sistema con acceso restringido, protegido con las medidas de seguridad razonables para un negocio de este tamaño.
+
+Tus derechos (ARCO)
+Puedes solicitar en cualquier momento el Acceso, Rectificación, Cancelación u Oposición al uso de tus datos personales, así como revocar tu consentimiento, escribiendo por WhatsApp al número de contacto de esta tienda. Atenderemos tu solicitud a la brevedad posible.
+
+Cambios a este aviso
+Este aviso puede actualizarse para reflejar cambios en nuestras prácticas o en la ley aplicable. La versión vigente siempre estará disponible en este catálogo.
+
+Al marcar la casilla de aceptación antes de confirmar tu pedido, declaras que leíste y aceptas este aviso de privacidad.`,
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'' };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'', privacyPolicyOpen:false };
 
 async function loadData(){
   try{
@@ -1220,8 +1253,9 @@ function handleCheckoutSubmit(){
   if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
   if(needsTermsAcceptance()){
     const termsEl = document.getElementById('ck-terms');
-    if(!termsEl || !termsEl.checked){ showToast('Debes aceptar los términos para continuar'); return; }
+    if(!termsEl || !termsEl.checked){ showToast('Debes aceptar el aviso de privacidad para continuar'); return; }
   }
+  if(needsTermsAcceptance()) markTermsAccepted();
   if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
   else{ clearCustomerProfile(); }
   state.submittingOrder = true; render();
@@ -1258,14 +1292,34 @@ function confirmAge(){
 }
 function declineAge(){ window.location.href = 'https://www.google.com'; }
 
-/* ============== ACEPTACIÓN DE TÉRMINOS ==============
-   Antes solo se pedía una vez por celular (se guardaba en localStorage y ya no se volvía a
-   pedir). Ahora es obligatorio marcarla en CADA pedido para poder confirmarlo — que alguien
-   haya aceptado hace tiempo en ese mismo celular no prueba que fue esta persona ni que sigue de
-   acuerdo, así que cada compra pide su propia aceptación. Se puede apagar por completo desde
+/* ============== ACEPTACIÓN DEL AVISO DE PRIVACIDAD ==============
+   Es obligatorio aceptarlo para poder comprar, pero solo hace falta hacerlo una vez por
+   cliente: en cuanto lo acepta en su primera compra, queda guardado en este mismo
+   celular/navegador (igual que el perfil y la mayoría de edad) y ya no se le vuelve a pedir en
+   sus compras siguientes desde el mismo dispositivo. Se puede apagar por completo desde
    Configuración → Operativo. */
+const TERMS_KEY = 'cdlp_terms_accepted';
+function hasAcceptedTerms(){
+  try{ return localStorage.getItem(TERMS_KEY)==='1'; }
+  catch(e){ return true; } // si el almacenamiento está bloqueado, no atrapamos al cliente sin poder comprar
+}
+function markTermsAccepted(){
+  try{ localStorage.setItem(TERMS_KEY,'1'); }catch(e){}
+}
 function needsTermsAcceptance(){
-  return state.settings.termsEnabled!==false;
+  return state.settings.termsEnabled!==false && !hasAcceptedTerms();
+}
+// Texto completo del aviso de privacidad, disponible desde el pie de página y desde el enlace
+// junto a la casilla de aceptación en el checkout — antes solo existía la frase corta de la
+// casilla, sin ningún lugar donde leer el aviso completo.
+function renderPrivacyPolicyDrawer(){
+  const text = state.settings.privacyPolicyText || DEFAULT_SETTINGS.privacyPolicyText;
+  return `
+    <div class="drawer-head"><h2>Aviso de privacidad</h2><button class="close-x" onclick="state.privacyPolicyOpen=false;render()">${icon('x')}</button></div>
+    <div class="drawer-body">
+      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;">${text}</div>
+    </div>
+  `;
 }
 function renderAgeGate(){
   return `
@@ -2020,6 +2074,7 @@ function renderFooterSection(){
         ${s.socialFacebook?`<div>Facebook: ${s.socialFacebook}</div>`:''}
         ${s.contactEmail?`<div>${s.contactEmail}</div>`:''}
         <a onclick="state.messageDrawerOpen=true;render()">${icon('message-circle')} Buzón de sugerencias</a>
+        <a onclick="state.privacyPolicyOpen=true;render()">Aviso de privacidad</a>
       </div>
     </div>
     <div class="foot-bottom">Pedidos por catálogo con entrega a domicilio y pago contra entrega.</div>
@@ -2229,7 +2284,7 @@ function renderCheckoutDrawer(){
       ${needsTermsAcceptance() ? `
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-top:10px;">
         <input id="ck-terms" type="checkbox" required style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">
-        <span>${state.settings.termsText||'Acepto la política de privacidad y de devoluciones de esta tienda.'} <strong>(obligatorio)</strong></span>
+        <span>${state.settings.termsText||'Acepto la política de privacidad y de devoluciones de esta tienda.'} <a onclick="event.preventDefault();state.privacyPolicyOpen=true;render()" href="#" style="color:var(--primary);font-weight:700;">Leer el aviso completo</a></span>
       </label>` : ''}
     </div>
     <div class="drawer-foot">
@@ -2297,7 +2352,7 @@ function renderStore(){
     </div>
     <button class="mobile-cart-bar-btn" onclick="state.cartOpen=true;render()">Ver carrito</button>
   </div>
-  <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId||state.profileOpen||state.messageDrawerOpen||state.checkoutReminderOpen||state.wishlistOpen||state.compareOpen||state.cartAbandonSurveyOpen?'open':''}" onclick="if(state.cartOpen){closeCartDrawer();}state.checkoutOpen=false;state.profileOpen=false;state.wishlistOpen=false;state.compareOpen=false;state.cartAbandonSurveyOpen=false;closeMessageDrawer();closeProductDetail();"></div>
+  <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId||state.profileOpen||state.messageDrawerOpen||state.checkoutReminderOpen||state.wishlistOpen||state.compareOpen||state.cartAbandonSurveyOpen||state.privacyPolicyOpen?'open':''}" onclick="if(state.cartOpen){closeCartDrawer();}state.checkoutOpen=false;state.profileOpen=false;state.wishlistOpen=false;state.compareOpen=false;state.cartAbandonSurveyOpen=false;state.privacyPolicyOpen=false;closeMessageDrawer();closeProductDetail();"></div>
   <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
   <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
   <div class="drawer drawer-detail ${state.detailProductId?'open':''}">${state.detailProductId ? renderProductDetailDrawer() : ''}</div>
@@ -2307,6 +2362,7 @@ function renderStore(){
   <div class="drawer ${state.wishlistOpen?'open':''}">${state.wishlistOpen ? renderWishlistDrawer() : ''}</div>
   <div class="drawer ${state.compareOpen?'open':''}">${state.compareOpen ? renderCompareDrawer() : ''}</div>
   <div class="drawer ${state.cartAbandonSurveyOpen?'open':''}">${state.cartAbandonSurveyOpen ? renderCartAbandonSurveyDrawer() : ''}</div>
+  <div class="drawer ${state.privacyPolicyOpen?'open':''}">${state.privacyPolicyOpen ? renderPrivacyPolicyDrawer() : ''}</div>
   `;
 }
 
