@@ -215,7 +215,9 @@ let state = {
   warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
   scannerContext:'checkout',
   posSessionReported:false,
+  posOffline: (typeof navigator!=='undefined' && 'onLine' in navigator) ? !navigator.onLine : false,
 };
+state.offlineQueueCount = loadOfflineQueue().length;
 // Para un kit, "existencia en este centro" es lo que alcance para armarlo SOLO con lo que hay
 // en ese centro (no se puede armar un kit combinando piezas de dos sucursales distintas) — por
 // eso centerStock() se apoya en computeKitStockAtCenter() para los kits, y así el buscador, la
@@ -1104,6 +1106,67 @@ async function logStockMovement(productId, type, qtyChange, note, centerId){
     });
   }catch(e){ console.error('No se pudo registrar el movimiento de inventario', e); }
 }
+/* ============== MODO DE VENTA SIN CONEXIÓN ==============
+   Si el internet falla justo cuando alguien está pagando, la venta no se pierde: se guarda
+   completa en este mismo dispositivo (localStorage) y el inventario se descuenta igual en
+   memoria para no vender dos veces lo mismo mientras sigue sin conexión — solo se aplaza el
+   folio consecutivo y la escritura real en Firestore, que se asignan/mandan en cuanto regresa
+   la señal. Mientras haya ventas pendientes de subir, no cierres esta pestaña ni la de otro
+   dispositivo en este mismo centro sin haber recuperado internet primero. */
+const POS_OFFLINE_QUEUE_KEY = 'cdlp_pos_offline_queue';
+function loadOfflineQueue(){
+  try{ return JSON.parse(localStorage.getItem(POS_OFFLINE_QUEUE_KEY)||'[]'); }catch(e){ return []; }
+}
+function saveOfflineQueue(queue){
+  try{ localStorage.setItem(POS_OFFLINE_QUEUE_KEY, JSON.stringify(queue)); }catch(e){}
+  state.offlineQueueCount = queue.length;
+}
+function queueOfflineSale(saleData){
+  const queue = loadOfflineQueue();
+  queue.push({...saleData, queuedAt:new Date().toISOString()});
+  saveOfflineQueue(queue);
+}
+let posSyncingOffline = false;
+async function trySyncOfflineQueue(){
+  if(posSyncingOffline || typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine) return;
+  let queue = loadOfflineQueue();
+  if(!queue.length) return;
+  posSyncingOffline = true;
+  const touchedProductIds = new Set();
+  while(queue.length){
+    const sale = queue[0];
+    try{
+      const orderNumber = await getNextOrderNumber();
+      const {stockUpdates, ...saleFields} = sale;
+      await db.collection('sales').add({...saleFields, orderNumber, source:'pos', syncedFromOffline:true});
+      for(const upd of (stockUpdates||[])){
+        await db.collection('products').doc(upd.id).update(upd.payload);
+        touchedProductIds.add(upd.id);
+      }
+      if(sale.couponCode){
+        try{ await db.collection('couponUsage').add({code: sale.couponCode, date:new Date().toISOString()}); }catch(e){}
+      }
+      queue.shift();
+      saveOfflineQueue(queue);
+    }catch(e){
+      console.error('No se pudo sincronizar una venta pendiente de conexión', e);
+      break; // deja el resto en la cola para el siguiente intento, no se pierde nada
+    }
+  }
+  if(touchedProductIds.size){
+    const kitsToRefresh = state.products.filter(k=>k.isKit && (k.kitItems||[]).some(ki=>touchedProductIds.has(ki.productId)));
+    await Promise.all(kitsToRefresh.map(k=>{
+      k.stock = computeKitStock(k);
+      return db.collection('products').doc(k.id).update({stock:k.stock}).catch(()=>{});
+    }));
+  }
+  posSyncingOffline = false;
+  if(queue.length===0) showToast('Ventas pendientes sincronizadas ✓');
+  render();
+}
+window.addEventListener('online', ()=>{ state.posOffline=false; render(); trySyncOfflineQueue(); });
+window.addEventListener('offline', ()=>{ state.posOffline=true; render(); });
+setInterval(()=>{ if(!(typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine)) trySyncOfflineQueue(); }, 20000);
 async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
   if(!state.activeCashRegister){ showToast('Abre la caja antes de vender'); return; }
@@ -1129,71 +1192,86 @@ async function chargeSale(){
     if(state.manualDiscount.type==='coupon') manualDiscountPayload.code = state.manualDiscount.coupon.code;
     else manualDiscountPayload.value = state.manualDiscount.value;
   }
+  const isOffline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
   try{
-    const orderNumber = await getNextOrderNumber();
+    // El inventario se descuenta en memoria siempre, aquí mismo, esté o no la conexión — así
+    // nadie puede vender dos veces lo último que queda de algo mientras el internet sigue caído.
+    // Lo único que se aplaza sin conexión es el folio consecutivo y las escrituras a Firestore
+    // (se guardan en "stockUpdates" para mandarlas en cuanto regrese la señal).
     const touchedComponentIds = new Set();
-    await Promise.all(items.map(it=>{
+    const stockUpdates = [];
+    items.forEach(it=>{
       const p = state.products.find(x=>x.id===it.id);
-      logStockMovement(it.id, 'venta_pos', -it.qty, `Venta #${String(orderNumber).padStart(4,'0')}`, centerId);
+      if(!isOffline) logStockMovement(it.id, 'venta_pos', -it.qty, `Venta`, centerId);
       if(p && p.isKit){
         // Un kit se vende como un solo ítem, pero descuenta el inventario real de cada
         // producto que lo compone — el kit en sí no guarda existencias propias.
-        return Promise.all((p.kitItems||[]).map(ki=>{
+        (p.kitItems||[]).forEach(ki=>{
           const comp = state.products.find(x=>x.id===ki.productId);
-          if(!comp) return Promise.resolve();
+          if(!comp) return;
           if(!comp.stockByCenter) comp.stockByCenter = {};
           comp.stockByCenter[centerId] = Math.max(0, (comp.stockByCenter[centerId]||0) - (ki.qty||1)*it.qty);
           comp.stock = totalStock(comp);
           touchedComponentIds.add(comp.id);
-          logStockMovement(comp.id, 'venta_pos_kit', -(ki.qty||1)*it.qty, `Componente de "${p.name}" — Venta #${String(orderNumber).padStart(4,'0')}`, centerId);
-          return db.collection('products').doc(comp.id).update({stockByCenter: comp.stockByCenter, stock: comp.stock});
-        }));
+          if(!isOffline) logStockMovement(comp.id, 'venta_pos_kit', -(ki.qty||1)*it.qty, `Componente de "${p.name}"`, centerId);
+          stockUpdates.push({id:comp.id, payload:{stockByCenter: comp.stockByCenter, stock: comp.stock}});
+        });
+        return;
       }
       if(it.variantId){
         const v = (p.variants||[]).find(x=>x.id===it.variantId);
         v.stock = Math.max(0, (v.stock||0) - it.qty);
         p.stock = Math.max(0, (p.stock||0) - it.qty);
-        return db.collection('products').doc(it.id).update({variants: p.variants, stock: p.stock});
+        stockUpdates.push({id:it.id, payload:{variants: p.variants, stock: p.stock}});
+        return;
       }
       if(!p.stockByCenter) p.stockByCenter = {};
       p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) - it.qty);
       p.stock = Math.max(0, (p.stock||0) - it.qty);
       touchedComponentIds.add(it.id);
-      return db.collection('products').doc(it.id).update({stockByCenter: p.stockByCenter, stock: p.stock});
-    }));
+      stockUpdates.push({id:it.id, payload:{stockByCenter: p.stockByCenter, stock: p.stock}});
+    });
     // Refresca el stock cacheado de cualquier kit (incluido el que se acaba de vender) cuyos
     // componentes se hayan movido, para que se muestre "Agotado" en cuanto ya no alcance.
     if(touchedComponentIds.size){
       const kitsToRefresh = state.products.filter(k=>k.isKit && (k.kitItems||[]).some(ki=>touchedComponentIds.has(ki.productId)));
-      await Promise.all(kitsToRefresh.map(k=>{
-        k.stock = computeKitStock(k);
-        return db.collection('products').doc(k.id).update({stock:k.stock});
-      })).catch(e=>console.error('No se pudo refrescar el stock de kits', e));
+      kitsToRefresh.forEach(k=>{ k.stock = computeKitStock(k); if(!isOffline) stockUpdates.push({id:k.id, payload:{stock:k.stock}}); });
     }
-    await db.collection('sales').add({
-      date: new Date().toISOString(), orderNumber, source:"pos",
+    const couponCode = state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null;
+    const saleFields = {
+      date: new Date().toISOString(),
       cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
       centerId, centerName: state.activeCenter.name,
       cashRegisterId: state.activeCashRegister.id,
       items, subtotal, total, paymentMethod: state.payMethod, payments,
-      manualDiscount: manualDiscountPayload,
-      couponCode: state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null,
+      manualDiscount: manualDiscountPayload, couponCode,
       customerId: state.activeCustomer ? state.activeCustomer.id : null,
       customerName: state.activeCustomer ? state.activeCustomer.name : null,
       customerPhone: state.activeCustomer ? (state.activeCustomer.phone||'') : null,
       customerAddress: state.activeCustomer ? (state.activeCustomer.address||'') : null,
       notes: state.saleNotes || '',
-    });
-    if(state.manualDiscount && state.manualDiscount.type==='coupon'){
-      try{ await db.collection('couponUsage').add({code: state.manualDiscount.coupon.code, date:new Date().toISOString()}); }
-      catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+    };
+    let orderNumber = null;
+    if(isOffline){
+      queueOfflineSale({...saleFields, stockUpdates});
+      showToast('Sin conexión: la venta se guardó en este dispositivo y se subirá sola cuando regrese el internet');
+    } else {
+      orderNumber = await getNextOrderNumber();
+      await Promise.all(stockUpdates.map(u=>db.collection('products').doc(u.id).update(u.payload)));
+      await db.collection('sales').add({...saleFields, orderNumber, source:"pos"});
+      if(couponCode){
+        try{ await db.collection('couponUsage').add({code: couponCode, date:new Date().toISOString()}); }
+        catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+      }
     }
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true; state.checkoutReminderShown = false;
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
-    // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin.
-    const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
-    const clienteLine = state.activeCustomer ? `\nCliente: ${state.activeCustomer.name}${state.activeCustomer.phone?` (${state.activeCustomer.phone})`:''}` : '';
-    sendSlackNotification(`💰 *Nueva venta* ${orderNumber?`#${orderNumber}`:''} — ${state.activeCenter.name}\nAtendió: ${state.activeCashier.name}\nProducto:\n${productLines}${clienteLine}\nTotal: ${money(total)}`);
+    // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin. Sin conexión no se puede mandar; se omite (no se reintenta al sincronizar).
+    if(!isOffline){
+      const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
+      const clienteLine = state.activeCustomer ? `\nCliente: ${state.activeCustomer.name}${state.activeCustomer.phone?` (${state.activeCustomer.phone})`:''}` : '';
+      sendSlackNotification(`💰 *Nueva venta* ${orderNumber?`#${orderNumber}`:''} — ${state.activeCenter.name}\nAtendió: ${state.activeCashier.name}\nProducto:\n${productLines}${clienteLine}\nTotal: ${money(total)}`);
+    }
     state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo';
   }catch(e){
     console.error(e); showToast('No se pudo registrar la venta');
@@ -1291,6 +1369,8 @@ function renderPOS(){
   const entries = Object.entries(state.cart);
   return `
   <div class="app">
+    ${state.posOffline ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;margin-bottom:10px;">${icon('alert-triangle',14)} Sin conexión — puedes seguir vendiendo, las ventas se guardan en este dispositivo y se suben solas cuando regrese el internet.</div>`
+      : state.offlineQueueCount>0 ? `<div class="note-box" style="background:#EAF3D8;color:#3d5c1a;margin-bottom:10px;">${icon('history',14)} Sincronizando ${state.offlineQueueCount} venta(s) pendiente(s) de cuando no había internet…</div>` : ''}
     <div class="top">
       <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
@@ -1417,7 +1497,7 @@ function renderReceipt(){
   return `<div class="receipt-screen"><div class="receipt-card">
     <div class="mark">${icon('check',26)}</div>
     <h2>Venta registrada</h2>
-    ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : ''}
+    ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : `<div style="font-weight:700;color:var(--amber);font-size:13px;margin:6px 0 -6px;">${icon('alert-triangle',13)} Guardada sin conexión — el folio se asigna al sincronizar</div>`}
     <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>${(state.lastPayments&&state.lastPayments.length>1) ? `Pago dividido: ${state.lastPayments.map(p=>`${p.method} ${money(p.amount)}`).join(' · ')}` : `Método: ${(state.lastPayments&&state.lastPayments[0]&&state.lastPayments[0].method)||state.payMethod}`}<br>Atendió: ${state.activeCashier.name}</p>
     ${state.lastCustomerPhone ? `<button class="btn-secondary" style="color:var(--green);margin-bottom:8px;" onclick="sendReceiptWhatsapp()">${icon('message-circle',15)} Enviar recibo por WhatsApp a ${state.lastCustomerName||'cliente'}</button>` : ''}
     <button class="btn-primary" onclick="newSale()">Nueva venta</button>

@@ -574,7 +574,7 @@ let state = {
   expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
   shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'',
   restockRequests:[], notifyModalProductId:null,
-  searchMisses:[], searchMissDays:30,
+  searchMisses:[], searchMissDays:30, cartAbandonSurveys:[],
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
   seasonNewName:'', seasonNewMonth:1, seasonNewDay:1,
   postModalProductId:null, postImageIdx:0, postText:'',
@@ -686,18 +686,20 @@ async function loadData(){
     // Firestore más recientes), el panel sigue cargando normal y solo avisa en Resumen cuál falló.
     state.loadWarnings = [];
     const safeGet = async (label, query) => { try{ return await query.get(); }catch(e){ console.error('No se pudo cargar '+label, e); state.loadWarnings.push(label); return {docs:[]}; } };
-    const [expSnap, shrSnap, reqSnap, missSnap, pcbSnap] = await Promise.all([
+    const [expSnap, shrSnap, reqSnap, missSnap, pcbSnap, casSnap] = await Promise.all([
       safeGet('gastos', db.collection('expenses').orderBy('date','desc').limit(1500)),
       safeGet('mermas', db.collection('shrinkage').orderBy('date','desc').limit(1000)),
       safeGet('avisos "avísame cuando llegue"', db.collection('restockRequests').limit(2000)),
       safeGet('búsquedas sin resultado', db.collection('searchMisses').orderBy('date','desc').limit(1500)),
       safeGet('cambios masivos de precio', db.collection('priceChangeBatches').orderBy('date','desc').limit(10)),
+      safeGet('encuesta de carrito abandonado', db.collection('cartAbandonSurveys').orderBy('date','desc').limit(1000)),
     ]);
     state.expenses = expSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.shrinkage = shrSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.restockRequests = reqSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.searchMisses = missSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.priceChangeBatches = pcbSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.cartAbandonSurveys = casSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -729,7 +731,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.cartAbandonSurveys = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -3653,6 +3655,45 @@ async function saveSalesGoal(){
   state.editingGoal = false;
   showToast('Meta guardada'); render();
 }
+/* ============== ALERTA DE VENTA ATÍPICA DEL DÍA ==============
+   Compara lo que se lleva vendido HOY (a esta hora) contra el promedio de lo que se llevaba
+   vendido a esta misma hora en los mismos días de la semana (mismo día, ej. todos los martes)
+   de las últimas ~8 semanas. Solo se evalúa después de mediodía para no disparar falsas alarmas
+   con apenas un par de horas de datos, y solo si hay al menos 3 días de referencia para comparar
+   (si la tienda es nueva o casi no hay historial, mejor no decir nada a que diga algo engañoso). */
+function computeSalesAnomaly(){
+  const now = new Date();
+  if(now.getHours() < 12) return null; // muy temprano para comparar con algo
+  const validOrders = state.orders.filter(o=>o.date);
+  if(validOrders.length===0) return null;
+  const earliestOrderDate = new Date(Math.min(...validOrders.map(o=>new Date(o.date).getTime())));
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const minutesSoFar = now.getHours()*60 + now.getMinutes();
+  const todayRevenue = state.orders
+    .filter(o=>o.status!=='Cancelado' && new Date(o.date) >= todayStart)
+    .reduce((s,o)=>s+(o.total||0), 0);
+  const weekday = now.getDay();
+  const refDays = []; // ingresos de días anteriores, mismo día de la semana, hasta la misma hora
+  for(let w=1; w<=8; w++){
+    const dayStart = new Date(todayStart); dayStart.setDate(dayStart.getDate() - 7*w);
+    if(dayStart < earliestOrderDate) continue; // la tienda ni siquiera tenía pedidos en esa fecha, no sirve de referencia
+    const dayCutoff = new Date(dayStart.getTime() + minutesSoFar*60000);
+    const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate()+1);
+    if(dayEnd > now) continue; // ese día todavía no ha pasado por completo, no sirve de referencia
+    const rev = state.orders
+      .filter(o=>o.status!=='Cancelado' && new Date(o.date) >= dayStart && new Date(o.date) < dayCutoff)
+      .reduce((s,o)=>s+(o.total||0), 0);
+    refDays.push(rev);
+  }
+  if(refDays.length < 3) return null; // muy poco historial para comparar con confianza
+  const avg = refDays.reduce((s,v)=>s+v,0) / refDays.length;
+  if(avg <= 0) return null;
+  const ratio = todayRevenue / avg;
+  const dayName = now.toLocaleDateString('es-MX',{weekday:'long'});
+  if(ratio <= 0.4) return { kind:'baja', ratio, todayRevenue, avg, dayName };
+  if(ratio >= 2.5) return { kind:'alta', ratio, todayRevenue, avg, dayName };
+  return null;
+}
 // Junta varias señales que ya calculamos por separado en un solo semáforo, para que de un
 // vistazo en Resumen sepas si hay algo que merece tu atención hoy — sin tener que entrar a
 // cada pestaña a revisar una por una.
@@ -3669,6 +3710,9 @@ function computeBusinessHealth(){
   if(g.goal>0 && !g.onTrack) issues.push({level:'ambar', text:'Vas un poco atrás de tu meta de venta de este mes.'});
   const waitingReady = computeRestockDemand().filter(g=>g.stock>0).reduce((s,g)=>s+g.people.length,0);
   if(waitingReady>0) issues.push({level:'ambar', text:`${waitingReady} persona(s) esperan productos que ya repusiste — avísales desde Centros → Reabasto.`});
+  const anomaly = computeSalesAnomaly();
+  if(anomaly && anomaly.kind==='baja') issues.push({level:'ambar', text:`Venta de hoy más baja de lo normal: ${money(anomaly.todayRevenue)} contra un promedio de ${money(anomaly.avg)} para un ${anomaly.dayName} a esta hora.`});
+  if(anomaly && anomaly.kind==='alta') issues.push({level:'ambar', text:`¡Venta de hoy muy por arriba de lo normal! ${money(anomaly.todayRevenue)} contra un promedio de ${money(anomaly.avg)} para un ${anomaly.dayName} a esta hora.`});
   const level = issues.some(i=>i.level==='rojo') ? 'rojo' : issues.length>0 ? 'ambar' : 'verde';
   return { level, issues };
 }
@@ -4004,6 +4048,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='gastos'?'active':''}" onclick="${goSub('gastos')}">Gastos y utilidad</button>
       <button class="admin-tab ${sub==='busquedas'?'active':''}" onclick="${goSub('busquedas')}">Búsquedas sin resultado</button>
       <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
+      <button class="admin-tab ${sub==='carritoabandonado'?'active':''}" onclick="${goSub('carritoabandonado')}">Encuesta de carrito abandonado</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -4017,6 +4062,7 @@ function renderEstadisticas(){
     ${sub==='gastos' ? renderStatsGastos() : ''}
     ${sub==='busquedas' ? renderStatsBusquedas() : ''}
     ${sub==='comisiones' ? renderStatsComisiones() : ''}
+    ${sub==='carritoabandonado' ? renderStatsCarritoAbandonado() : ''}
   `;
 }
 const HEAT_DAY_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -6227,6 +6273,57 @@ function createProductFromSearch(term){
   state.adminTab = 'productos';
   state.productModal = {images:[], sku:generateSKU({}), name: term};
   render();
+}
+/* ============== ENCUESTA DE CARRITO ABANDONADO (vista de resultados) ==============
+   Agrupa las respuestas de "¿por qué no completaste tu compra?" por motivo, para ver de un
+   vistazo cuál es la razón más común, y deja la lista de respuestas recientes con el contexto
+   del carrito (total y número de artículos) que traían al momento de abandonarlo. Son anónimas:
+   nunca se guarda nombre, teléfono ni ningún otro dato de quien responde. */
+function computeCartAbandonSurveyStats(){
+  const rows = state.cartAbandonSurveys || [];
+  const byReason = {};
+  rows.forEach(r=>{ const key = r.reason || 'Sin especificar'; byReason[key] = (byReason[key]||0) + 1; });
+  const total = rows.length;
+  const breakdown = Object.entries(byReason).map(([reason,count])=>({reason, count, pct: total? (count/total*100) : 0})).sort((a,b)=>b.count-a.count);
+  const recent = [...rows].sort((a,b)=> new Date(b.date) - new Date(a.date)).slice(0,50);
+  return { total, breakdown, recent };
+}
+function clearCartAbandonSurveys(){
+  if(!confirm('¿Borrar todas las respuestas de la encuesta de carrito abandonado? Esta acción no se puede deshacer.')) return;
+  const ids = state.cartAbandonSurveys.map(r=>r.id);
+  const batch = db.batch();
+  ids.slice(0,400).forEach(id=>batch.delete(db.collection('cartAbandonSurveys').doc(id)));
+  batch.commit().then(()=>{
+    state.cartAbandonSurveys = [];
+    showToast('Respuestas borradas'); render();
+  });
+}
+function renderStatsCarritoAbandonado(){
+  const { total, breakdown, recent } = computeCartAbandonSurveyStats();
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Encuesta de carrito abandonado</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Cuando alguien cierra su carrito sin pasar a pagar, se le pregunta una sola vez por sesión por qué — de forma opcional y anónima. Aquí ves las razones más comunes.</div>
+    ${total===0 ? `<div class="empty-state">Todavía no hay respuestas de esta encuesta.</div>` : `
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-sub" style="margin-bottom:10px;">${total} respuesta${total===1?'':'s'} en total</div>
+        ${breakdown.map(b=>`
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+              <span>${b.reason}</span><span style="color:var(--ink-soft);">${b.count} (${b.pct.toFixed(0)}%)</span>
+            </div>
+            <div style="background:var(--bg);border-radius:999px;height:10px;overflow:hidden;">
+              <div style="height:100%;border-radius:999px;background:var(--primary);width:${b.pct}%;"></div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <div class="panel-title" style="margin-bottom:8px;">Respuestas recientes</div>
+      ${recent.map(r=>`
+        <div class="list-row">
+          <div class="row-main"><div class="row-title">${r.reason||'Sin especificar'}</div><div class="row-sub">Carrito de ${money(r.cartTotal||0)} · ${r.itemCount||0} artículo(s) · ${r.date?new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div></div>
+        </div>`).join('')}
+      <button class="btn-tertiary" style="margin-top:10px;" onclick="clearCartAbandonSurveys()">${icon('trash',13)} Borrar todas las respuestas</button>
+    `}
+  `;
 }
 function renderStatsBusquedas(){
   const days = state.searchMissDays || 30;
