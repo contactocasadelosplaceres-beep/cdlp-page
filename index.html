@@ -442,7 +442,7 @@ const DEFAULT_SETTINGS = {
   shippingNote:"El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán.",
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'' };
 
 async function loadData(){
   try{
@@ -1503,6 +1503,7 @@ function renderProductDetailDrawer(){
         <div class="detail-cat">${productCats(p).join(' · ')}</div>
         <div class="detail-name">${p.name}</div>
         <div class="detail-price">${p.promoPrice>0 && p.promoPrice<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
+        ${renderPromoCountdownBadge(p) ? `<div style="margin-bottom:8px;">${renderPromoCountdownBadge(p)}</div>` : ''}
         ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
         ${hasVariants ? `
           <div style="margin:10px 0;">
@@ -1736,6 +1737,30 @@ function dailyShuffledProducts(){
   return [...state.products].map(p=>({p, r: seededRank(p.id, seed)})).sort((a,b)=>a.r-b.r).map(x=>x.p);
 }
 
+/* ============== FILTRO DE RANGO DE PRECIO ==============
+   Se combina con cualquier otro filtro activo (categoría, "para quién" o búsqueda) — nunca lo
+   sustituye — comparando contra el precio que el cliente de verdad pagaría (ya con promociones
+   y mayoreo aplicados), no el de lista. */
+function priceFilterActive(){ return (state.priceMin!=='' && state.priceMin!=null) || (state.priceMax!=='' && state.priceMax!=null); }
+function applyPriceFilter(products){
+  if(!priceFilterActive()) return products;
+  const min = (state.priceMin!=='' && state.priceMin!=null) ? Number(state.priceMin) : -Infinity;
+  const max = (state.priceMax!=='' && state.priceMax!=null) ? Number(state.priceMax) : Infinity;
+  return products.filter(p=>{ const price = automaticDiscountedPrice(p); return price>=min && price<=max; });
+}
+function setPriceFilter(which, val){ state[which] = val; state.gridRenderLimit = 20; render(); }
+function clearPriceFilter(){ state.priceMin=''; state.priceMax=''; state.gridRenderLimit=20; render(); }
+function renderPriceFilterRow(){
+  return `
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;">
+    <span style="font-size:12.5px;color:var(--ink-soft);font-weight:600;">Precio:</span>
+    <input id="price-min-input" type="number" min="0" inputmode="numeric" placeholder="Mín" value="${state.priceMin}" oninput="setPriceFilter('priceMin', this.value)" style="width:84px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+    <span style="color:var(--ink-soft);">—</span>
+    <input id="price-max-input" type="number" min="0" inputmode="numeric" placeholder="Máx" value="${state.priceMax}" oninput="setPriceFilter('priceMax', this.value)" style="width:84px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+    ${priceFilterActive() ? `<button class="btn-tertiary" onclick="clearPriceFilter()">Quitar filtro</button>` : ''}
+  </div>`;
+}
+
 /* ============== CATÁLOGO COMPLETO ============== */
 function renderGridSection(){
   let filtered = dailyShuffledProducts();
@@ -1771,6 +1796,7 @@ function renderGridSection(){
     });
   }
   // Los productos agotados se muestran hasta el final, sin alterar el orden entre sí.
+  filtered = applyPriceFilter(filtered);
   filtered = filtered
     .map((p,i)=>({p,i}))
     .sort((a,b)=> (a.p.stock<=0)-(b.p.stock<=0) || a.i-b.i)
@@ -1783,6 +1809,7 @@ function renderGridSection(){
       <div class="section-heading" style="margin-bottom:0;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</div>
       ${showClearBtn ? `<button class="btn-tertiary" onclick="goToCatalog('Todos')">${icon('grid',14)} Ver catálogo completo</button>` : ''}
     </div>
+    ${renderPriceFilterRow()}
     ${filtered.length
       ? `<div class="grid">${shown.map(p=>renderProductCard(p, state.activeBestSellers)).join('')}</div>
          ${hasMore ? `
@@ -1806,6 +1833,55 @@ function isNewProduct(p){
   const days = (Date.now() - new Date(p.createdAt).getTime()) / 86400000;
   return days>=0 && days<=NEW_BADGE_DAYS;
 }
+/* ============== CUENTA REGRESIVA EN PROMOCIONES ==============
+   Las promociones automáticas (state.settings.promotions) ya tenían fecha de fin opcional, pero
+   nunca se comunicaba al cliente cuánto faltaba para que se acabara — solo dejaba de aplicarse
+   en silencio. Ahora, si un producto entra en el alcance de una promo con fecha de fin, se
+   muestra una cuenta regresiva junto al precio, usando la fecha más próxima entre las promos
+   que le aplican. Un temporizador ligero refresca la pantalla mientras haya alguna cuenta
+   regresiva visible, para que no se quede pegada en un número viejo. */
+function soonestPromoEndDate(p){
+  let soonest = null;
+  activePromotions().forEach(promo=>{
+    if(!promo.endDate) return;
+    let applies = false;
+    if(promo.type==='cross_sell') applies = promo.discountProductId===p.id || promo.triggerProductId===p.id;
+    else applies = isPromoScopeEligible(p, promo);
+    if(!applies) return;
+    const end = new Date(promo.endDate+'T23:59:59');
+    if(!soonest || end < soonest) soonest = end;
+  });
+  return soonest;
+}
+function formatPromoCountdown(endDate){
+  const diffMs = endDate.getTime() - Date.now();
+  if(diffMs <= 0) return null;
+  const totalMinutes = Math.floor(diffMs/60000);
+  const days = Math.floor(totalMinutes/1440);
+  const hours = Math.floor((totalMinutes%1440)/60);
+  const minutes = totalMinutes%60;
+  if(days>=1) return `Termina en ${days} día${days===1?'':'s'}`;
+  if(hours>=1) return `Termina en ${hours}h ${minutes}min`;
+  return `Termina en ${minutes} min`;
+}
+function renderPromoCountdownBadge(p){
+  const end = soonestPromoEndDate(p);
+  if(!end) return '';
+  const label = formatPromoCountdown(end);
+  if(!label) return '';
+  return `<span class="badge badge-best promo-countdown" style="background:var(--rose);">⏳ ${label}</span>`;
+}
+let promoCountdownTimer = null;
+function ensurePromoCountdownTimer(){
+  const hasCountdown = state.products.some(p=>soonestPromoEndDate(p));
+  if(hasCountdown && !promoCountdownTimer){
+    promoCountdownTimer = setInterval(()=>{
+      if(state.products.some(p=>soonestPromoEndDate(p))) render(); else { clearInterval(promoCountdownTimer); promoCountdownTimer = null; }
+    }, 60000);
+  } else if(!hasCountdown && promoCountdownTimer){
+    clearInterval(promoCountdownTimer); promoCountdownTimer = null;
+  }
+}
 function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
@@ -1825,6 +1901,7 @@ function renderProductCard(p, forceBest){
               ${p.isKit ? `<span class="badge badge-best" style="background:var(--navy);">Combo</span>` : ''}
               ${p.isMysteryBox ? `<span class="badge badge-best" style="background:var(--navy);">Caja sorpresa</span>` : ''}
               ${hasPromo ? `<span class="badge badge-best" style="background:var(--rose);">Oferta</span>` : ''}
+              ${renderPromoCountdownBadge(p)}
               ${wholesaleEligible ? `<span class="badge badge-best" style="background:var(--navy);">${wholesaleUnlocked?'Mayoreo activo':'Mayoreo disponible'}</span>` : ''}
               ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
             </div>
@@ -2258,6 +2335,7 @@ function render(){
   adjustTopbarSpacer();
   restoreFocusState(root, focusInfo);
   restoreScrollPositions(root, scrollPositions);
+  ensurePromoCountdownTimer();
 }
 function adjustTopbarSpacer(){
   const bar = document.querySelector('.topbar');

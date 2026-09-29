@@ -4050,6 +4050,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
       <button class="admin-tab ${sub==='carritoabandonado'?'active':''}" onclick="${goSub('carritoabandonado')}">Encuesta de carrito abandonado</button>
       <button class="admin-tab ${sub==='horaspico'?'active':''}" onclick="${goSub('horaspico')}">Horas pico por cajero</button>
+      <button class="admin-tab ${sub==='embudoproducto'?'active':''}" onclick="${goSub('embudoproducto')}">Embudo por producto</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -4065,6 +4066,7 @@ function renderEstadisticas(){
     ${sub==='comisiones' ? renderStatsComisiones() : ''}
     ${sub==='carritoabandonado' ? renderStatsCarritoAbandonado() : ''}
     ${sub==='horaspico' ? renderStatsHorasPico() : ''}
+    ${sub==='embudoproducto' ? renderStatsEmbudoProducto() : ''}
   `;
 }
 const HEAT_DAY_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -6427,6 +6429,58 @@ function renderStatsHorasPico(){
             </div>
           </div>`).join('')}
     `}
+  `;
+}
+/* ============== EMBUDO DE CONVERSIÓN POR PRODUCTO ==============
+   Ya existía computeFunnel() (vistas → carrito → compra a nivel de TODA la tienda). Esto es lo
+   mismo pero desglosado producto por producto, cruzando los eventos de analítica que ya se
+   registran (product_view, add_to_cart, ambos con productId) con lo realmente comprado según
+   las líneas de cada pedido — para ver en qué producto en particular se pierden más ventas y en
+   qué paso (¿no le da clic para verlo?, ¿lo ve pero no lo agrega?, ¿lo agrega pero no compra?). */
+function computeProductFunnel(days){
+  days = days || 30;
+  const since = Date.now() - days*86400000;
+  const viewsById = {}, addsById = {}, purchasesById = {};
+  (state.analyticsEvents||[]).forEach(e=>{
+    if(!e.productId || !e.date) return;
+    if(new Date(e.date).getTime() < since) return;
+    if(e.type==='product_view') viewsById[e.productId] = (viewsById[e.productId]||0) + 1;
+    if(e.type==='add_to_cart') addsById[e.productId] = (addsById[e.productId]||0) + 1;
+  });
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado' || !o.date) return;
+    if(new Date(o.date).getTime() < since) return;
+    (o.items||[]).forEach(it=>{
+      if(!it.id || it.id==='promo_buyxpayy') return;
+      purchasesById[it.id] = (purchasesById[it.id]||0) + (it.qty||1);
+    });
+  });
+  const ids = new Set([...Object.keys(viewsById), ...Object.keys(addsById), ...Object.keys(purchasesById)]);
+  const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0;
+  return Array.from(ids).map(id=>{
+    const product = state.products.find(p=>p.id===id);
+    const views = viewsById[id]||0, adds = addsById[id]||0, purchases = purchasesById[id]||0;
+    return {
+      id, name: product ? product.name : '(producto ya no existe)', views, adds, purchases,
+      viewToCartPct: pct(adds, views), cartToPurchasePct: pct(purchases, adds), overallPct: pct(purchases, views),
+    };
+  }).filter(r=>r.views>0 || r.adds>0 || r.purchases>0).sort((a,b)=>b.views-a.views);
+}
+function renderStatsEmbudoProducto(){
+  const days = state.funnelProductDays || 30;
+  const rows = computeProductFunnel(days);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Embudo de conversión por producto</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Cuántas personas vieron cada producto, cuántas lo agregaron al carrito y cuántas finalmente lo compraron — para saber en qué paso se pierden las ventas de un producto en particular (¿la foto o el precio no convencen? ¿se agrega pero no se completa la compra?).</div>
+    <div class="form-field" style="max-width:240px;"><select onchange="state.funnelProductDays=Number(this.value);render()">${[30,90,180].map(d=>`<option value="${d}" ${days===d?'selected':''}>Últimos ${d} días</option>`).join('')}</select></div>
+    ${rows.length===0 ? `<div class="empty-state">Todavía no hay suficientes datos de analítica por producto en este periodo.</div>` :
+      rows.map(r=>`
+        <div class="list-row" style="flex-wrap:wrap;">
+          <div class="row-main">
+            <div class="row-title">${r.name}</div>
+            <div class="row-sub">${r.views} vista(s) → ${r.adds} al carrito (${r.viewToCartPct}%) → ${r.purchases} comprado(s) (${r.cartToPurchasePct}% de lo agregado · ${r.overallPct}% del total de vistas)</div>
+          </div>
+        </div>`).join('')}
   `;
 }
 function renderStatsBusquedas(){
