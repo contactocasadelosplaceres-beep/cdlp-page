@@ -503,6 +503,7 @@ const DEFAULT_SETTINGS = {
   termsText: "Acepto la política de privacidad y de devoluciones de esta tienda: mis datos se usan solo para procesar mi pedido, el empaque es neutro y discreto, y ante cualquier problema con lo recibido puedo contactar a la tienda por WhatsApp.",
   theme:{},
   historicalOrderCountOffset:0,
+  dashboardNotes: [],
 };
 // Paletas de color prediseñadas para la tienda (Diseño → Apariencia). Cada una define los 4
 // colores que en realidad se usan en toda la tienda (primary/primaryDeep para botones y
@@ -587,6 +588,7 @@ let state = {
   bgFixProcessing:false, bgFixProgress:0, bgFixResult:null,
   recompressOpen:false, recompressScanning:false, recompressCandidates:[], recompressProcessing:false, recompressProgress:0, recompressResult:null,
   testimonialDraftName:'', testimonialDraftText:'', testimonialDraftRating:5, testimonialEditIdx:null, featuredSearch:'',
+  newDashboardNoteText:'', dashboardNotesShowDone:false,
 };
 
 /* ============== LOAD + MIGRATION ============== */
@@ -867,7 +869,7 @@ const SETTINGS_FIELD_LABELS = {
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
-const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified','churnRiskNotified']);
+const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified','churnRiskNotified','dashboardNotes']);
 async function saveSettings(){
   try{
     if(_settingsAuditBaseline){
@@ -3716,6 +3718,72 @@ function computeBusinessHealth(){
   const level = issues.some(i=>i.level==='rojo') ? 'rojo' : issues.length>0 ? 'ambar' : 'verde';
   return { level, issues };
 }
+/* ============== NOTAS FIJADAS DEL DASHBOARD ==============
+   Post-its cortos, compartidos por todo el equipo con acceso al panel, para dejar pendientes
+   visibles apenas se entra (ej. "surtir tal producto", "llamar a proveedor X"). Viven dentro de
+   settings.dashboardNotes (un solo doc, no hace falta colección propia) y se excluyen de la
+   bitácora de auditoría (SETTINGS_AUDIT_IGNORE) porque cambian todo el tiempo sin ser una
+   configuración real de la tienda. */
+function currentUserDisplayName(){
+  const myEmail = (state.user && state.user.email || '').trim().toLowerCase();
+  const mine = state.cashiers.find(c=>(c.email||'').trim().toLowerCase()===myEmail && myEmail);
+  if(mine && mine.name) return mine.name;
+  return myEmail ? myEmail.split('@')[0] : 'Alguien';
+}
+async function addDashboardNote(){
+  const text = (state.newDashboardNoteText||'').trim();
+  if(!text) return;
+  if(!state.settings.dashboardNotes) state.settings.dashboardNotes = [];
+  state.settings.dashboardNotes.unshift({
+    id: 'note_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    text, done:false, createdAt:new Date().toISOString(), createdBy: currentUserDisplayName(),
+  });
+  state.newDashboardNoteText = '';
+  await saveSettings();
+  render();
+}
+async function toggleDashboardNote(id){
+  const n = (state.settings.dashboardNotes||[]).find(x=>x.id===id);
+  if(!n) return;
+  n.done = !n.done;
+  n.doneAt = n.done ? new Date().toISOString() : null;
+  await saveSettings();
+  render();
+}
+async function deleteDashboardNote(id){
+  state.settings.dashboardNotes = (state.settings.dashboardNotes||[]).filter(x=>x.id!==id);
+  await saveSettings();
+  render();
+}
+function renderDashboardNotesPanel(){
+  const all = state.settings.dashboardNotes || [];
+  const pending = all.filter(n=>!n.done);
+  const done = all.filter(n=>n.done);
+  const visibleDone = state.dashboardNotesShowDone ? done : [];
+  return `
+    <div class="panel" style="background:#FFF8E1;border:1px solid #F0DFA0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="panel-title" style="margin:0;">${icon('map-pin',15)} Notas del equipo</div>
+        ${done.length>0 ? `<button class="btn-tertiary" onclick="state.dashboardNotesShowDone=${!state.dashboardNotesShowDone};render()">${state.dashboardNotesShowDone?'Ocultar resueltas':`Ver resueltas (${done.length})`}</button>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:${pending.length||visibleDone.length?'10px':'0'};">
+        <input id="dashboard-note-input" placeholder="Ej. Llamar al proveedor de lubricantes" value="${escDescHtml(state.newDashboardNoteText||'')}" oninput="state.newDashboardNoteText=this.value" onkeydown="if(event.key==='Enter')addDashboardNote();" style="flex:1;">
+        <button class="btn-primary" style="width:auto;padding:0 16px;" onclick="addDashboardNote()">+ Fijar</button>
+      </div>
+      ${pending.length===0 && visibleDone.length===0 ? `<div class="panel-sub">Sin pendientes fijados. Usa esto para dejarle notas al equipo (o a ti misma) directo en el dashboard.</div>` : ''}
+      ${[...pending, ...visibleDone].map(n=>`
+        <div class="list-row" style="align-items:flex-start;${n.done?'opacity:.55;':''}">
+          <input type="checkbox" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" ${n.done?'checked':''} onchange="toggleDashboardNote('${n.id}')">
+          <div class="row-main">
+            <div class="row-title" style="${n.done?'text-decoration:line-through;':''}">${escDescHtml(n.text)}</div>
+            <div class="row-sub">${n.createdBy||''} · ${timeAgo(n.createdAt)}</div>
+          </div>
+          <button class="btn-tertiary" title="Eliminar" onclick="if(confirm('¿Eliminar esta nota?'))deleteDashboardNote('${n.id}')">${icon('trash',13)}</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
 function renderResumen(){
   const m = computeMetrics();
   const g = computeMonthProgress();
@@ -3724,6 +3792,7 @@ function renderResumen(){
   const healthLabel = {rojo:'Necesita atención', ambar:'Con pendientes', verde:'Todo en orden'}[health.level];
   return `
     ${state.loadWarnings && state.loadWarnings.length ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;">${icon('alert-triangle',14)} No se pudo cargar: ${state.loadWarnings.join(', ')}. Casi seguro falta publicar las reglas de Firestore más recientes (Firebase → Firestore → Reglas → pegar el archivo → Publicar).</div>` : ''}
+    ${renderDashboardNotesPanel()}
     <div class="panel" style="border-left:5px solid ${healthColor};">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:${health.issues.length?'10px':'0'};">
         <span style="width:12px;height:12px;border-radius:50%;background:${healthColor};display:inline-block;"></span>
