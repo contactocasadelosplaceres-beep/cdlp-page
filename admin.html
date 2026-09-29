@@ -471,6 +471,8 @@ const DEFAULT_SETTINGS = {
   seasonCustomEvents: [], seasonHidden: [],
   repurchaseProductIds: [], repurchaseDays: 45, repurchaseNotified: {},
   churnRiskDays: 60, churnRiskMinPurchases: 2, churnRiskNotified: {},
+  storePaused: false, storePausedMessage: "Estamos en pausa temporalmente y no podemos tomar pedidos nuevos en este momento. ¡Vuelve pronto! Si ya tienes una duda, escríbenos por WhatsApp.",
+  ageGateEnabled: true,
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -830,6 +832,7 @@ const SETTINGS_FIELD_LABELS = {
   theme:'Apariencia (colores/tipografía)', deliverySurveyQuestions:'Preguntas de la encuesta post-entrega',
   repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
   churnRiskDays:'Días para clientes en riesgo de fuga', churnRiskMinPurchases:'Compras mínimas para riesgo de fuga',
+  storePaused:'Tienda en pausa', storePausedMessage:'Mensaje de tienda en pausa', ageGateEnabled:'Verificación de mayoría de edad',
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
@@ -8970,6 +8973,26 @@ function renderConfigSubpanel(key){
 function renderOperativoSubpanel(){
   const s = state.settings;
   return `
+  <div class="panel">
+    <div class="panel-title">${icon('alert-triangle',15)} Tienda en pausa</div>
+    <div class="panel-sub">Actívalo cuando no puedas surtir pedidos (vacaciones, imprevisto, inventario en reconteo). La tienda se sigue viendo normal — los productos siguen visibles — pero nadie puede agregar al carrito ni completar un pedido hasta que lo desactives. No hace falta ocultar producto por producto.</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.storePaused?'checked':''} onchange="state.settings.storePaused=this.checked;saveSettings();render()">
+      <span>${s.storePaused ? 'Tienda en pausa — no se pueden hacer pedidos' : 'Tienda operando normalmente'}</span>
+    </label>
+    <div class="form-field" style="margin-top:8px;"><label>Mensaje que verán los clientes mientras está en pausa</label>
+      <textarea id="set-store-paused-msg" rows="2" oninput="state.settings.storePausedMessage=this.value">${s.storePausedMessage||''}</textarea>
+    </div>
+    <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Verificación de mayoría de edad</div>
+    <div class="panel-sub">Antes de ver el catálogo, quien entra a la tienda debe declarar que es mayor de edad (se guarda en su celular para no volver a preguntarle en su próxima visita).</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.ageGateEnabled!==false?'checked':''} onchange="state.settings.ageGateEnabled=this.checked;saveSettings();render()">
+      <span>Pedir confirmación de mayoría de edad al entrar</span>
+    </label>
+  </div>
   <div class="panel">
     <div class="panel-title">Datos operativos</div>
     <div class="form-field"><label>WhatsApp para confirmaciones (con código de país)</label><input id="set-wa" value="${s.whatsapp}" oninput="state.settings.whatsapp=this.value"></div>
