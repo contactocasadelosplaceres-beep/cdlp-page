@@ -3772,7 +3772,7 @@ function renderDashboardNotesPanel(){
         <input id="dashboard-note-input" placeholder="Ej. Llamar al proveedor de lubricantes" value="${escDescHtml(state.newDashboardNoteText||'')}" oninput="state.newDashboardNoteText=this.value" onkeydown="if(event.key==='Enter')addDashboardNote();" style="flex:1;">
         <button class="btn-primary" style="width:auto;padding:0 16px;" onclick="addDashboardNote()">+ Fijar</button>
       </div>
-      ${pending.length===0 && visibleDone.length===0 ? `<div class="panel-sub">Sin pendientes fijados. Usa esto para dejarle notas al equipo (o a ti misma) directo en el dashboard.</div>` : ''}
+      ${pending.length===0 && visibleDone.length===0 ? `<div style="font-size:11.5px;color:var(--ink-soft);">Sin pendientes fijados. Usa esto para dejarle notas al equipo (o a ti misma) directo en el dashboard.</div>` : ''}
       ${[...pending, ...visibleDone].map(n=>`
         <div class="list-row" style="align-items:flex-start;${n.done?'opacity:.55;':''}">
           <input type="checkbox" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" ${n.done?'checked':''} onchange="toggleDashboardNote('${n.id}')">
@@ -7640,7 +7640,7 @@ function renderCouponModal(){
         <input id="cp-single-use" type="checkbox" ${c.singleUsePerCustomer?'checked':''}>
         <span>Un solo uso por cliente (por teléfono) — útil para cupones de "primera compra"</span>
       </label>
-      ${couponUsedCount(c.code)>0 ? `<div class="panel-sub">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}
+      ${couponUsedCount(c.code)>0 ? `<div class="panel-sub" style="margin-top:4px;">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCouponModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveCoupon()">Guardar</button>
@@ -9109,7 +9109,7 @@ function renderFeaturedSubpanel(){
     <input id="featured-search-input" placeholder="Buscar producto por nombre..." value="${state.featuredSearch||''}" oninput="state.featuredSearch=this.value;render()">
     <div style="margin-top:10px;">
       ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
-        list.length===0 ? `<div class="empty-state">Sin resultados para "${state.featuredSearch}".</div>` :
+        q && list.length===0 ? `<div class="empty-state">Sin resultados para "${state.featuredSearch}".</div>` :
         list.map(p=>`
           <label class="checkbox-row">
             <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleFeatured('${p.id}', this.checked)">
