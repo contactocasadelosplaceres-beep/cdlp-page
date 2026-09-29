@@ -134,6 +134,30 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+/* ============== REGISTRO DE ERRORES DEL SISTEMA ==============
+   Ver la nota completa en index.html — mismo mecanismo, guardando "pos" como origen. */
+let systemErrorsLoggedThisSession = 0;
+const SYSTEM_ERROR_LOG_LIMIT = 5;
+function logSystemError(message, stack){
+  if(systemErrorsLoggedThisSession >= SYSTEM_ERROR_LOG_LIMIT) return;
+  systemErrorsLoggedThisSession++;
+  try{
+    db.collection('systemErrors').add({
+      message: String(message||'Error desconocido').slice(0,500),
+      stack: String(stack||'').slice(0,2000),
+      source: 'pos',
+      page: location.pathname + location.search,
+      userAgent: (navigator.userAgent||'').slice(0,300),
+      date: new Date().toISOString(),
+    }).catch(()=>{});
+  }catch(e){}
+}
+window.addEventListener('error', (ev)=>{ logSystemError(ev.message, ev.error && ev.error.stack ? ev.error.stack : ''); });
+window.addEventListener('unhandledrejection', (ev)=>{
+  const r = ev.reason;
+  logSystemError(r && r.message ? r.message : String(r), r && r.stack ? r.stack : '');
+});
+
 // Mismo contador compartido con index.html: folio consecutivo único para
 // pedidos de la tienda y ventas del Punto de Venta.
 async function getNextOrderNumber(){

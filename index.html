@@ -344,6 +344,33 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+/* ============== REGISTRO DE ERRORES DEL SISTEMA ==============
+   Si algo truena sin que nadie lo esté viendo (un error de JavaScript no capturado, una promesa
+   rechazada), se guarda automáticamente en Firestore para que Ale lo pueda ver después en el
+   panel — en vez de perderse solo en la consola del navegador de quien lo vivió. Con un tope por
+   sesión para no inundar la base de datos si algo entra en bucle de errores. */
+let systemErrorsLoggedThisSession = 0;
+const SYSTEM_ERROR_LOG_LIMIT = 5;
+function logSystemError(message, stack){
+  if(systemErrorsLoggedThisSession >= SYSTEM_ERROR_LOG_LIMIT) return;
+  systemErrorsLoggedThisSession++;
+  try{
+    db.collection('systemErrors').add({
+      message: String(message||'Error desconocido').slice(0,500),
+      stack: String(stack||'').slice(0,2000),
+      source: 'index',
+      page: location.pathname + location.search,
+      userAgent: (navigator.userAgent||'').slice(0,300),
+      date: new Date().toISOString(),
+    }).catch(()=>{});
+  }catch(e){}
+}
+window.addEventListener('error', (ev)=>{ logSystemError(ev.message, ev.error && ev.error.stack ? ev.error.stack : ''); });
+window.addEventListener('unhandledrejection', (ev)=>{
+  const r = ev.reason;
+  logSystemError(r && r.message ? r.message : String(r), r && r.stack ? r.stack : '');
+});
+
 // Folio consecutivo compartido con el Punto de Venta: cada pedido/venta obtiene
 // un número único e incremental (#0001, #0002, ...) sin importar de dónde venga.
 async function getNextOrderNumber(){

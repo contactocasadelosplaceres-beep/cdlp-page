@@ -389,7 +389,33 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
+/* ============== REGISTRO DE ERRORES DEL SISTEMA ==============
+   Ver la nota completa en index.html — mismo mecanismo, mismo tope por sesión, guardando
+   "admin" como origen para poder distinguir de dónde vino cada error en Configuración →
+   Registro de errores del sistema. */
+let systemErrorsLoggedThisSession = 0;
+const SYSTEM_ERROR_LOG_LIMIT = 5;
+function logSystemError(message, stack){
+  if(systemErrorsLoggedThisSession >= SYSTEM_ERROR_LOG_LIMIT) return;
+  systemErrorsLoggedThisSession++;
+  try{
+    db.collection('systemErrors').add({
+      message: String(message||'Error desconocido').slice(0,500),
+      stack: String(stack||'').slice(0,2000),
+      source: 'admin',
+      page: location.pathname + location.search,
+      userAgent: (navigator.userAgent||'').slice(0,300),
+      date: new Date().toISOString(),
+    }).catch(()=>{});
+  }catch(e){}
+}
+window.addEventListener('error', (ev)=>{ logSystemError(ev.message, ev.error && ev.error.stack ? ev.error.stack : ''); });
+window.addEventListener('unhandledrejection', (ev)=>{
+  const r = ev.reason;
+  logSystemError(r && r.message ? r.message : String(r), r && r.stack ? r.stack : '');
+});
+
+const PALETTE =["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
 const DEFAULT_NEEDS = [
   {key:'para-mi', label:'Para mí'},
@@ -9081,6 +9107,7 @@ const CONFIG_SUBPANELS = [
   {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
   {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
   {key:'exportar', icon:icon('download'), label:'Exportar tus datos', ownerOnly:true},
+  {key:'errores', icon:icon('alert-triangle'), label:'Registro de errores del sistema', ownerOnly:true},
 ];
 function downloadCSV(filename, rows){
   const csvContent = rows.map(row => row.map(cell => {
@@ -9188,9 +9215,67 @@ function renderConfig(){
     <div class="note-box" style="margin-top:14px;">Para agregar más administradores o cambiar tu contraseña, hazlo desde la consola de Firebase → Authentication → Users.</div>
   `;
 }
+/* ============== REGISTRO DE ERRORES DEL SISTEMA (panel) ==============
+   Ver la lógica de captura y guardado en index.html/admin.html/pos.html — aquí solo se muestra
+   lo que ya quedó guardado en la colección "systemErrors". Se carga solo al abrir este panel,
+   no en cada carga del panel, porque es información técnica que casi nunca hace falta ver. */
+function loadSystemErrors(){
+  state.systemErrorsLoading = true; render();
+  db.collection('systemErrors').get().then(snap=>{
+    const items = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    items.sort((a,b)=> new Date(b.date) - new Date(a.date));
+    state.systemErrors = items.slice(0,200);
+    state.systemErrorsLoading = false; render();
+  }).catch(e=>{ console.error('No se pudo cargar el registro de errores', e); state.systemErrors=[]; state.systemErrorsLoading=false; render(); });
+}
+async function clearSystemErrors(){
+  if(!confirm('¿Borrar todos los errores guardados? No se puede deshacer.')) return;
+  try{
+    const batch = db.batch();
+    (state.systemErrors||[]).forEach(e=>batch.delete(db.collection('systemErrors').doc(e.id)));
+    await batch.commit();
+    state.systemErrors = [];
+    showToast('Registro de errores borrado');
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo borrar el registro'); }
+}
+async function deleteSystemError(id){
+  try{
+    await db.collection('systemErrors').doc(id).delete();
+    state.systemErrors = (state.systemErrors||[]).filter(e=>e.id!==id);
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo borrar ese registro'); }
+}
+const SYSTEM_ERROR_SOURCE_LABEL = {index:'Tienda', admin:'Panel', pos:'Punto de venta'};
+function renderSystemErrorsSubpanel(){
+  if(state.systemErrors==null && !state.systemErrorsLoading){ loadSystemErrors(); }
+  const items = state.systemErrors||[];
+  return `
+    <div class="panel-title">Registro de errores del sistema</div>
+    <div class="note-box">Si algo truena en la tienda, el panel o el Punto de Venta sin que nadie se dé cuenta en el momento (un error de JavaScript, una promesa rechazada), queda guardado aquí — con el mensaje técnico, de dónde vino y cuándo pasó — en vez de perderse solo en la pantalla de quien lo vivió.</div>
+    ${state.systemErrorsLoading ? `<div class="empty-state">Cargando…</div>` : items.length===0 ? `<div class="empty-state">No hay errores registrados. Buena señal.</div>` : `
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+        <button class="btn-tertiary" onclick="loadSystemErrors()">${icon('history',13)} Refrescar</button>
+        <button class="btn-tertiary" onclick="clearSystemErrors()">${icon('trash',13)} Borrar todo</button>
+      </div>
+      ${items.map(e=>`
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+            <div style="flex:1;">
+              <div class="row-title" style="font-size:13px;">${escDescHtml(e.message||'Error desconocido')}</div>
+              <div class="row-sub">${SYSTEM_ERROR_SOURCE_LABEL[e.source]||e.source||'—'} · ${new Date(e.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}${e.page?` · ${escDescHtml(e.page)}`:''}</div>
+            </div>
+            <button class="icon-btn danger" onclick="deleteSystemError('${e.id}')">${icon('trash',14)}</button>
+          </div>
+          ${e.stack ? `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">Ver detalle técnico</summary><pre style="white-space:pre-wrap;font-size:11px;color:var(--ink-soft);background:var(--bg);border-radius:8px;padding:8px;margin-top:6px;">${escDescHtml(e.stack)}</pre></details>` : ''}
+        </div>
+      `).join('')}
+    `}
+  `;
+}
 function renderConfigSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.configSubpanel=null;render()">‹ Volver a Configuración</button>`;
-  const map = {operativo: renderOperativoSubpanel, encuesta: renderSurveySubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel};
+  const map = {operativo: renderOperativoSubpanel, encuesta: renderSurveySubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel, errores: renderSystemErrorsSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 function renderOperativoSubpanel(){
