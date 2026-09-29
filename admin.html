@@ -4049,6 +4049,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='busquedas'?'active':''}" onclick="${goSub('busquedas')}">Búsquedas sin resultado</button>
       <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
       <button class="admin-tab ${sub==='carritoabandonado'?'active':''}" onclick="${goSub('carritoabandonado')}">Encuesta de carrito abandonado</button>
+      <button class="admin-tab ${sub==='horaspico'?'active':''}" onclick="${goSub('horaspico')}">Horas pico por cajero</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -4063,6 +4064,7 @@ function renderEstadisticas(){
     ${sub==='busquedas' ? renderStatsBusquedas() : ''}
     ${sub==='comisiones' ? renderStatsComisiones() : ''}
     ${sub==='carritoabandonado' ? renderStatsCarritoAbandonado() : ''}
+    ${sub==='horaspico' ? renderStatsHorasPico() : ''}
   `;
 }
 const HEAT_DAY_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -6322,6 +6324,108 @@ function renderStatsCarritoAbandonado(){
           <div class="row-main"><div class="row-title">${r.reason||'Sin especificar'}</div><div class="row-sub">Carrito de ${money(r.cartTotal||0)} · ${r.itemCount||0} artículo(s) · ${r.date?new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div></div>
         </div>`).join('')}
       <button class="btn-tertiary" style="margin-top:10px;" onclick="clearCartAbandonSurveys()">${icon('trash',13)} Borrar todas las respuestas</button>
+    `}
+  `;
+}
+/* ============== REPORTE DE HORAS PICO POR CAJERO ==============
+   Cruza los turnos de caja (apertura/cierre, quién y cuándo) con las ventas del Punto de Venta
+   para saber, hora por hora, cuánta gente estuvo atendiendo contra cuánto se vendió en esa
+   hora — así se ve si hay horas de mucha venta con poco personal (o al revés). También arma un
+   ranking por cajero: horas trabajadas, ventas atendidas y su "ritmo" (ventas por hora). Las
+   horas de un turno se reparten en fracciones si cruzan de una hora a otra, para que el reparto
+   sea exacto y no solo redondeado a la hora de apertura. */
+function computeCashierPeakHours(days){
+  days = days || 30;
+  const periodStart = new Date(Date.now() - days*86400000);
+  const periodEnd = new Date();
+  const staffedHours = Array(24).fill(0);
+  const byCashier = {};
+  const ensureCashier = (name) => byCashier[name] || (byCashier[name] = {name, hoursWorked:0, sales:0, revenue:0});
+  state.cashRegisters.forEach(r=>{
+    if(!r.openedAt) return;
+    const start = new Date(Math.max(new Date(r.openedAt).getTime(), periodStart.getTime()));
+    const endRaw = r.closedAt ? new Date(r.closedAt) : new Date();
+    const end = new Date(Math.min(endRaw.getTime(), periodEnd.getTime()));
+    if(!(end > start)) return;
+    const cashier = ensureCashier(r.cashierName || 'Sin nombre');
+    let cursor = new Date(start);
+    while(cursor < end){
+      const nextHourBoundary = new Date(cursor); nextHourBoundary.setMinutes(0,0,0); nextHourBoundary.setHours(nextHourBoundary.getHours()+1);
+      const segEnd = new Date(Math.min(nextHourBoundary.getTime(), end.getTime()));
+      const fraction = (segEnd.getTime() - cursor.getTime()) / 3600000;
+      staffedHours[cursor.getHours()] += fraction;
+      cashier.hoursWorked += fraction;
+      cursor = segEnd;
+    }
+  });
+  const salesByHour = Array(24).fill(0);
+  const revenueByHour = Array(24).fill(0);
+  state.orders.forEach(o=>{
+    if(o.source!=='pos' || o.status==='Cancelado' || !o.date) return;
+    const d = new Date(o.date);
+    if(d < periodStart || d > periodEnd) return;
+    salesByHour[d.getHours()] += 1;
+    revenueByHour[d.getHours()] += (o.total||0);
+    const cashier = ensureCashier(o.cashierName || 'Sin nombre');
+    cashier.sales += 1; cashier.revenue += (o.total||0);
+  });
+  const hourly = [];
+  for(let h=0; h<24; h++){
+    const staffed = staffedHours[h], sales = salesByHour[h];
+    hourly.push({ hour:h, staffedHours: staffed, sales, revenue: revenueByHour[h], salesPerStaffHour: staffed>0 ? sales/staffed : null });
+  }
+  const busiestUnderstaffed = hourly.filter(h=>h.salesPerStaffHour!==null && h.sales>0).sort((a,b)=>b.salesPerStaffHour-a.salesPerStaffHour).slice(0,3);
+  const cashierRows = Object.values(byCashier)
+    .map(c=>({...c, salesPerHour: c.hoursWorked>0 ? c.sales/c.hoursWorked : null}))
+    .sort((a,b)=>b.sales-a.sales);
+  const maxSales = Math.max(1, ...hourly.map(h=>h.sales));
+  return { hourly, cashierRows, busiestUnderstaffed, maxSales };
+}
+function renderStatsHorasPico(){
+  const days = state.peakHoursDays || 30;
+  const { hourly, cashierRows, busiestUnderstaffed, maxSales } = computeCashierPeakHours(days);
+  const withActivity = hourly.filter(h=>h.sales>0 || h.staffedHours>0);
+  const minH = withActivity.length ? Math.min(9, ...withActivity.map(h=>h.hour)) : 9;
+  const maxH = withActivity.length ? Math.max(21, ...withActivity.map(h=>h.hour)) : 21;
+  const hoursRange = []; for(let x=minH; x<=maxH; x++) hoursRange.push(x);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Horas pico por cajero</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Cruza los turnos de caja (quién estuvo atendiendo y cuándo) con las ventas del Punto de Venta, para ver si el personal está bien repartido a lo largo del día.</div>
+    <div class="form-field" style="max-width:240px;"><select onchange="state.peakHoursDays=Number(this.value);render()">${[30,90,180].map(d=>`<option value="${d}" ${days===d?'selected':''}>Últimos ${d} días</option>`).join('')}</select></div>
+    ${cashierRows.length===0 && hourly.every(h=>h.sales===0) ? `<div class="empty-state">Todavía no hay turnos de caja ni ventas del Punto de Venta en este periodo.</div>` : `
+      ${busiestUnderstaffed.length>0 ? `<div class="note-box">Horas con más venta por persona atendiendo: ${busiestUnderstaffed.map(h=>`<strong>${h.hour}:00–${h.hour+1}:00</strong> (${h.sales} venta${h.sales===1?'':'s'} / ${h.staffedHours.toFixed(1)}h de personal)`).join(' · ')}</div>` : ''}
+      <div class="panel-title" style="margin:14px 0 8px;font-size:14px;">Ventas y personal por hora</div>
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:separate;border-spacing:3px;">
+          <thead><tr><th></th>${hoursRange.map(x=>`<th style="font-size:10.5px;font-weight:600;color:var(--ink-soft);">${x}h</th>`).join('')}</tr></thead>
+          <tbody>
+            <tr><th style="text-align:right;padding-right:6px;font-size:12px;">Ventas</th>${hoursRange.map(x=>{
+              const h = hourly[x];
+              const alpha = maxSales>0 ? h.sales/maxSales : 0;
+              const bg = h.sales>0 ? `rgba(153,52,119,${(0.15+alpha*0.85).toFixed(2)})` : 'var(--bg)';
+              const color = alpha>0.55 ? '#fff' : 'var(--ink)';
+              return `<td title="${x}:00 — ${h.sales} venta(s), ${h.staffedHours.toFixed(1)}h de personal" style="min-width:38px;height:30px;border-radius:6px;background:${bg};color:${color};text-align:center;font-size:10.5px;font-weight:700;">${h.sales>0?h.sales:''}</td>`;
+            }).join('')}</tr>
+            <tr><th style="text-align:right;padding-right:6px;font-size:12px;">Personal (h)</th>${hoursRange.map(x=>{
+              const h = hourly[x];
+              return `<td style="min-width:38px;height:26px;text-align:center;font-size:10.5px;color:var(--ink-soft);">${h.staffedHours>0?h.staffedHours.toFixed(1):'—'}</td>`;
+            }).join('')}</tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-title" style="margin:18px 0 8px;font-size:14px;">Por cajero</div>
+      ${cashierRows.length===0 ? `<div class="empty-state">No hay turnos ni ventas de Punto de Venta asociadas a un cajero en este periodo.</div>` :
+        cashierRows.map(c=>`
+          <div class="list-row">
+            <div class="row-main">
+              <div class="row-title">${c.name}</div>
+              <div class="row-sub">${c.hoursWorked>0 ? `${c.hoursWorked.toFixed(1)} h trabajadas · ` : 'Sin turno de caja registrado · '}${c.sales} venta(s) · ${money(c.revenue)}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-weight:800;">${c.salesPerHour!==null ? c.salesPerHour.toFixed(1) : '—'}</div>
+              <div class="row-sub">venta(s)/hora</div>
+            </div>
+          </div>`).join('')}
     `}
   `;
 }
