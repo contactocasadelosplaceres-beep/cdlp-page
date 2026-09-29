@@ -2307,6 +2307,7 @@ function exportProductsJSON(){
   showToast(`${data.length} producto(s) exportados (sin imágenes)`);
   state.settings.lastExportAt = new Date().toISOString();
   saveSettings();
+  logAdminAction('exportacion', 'respaldo de catálogo (JSON)', `${data.length} producto(s)`);
 }
 async function deleteProduct(id){
   const p = state.products.find(x=>x.id===id);
@@ -2705,6 +2706,7 @@ const ADMIN_ACTION_LABELS = {
   cambio_precio_masivo: 'Cambió precios en masa',
   deshacer_cambio_precio_masivo: 'Deshizo un cambio masivo de precios',
   cambio_configuracion: 'Cambió configuración o diseño',
+  impresion: 'Imprimió/generó un documento',
 };
 function openAuditLog(){
   state.auditLogOpen = true; state.auditLogLoading = true; state.auditLogItems = [];
@@ -7114,6 +7116,7 @@ function exportCustomersCSV(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download='clientes.csv'; a.click();
   URL.revokeObjectURL(url);
+  logAdminAction('exportacion', 'clientes', `${list.length} cliente(s)`);
 }
 function parseCustomerCSV(text){
   const lines = text.split(/\r?\n/).filter(l=>l.trim());
@@ -9581,6 +9584,7 @@ function printCatalogPDF(category){
   `);
   win.document.close();
   win.focus();
+  logAdminAction('impresion', 'catálogo en PDF', `${list.length} producto(s)${category!=='Todas'?' · '+category:''}`);
 }
 function renderConfig(){
   if(state.configSubpanel) return renderConfigSubpanel(state.configSubpanel);
