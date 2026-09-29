@@ -473,6 +473,8 @@ const DEFAULT_SETTINGS = {
   churnRiskDays: 60, churnRiskMinPurchases: 2, churnRiskNotified: {},
   storePaused: false, storePausedMessage: "Estamos en pausa temporalmente y no podemos tomar pedidos nuevos en este momento. ¡Vuelve pronto! Si ya tienes una duda, escríbenos por WhatsApp.",
   ageGateEnabled: true,
+  termsEnabled: true,
+  termsText: "Acepto la política de privacidad y de devoluciones de esta tienda: mis datos se usan solo para procesar mi pedido, el empaque es neutro y discreto, y ante cualquier problema con lo recibido puedo contactar a la tienda por WhatsApp.",
   theme:{},
   historicalOrderCountOffset:0,
 };
@@ -518,7 +520,7 @@ let state = {
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   suppliers:[], restockItems:[], newSupplierInput:"", restockAddSearch:"", restockPickedProductId:null, restockPickedQty:"", restockPickedSupplierId:"",
   wholesaleModal:null, wholesaleProductSearch:"",
-  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas",inactive:false},
+  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas",inactive:false,tag:"Todas"},
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   couponModal:null, couponProductSearch:"", couponUsage:[],
   promoModal:null, promoProductSearch:"", promoProductSearch2:"",
@@ -833,6 +835,7 @@ const SETTINGS_FIELD_LABELS = {
   repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
   churnRiskDays:'Días para clientes en riesgo de fuga', churnRiskMinPurchases:'Compras mínimas para riesgo de fuga',
   storePaused:'Tienda en pausa', storePausedMessage:'Mensaje de tienda en pausa', ageGateEnabled:'Verificación de mayoría de edad',
+  termsEnabled:'Aceptación de términos al primer pedido', termsText:'Texto de términos y condiciones',
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
@@ -1548,7 +1551,7 @@ function renderOrderDetailModal(){
       </div>
 
       <div class="order-detail" style="margin-bottom:14px;">
-        ${(o.items||[]).map(it=>`<div><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+        ${(o.items||[]).map(it=>`<div><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>${it.mysteryPicks&&it.mysteryPicks.length?`<div class="note-box" style="margin:2px 0 6px;font-size:12px;">${icon('package',13)} Contenido sorteado para empacar: ${it.mysteryPicks.map(mp=>`${mp.qty}x ${mp.name}`).join(', ')}</div>`:''}`).join('')}
         ${o.manualDiscount ? `
           <div style="border-top:1px dashed var(--border);margin-top:4px;padding-top:4px;"><span>Subtotal</span><span>${money(o.subtotal!=null?o.subtotal:o.total)}</span></div>
           <div><span>${o.manualDiscount.type==='coupon'?`Cupón ${o.manualDiscount.code}`:`Descuento${o.manualDiscount.type==='percent'?` (${o.manualDiscount.value}%)`:''}`}</span><span>-${money(o.manualDiscount.amount)}</span></div>
@@ -2110,16 +2113,20 @@ async function saveProduct(p){
   const old = p.id ? state.products.find(x=>x.id===p.id) : null;
   const isKit = !!p.isKit;
   const kitItems = isKit ? (p.kitItems||[]).filter(ki=>ki.productId && ki.qty>0) : [];
+  const isMysteryBox = !!p.isMysteryBox;
   const payload = {
     name:p.name, sku:p.sku||'', location:p.location||'', supplierId:p.supplierId||'', expirationDate:p.expirationDate||'', lowStockThreshold:p.lowStockThreshold||0, cat:p.cat, categories:p.categories||[p.cat],
     price:p.price, promoPrice:p.promoPrice||0, cost:p.cost||0,
     // Un kit no tiene existencias propias por centro: su stock se calcula solo a partir de lo
-    // que alcance con sus productos componentes (ver computeKitStock).
+    // que alcance con sus productos componentes (ver computeKitStock). Una caja sorpresa sí
+    // tiene su propio stock (se surte manualmente, igual que cualquier producto), ya que no se
+    // arma de componentes fijos sino de una selección aleatoria al momento del pedido.
     stock: isKit ? computeKitStock({kitItems}) : p.stock,
     desc:p.desc, images:p.images||[], needs:p.needs||[],
     stockByCenter: isKit ? {} : (p.stockByCenter||{}), hidden: !!p.hidden,
     variantGroups: p.variantGroups||[], variants: p.variants||[],
     isKit, kitItems,
+    isMysteryBox, mysteryCategory: isMysteryBox ? (p.mysteryCategory||'Cualquiera') : '', mysteryItemCount: isMysteryBox ? Math.max(1, Number(p.mysteryItemCount)||3) : 0,
     // .set() reemplaza el documento completo, así que cualquier campo que no se mande aquí se
     // pierde — el orden manual dentro de categorías (ver moveProductInCategory) y la fecha de
     // creación (para la etiqueta "Nuevo") se preservan explícitamente por eso.
@@ -2671,6 +2678,7 @@ const ADMIN_ACTION_LABELS = {
 };
 function openAuditLog(){
   state.auditLogOpen = true; state.auditLogLoading = true; state.auditLogItems = [];
+  state.auditLogFilterUser = ''; state.auditLogFilterAction = '';
   render();
   loadAuditLog();
 }
@@ -2685,14 +2693,34 @@ async function loadAuditLog(){
 }
 function closeAuditLog(){ state.auditLogOpen=false; render(); }
 function renderAuditLogModal(){
+  const users = [...new Set(state.auditLogItems.map(a=>a.userEmail).filter(Boolean))].sort();
+  const actionsUsed = [...new Set(state.auditLogItems.map(a=>a.action).filter(Boolean))];
+  const filterUser = state.auditLogFilterUser||'';
+  const filterAction = state.auditLogFilterAction||'';
+  const filtered = state.auditLogItems.filter(a=>
+    (!filterUser || a.userEmail===filterUser) &&
+    (!filterAction || a.action===filterAction)
+  );
   return `
   <div class="modal-overlay">
     <div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto;">
       <h3>Bitácora de acciones del panel</h3>
       <div class="panel-sub" style="margin-top:-6px;">Quién hizo qué, y cuándo — útil para cuando haya más de una persona con acceso.</div>
+      ${!state.auditLogLoading && state.auditLogItems.length>0 ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px;">
+          <select style="flex:1;min-width:140px;" onchange="state.auditLogFilterUser=this.value;render()">
+            <option value="">Todos los colaboradores</option>
+            ${users.map(u=>`<option value="${u}" ${filterUser===u?'selected':''}>${u}</option>`).join('')}
+          </select>
+          <select style="flex:1;min-width:140px;" onchange="state.auditLogFilterAction=this.value;render()">
+            <option value="">Todas las acciones</option>
+            ${actionsUsed.map(a=>`<option value="${a}" ${filterAction===a?'selected':''}>${ADMIN_ACTION_LABELS[a]||a}</option>`).join('')}
+          </select>
+        </div>` : ''}
       ${state.auditLogLoading ? `<div class="empty-state">Cargando…</div>` :
         state.auditLogItems.length===0 ? `<div class="empty-state">Todavía no hay nada registrado (empieza a guardarse desde que subiste esta actualización — lo de antes no quedó registrado).</div>` :
-        state.auditLogItems.map(a=>`
+        filtered.length===0 ? `<div class="empty-state">Nada con ese filtro.</div>` :
+        filtered.map(a=>`
           <div class="list-row" style="padding:10px 0;">
             <div class="row-main">
               <div class="row-title" style="font-size:13px;">${ADMIN_ACTION_LABELS[a.action]||a.action}${a.targetName?`: ${a.targetName}`:''}</div>
@@ -3340,9 +3368,31 @@ function computeMetrics(){
     return days<=30;
   }).length;
 
+  // Comparación mes contra mes (calendario, no "últimos 30 días"): este mes de corrido vs. el
+  // mismo tramo de días del mes pasado, para que la comparación sea justa aunque el mes actual
+  // todavía no termine (ej. comparar los primeros 12 días de este mes contra los primeros 12
+  // días del mes pasado, no el mes pasado completo).
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const sameDayLastMonth = new Date(now.getFullYear(), now.getMonth()-1, now.getDate(), 23,59,59,999);
+  const ordersThisMonth = valid.filter(o=>new Date(o.date)>=startOfThisMonth);
+  const ordersLastMonthSameSpan = valid.filter(o=>{ const d=new Date(o.date); return d>=startOfLastMonth && d<=sameDayLastMonth; });
+  const pct = (curr, prev) => prev>0 ? Math.round(((curr-prev)/prev)*100) : (curr>0?100:0);
+  const sumTotal = (list)=>list.reduce((s,o)=>s+o.total,0);
+  const avgTicket = (list)=>list.length? sumTotal(list)/list.length : 0;
+  const monthComparison = {
+    thisMonth: {revenue: sumTotal(ordersThisMonth), orders: ordersThisMonth.length, avgTicket: avgTicket(ordersThisMonth)},
+    lastMonth: {revenue: sumTotal(ordersLastMonthSameSpan), orders: ordersLastMonthSameSpan.length, avgTicket: avgTicket(ordersLastMonthSameSpan)},
+    revenueDeltaPct: pct(sumTotal(ordersThisMonth), sumTotal(ordersLastMonthSameSpan)),
+    ordersDeltaPct: pct(ordersThisMonth.length, ordersLastMonthSameSpan.length),
+    avgTicketDeltaPct: pct(avgTicket(ordersThisMonth), avgTicket(ordersLastMonthSameSpan)),
+    dayOfMonth: now.getDate(),
+  };
+
   return {totalRevenue,avgOrder,avgItems,pending,lowStock,cancelRate,uniqueCustomers,repeatCustomers,repeatRate,topCustomers,
     dayRevenue,monthRevenue,revDelta,catUnitRows,catRevRows,maxCatUnit,maxCatRev,topByUnits,topByRevenue,noSales,
-    weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length,expiringOrExpired};
+    weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length,expiringOrExpired,
+    monthComparison};
 }
 const VISIT_PERIODS = [
   {key:'hoy', label:'Hoy'},
@@ -3784,7 +3834,37 @@ const HEALTH_CHECKS_DEF = [
   {key:'expired', label:'Ya caducado'},
   {key:'negativeMargin', label:'Costo igual o mayor al precio de venta'},
   {key:'lowMargin', label:'Margen menor al 20%'},
+  {key:'priceMismatch', label:'Precio muy distinto a un producto similar'},
 ];
+// Alerta de precios inconsistentes: dos productos de la MISMA categoría cuyo nombre comparte al
+// menos 2 palabras significativas (se ignoran palabras de 3 letras o menos, como "de"/"con") pero
+// cuyo precio difiere 80% o más entre sí — suele ser un error de captura (un cero de más o de
+// menos) más que una diferencia real de producto. No detecta nada entre categorías distintas.
+function normalizeNameTokens(name){
+  return (name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9\s]/g,'').split(/\s+/).filter(w=>w.length>=4);
+}
+function computePriceMismatches(){
+  const byCat = {};
+  state.products.forEach(p=>{ if(!(p.price>0)) return; const cat = p.cat||'Otros'; (byCat[cat]=byCat[cat]||[]).push(p); });
+  const flagged = new Map();
+  Object.values(byCat).forEach(list=>{
+    for(let i=0;i<list.length;i++){
+      for(let j=i+1;j<list.length;j++){
+        const a=list[i], b=list[j];
+        const tokensA = normalizeNameTokens(a.name), tokensB = normalizeNameTokens(b.name);
+        if(!tokensA.length || !tokensB.length) continue;
+        const shared = tokensA.filter(t=>tokensB.includes(t));
+        if(shared.length < Math.min(2, tokensA.length, tokensB.length)) continue;
+        const ratio = Math.max(a.price,b.price)/Math.min(a.price,b.price);
+        if(ratio>=1.8){
+          if(!flagged.has(a.id)) flagged.set(a.id, {product:a, other:b, ratio});
+          if(!flagged.has(b.id)) flagged.set(b.id, {product:b, other:a, ratio});
+        }
+      }
+    }
+  });
+  return Array.from(flagged.values());
+}
 // Precio al que de verdad se vende hoy (el promocional si está activo) y margen sobre ese precio.
 // Sin costo capturado no se puede calcular, así que esos productos no se marcan aquí.
 function productSellPrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : (p.price||0); }
@@ -3813,12 +3893,15 @@ function computeCatalogHealth(){
     expired: state.products.filter(p=>p.expirationDate && new Date(p.expirationDate+'T00:00:00') < new Date()),
     negativeMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m<=0; }),
     lowMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m>0 && m<20; }),
+    priceMismatch: computePriceMismatches().map(x=>x.product),
   };
+  const priceMismatchByProductId = {};
+  computePriceMismatches().forEach(x=>{ priceMismatchByProductId[x.product.id] = x; });
   const dismissedSet = new Set(state.settings.dismissedHealthItems||[]);
   return HEALTH_CHECKS_DEF.map(c=>{
     const fullList = listByKey[c.key]||[];
     const pending = fullList.filter(p=>!dismissedSet.has(healthDismissKey(p.id, c.key)));
-    return {...c, list: pending, dismissedCount: fullList.length - pending.length};
+    return {...c, list: pending, dismissedCount: fullList.length - pending.length, priceMismatchByProductId};
   });
 }
 async function dismissHealthItem(productId, checkKey){
@@ -4134,6 +4217,27 @@ function renderStatsGeneral(){
       <div class="stat-card"><div class="stat-label">Clientes recurrentes</div><div class="stat-value">${m.repeatCustomers} (${m.repeatRate}%)</div></div>
       <div class="stat-card"><div class="stat-label">Mejor día (prom. ingresos)</div><div class="stat-value" style="font-size:16px;">${m.weekdayNames[m.bestDayIdx]}</div></div>
     </div>
+    <div class="panel">
+      <div class="panel-title">Este mes vs. mes pasado</div>
+      <div class="panel-sub">Comparando los primeros ${m.monthComparison.dayOfMonth} días de cada mes, para que sea una comparación justa aunque el mes actual no haya terminado.</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Ventas</div>
+          <div class="stat-value">${money(m.monthComparison.thisMonth.revenue)}</div>
+          <div class="row-sub" style="color:${m.monthComparison.revenueDeltaPct>=0?'var(--green)':'var(--rose)'};font-weight:700;">${m.monthComparison.revenueDeltaPct>=0?'▲':'▼'} ${Math.abs(m.monthComparison.revenueDeltaPct)}% vs. ${money(m.monthComparison.lastMonth.revenue)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Pedidos</div>
+          <div class="stat-value">${m.monthComparison.thisMonth.orders}</div>
+          <div class="row-sub" style="color:${m.monthComparison.ordersDeltaPct>=0?'var(--green)':'var(--rose)'};font-weight:700;">${m.monthComparison.ordersDeltaPct>=0?'▲':'▼'} ${Math.abs(m.monthComparison.ordersDeltaPct)}% vs. ${m.monthComparison.lastMonth.orders}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Ticket promedio</div>
+          <div class="stat-value">${money(m.monthComparison.thisMonth.avgTicket)}</div>
+          <div class="row-sub" style="color:${m.monthComparison.avgTicketDeltaPct>=0?'var(--green)':'var(--rose)'};font-weight:700;">${m.monthComparison.avgTicketDeltaPct>=0?'▲':'▼'} ${Math.abs(m.monthComparison.avgTicketDeltaPct)}% vs. ${money(m.monthComparison.lastMonth.avgTicket)}</div>
+        </div>
+      </div>
+    </div>
     <div class="panel"><div class="panel-title">Ingresos — últimos 7 días</div>${renderBarChart(m.dayRevenue)}</div>
     <div class="panel"><div class="panel-title">Horarios en que los clientes entran a la tienda</div><div class="panel-sub">Por hora del día, últimos 3000 registros de visitas</div>${renderBarChart(v.visitsByHour, false)}</div>
     <div class="panel">
@@ -4263,7 +4367,7 @@ function renderStatsProductos(){
             ${shown.map(p=>`
               <div class="list-row">
                 <div class="row-main" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>
-                  <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}</div>
+                  <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}${check.key==='priceMismatch' && check.priceMismatchByProductId[p.id] ? ` · ${money(p.price)} vs. "${check.priceMismatchByProductId[p.id].other.name}" a ${money(check.priceMismatchByProductId[p.id].other.price)} — toca para revisar` : ''}</div>
                 </div>
                 <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Marcar como leído</button>
                 ${(check.key==='expired'||check.key==='expiringSoon') ? `<button class="btn-tertiary" title="Darlo de baja del inventario" onclick="openShrinkForProduct('${p.id}')">Registrar merma</button>` : ''}
@@ -4658,8 +4762,8 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
         <input type="checkbox" ${isSelected?'checked':''} onchange="toggleProductSelection('${p.id}')">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main">
-          <div class="row-title">${p.name} ${p.isKit?'<span class="status-badge" style="background:var(--teal);">Kit</span>':''} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
-          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}${p.isKit?` · ${(p.kitItems||[]).length} producto(s) en el kit`:''}</div>
+          <div class="row-title">${p.name} ${p.isKit?'<span class="status-badge" style="background:var(--teal);">Kit</span>':''} ${p.isMysteryBox?'<span class="status-badge" style="background:var(--navy);">Caja sorpresa</span>':''} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
+          <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}${p.isKit?` · ${(p.kitItems||[]).length} producto(s) en el kit`:''}${p.isMysteryBox?` · ${p.mysteryItemCount||3} producto(s) sorpresa de ${p.mysteryCategory||'Cualquiera'}`:''}</div>
           <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">${stockStatusBadge(p)}${expirationBadge(p)}</div>
         </div>
         <div class="row-actions">
@@ -5551,6 +5655,12 @@ function toggleProductIsKit(checked){
   if(checked && !state.productModal.kitItems) state.productModal.kitItems = [];
   render();
 }
+function toggleProductIsMysteryBox(checked){
+  state.productModal.isMysteryBox = checked;
+  if(checked && !state.productModal.mysteryCategory) state.productModal.mysteryCategory = 'Cualquiera';
+  if(checked && !state.productModal.mysteryItemCount) state.productModal.mysteryItemCount = 3;
+  render();
+}
 function addKitComponent(id){
   if(id===state.productModal.id) { showToast('Un kit no puede contenerse a sí mismo'); return; }
   const items = state.productModal.kitItems || (state.productModal.kitItems=[]);
@@ -5698,7 +5808,7 @@ function computeCustomersList(){
     const key = normalizePhone(o.phone);
     if(!key) return;
     if(!byPhone[key]){
-      byPhone[key] = { id:key, name:o.customer||'Sin nombre', phone:o.phone, email:'', address:'', city:'', state:'', country:'', notes:'',
+      byPhone[key] = { id:key, name:o.customer||'Sin nombre', phone:o.phone, email:'', address:'', city:'', state:'', country:'', notes:'', tags:[],
         createdAt:null, purchases:[], totalSpent:0, isManual:false, manualId:null };
     }
     const c = byPhone[key];
@@ -5712,9 +5822,9 @@ function computeCustomersList(){
   state.customers.forEach(m=>{
     const key = m.phone ? normalizePhone(m.phone) : `manual_${m.id}`;
     if(byPhone[key]){
-      Object.assign(byPhone[key], { name:m.name||byPhone[key].name, email:m.email||'', address:m.address||byPhone[key].address||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'', createdAt:m.createdAt||null, isManual:true, manualId:m.id });
+      Object.assign(byPhone[key], { name:m.name||byPhone[key].name, email:m.email||'', address:m.address||byPhone[key].address||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'', tags:m.tags||[], createdAt:m.createdAt||null, isManual:true, manualId:m.id });
     }else{
-      byPhone[key] = { id:key, name:m.name||'Sin nombre', phone:m.phone||'', email:m.email||'', address:m.address||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'',
+      byPhone[key] = { id:key, name:m.name||'Sin nombre', phone:m.phone||'', email:m.email||'', address:m.address||'', city:m.city||'', state:m.state||'', country:m.country||'', notes:m.notes||'', tags:m.tags||[],
         createdAt:m.createdAt||null, purchases:[], totalSpent:0, isManual:true, manualId:m.id };
     }
   });
@@ -5729,7 +5839,7 @@ function computeCustomersList(){
       // El perfil pudo haberse borrado después de la venta; se conserva su historial igual.
       key = `manual_${o.customerId}`;
       if(!byPhone[key]){
-        byPhone[key] = { id:key, name:o.customerName||'Sin nombre', phone:o.customerPhone||'', email:'', address:'', city:'', state:'', country:'', notes:'',
+        byPhone[key] = { id:key, name:o.customerName||'Sin nombre', phone:o.customerPhone||'', email:'', address:'', city:'', state:'', country:'', notes:'', tags:[],
           createdAt:null, purchases:[], totalSpent:0, isManual:false, manualId:o.customerId };
       }
     }
@@ -5761,19 +5871,26 @@ function filteredCustomers(){
     const cutoff = Date.now()-60*86400000;
     list = list.filter(c=>c.purchaseCount>=2 && c.lastDate && new Date(c.lastDate).getTime()<cutoff);
   }
+  if(f.tag && f.tag!=='Todas') list = list.filter(c=>(c.tags||[]).includes(f.tag));
   return list;
 }
 function distinctCustomerValues(field){
   const vals = new Set(computeCustomersList().map(c=>c[field]||'—'));
   return Array.from(vals).sort();
 }
+function distinctCustomerTags(){
+  const tags = new Set();
+  computeCustomersList().forEach(c=>(c.tags||[]).forEach(t=>tags.add(t)));
+  return Array.from(tags).sort();
+}
 function openCustomerModal(manualId){
   state.customerMessagesItems = []; state.customerMessagesLoading = false;
   if(manualId){
     state.customerModal = {...state.customers.find(c=>c.id===manualId)};
+    state.customerModal.tags = state.customerModal.tags || [];
     if(state.customerModal.phone) loadCustomerMessageHistory(state.customerModal.phone);
   }
-  else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'', notesLog:[] }; }
+  else{ state.customerModal = { name:'', phone:'', email:'', address:'', city:'', state:'', country:'', notes:'', notesLog:[], tags:[] }; }
   render();
 }
 
@@ -6554,8 +6671,9 @@ async function saveCustomerModal(){
   const stateField = document.getElementById('cm-state').value.trim();
   const country = document.getElementById('cm-country').value.trim();
   const notes = document.getElementById('cm-notes').value.trim();
+  const tags = document.getElementById('cm-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
   if(!name){ showToast('Ponle un nombre al cliente'); return; }
-  const payload = { name, phone, email, address, city, state:stateField, country, notes, notesLog: state.customerModal.notesLog || [] };
+  const payload = { name, phone, email, address, city, state:stateField, country, notes, tags, notesLog: state.customerModal.notesLog || [] };
   try{
     if(state.customerModal.id){
       payload.createdAt = state.customerModal.createdAt || new Date().toISOString();
@@ -6658,13 +6776,20 @@ function renderClientes(){
         <option>Todos</option>${distinctCustomerValues('city').map(v=>`<option ${state.customerFilters.city===v?'selected':''}>${v}</option>`).join('')}
       </select>
     </div>
+    ${distinctCustomerTags().length>0 ? `
+    <div class="form-field" style="max-width:50%;margin-bottom:16px;">
+      <label>Etiqueta</label>
+      <select onchange="state.customerFilters.tag=this.value;resetShowMore('customersShowMore');render()">
+        <option>Todas</option>${distinctCustomerTags().map(t=>`<option ${state.customerFilters.tag===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>` : ''}
     <div class="panel-title" style="margin-bottom:12px;">Clientes (${list.length})</div>
     ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan.</div>` :
       (()=>{ const {shown, remaining} = showMoreSlice('customersShowMore', list); return shown.map(c=>`
         <div class="list-row">
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
             <div class="row-title">${c.name}${c.isManual?'':' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(automático)</span>'}</div>
-            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}${state.customerFilters.inactive?` (hace ${Math.floor((Date.now()-new Date(c.lastDate).getTime())/86400000)} días)`:''} · `:'Sin compras · '}${c.purchaseCount} compra(s)</div>
+            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}${state.customerFilters.inactive?` (hace ${Math.floor((Date.now()-new Date(c.lastDate).getTime())/86400000)} días)`:''} · `:'Sin compras · '}${c.purchaseCount} compra(s)${(c.tags&&c.tags.length)?` · ${c.tags.map(t=>`<span class="status-badge" style="background:var(--surface-soft);color:var(--ink);font-weight:600;">${t}</span>`).join(' ')}`:''}</div>
           </div>
           <div style="text-align:right;margin-right:10px;">
             <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
@@ -6716,6 +6841,7 @@ function renderCustomerModal(){
           </div>`}
       </div>
       <div class="form-field"><label>Nota general</label><textarea id="cm-notes" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
+      <div class="form-field"><label>Etiquetas (separadas por coma)</label><input id="cm-tags" placeholder="mayorista, referido por Ana" value="${(c.tags||[]).join(', ')}"></div>
       ${c.id ? renderCustomerMessageHistory() : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCustomerModal()">Cancelar</button>
@@ -6824,6 +6950,9 @@ function wholesaleLink(code){
 }
 function copyWholesaleLink(code){
   navigator.clipboard.writeText(wholesaleLink(code)).then(()=>showToast('Enlace copiado')).catch(()=>showToast('No se pudo copiar, cópialo manualmente'));
+}
+function kioskModeLink(off){
+  return `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html?vitrina=${off?'0':'1'}`;
 }
 /* ============== MARKETING (mayoreo, cupones, promociones) ==============
    Antes eran 3 pestañas separadas en el menú principal; se agrupan en una sola ("Marketing")
@@ -6953,7 +7082,7 @@ function renderWholesaleModal(){
 function openCouponModal(id){
   const c = id ? {...state.settings.coupons.find(x=>x.id===id)} : {
     id: uid('cp_'), code:'', discountPercent:10, scope:'all', categories:[], productIds:[],
-    startDate:'', endDate:'', maxUses:0, active:true,
+    startDate:'', endDate:'', maxUses:0, active:true, singleUsePerCustomer:false,
   };
   state.couponModal = c; state.couponProductSearch=''; render();
 }
@@ -6988,10 +7117,11 @@ async function saveCoupon(){
   const startDate = document.getElementById('cp-start').value;
   const endDate = document.getElementById('cp-end').value;
   const maxUses = Number(document.getElementById('cp-maxuses').value)||0;
+  const singleUsePerCustomer = document.getElementById('cp-single-use').checked;
   if(!code){ showToast('Ponle un código al cupón'); return; }
   const others = state.settings.coupons.filter(x=>x.id!==c.id);
   if(others.some(x=>x.code===code)){ showToast('Ese código ya existe, elige otro'); return; }
-  const updated = {...c, code, discountPercent, scope, startDate, endDate, maxUses};
+  const updated = {...c, code, discountPercent, scope, startDate, endDate, maxUses, singleUsePerCustomer};
   const idx = state.settings.coupons.findIndex(x=>x.id===c.id);
   if(idx>=0) state.settings.coupons[idx] = updated;
   else state.settings.coupons.push(updated);
@@ -7094,6 +7224,10 @@ function renderCouponModal(){
         <div class="form-field"><label>Vigente hasta (opcional)</label><input id="cp-end" type="date" value="${c.endDate||''}" oninput="state.couponModal.endDate=this.value"></div>
       </div>
       <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" value="${c.maxUses||0}" oninput="state.couponModal.maxUses=this.value"></div>
+      <label class="checkbox-row">
+        <input id="cp-single-use" type="checkbox" ${c.singleUsePerCustomer?'checked':''}>
+        <span>Un solo uso por cliente (por teléfono) — útil para cupones de "primera compra"</span>
+      </label>
       ${couponUsedCount(c.code)>0 ? `<div class="panel-sub">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCouponModal()">Cancelar</button>
@@ -7501,6 +7635,44 @@ async function adminForceCloseCash(id){
   }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); }
 }
 
+/* ============== RENDIMIENTO POR CENTRO DE DISTRIBUCIÓN ==============
+   Junta lo que ya vive disperso en Ventas (POS), Transferencias y Mermas, agrupado por centro,
+   para comparar de un vistazo cuál centro vende más, cuál mueve más inventario y cuál tiene más
+   merma — sin tener que ir pestaña por pestaña sumando a mano. Las ventas de la tienda en línea
+   no traen centro (no son físicas), así que solo se cuentan las ventas del Punto de Venta. */
+function computeCenterPerformance(){
+  const posSales = state.orders.filter(o=>o.source==='pos' && o.status!=='Cancelado' && o.centerId);
+  return state.centers.map(c=>{
+    const sales = posSales.filter(o=>o.centerId===c.id);
+    const salesRevenue = sales.reduce((s,o)=>s+(o.total||0),0);
+    const transfersOut = state.transfers.filter(t=>t.fromCenterId===c.id).length;
+    const transfersIn = state.transfers.filter(t=>t.toCenterId===c.id).length;
+    const shrinkageForCenter = state.shrinkage.filter(s=>s.centerId===c.id);
+    const shrinkageValue = shrinkageForCenter.reduce((s,x)=>s+(x.totalCost||0),0);
+    const inventoryValue = state.products.reduce((s,p)=>s+(p.price||0)*((p.stockByCenter&&p.stockByCenter[c.id])||0),0);
+    return { id:c.id, name:c.name, salesCount:sales.length, salesRevenue, transfersOut, transfersIn, shrinkageCount:shrinkageForCenter.length, shrinkageValue, inventoryValue };
+  }).sort((a,b)=>b.salesRevenue-a.salesRevenue);
+}
+function renderCenterPerformance(){
+  const rows = computeCenterPerformance();
+  const maxRevenue = Math.max(1, ...rows.map(r=>r.salesRevenue));
+  return `
+  <div class="panel">
+    <div class="panel-title">Rendimiento por centro</div>
+    <div class="panel-sub">Ventas del Punto de Venta, movimientos de inventario y mermas por centro, para saber dónde reforzar. Las ventas de la tienda en línea no se cuentan aquí porque no salen de un centro físico.</div>
+    ${rows.length===0 ? `<div class="empty-state">Aún no tienes centros de distribución configurados.</div>` :
+      rows.map(r=>`
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="row-title">${r.name}</div>
+            <div style="font-weight:800;">${money(r.salesRevenue)}</div>
+          </div>
+          <div class="hbar-row" style="margin:4px 0;"><div class="hbar-track"><div class="hbar-fill" style="width:${(r.salesRevenue/maxRevenue*100)}%;background:var(--primary)"></div></div></div>
+          <div class="row-sub">${r.salesCount} venta(s) · ${r.transfersIn} transferencia(s) recibidas · ${r.transfersOut} enviada(s) · ${r.shrinkageCount} merma(s) por ${money(r.shrinkageValue)} · ${money(r.inventoryValue)} en inventario</div>
+        </div>
+      `).join('')}
+  </div>`;
+}
 function renderCentros(){
   const sub = state.centersSubview || 'centros';
   return `
@@ -7511,6 +7683,7 @@ function renderCentros(){
       <button class="admin-tab ${sub==='auditorias'?'active':''}" onclick="state.centersSubview='auditorias';render()">Auditorías</button>
       <button class="admin-tab ${sub==='mermas'?'active':''}" onclick="state.centersSubview='mermas';render()">Mermas</button>
       <button class="admin-tab ${sub==='reabasto'?'active':''}" onclick="state.centersSubview='reabasto';render()">Reabasto${state.restockItems.length?` <span class="tab-badge">${state.restockItems.length}</span>`:''}</button>
+      <button class="admin-tab ${sub==='rendimiento'?'active':''}" onclick="state.centersSubview='rendimiento';render()">Rendimiento</button>
     </div>
     ${sub==='centros' ? renderCentrosList() : ''}
     ${sub==='transferencias' ? renderTransferencias() : ''}
@@ -7518,6 +7691,7 @@ function renderCentros(){
     ${sub==='auditorias' ? renderAuditorias() : ''}
     ${sub==='mermas' ? renderMermas() : ''}
     ${sub==='reabasto' ? renderRestockDemandPanel() + renderReabasto() : ''}
+    ${sub==='rendimiento' ? renderCenterPerformance() : ''}
     ${state.centerModal ? renderCenterModal() : ''}
   `;
 }
@@ -8939,6 +9113,7 @@ function exportOrdersCSV(){
   logAdminAction('exportacion', 'ventas', `${state.orders.length} registro(s)`);
 }
 function renderExportSubpanel(){
+  const cats = ['Todas', ...(state.settings.categories||DEFAULT_CATEGORIES).filter(c=>state.products.some(p=>p.cat===c))];
   return `
     <div class="panel-title">Exportar tus datos</div>
     <div class="note-box">Descarga tus datos en un archivo que se abre directo en Excel — como respaldo aparte de la plataforma, o para compartir con tu contador.</div>
@@ -8947,7 +9122,55 @@ function renderExportSubpanel(){
       <button class="btn-outline" onclick="exportOrdersCSV()">${icon('download',14)} Exportar ventas y pedidos (${state.orders.length})</button>
       <button class="btn-outline" onclick="exportCustomersCSV()">${icon('download',14)} Exportar clientes (${state.customers.length})</button>
     </div>
+    <div class="panel-title" style="margin-top:18px;">Catálogo en PDF</div>
+    <div class="note-box">Genera una página con foto, nombre y precio de tu catálogo (todo o por categoría) para compartir por WhatsApp con quien no navega bien la tienda en línea. Se abre una ventana lista para "Guardar como PDF" desde el diálogo de impresión del navegador.</div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px;">
+      <select id="catalog-pdf-cat" style="max-width:280px;">
+        ${cats.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <button class="btn-outline" style="max-width:280px;" onclick="printCatalogPDF(document.getElementById('catalog-pdf-cat').value)">${icon('printer',14)} Generar catálogo en PDF</button>
+    </div>
   `;
+}
+// Catálogo en PDF: mismo mecanismo que la hoja de preparación y el recibo de venta — una
+// ventana con "Imprimir" que ofrece "Guardar como PDF" en el diálogo del navegador, sin
+// depender de ninguna librería extra. Solo incluye productos visibles en la tienda (no los
+// ocultos), con foto, nombre y el precio al que de verdad se venden hoy (el promocional si
+// está activo).
+function printCatalogPDF(category){
+  const list = state.products.filter(p=>!p.hidden && (category==='Todas' || p.cat===category)).sort((a,b)=>a.name.localeCompare(b.name));
+  if(list.length===0){ showToast('No hay productos visibles en esa categoría'); return; }
+  const cardsHtml = list.map(p=>{
+    const img = (p.images&&p.images[0]) ? p.images[0] : '';
+    const price = productSellPrice(p);
+    const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
+    return `
+      <div style="break-inside:avoid;border:1px solid #ddd;border-radius:8px;padding:8px;text-align:center;">
+        ${img ? `<img src="${img}" style="width:100%;height:110px;object-fit:cover;border-radius:6px;margin-bottom:6px;">` : `<div style="width:100%;height:110px;background:#f2f2f2;border-radius:6px;margin-bottom:6px;"></div>`}
+        <div style="font-size:11.5px;font-weight:700;line-height:1.25;margin-bottom:3px;">${p.name}</div>
+        <div style="font-size:12.5px;font-weight:800;color:#5C1F49;">${hasPromo?`<s style="color:#999;font-weight:600;font-size:10.5px;">${money(p.price)}</s> `:''}${money(price)}</div>
+      </div>`;
+  }).join('');
+  const win = window.open('', '_blank');
+  if(!win){ showToast('Habilita las ventanas emergentes para generar el PDF'); return; }
+  win.document.write(`
+    <html><head><title>Catálogo ${category!=='Todas'?'— '+category:''}</title>
+    <meta charset="utf-8">
+    <style>
+      body{font-family:Arial,sans-serif;padding:20px;color:#222;}
+      h1{font-size:20px;margin:0 0 2px;}
+      .sub{color:#666;font-size:12.5px;margin-bottom:16px;}
+      .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+      @media print{ .no-print{display:none;} .grid{grid-template-columns:repeat(3,1fr);} }
+    </style></head><body>
+      <h1>${state.settings.storeName||'La Casa de los Placeres'}</h1>
+      <div class="sub">Catálogo${category!=='Todas'?' — '+category:''} · ${list.length} producto(s) · ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}</div>
+      <button class="no-print" onclick="window.print()" style="margin-bottom:14px;padding:10px 16px;font-size:14px;font-weight:700;">Imprimir / Guardar como PDF</button>
+      <div class="grid">${cardsHtml}</div>
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
 }
 function renderConfig(){
   if(state.configSubpanel) return renderConfigSubpanel(state.configSubpanel);
@@ -8992,6 +9215,32 @@ function renderOperativoSubpanel(){
       <input type="checkbox" ${s.ageGateEnabled!==false?'checked':''} onchange="state.settings.ageGateEnabled=this.checked;saveSettings();render()">
       <span>Pedir confirmación de mayoría de edad al entrar</span>
     </label>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Aceptación de términos en el primer pedido</div>
+    <div class="panel-sub">La primera vez que alguien hace un pedido en este celular, debe marcar una casilla aceptando el texto de abajo antes de poder confirmarlo. Ya no se le vuelve a pedir en pedidos siguientes desde el mismo celular.</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.termsEnabled!==false?'checked':''} onchange="state.settings.termsEnabled=this.checked;saveSettings();render()">
+      <span>Pedir aceptar términos en el primer pedido</span>
+    </label>
+    <div class="form-field" style="margin-top:8px;"><label>Texto de la casilla de aceptación</label>
+      <textarea id="set-terms-text" rows="3" oninput="state.settings.termsText=this.value">${s.termsText||''}</textarea>
+    </div>
+    <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Modo kiosko / vitrina</div>
+    <div class="panel-sub">Para una tablet en el mostrador de la tienda física: muestra el catálogo para que la clienta lo hojee (fotos, precios, existencias), pero sin botones de comprar ni carrito — cualquier compra la completa el personal desde el Punto de Venta. Abre el enlace de abajo una sola vez en esa tablet; queda activado en ese dispositivo aunque se apague o se recargue la página.</div>
+    <div class="form-field">
+      <label>Enlace para activar el modo vitrina en una tablet</label>
+      <input id="kiosk-link" readonly value="${kioskModeLink()}" onclick="this.select()">
+      <button class="btn-tertiary" style="margin-top:6px;" onclick="navigator.clipboard.writeText(document.getElementById('kiosk-link').value);showToast('Enlace copiado');">Copiar enlace</button>
+    </div>
+    <div class="form-field">
+      <label>Enlace para desactivarlo (regresar esa tablet a la tienda normal)</label>
+      <input id="kiosk-link-off" readonly value="${kioskModeLink(true)}" onclick="this.select()">
+      <button class="btn-tertiary" style="margin-top:6px;" onclick="navigator.clipboard.writeText(document.getElementById('kiosk-link-off').value);showToast('Enlace copiado');">Copiar enlace</button>
+    </div>
   </div>
   <div class="panel">
     <div class="panel-title">Datos operativos</div>
@@ -9266,6 +9515,28 @@ function renderProductModal(){
         <input type="checkbox" id="pf-iskit" ${p.isKit?'checked':''} onchange="toggleProductIsKit(this.checked)">
         Este producto es un kit o combo (se arma con otros productos ya existentes)
       </label>`}
+
+      ${!isNew && (p.variants&&p.variants.length) ? '' : `
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
+        <input type="checkbox" id="pf-mysterybox" ${p.isMysteryBox?'checked':''} onchange="toggleProductIsMysteryBox(this.checked)">
+        Este producto es una caja sorpresa (combo aleatorio armado al momento del pedido)
+      </label>`}
+      ${p.isMysteryBox ? `
+      <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
+        <div class="panel-sub" style="margin-top:0;">Al comprarla, el sistema elige al azar productos reales con existencia (de la categoría que elijas abajo) hasta completar el número de piezas indicado. La clienta no ve cuáles son hasta que le llega — a ti sí te aparecerán en el detalle del pedido, para que sepas exactamente qué empacar.</div>
+        <div class="two-col">
+          <div class="form-field"><label>Categoría de donde se sortean los productos</label>
+            <select id="pf-mystery-cat" onchange="state.productModal.mysteryCategory=this.value">
+              <option value="Cualquiera" ${(p.mysteryCategory||'Cualquiera')==='Cualquiera'?'selected':''}>Cualquiera (todo el catálogo)</option>
+              ${state.settings.categories.map(c=>`<option value="${c}" ${p.mysteryCategory===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field"><label>Número de productos que incluye</label>
+            <input id="pf-mystery-count" type="number" min="1" value="${p.mysteryItemCount||3}" oninput="state.productModal.mysteryItemCount=this.value">
+          </div>
+        </div>
+        <div class="panel-sub" style="margin-bottom:0;">El stock de esta caja se maneja como cualquier producto (ajústalo tú mismo abajo, en Inventario) — represéntalo como cuántas cajas puedes armar por ahora.</div>
+      </div>` : ''}
 
       <div class="form-section-label">Información principal</div>
       <div class="form-field"><label>Imágenes (máx. 5) — la primera es la portada</label>

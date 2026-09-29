@@ -448,6 +448,7 @@ async function loadData(){
   }
   state.loaded = true;
   captureWholesaleCodeFromURL();
+  captureKioskModeFromURL();
   render();
   const cssTag = document.getElementById('custom-css-injected');
   if(cssTag) cssTag.textContent = state.settings.customCss || '';
@@ -622,6 +623,28 @@ function activeWholesaleTier(){
   if(!code) return null;
   return (state.settings.wholesaleTiers||[]).find(t=>t.active && t.code===code) || null;
 }
+
+/* ============== MODO KIOSKO / VITRINA ==============
+   Pensado para una tablet en el mostrador de la tienda física: muestra el catálogo para que la
+   clienta lo hojee, pero sin botones de comprar ni carrito — solo puede ver productos y precios;
+   cualquier compra la hace el personal desde el Punto de Venta. Se activa con ?vitrina=1 en la
+   URL (queda guardado en ese dispositivo, no hace falta repetirlo cada vez que se prende la
+   tablet) y se apaga con ?vitrina=0. */
+const KIOSK_KEY = 'cdlp_kiosk_mode';
+function captureKioskModeFromURL(){
+  const params = new URLSearchParams(location.search);
+  const val = params.get('vitrina');
+  if(val==null) return;
+  try{
+    if(val==='0') localStorage.removeItem(KIOSK_KEY);
+    else localStorage.setItem(KIOSK_KEY,'1');
+  }catch(e){}
+  const url = new URL(location.href); url.searchParams.delete('vitrina');
+  history.replaceState({}, '', url.toString());
+}
+function isKioskMode(){
+  try{ return localStorage.getItem(KIOSK_KEY)==='1'; }catch(e){ return false; }
+}
 function isEligibleForTier(p, tier){
   if(!tier) return false;
   if(tier.scope==='all') return true;
@@ -687,7 +710,26 @@ async function applyCouponCode(){
       if(used.size >= coupon.maxUses){ state.couponError = 'Este cupón ya alcanzó su límite de usos'; render(); return; }
     }catch(e){ console.error(e); }
   }
+  // Aviso temprano para cupones de un solo uso por cliente: si ya tenemos su teléfono guardado
+  // en este celular (compró antes y guardó sus datos), se revisa de una vez. Si no lo tenemos
+  // todavía (primera visita, aún no llega al checkout), la revisión definitiva ocurre de todos
+  // modos al confirmar el pedido, en submitOrder — esto es solo para no hacerle perder el tiempo.
+  if(coupon.singleUsePerCustomer){
+    const savedProfile = loadCustomerProfile();
+    if(savedProfile && savedProfile.phone){
+      const usedByThisPhone = await couponUsedByPhone(code, savedProfile.phone);
+      if(usedByThisPhone){ state.couponError = 'Ya usaste este cupón antes'; render(); return; }
+    }
+  }
   state.appliedCoupon = coupon; state.couponInput = ''; showToast(`Cupón ${code} aplicado`); render();
+}
+async function couponUsedByPhone(code, phone){
+  const digits = (phone||'').replace(/\D/g,'');
+  if(!digits) return false;
+  try{
+    const snap = await db.collection('couponUsage').where('code','==',code).where('phone','==',digits).get();
+    return !snap.empty;
+  }catch(e){ console.error(e); return false; }
 }
 function removeCoupon(){ state.appliedCoupon=null; state.couponError=''; render(); }
 function couponDiscountedPrice(p, price){
@@ -934,6 +976,7 @@ function sendSlackNotification(text){
 }
 
 function addToCart(id, variantId){
+  if(isKioskMode()){ return; } // en modo vitrina no se puede agregar al carrito, solo hojear el catálogo
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); return; }
   const p = state.products.find(x=>x.id===id);
   if(!p){ return; }
@@ -1018,13 +1061,47 @@ function scheduleSearchMissCheck(v){
 }
 function onSearchInput(v){ scheduleSearchMissCheck(v); state.activeBestSellers=false; state.searchQuery=v; state.activeCat='Todos'; state.activeNeed=null; state.gridRenderLimit=20; render(); const i=document.getElementById('search-input'); if(i){ i.focus(); i.setSelectionRange(v.length,v.length);} }
 
+/* ============== CAJA SORPRESA / COMBO ALEATORIO ==============
+   Al confirmar el pedido (no antes, para que sea una sorpresa real hasta ese momento) se sortean
+   productos reales con existencia para completar cada caja — de la categoría que el producto
+   "caja sorpresa" tenga configurada (o de cualquier categoría, si se dejó en "Cualquiera"). La
+   clienta solo ve el nombre y precio de la caja en su carrito; el detalle de qué le tocó queda
+   guardado en el pedido para que el personal sepa exactamente qué empacar. */
+function pickMysteryBoxItems(box, qty){
+  const wantCategory = box.mysteryCategory && box.mysteryCategory!=='Cualquiera' ? box.mysteryCategory : null;
+  const pool = state.products.filter(p=>
+    p.id!==box.id && !p.isKit && !p.isMysteryBox && (p.stock==null || p.stock>0) &&
+    (!wantCategory || productCats(p).includes(wantCategory))
+  );
+  const count = Math.max(1, Number(box.mysteryItemCount)||3) * Math.max(1, qty||1);
+  if(!pool.length) return [];
+  const picks = {};
+  for(let i=0;i<count;i++){
+    const choice = pool[Math.floor(Math.random()*pool.length)];
+    picks[choice.id] = picks[choice.id] || {id:choice.id, name:choice.name, qty:0};
+    picks[choice.id].qty += 1;
+  }
+  return Object.values(picks);
+}
 async function submitOrder(formData){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); state.submittingOrder=false; render(); return; }
+  if(state.appliedCoupon && state.appliedCoupon.singleUsePerCustomer){
+    const alreadyUsed = await couponUsedByPhone(state.appliedCoupon.code, formData.phone);
+    if(alreadyUsed){
+      showToast('Ese cupón ya lo usaste antes con este teléfono — se quitó de tu pedido');
+      state.appliedCoupon = null; state.submittingOrder=false; render(); return;
+    }
+  }
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
     let price = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p);
     price = couponDiscountedPrice(p, price);
-    return {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
+    const line = {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
+    if(p.isMysteryBox){
+      const picks = pickMysteryBoxItems(p, qty);
+      if(picks.length) line.mysteryPicks = picks;
+    }
+    return line;
   });
   const buyXPayYSavings = buyXPayYAdjustment();
   if(buyXPayYSavings>0){
@@ -1043,7 +1120,7 @@ async function submitOrder(formData){
   clearTimeout(abandonedCartTimer);
   clearAbandonedCartDraft(formData.phone);
   if(couponCode){
-    try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString()}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+    try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString(), phone: (formData.phone||'').replace(/\D/g,'')}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
   }
   state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; render();
 
@@ -1065,8 +1142,13 @@ function handleCheckoutSubmit(){
   const notes = document.getElementById('ck-notes').value.trim();
   const remember = document.getElementById('ck-remember').checked;
   if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
+  if(needsTermsAcceptance()){
+    const termsEl = document.getElementById('ck-terms');
+    if(!termsEl || !termsEl.checked){ showToast('Debes aceptar los términos para continuar'); return; }
+  }
   if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
   else{ clearCustomerProfile(); }
+  if(needsTermsAcceptance()) markTermsAccepted();
   state.submittingOrder = true; render();
   submitOrder({name,phone,address,notes});
 }
@@ -1100,6 +1182,21 @@ function confirmAge(){
   render();
 }
 function declineAge(){ window.location.href = 'https://www.google.com'; }
+
+/* ============== ACEPTACIÓN DE TÉRMINOS EN EL PRIMER PEDIDO ==============
+   Igual que la mayoría de edad, se guarda en este mismo celular/navegador para no volver a
+   pedir la casilla en la próxima compra. Se puede apagar desde Configuración → Operativo. */
+const TERMS_KEY = 'cdlp_terms_accepted';
+function hasAcceptedTerms(){
+  try{ return localStorage.getItem(TERMS_KEY)==='1'; }
+  catch(e){ return true; } // si el almacenamiento está bloqueado, no atrapamos al cliente sin poder comprar
+}
+function markTermsAccepted(){
+  try{ localStorage.setItem(TERMS_KEY,'1'); }catch(e){}
+}
+function needsTermsAcceptance(){
+  return state.settings.termsEnabled!==false && !hasAcceptedTerms();
+}
 function renderAgeGate(){
   return `
   <div class="age-gate">
@@ -1305,9 +1402,10 @@ function renderProductDetailDrawer(){
   const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible';
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><div style="display:flex;gap:6px;align-items:center;">
+      ${isKioskMode() ? '' : `
       <button class="close-x" aria-label="Agregar a favoritos" onclick="toggleWishlist('${p.id}')" style="color:var(--rose);">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
-      </button>
+      </button>`}
       <button class="close-x" onclick="closeProductDetail()">${icon('x')}</button>
     </div></div>
     <div class="drawer-body" style="padding:0;">
@@ -1342,11 +1440,14 @@ function renderProductDetailDrawer(){
             `).join('')}
           </div>
         ` : ''}
+        ${p.isMysteryBox ? `<div class="note-box" style="margin-bottom:10px;">🎁 Es una caja sorpresa: incluye ${p.mysteryItemCount||3} producto(s) elegidos al azar${p.mysteryCategory&&p.mysteryCategory!=='Cualquiera'?` de ${p.mysteryCategory}`:''}. No se elige el contenido, ¡es parte de la sorpresa!</div>` : ''}
         ${p.desc ? `<div class="detail-desc">${p.desc}</div>` : ''}
       </div>
     </div>
     <div class="drawer-foot">
-      ${needsSelection ? `
+      ${isKioskMode() ? `
+        <div class="note-box" style="margin:0;">Pregunta por este producto en el mostrador.</div>
+      ` : needsSelection ? `
         <button class="btn-primary" disabled style="opacity:.5">Elige ${p.variantGroups.map(g=>g.name).join(' y ')}</button>
       ` : qty>0 ? `
         <div class="detail-qty-row">
@@ -1388,6 +1489,7 @@ function renderHeader(){
         ${cats.slice(0,6).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </nav>
       <div class="header-actions">
+        ${isKioskMode() ? `<span class="badge badge-best" style="background:var(--navy);">Vitrina</span>` : `
         <button class="icon-btn" onclick="openProfile()" aria-label="Mi perfil">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="${loadCustomerProfile()?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
@@ -1402,6 +1504,7 @@ function renderHeader(){
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
           ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}
         </button>
+        `}
       </div>
     </div>
     <div class="search-bar open" id="search-bar-mobile">
@@ -1644,15 +1747,17 @@ function renderProductCard(p, forceBest){
               ${isNewProduct(p) ? `<span class="badge badge-best" style="background:var(--teal);">Nuevo</span>` : ''}
               ${isBest ? `<span class="badge badge-best">Más vendido</span>` : ''}
               ${p.isKit ? `<span class="badge badge-best" style="background:var(--navy);">Combo</span>` : ''}
+              ${p.isMysteryBox ? `<span class="badge badge-best" style="background:var(--navy);">Caja sorpresa</span>` : ''}
               ${hasPromo ? `<span class="badge badge-best" style="background:var(--rose);">Oferta</span>` : ''}
               ${wholesaleEligible ? `<span class="badge badge-best" style="background:var(--navy);">${wholesaleUnlocked?'Mayoreo activo':'Mayoreo disponible'}</span>` : ''}
               ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
             </div>
           </div>
+          ${isKioskMode() ? '' : `
           <button class="fab-add" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();${hasVariants?`openProductDetail('${p.id}')`:`addToCart('${p.id}')`}">+</button>
           <button class="wishlist-fab" aria-label="Agregar a favoritos" onclick="event.stopPropagation();toggleWishlist('${p.id}')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
-          </button>
+          </button>`}
         </div>
         <div class="card-body">
           <div class="card-cat">${productCats(p).join(', ')}</div>
@@ -1894,6 +1999,11 @@ function renderCheckoutDrawer(){
         <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''} style="width:16px;height:16px;">
         Recordar mis datos en este celular para la próxima compra
       </label>
+      ${needsTermsAcceptance() ? `
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-top:10px;">
+        <input id="ck-terms" type="checkbox" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">
+        <span>${state.settings.termsText||'Acepto la política de privacidad y de devoluciones de esta tienda.'}</span>
+      </label>` : ''}
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
@@ -1940,7 +2050,7 @@ function renderStore(){
     });
   }
 
-  const showBar = cartCount()>0 && !state.cartOpen && !state.checkoutOpen;
+  const showBar = !isKioskMode() && cartCount()>0 && !state.cartOpen && !state.checkoutOpen;
   return `
   <div class="app">
     <div class="topbar">${renderHeader()}</div>
