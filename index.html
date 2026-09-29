@@ -618,7 +618,6 @@ const CART_ABANDON_REASONS = [
   'Los precios me parecieron altos',
   'Solo estaba viendo, sin intención de compra todavía',
   'El costo o tiempo de envío no me convenció',
-  'Preferí comprar directo en la tienda física',
   'Tuve un problema al llenar mis datos o pagar',
   'Otro motivo',
 ];
@@ -947,21 +946,22 @@ function parseCartKey(key){
   return {p, v};
 }
 function itemStock(p, v){ return v ? (v.stock||0) : (p ? p.stock : 0); }
-// Aviso antes de pasar al checkout: si el carrito no lleva ninguno de los productos que Ale
-// marcó como "para recordar ofrecer" (lubricante, condones, etc.) en el panel, se detiene un
-// momento para sugerirlos — igual que en el Punto de Venta, pero aquí lo ve la clienta
-// directamente, así que el tono es una sugerencia amable, no una instrucción a un cajero.
-function cartHasReminderProduct(){
+// Aviso antes de pasar al checkout: de la lista de productos que Ale marcó como "para recordar
+// ofrecer" (lubricante, condones, etc.) en el panel, se sugiere lo que todavía NO lleva en el
+// carrito — igual que en el Punto de Venta, pero aquí lo ve la clienta directamente, así que el
+// tono es una sugerencia amable, no una instrucción a un cajero.
+// Antes, si el carrito ya traía UNO solo de esos productos, se cancelaba el aviso por completo
+// y se perdía la oportunidad de sugerir los demás (por ejemplo: ya lleva condones, pero nunca se
+// le ofrece el lubricante porque "ya llevaba algo de la lista"). Ahora se detecta, producto por
+// producto, cuál ya lleva y cuál no, y solo se le sugiere algo DIFERENTE a lo que ya tiene.
+function reminderProductsNotInCart(){
   const reminderIds = state.settings.checkoutReminderProducts || [];
-  if(!reminderIds.length) return true;
-  return Object.keys(state.cart).some(key=>{
-    const {p} = parseCartKey(key);
-    return p && reminderIds.includes(p.id);
-  });
+  const inCartIds = new Set(Object.keys(state.cart).map(key=>parseCartKey(key).p).filter(Boolean).map(p=>p.id));
+  return reminderIds.filter(id=>!inCartIds.has(id)).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
 }
 function proceedToCheckout(){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); return; }
-  if(!state.checkoutReminderShown && !cartHasReminderProduct()){
+  if(!state.checkoutReminderShown && reminderProductsNotInCart().length){
     state.checkoutReminderOpen = true;
     render();
     return;
@@ -980,14 +980,18 @@ function continueCheckoutWithoutReminder(){
   state.cartOpen=false; state.checkoutOpen=true; trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
 }
 function renderCheckoutReminderDrawer(){
-  const items = (state.settings.checkoutReminderProducts||[]).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  // Solo se sugiere lo que todavía no lleva en el carrito (ver reminderProductsNotInCart), y
+  // ahora cada sugerencia se ve con su imagen para que sea más atractiva y fácil de reconocer,
+  // igual que en el resto de la tienda.
+  const items = reminderProductsNotInCart();
   return `
     <div class="drawer-head"><h2>¿Se te olvidó algo?</h2><button class="close-x" onclick="continueCheckoutWithoutReminder()">${icon('x')}</button></div>
     <div class="drawer-body">
       <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;">Muchas veces un lubricante hace toda la diferencia — aquí tienes algunas opciones, por si quieres agregar una:</p>
       ${items.map(p=>`
-        <button class="suggestion-add" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:12px 14px;margin-bottom:8px;border-radius:12px;background:var(--bg);border:1px solid var(--border);text-align:left;" onclick="addReminderProductToCart('${p.id}')">
-          <span>${p.name}</span><span style="font-weight:800;">${money(effectivePrice(p))}</span>
+        <button class="suggestion-add" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 12px;margin-bottom:8px;border-radius:12px;background:var(--bg);border:1px solid var(--border);text-align:left;" onclick="addReminderProductToCart('${p.id}')">
+          ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${p.images[0]}" alt="${p.name}" loading="lazy">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)};display:flex;align-items:center;justify-content:center;">${catIcon(p.cat)}</div>`}
+          <span style="flex:1;min-width:0;">${p.name}</span><span style="font-weight:800;flex-shrink:0;">${money(effectivePrice(p))}</span>
         </button>`).join('')}
     </div>
     <div class="drawer-foot"><button class="btn-primary" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button></div>
@@ -1220,7 +1224,6 @@ function handleCheckoutSubmit(){
   }
   if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
   else{ clearCustomerProfile(); }
-  if(needsTermsAcceptance()) markTermsAccepted();
   state.submittingOrder = true; render();
   submitOrder({name,phone,address,notes});
 }
@@ -1255,19 +1258,14 @@ function confirmAge(){
 }
 function declineAge(){ window.location.href = 'https://www.google.com'; }
 
-/* ============== ACEPTACIÓN DE TÉRMINOS EN EL PRIMER PEDIDO ==============
-   Igual que la mayoría de edad, se guarda en este mismo celular/navegador para no volver a
-   pedir la casilla en la próxima compra. Se puede apagar desde Configuración → Operativo. */
-const TERMS_KEY = 'cdlp_terms_accepted';
-function hasAcceptedTerms(){
-  try{ return localStorage.getItem(TERMS_KEY)==='1'; }
-  catch(e){ return true; } // si el almacenamiento está bloqueado, no atrapamos al cliente sin poder comprar
-}
-function markTermsAccepted(){
-  try{ localStorage.setItem(TERMS_KEY,'1'); }catch(e){}
-}
+/* ============== ACEPTACIÓN DE TÉRMINOS ==============
+   Antes solo se pedía una vez por celular (se guardaba en localStorage y ya no se volvía a
+   pedir). Ahora es obligatorio marcarla en CADA pedido para poder confirmarlo — que alguien
+   haya aceptado hace tiempo en ese mismo celular no prueba que fue esta persona ni que sigue de
+   acuerdo, así que cada compra pide su propia aceptación. Se puede apagar por completo desde
+   Configuración → Operativo. */
 function needsTermsAcceptance(){
-  return state.settings.termsEnabled!==false && !hasAcceptedTerms();
+  return state.settings.termsEnabled!==false;
 }
 function renderAgeGate(){
   return `
@@ -1479,7 +1477,7 @@ function renderProductDetailDrawer(){
         <svg width="18" height="18" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
       </button>`}
       ${isKioskMode() ? '' : `
-      <button class="close-x" aria-label="Comparar producto" onclick="toggleCompare('${p.id}')" style="${isComparing(p.id)?'color:var(--navy);':''}">
+      <button class="close-x" aria-label="Comparar producto" title="${isComparing(p.id)?'Quitar de comparar':'Agregar a comparar (elige 2 o más para ver lado a lado)'}" onclick="toggleCompare('${p.id}')" style="${isComparing(p.id)?'color:var(--navy);':''}">
         ${icon('columns')}
       </button>`}
       <button class="close-x" onclick="closeProductDetail()">${icon('x')}</button>
@@ -1748,15 +1746,26 @@ function applyPriceFilter(products){
   const max = (state.priceMax!=='' && state.priceMax!=null) ? Number(state.priceMax) : Infinity;
   return products.filter(p=>{ const price = automaticDiscountedPrice(p); return price>=min && price<=max; });
 }
-function setPriceFilter(which, val){ state[which] = val; state.gridRenderLimit = 20; render(); }
+// setPriceFilter fuerza un render() completo del catálogo en cada tecla (para reflejar el
+// filtro al instante), y ese render() reconstruye el input desde cero — eso le hacía perder el
+// foco y el cursor, así que al seguir escribiendo el dígito nuevo no caía donde ibas escribiendo
+// sino al final, dando la sensación de que el número "se reordenaba" solo. Se corrige igual que
+// ya se hace en el buscador (onSearchInput): después de renderizar, se vuelve a enfocar el mismo
+// input y se restaura la posición del cursor donde el usuario iba escribiendo.
+function setPriceFilter(which, val){
+  state[which] = val; state.gridRenderLimit = 20; render();
+  const id = which==='priceMin' ? 'price-min-input' : 'price-max-input';
+  const i = document.getElementById(id);
+  if(i){ i.focus(); const pos = String(val).length; i.setSelectionRange(pos,pos); }
+}
 function clearPriceFilter(){ state.priceMin=''; state.priceMax=''; state.gridRenderLimit=20; render(); }
 function renderPriceFilterRow(){
   return `
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;">
     <span style="font-size:12.5px;color:var(--ink-soft);font-weight:600;">Precio:</span>
-    <input id="price-min-input" type="number" min="0" inputmode="numeric" placeholder="Mín" value="${state.priceMin}" oninput="setPriceFilter('priceMin', this.value)" style="width:84px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+    <input id="price-min-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Mín" value="${state.priceMin}" oninput="setPriceFilter('priceMin', this.value.replace(/[^0-9]/g,''))" style="width:84px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
     <span style="color:var(--ink-soft);">—</span>
-    <input id="price-max-input" type="number" min="0" inputmode="numeric" placeholder="Máx" value="${state.priceMax}" oninput="setPriceFilter('priceMax', this.value)" style="width:84px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+    <input id="price-max-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Máx" value="${state.priceMax}" oninput="setPriceFilter('priceMax', this.value.replace(/[^0-9]/g,''))" style="width:84px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
     ${priceFilterActive() ? `<button class="btn-tertiary" onclick="clearPriceFilter()">Quitar filtro</button>` : ''}
   </div>`;
 }
@@ -2070,9 +2079,20 @@ function renderWishlistDrawer(){
 const COMPARE_MAX = 3;
 function isComparing(id){ return state.compareIds.includes(id); }
 function toggleCompare(id){
-  if(isComparing(id)){ state.compareIds = state.compareIds.filter(x=>x!==id); render(); return; }
+  // El icono de "comparar" (las dos barras junto al corazón de favoritos) no tenía ninguna
+  // confirmación visible al darle clic con un solo producto seleccionado — el único cambio era
+  // el color del icono, muy fácil de pasar por alto — por eso parecía que "no hacía nada". Ahora
+  // avisamos con un toast en cada clic para que quede claro qué pasó, y solo al llegar a 2
+  // productos aparece además la barra "Ver comparación" para abrir el comparativo.
+  if(isComparing(id)){
+    state.compareIds = state.compareIds.filter(x=>x!==id);
+    showToast('Quitado de comparar');
+    render(); return;
+  }
   if(state.compareIds.length >= COMPARE_MAX){ showToast(`Solo puedes comparar hasta ${COMPARE_MAX} productos a la vez`); return; }
-  state.compareIds = [...state.compareIds, id]; render();
+  state.compareIds = [...state.compareIds, id];
+  showToast(state.compareIds.length===1 ? 'Agregado a comparar. Elige otro producto para verlos lado a lado.' : `Agregado a comparar (${state.compareIds.length}/${COMPARE_MAX})`);
+  render();
 }
 function clearCompare(){ state.compareIds = []; state.compareOpen = false; render(); }
 function compareProducts(){ return state.compareIds.map(id=>state.products.find(p=>p.id===id)).filter(Boolean); }
@@ -2208,8 +2228,8 @@ function renderCheckoutDrawer(){
       </label>
       ${needsTermsAcceptance() ? `
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-soft);margin-top:10px;">
-        <input id="ck-terms" type="checkbox" style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">
-        <span>${state.settings.termsText||'Acepto la política de privacidad y de devoluciones de esta tienda.'}</span>
+        <input id="ck-terms" type="checkbox" required style="width:16px;height:16px;margin-top:2px;flex-shrink:0;">
+        <span>${state.settings.termsText||'Acepto la política de privacidad y de devoluciones de esta tienda.'} <strong>(obligatorio)</strong></span>
       </label>` : ''}
     </div>
     <div class="drawer-foot">
