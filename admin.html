@@ -4051,6 +4051,7 @@ function renderEstadisticas(){
       <button class="admin-tab ${sub==='carritoabandonado'?'active':''}" onclick="${goSub('carritoabandonado')}">Encuesta de carrito abandonado</button>
       <button class="admin-tab ${sub==='horaspico'?'active':''}" onclick="${goSub('horaspico')}">Horas pico por cajero</button>
       <button class="admin-tab ${sub==='embudoproducto'?'active':''}" onclick="${goSub('embudoproducto')}">Embudo por producto</button>
+      <button class="admin-tab ${sub==='mejorhoraredes'?'active':''}" onclick="${goSub('mejorhoraredes')}">Mejor hora para redes</button>
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -4067,6 +4068,7 @@ function renderEstadisticas(){
     ${sub==='carritoabandonado' ? renderStatsCarritoAbandonado() : ''}
     ${sub==='horaspico' ? renderStatsHorasPico() : ''}
     ${sub==='embudoproducto' ? renderStatsEmbudoProducto() : ''}
+    ${sub==='mejorhoraredes' ? renderStatsMejorHoraRedes() : ''}
   `;
 }
 const HEAT_DAY_LABELS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -6481,6 +6483,63 @@ function renderStatsEmbudoProducto(){
             <div class="row-sub">${r.views} vista(s) → ${r.adds} al carrito (${r.viewToCartPct}%) → ${r.purchases} comprado(s) (${r.cartToPurchasePct}% de lo agregado · ${r.overallPct}% del total de vistas)</div>
           </div>
         </div>`).join('')}
+  `;
+}
+/* ============== MEJOR HORA PARA PUBLICAR EN REDES ==============
+   Reutiliza el mismo tipo de cruce día-de-semana × hora que ya usa el mapa de calor de ventas,
+   pero sobre las VISITAS a la tienda (state.visits) en vez de las ventas — para saber cuándo
+   entra más gente a mirar el catálogo y, con eso, sugerir la mejor ventana para publicar en
+   redes (una publicación llega más fresca a la gente si coincide con cuándo de por sí ya suele
+   entrar a la tienda). No mide nada de Instagram/Facebook directamente — es una aproximación a
+   partir del tráfico que si se puede medir. */
+function computeVisitHeatmap(days){
+  days = days || 90;
+  const since = Date.now() - days*86400000;
+  const grid = Array.from({length:7}, ()=>Array(24).fill(0));
+  (state.visits||[]).forEach(v=>{
+    if(!v.date) return;
+    const d = new Date(v.date);
+    if(isNaN(d.getTime()) || d.getTime() < since) return;
+    const day = (d.getDay()+6)%7, hour = d.getHours();
+    grid[day][hour] += 1;
+  });
+  let max = 0, total = 0; const cells = [];
+  for(let di=0; di<7; di++) for(let h=0; h<24; h++){
+    const v = grid[di][h];
+    if(v>max) max = v;
+    total += v;
+    if(v>0) cells.push({day:di, hour:h, value:v});
+  }
+  cells.sort((a,b)=>b.value-a.value);
+  return {grid, max, total, cells, top: cells.slice(0,3)};
+}
+function renderStatsMejorHoraRedes(){
+  const days = state.socialTimingDays || 90;
+  const h = computeVisitHeatmap(days);
+  const withData = h.cells.map(c=>c.hour);
+  const minH = Math.min(9, ...(withData.length ? withData : [9]));
+  const maxH = Math.max(20, ...(withData.length ? withData : [20]));
+  const hours = []; for(let x=minH; x<=maxH; x++) hours.push(x);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Mejor hora para publicar en redes</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Cuándo entra más gente a tu tienda en línea, día por día y hora por hora — una aproximación honesta de cuándo conviene más publicar una promoción o historia, basada en tráfico real y no en reglas genéricas de internet.</div>
+    <div class="form-field" style="max-width:240px;"><select onchange="state.socialTimingDays=Number(this.value);render()">${[30,90,180].map(d=>`<option value="${d}" ${days===d?'selected':''}>Últimos ${d} días</option>`).join('')}</select></div>
+    ${h.total===0 ? `<div class="empty-state">Todavía no hay suficientes visitas registradas en este periodo.</div>` : `
+      <div class="note-box">Mejores momentos para publicar: ${h.top.map(c=>`<strong>${HEAT_DAY_LABELS[c.day]} ${c.hour}:00–${c.hour+1}:00</strong> (${c.value} visita${c.value===1?'':'s'})`).join(' · ')}</div>
+      <div style="overflow-x:auto;">
+        <table style="border-collapse:separate;border-spacing:3px;">
+          <thead><tr><th></th>${hours.map(x=>`<th style="font-size:10.5px;font-weight:600;color:var(--ink-soft);">${x}h</th>`).join('')}</tr></thead>
+          <tbody>
+            ${HEAT_DAY_LABELS.map((lbl,di)=>`<tr><th style="text-align:right;padding-right:6px;font-size:12px;">${lbl}</th>${hours.map(x=>{
+              const v = h.grid[di][x];
+              const alpha = h.max>0 ? v/h.max : 0;
+              const bg = v>0 ? `rgba(153,52,119,${(0.15+alpha*0.85).toFixed(2)})` : 'var(--bg)';
+              const color = alpha>0.55 ? '#fff' : 'var(--ink)';
+              return `<td title="${lbl} ${x}:00 — ${v} visita(s)" style="min-width:34px;height:30px;border-radius:6px;background:${bg};color:${color};text-align:center;font-size:10.5px;font-weight:700;">${v>0?v:''}</td>`;
+            }).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
   `;
 }
 function renderStatsBusquedas(){
