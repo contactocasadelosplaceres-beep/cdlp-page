@@ -6349,14 +6349,25 @@ function computeRestockDemand(){
     return {...g, product:p, stock: p ? (p.stock||0) : 0};
   }).sort((a,b)=>b.people.length-a.people.length);
 }
+// Igual que con los carritos abandonados: un aviso ya contactado hace tiempo (o pendiente desde
+// hace mucho y que ya ni vale la pena seguir mostrando) no se borra solo — se ofrece un botón
+// para archivar en bloque todo lo de más de 60 días, para que la lista no se llene de avisos
+// viejos que ya se resolvieron o que la persona seguramente ya ni recuerda haber pedido.
+const RESTOCK_REQUEST_STALE_MS = 60*24*60*60*1000;
+function staleRestockRequests(){
+  const cutoff = Date.now() - RESTOCK_REQUEST_STALE_MS;
+  return state.restockRequests.filter(r=>new Date(r.date||0).getTime() < cutoff);
+}
 function renderRestockDemandPanel(){
   const demand = computeRestockDemand();
-  if(!demand.length) return '';
+  const stale = staleRestockRequests();
+  if(!demand.length && !stale.length) return '';
   return `
   <div class="panel">
     <div class="panel-title">Clientes esperando producto</div>
     <div class="panel-sub">Personas que dejaron su WhatsApp para que les avises cuando llegue. Arriba están los que más gente espera.</div>
-    ${demand.map(g=>`
+    ${stale.length ? `<div class="note-box" style="margin-bottom:10px;">${stale.length} aviso${stale.length===1?'':'s'} de más de 60 días. <button class="btn-tertiary" onclick="archiveStaleRestockRequests()">Archivar los viejos</button></div>` : ''}
+    ${demand.length ? demand.map(g=>`
       <div class="list-row" style="flex-wrap:wrap;">
         <div class="row-main">
           <div class="row-title">${g.product ? g.product.name : g.name}</div>
@@ -6366,7 +6377,7 @@ function renderRestockDemandPanel(){
           ${g.stock<=0 && g.product ? `<button class="btn-outline" onclick="addProductToRestock('${g.productId}', ${Math.max(g.people.length,3)})">${icon('package',14)} Agregar a reabasto</button>` : ''}
           <button class="btn-primary" style="width:auto;padding:8px 14px;" onclick="state.notifyModalProductId='${g.productId}';render()">Avisar a ${g.people.length}</button>
         </div>
-      </div>`).join('')}
+      </div>`).join('') : `<div class="empty-state">Nadie pendiente por avisar en este momento.</div>`}
   </div>`;
 }
 async function markRequestNotified(id){
@@ -6381,10 +6392,38 @@ async function markRequestNotified(id){
   }catch(e){ console.error('No se pudo marcar como avisado', e); }
   render();
 }
+// Botón manual de "ya se contactó" — independiente del enlace de WhatsApp de arriba. Antes solo
+// se marcaba como avisado automáticamente al abrir ese enlace, así que si Ale le avisaba a
+// alguien por otro medio (llamada, en persona, un mensaje directo fuera de este botón) no había
+// forma de reflejarlo aquí sin pasar por WhatsApp igual.
+async function markRequestContactedManually(id){
+  const r = state.restockRequests.find(x=>x.id===id); if(!r || r.notified) return;
+  try{
+    await db.collection('restockRequests').doc(id).set({notified:true, notifiedAt:new Date().toISOString(), notifiedManually:true}, {merge:true});
+    r.notified = true; r.notifiedAt = new Date().toISOString(); r.notifiedManually = true;
+  }catch(e){ console.error('No se pudo marcar como contactado', e); showToast('No se pudo marcar como contactado'); }
+  render();
+}
 async function removeRestockRequest(id){
   if(!confirm('¿Quitar a esta persona de la lista?')) return;
   try{ await db.collection('restockRequests').doc(id).delete(); state.restockRequests = state.restockRequests.filter(x=>x.id!==id); }
   catch(e){ console.error(e); showToast('No se pudo quitar'); }
+  render();
+}
+async function archiveStaleRestockRequests(){
+  const stale = staleRestockRequests();
+  if(stale.length===0) return;
+  if(!confirm(`¿Archivar ${stale.length} aviso(s) de más de 60 días? Esto los elimina de la lista — no se puede deshacer.`)) return;
+  try{
+    for(let i=0;i<stale.length;i+=400){
+      const batch = db.batch();
+      stale.slice(i,i+400).forEach(r=>batch.delete(db.collection('restockRequests').doc(r.id)));
+      await batch.commit();
+    }
+  }catch(e){ console.error('No se pudieron archivar los avisos de reabasto', e); showToast('No se pudo archivar'); return; }
+  const staleIds = new Set(stale.map(r=>r.id));
+  state.restockRequests = state.restockRequests.filter(r=>!staleIds.has(r.id));
+  showToast(`${stale.length} aviso(s) archivado(s)`);
   render();
 }
 function renderNotifyModal(){
@@ -6396,12 +6435,15 @@ function renderNotifyModal(){
   return `
   <div class="modal-overlay"><div class="modal" style="max-width:460px;max-height:80vh;overflow-y:auto;">
     <h3>Avisar: ${p ? p.name : ''}</h3>
-    <p class="panel-sub">Cada botón abre WhatsApp con el mensaje ya escrito. Después de abrirlo, esa persona se marca como avisada.</p>
+    <p class="panel-sub">El botón de WhatsApp abre el mensaje ya escrito y marca a esa persona como contactada en cuanto lo abres. Si ya le avisaste por otro medio, usa "Ya se contactó" en su lugar.</p>
     ${people.length===0 ? `<div class="empty-state">Ya avisaste a todos.</div>` : people.map(r=>{
       const msg = `Hola ${r.name||''}! 💕 Te escribimos de ${storeName}: ya llegó "${(r.productName||'').replace(/"/g,'')}", el producto que querías. Aquí lo puedes ver: ${link}`;
-      return `<div class="list-row"><div class="row-main"><div class="row-title">${r.name||'Sin nombre'}</div><div class="row-sub">${r.phone}</div></div>
+      return `<div class="list-row" style="flex-wrap:wrap;"><div class="row-main"><div class="row-title">${r.name||'Sin nombre'}</div><div class="row-sub">${r.phone}</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <a class="btn-primary" style="width:auto;padding:8px 14px;text-decoration:none;" href="${waLink(waNumberMX(r.phone), msg)}" target="_blank" onclick="setTimeout(()=>markRequestNotified('${r.id}'),400)">WhatsApp</a>
-        <button class="icon-btn danger" title="Quitar de la lista" onclick="removeRestockRequest('${r.id}')">${icon('trash',14)}</button></div>`; }).join('')}
+        <button class="btn-outline" onclick="markRequestContactedManually('${r.id}')">Ya se contactó</button>
+        <button class="icon-btn danger" title="Quitar de la lista" onclick="removeRestockRequest('${r.id}')">${icon('trash',14)}</button>
+        </div></div>`; }).join('')}
     <div class="modal-actions"><button class="btn-cancel" style="flex:1;" onclick="state.notifyModalProductId=null;render()">Cerrar</button></div>
   </div></div>`;
 }
@@ -8815,19 +8857,34 @@ function renderAsistenteIA(){
 }
 
 /* ============== DISEÑO (secciones de la página de inicio) ============== */
-const DESIGN_SUBPANELS = [
-  {key:"brand", icon:icon('tag'), label:"Nombre y logo de la tienda"},
-  {key:"appearance", icon:icon('palette'), label:"Colores y tipografía"},
-  {key:"hero", icon:icon('message-circle'), label:"Mensaje de bienvenida"},
-  {key:"header", icon:icon('arrow-up'), label:"Encabezado"},
-  {key:"categories", icon:icon('folder'), label:"Categorías principales"},
-  {key:"promo", icon:icon('image'), label:"Banner promocional"},
-  {key:"featured", icon:icon('star'), label:"Productos destacados"},
-  {key:"testimonials", icon:icon('message-square'), label:"Testimonios"},
-  {key:"faq", icon:icon('help-circle'), label:"Preguntas frecuentes sobre discreción"},
-  {key:"footer", icon:icon('arrow-down'), label:"Pie de página"},
-  {key:"css", icon:icon('code'), label:"Código avanzado (CSS)"},
+// Antes esto era una sola lista plana de 11 opciones, sin ningún orden claro (una mezcla de
+// identidad de marca, contenido de la página y una opción técnica avanzada, todo al mismo
+// nivel) — costaba encontrar qué tocar. Ahora se agrupan por lo que de verdad son, y dentro de
+// "Contenido de tu página de inicio" van en el mismo orden en que aparecen al bajar por la
+// tienda (encabezado → bienvenida → categorías → banner → destacados → testimonios → preguntas
+// frecuentes → pie de página), para que el orden de la lista coincida con lo que se ve.
+const DESIGN_SUBPANEL_GROUPS = [
+  { title: "Identidad de marca", items: [
+    {key:"brand", icon:icon('tag'), label:"Nombre y logo de la tienda"},
+    {key:"appearance", icon:icon('palette'), label:"Colores y tipografía"},
+  ]},
+  { title: "Contenido de tu página de inicio", items: [
+    {key:"header", icon:icon('arrow-up'), label:"Encabezado"},
+    {key:"hero", icon:icon('message-circle'), label:"Mensaje de bienvenida"},
+    {key:"categories", icon:icon('folder'), label:"Categorías principales"},
+    {key:"promo", icon:icon('image'), label:"Banner promocional"},
+    {key:"featured", icon:icon('star'), label:"Productos destacados"},
+    {key:"testimonials", icon:icon('message-square'), label:"Testimonios"},
+    {key:"faq", icon:icon('help-circle'), label:"Preguntas frecuentes sobre discreción"},
+    {key:"footer", icon:icon('arrow-down'), label:"Pie de página"},
+  ]},
+  { title: "Avanzado", items: [
+    {key:"css", icon:icon('code'), label:"Código avanzado (CSS)"},
+  ]},
 ];
+// Lista plana derivada de los grupos de arriba — algunas funciones (como buscar la etiqueta de
+// un subpanel) siguen recorriendo todas las opciones sin que les importe el agrupado.
+const DESIGN_SUBPANELS = DESIGN_SUBPANEL_GROUPS.flatMap(g=>g.items);
 let sectionDragIdx = null;
 
 function renderDiseno(){
@@ -8839,15 +8896,16 @@ function renderDiseno(){
       <div class="panel-sub">Actívalas, ocúltalas y ordénalas (arrastra o usa las flechas). Se reflejan en tu tienda en cuanto las cambias.</div>
       ${state.settings.sections.map((s,idx)=>renderSectionRow(s,idx)).join('')}
     </div>
+    ${DESIGN_SUBPANEL_GROUPS.map(g=>`
     <div class="panel">
-      <div class="panel-title">Marca, colores y contenido</div>
-      ${DESIGN_SUBPANELS.map(sp=>`
+      <div class="panel-title">${g.title}</div>
+      ${g.items.map(sp=>`
         <div class="subpanel-item" onclick="state.designSubpanel='${sp.key}';render()">
           <span>${sp.icon}&nbsp;&nbsp;${sp.label}</span>
           <span class="chev">›</span>
         </div>
       `).join('')}
-    </div>
+    </div>`).join('')}
   `;
 }
 function renderSectionRow(s, idx){
