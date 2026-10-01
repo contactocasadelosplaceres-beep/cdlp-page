@@ -597,7 +597,7 @@ let state = {
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   suppliers:[], restockItems:[], newSupplierInput:"", restockAddSearch:"", restockPickedProductId:null, restockPickedQty:"", restockPickedSupplierId:"",
   wholesaleModal:null, wholesaleProductSearch:"",
-  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas",inactive:false,tag:"Todas"},
+  customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas",inactive:false,tag:"Todas"}, customerMoreFiltersOpen:false,
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   couponModal:null, couponProductSearch:"", couponUsage:[],
   promoModal:null, promoProductSearch:"", promoProductSearch2:"",
@@ -610,7 +610,7 @@ let state = {
   histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
   newOrderCount:0, lastOrderCheck:null, healthOpen:null, healthShowDismissed:false,
   promoBannerEditId:null, promoBannerDraft:null,
-  storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null,
+  storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null, selectedMessages:[], showArchivedMessages:false,
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
   productHistoryOpen:false, productHistoryProductId:null, productHistoryLoading:false, productHistoryItems:[],
@@ -2315,8 +2315,8 @@ async function saveProduct(p){
     // Si este producto es componente de algún kit, el guardado pudo haber cambiado su
     // existencia (o el kit se acaba de crear con él) — refresca el stock de esos kits.
     recomputeKitStocksFor([p.id]);
-  }catch(e){ console.error(e); showToast('No se pudo guardar (revisa el tamaño de las imágenes)'); return; }
-  state.productModal=null; showToast('Producto guardado'); render();
+  }catch(e){ console.error(e); state.savingProduct = false; showToast('No se pudo guardar (revisa el tamaño de las imágenes)'); render(); return; }
+  state.savingProduct = false; state.productModal=null; showToast('Producto guardado'); render();
 }
 async function generateMissingSKUs(){
   const missing = state.products.filter(p=>!p.sku);
@@ -3439,7 +3439,10 @@ function computeMetrics(){
   const totalRevenue = valid.reduce((s,o)=>s+o.total,0);
   const avgOrder = valid.length ? totalRevenue/valid.length : 0;
   const avgItems = valid.length ? valid.reduce((s,o)=>s+o.items.reduce((a,it)=>a+it.qty,0),0)/valid.length : 0;
-  const pending = state.orders.filter(o=>['Nuevo','Preparando','En camino'].includes(o.status)).length;
+  const pendingNuevo = state.orders.filter(o=>o.status==='Nuevo').length;
+  const pendingPreparando = state.orders.filter(o=>o.status==='Preparando').length;
+  const pendingCamino = state.orders.filter(o=>o.status==='En camino').length;
+  const pending = pendingNuevo + pendingPreparando + pendingCamino;
   const lowStock = state.products.filter(p=>p.stock<=(p.lowStockThreshold>0?p.lowStockThreshold:3));
   const cancelRate = state.orders.length ? Math.round((cancelled.length/state.orders.length)*100) : 0;
 
@@ -3532,7 +3535,7 @@ function computeMetrics(){
     dayOfMonth: now.getDate(),
   };
 
-  return {totalRevenue,avgOrder,avgItems,pending,lowStock,cancelRate,uniqueCustomers,repeatCustomers,repeatRate,topCustomers,
+  return {totalRevenue,avgOrder,avgItems,pending,pendingNuevo,pendingPreparando,pendingCamino,lowStock,cancelRate,uniqueCustomers,repeatCustomers,repeatRate,topCustomers,
     dayRevenue,monthRevenue,revDelta,catUnitRows,catRevRows,maxCatUnit,maxCatRev,topByUnits,topByRevenue,noSales,
     weekdayNames,weekdayAvg,bestDayIdx,inventoryValue,invRows,maxInv,statusCounts,totalOrders:state.orders.length,expiringOrExpired,
     monthComparison};
@@ -3824,7 +3827,7 @@ function computeBusinessHealth(){
   if(oldestOpenDays>=1) issues.push({level:'rojo', text:`Hay una caja abierta desde hace ${Math.floor(oldestOpenDays)} día(s) — revísala en Caja.`});
   const m = computeMetrics();
   if(m.lowStock.length>0) issues.push({level:'ambar', text:`${m.lowStock.length} producto(s) con poco stock.`});
-  const unansweredOld = state.storeMessages.filter(msg=>(msg.status||'nuevo')!=='respondido' && msg.date && (Date.now()-new Date(msg.date).getTime())>24*60*60000);
+  const unansweredOld = state.storeMessages.filter(msg=>!msg.archived && (msg.status||'nuevo')!=='respondido' && msg.date && (Date.now()-new Date(msg.date).getTime())>24*60*60000);
   if(unansweredOld.length>0) issues.push({level:'ambar', text:`${unansweredOld.length} mensaje(s) sin responder hace más de 24 horas.`});
   const g = computeMonthProgress();
   if(g.goal>0 && !g.onTrack) issues.push({level:'ambar', text:'Vas un poco atrás de tu meta de venta de este mes.'});
@@ -3950,7 +3953,9 @@ function renderResumen(){
       <div class="stat-card primary"><div class="stat-label">${icon('dollar-sign',13)} Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('bar-chart',13)} Ingresos 7 días vs. semana previa</div><div class="stat-value">${money(m.dayRevenue.reduce((s,d)=>s+d.value,0))}</div><div class="stat-delta ${m.revDelta>=0?'up':'down'}">${m.revDelta>=0?'▲':'▼'} ${Math.abs(m.revDelta)}%</div></div>
       <div class="stat-card"><div class="stat-label">${icon('receipt',13)} Ticket promedio</div><div class="stat-value">${money(m.avgOrder)}</div></div>
-      <div class="stat-card"><div class="stat-label">${icon('bag',13)} Pedidos activos</div><div class="stat-value">${m.pending}</div></div>
+      <div class="stat-card" style="cursor:pointer;" onclick="state.adminTab='pedidos';state.orderStatusFilter='Nuevo';render()"><div class="stat-label">${icon('bag',13)} Nuevos</div><div class="stat-value">${m.pendingNuevo}</div></div>
+      <div class="stat-card" style="cursor:pointer;" onclick="state.adminTab='pedidos';state.orderStatusFilter='Preparando';render()"><div class="stat-label">${icon('bag',13)} Preparando</div><div class="stat-value">${m.pendingPreparando}</div></div>
+      <div class="stat-card" style="cursor:pointer;" onclick="state.adminTab='pedidos';state.orderStatusFilter='En camino';render()"><div class="stat-label">${icon('bag',13)} En camino</div><div class="stat-value">${m.pendingCamino}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('users',13)} Clientes distintos</div><div class="stat-value">${m.uniqueCustomers}</div></div>
       <div class="stat-card"><div class="stat-label">${icon('alert-triangle',13)} Productos con poco stock</div><div class="stat-value">${m.lowStock.length}</div></div>
       <div class="stat-card" style="cursor:pointer;" onclick="state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"><div class="stat-label">${icon('alert-triangle',13)} Por caducar o caducado</div><div class="stat-value">${m.expiringOrExpired}</div></div>
@@ -5663,8 +5668,26 @@ async function deleteStoreMessage(id){
     showToast('Mensaje eliminado'); render();
   }catch(e){ console.error(e); showToast('No se pudo eliminar el mensaje'); }
 }
+function toggleMessageSelected(id){
+  const i = state.selectedMessages.indexOf(id);
+  if(i>=0) state.selectedMessages.splice(i,1); else state.selectedMessages.push(id);
+  render();
+}
+// Archivar es reversible (a diferencia de eliminar): el mensaje simplemente deja de aparecer en
+// la bandeja principal, pero se puede traer de vuelta con "Ver archivados" en cualquier momento.
+async function archiveMessages(ids, archived){
+  if(!ids.length) return;
+  try{
+    await Promise.all(ids.map(id=>db.collection('storeMessages').doc(id).update({archived})));
+    ids.forEach(id=>{ const m = state.storeMessages.find(x=>x.id===id); if(m) m.archived = archived; });
+    state.selectedMessages = [];
+    showToast(archived ? `${ids.length} mensaje${ids.length===1?'':'s'} archivado${ids.length===1?'':'s'}` : `${ids.length} mensaje${ids.length===1?'':'s'} restaurado${ids.length===1?'':'s'}`);
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo actualizar los mensajes'); }
+}
 function filteredStoreMessages(){
   let list = [...(state.storeMessages||[])].sort((a,b)=> new Date(b.date||0) - new Date(a.date||0));
+  list = list.filter(m=> state.showArchivedMessages ? !!m.archived : !m.archived);
   if(state.messageStatusFilter && state.messageStatusFilter!=='Todos'){
     list = list.filter(m=>(m.status||'nuevo')===state.messageStatusFilter);
   }
@@ -5680,7 +5703,9 @@ function renderMensajes(){
     {key:'respondido', label:'Respondidos'},
   ];
   const list = filteredStoreMessages();
-  const unansweredOld = state.storeMessages.filter(m=>(m.status||'nuevo')!=='respondido' && m.date && (Date.now()-new Date(m.date).getTime())>24*60*60000);
+  const unansweredOld = state.storeMessages.filter(m=>!m.archived && (m.status||'nuevo')!=='respondido' && m.date && (Date.now()-new Date(m.date).getTime())>24*60*60000);
+  const archivedCount = state.storeMessages.filter(m=>m.archived).length;
+  const selectedOnScreen = state.selectedMessages.filter(id=>list.some(m=>m.id===id));
   return `
     <div class="note-box" style="margin-bottom:14px;">Los clientes dejan estos mensajes desde el enlace "Buzón de sugerencias" en el pie de página de tu tienda. Si dejaron teléfono, puedes responder directo por WhatsApp.</div>
     ${unansweredOld.length>0 ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;">${icon('alert-triangle',14)} ${unansweredOld.length} mensaje(s) llevan más de 24 horas sin marcarse como respondidos.</div>` : ''}
@@ -5692,6 +5717,20 @@ function renderMensajes(){
         <span>Agrupar por cliente</span>
       </label>
     </div>
+    <label class="checkbox-row" style="margin-bottom:12px;">
+      <input type="checkbox" ${state.showArchivedMessages?'checked':''} onchange="state.showArchivedMessages=this.checked;state.selectedMessages=[];resetShowMore('messagesShowMore');render()">
+      <span>Ver archivados${archivedCount>0?` (${archivedCount})`:''}</span>
+    </label>
+    ${selectedOnScreen.length>0 ? `
+    <div class="note-box" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+      <span>${selectedOnScreen.length} seleccionado${selectedOnScreen.length===1?'':'s'}</span>
+      <div style="display:flex;gap:8px;">
+        ${state.showArchivedMessages
+          ? `<button class="btn-tertiary" onclick='archiveMessages(${JSON.stringify(selectedOnScreen)}, false)'>${icon('arrow-up',14)} Restaurar</button>`
+          : `<button class="btn-tertiary" onclick='archiveMessages(${JSON.stringify(selectedOnScreen)}, true)'>${icon('folder',14)} Archivar</button>`}
+        <button class="btn-outline" onclick="state.selectedMessages=[];render()">Cancelar</button>
+      </div>
+    </div>` : ''}
     <div class="panel-title" style="margin-bottom:12px;">Mensajes (${list.length})</div>
     ${list.length===0 ? `<div class="empty-state">No hay mensajes en este filtro.</div>` :
       state.groupMessagesByCustomer ? renderMessagesGrouped(list) :
@@ -5703,6 +5742,7 @@ function renderMessageRow(m){
   const status = m.status||'nuevo';
   return `
     <div class="list-row" style="align-items:flex-start;">
+      <input type="checkbox" style="margin-top:4px;" ${state.selectedMessages.includes(m.id)?'checked':''} onchange="toggleMessageSelected('${m.id}')">
       <div class="row-main">
         <div class="row-title">${m.name||'Sin nombre'} <span class="status-badge" style="background:var(--teal);color:#2B1620;">${MESSAGE_TYPE_LABEL[m.type]||'Otro'}</span></div>
         <div class="row-sub">${m.date ? new Date(m.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''} ${m.phone?`· ${m.phone}`:''}</div>
@@ -5717,6 +5757,7 @@ function renderMessageRow(m){
         ${wa ? `<a class="icon-btn" href="${wa}" target="_blank" title="Responder por WhatsApp" onclick="updateMessageStatus('${m.id}','respondido');logStoreMessageReply('${m.id}')">
           <svg width="15" height="15" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
         </a>` : ''}
+        <button class="icon-btn" title="${m.archived?'Restaurar':'Archivar'}" onclick="archiveMessages(['${m.id}'], ${m.archived?'false':'true'})">${icon(m.archived?'arrow-up':'folder')}</button>
         <button class="icon-btn danger" onclick="deleteStoreMessage('${m.id}')">${icon('trash')}</button>
       </div>
     </div>
@@ -7366,6 +7407,14 @@ function renderClientes(){
       <input type="checkbox" ${state.customerFilters.inactive?'checked':''} onchange="state.customerFilters.inactive=this.checked;resetShowMore('customersShowMore');render()">
       <span>Solo clientes que dejaron de comprar (2+ compras antes, nada en los últimos 60 días)</span>
     </label>
+    ${(()=>{
+      const f = state.customerFilters;
+      const activeCount = ['country','state','city','tag'].filter(k=>f[k] && f[k]!=='Todos' && f[k]!=='Todas').length;
+      return `
+    <button class="btn-outline" style="margin-bottom:16px;" onclick="state.customerMoreFiltersOpen=!state.customerMoreFiltersOpen;render()">
+      ${state.customerMoreFiltersOpen?'▲':'▼'} Más filtros${activeCount>0?` (${activeCount} activo${activeCount>1?'s':''})`:''}
+    </button>
+    ${state.customerMoreFiltersOpen ? `
     <div class="two-col" style="margin-bottom:16px;">
       <select onchange="state.customerFilters.country=this.value;resetShowMore('customersShowMore');render()">
         <option>Todos</option>${distinctCustomerValues('country').map(v=>`<option ${state.customerFilters.country===v?'selected':''}>${v}</option>`).join('')}
@@ -7385,7 +7434,8 @@ function renderClientes(){
       <select onchange="state.customerFilters.tag=this.value;resetShowMore('customersShowMore');render()">
         <option>Todas</option>${distinctCustomerTags().map(t=>`<option ${state.customerFilters.tag===t?'selected':''}>${t}</option>`).join('')}
       </select>
-    </div>` : ''}
+    </div>` : ''}` : ''}`;
+    })()}
     <div class="panel-title" style="margin-bottom:12px;">Clientes (${list.length})</div>
     ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan.</div>` :
       (()=>{ const {shown, remaining} = showMoreSlice('customersShowMore', list); return shown.map(c=>`
@@ -10376,8 +10426,8 @@ function renderProductModal(){
       ${renderVariantsEditor(p)}
 
       <div class="modal-actions">
-        <button class="btn-cancel" onclick="state.productModal=null;render()">Cancelar</button>
-        <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')">Guardar</button>
+        <button class="btn-cancel" onclick="state.productModal=null;render()" ${state.savingProduct?'disabled':''}>Cancelar</button>
+        <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')" ${state.savingProduct?'disabled':''}>${state.savingProduct?'Guardando…':'Guardar'}</button>
       </div>
     </div>
   </div>`;
@@ -10616,6 +10666,11 @@ function setVariantField(variantId, field, value){
   v[field] = (field==='stock'||field==='priceOverride') ? Math.max(0, Number(value)||0) : value;
 }
 function handleSaveProduct(existingId){
+  // Evita el doble-guardado: un doble click o un dedo lento en pantallas táctiles podía disparar
+  // esta función dos veces antes de que la primera terminara, creando el producto duplicado (o
+  // registrando el cambio dos veces en la bitácora) cuando se trata de uno nuevo.
+  if(state.savingProduct) return;
+  state.savingProduct = true; render();
   const name = document.getElementById('pf-name').value.trim();
   const sku = document.getElementById('pf-sku').value.trim();
   const location = document.getElementById('pf-location').value.trim();
@@ -10627,7 +10682,7 @@ function handleSaveProduct(existingId){
   const cost = Number(document.getElementById('pf-cost').value)||0;
   const desc = document.getElementById('pf-desc').value.trim();
   const hidden = document.getElementById('pf-hidden').checked;
-  if(!name){ showToast('Ponle un nombre al producto'); return; }
+  if(!name){ state.savingProduct = false; showToast('Ponle un nombre al producto'); render(); return; }
   const categories = (state.productModal.categories && state.productModal.categories.length) ? state.productModal.categories : [state.settings.categories[0]];
   const cat = categories[0];
   const stockByCenter = state.productModal.stockByCenter || {};

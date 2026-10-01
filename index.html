@@ -121,7 +121,7 @@
 
   /* ===== GENERIC SECTION ===== */
   .section-block{padding:32px 20px 6px;}
-  .section-heading{font-family:var(--font-heading);font-size:20px;font-weight:800;color:var(--primary-deep);}
+  .section-heading{font-family:var(--font-heading);font-size:20px;font-weight:800;color:var(--primary-deep);margin:0;}
   .section-sub{color:var(--ink-soft);font-size:13px;margin-top:4px;}
   .section-head-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px;}
 
@@ -147,12 +147,12 @@
   .badge{font-size:9.5px;font-weight:700;padding:5px 9px;border-radius:7px;letter-spacing:0.02em;color:#fff;}
   .badge-stock{background:rgba(43,22,32,0.78);}
   .badge-best{background:var(--amber);color:#3a2200;}
-  .fab-add{position:absolute;bottom:-18px;right:10px;width:42px;height:42px;border-radius:50%;background:var(--primary);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -6px rgba(110,33,89,0.55);}
+  .fab-add{position:absolute;bottom:-18px;right:10px;width:44px;height:44px;border-radius:50%;background:var(--primary);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px -6px rgba(110,33,89,0.55);}
   .fab-add:disabled{opacity:.4;}
-  .wishlist-fab{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.9);color:var(--rose);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.18);}
+  .wishlist-fab{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.9);color:var(--rose);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.18);}
   .card-body{padding:24px 12px 14px;display:flex;flex-direction:column;gap:4px;flex:1;}
   .card-cat{min-width:0;font-size:10.5px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
-  .card-name{min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:14px;font-weight:700;line-height:1.25;font-family:var(--font-heading);}
+  .card-name{min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:14px;font-weight:700;line-height:1.25;font-family:var(--font-heading);margin:0;}
   .card-desc{font-size:12px;color:var(--ink-soft);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .card-price{font-weight:800;color:var(--primary-deep);font-size:15px;margin-top:2px;}
   .empty-state{padding:50px 20px;text-align:center;color:var(--ink-soft);}
@@ -1593,7 +1593,7 @@ function renderProductDetailDrawer(){
         </div>` : ''}
       <div class="detail-info">
         <div class="detail-cat">${productCats(p).join(' · ')}</div>
-        <div class="detail-name">${p.name}</div>
+        <h2 class="detail-name">${p.name}</h2>
         <div class="detail-price">${p.promoPrice>0 && p.promoPrice<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
         ${renderPromoCountdownBadge(p) ? `<div style="margin-bottom:8px;">${renderPromoCountdownBadge(p)}</div>` : ''}
         ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
@@ -1721,7 +1721,7 @@ function renderTrustBar(){
 function renderNeedsSection(){
   return `
   <div class="needs-block">
-    <div class="section-heading">¿Qué estás buscando?</div>
+    <h2 class="section-heading">¿Qué estás buscando?</h2>
     <div class="section-sub" style="margin-bottom:14px;">Elige una opción y te mostramos productos pensados para eso.</div>
     <div class="needs-row">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
   </div>`;
@@ -1743,7 +1743,7 @@ function renderFeaturedSection(){
   <div class="section-block" id="destacados">
     <div class="section-head-row">
       <div>
-        <div class="section-heading">Los favoritos de nuestros clientes</div>
+        <h2 class="section-heading">Los favoritos de nuestros clientes</h2>
         <div class="section-sub">Lo que más piden, una y otra vez.</div>
       </div>
     </div>
@@ -1796,7 +1796,7 @@ function renderKitsSection(){
   if(!items.length) return '';
   return `
   <div class="section-block">
-    <div class="section-heading">Todo lo que necesitas, en un solo kit</div>
+    <h2 class="section-heading">Todo lo que necesitas, en un solo kit</h2>
     <div class="section-sub">Soluciones completas, listas para disfrutar.</div>
     <div class="kits-row">
       ${items.map(p=>`
@@ -1914,7 +1914,7 @@ function renderGridSection(){
   return `
   <div id="catalogo" class="section-block" style="padding-top:10px;">
     <div class="section-head-row" style="margin-bottom:14px;align-items:center;">
-      <div class="section-heading" style="margin-bottom:0;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</div>
+      <h2 class="section-heading" style="margin-bottom:0;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</h2>
       ${showClearBtn ? `<button class="btn-tertiary" onclick="goToCatalog('Todos')">${icon('grid',14)} Ver catálogo completo</button>` : ''}
     </div>
     ${renderPriceFilterRow()}
@@ -1990,6 +1990,23 @@ function ensurePromoCountdownTimer(){
     clearInterval(promoCountdownTimer); promoCountdownTimer = null;
   }
 }
+// Antes se podían juntar hasta 7 insignias sobre la misma tarjeta (Nuevo, Más vendido, Combo,
+// Caja sorpresa, Oferta, cuenta regresiva, Mayoreo, Agotado/Últimas piezas) — ilegible y le resta
+// peso a la que de verdad importa. Aquí se arma la lista completa con una prioridad (lo que más
+// ayuda a decidir una compra primero: disponibilidad y urgencia de precio) y se muestran máximo 2.
+function renderProductBadges(p, ctx){
+  const candidates = [];
+  if(p.stock<=3) candidates.push({priority:1, html:`<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>`});
+  const countdown = renderPromoCountdownBadge(p);
+  if(countdown) candidates.push({priority:2, html:countdown});
+  else if(ctx.hasPromo) candidates.push({priority:2, html:`<span class="badge badge-best" style="background:var(--rose);">Oferta</span>`});
+  if(ctx.wholesaleEligible) candidates.push({priority:3, html:`<span class="badge badge-best" style="background:var(--navy);">${ctx.wholesaleUnlocked?'Mayoreo activo':'Mayoreo disponible'}</span>`});
+  if(p.isKit) candidates.push({priority:4, html:`<span class="badge badge-best" style="background:var(--navy);">Combo</span>`});
+  if(p.isMysteryBox) candidates.push({priority:4, html:`<span class="badge badge-best" style="background:var(--navy);">Caja sorpresa</span>`});
+  if(ctx.isBest) candidates.push({priority:5, html:`<span class="badge badge-best">Más vendido</span>`});
+  if(isNewProduct(p)) candidates.push({priority:6, html:`<span class="badge badge-best" style="background:var(--teal);">Nuevo</span>`});
+  return candidates.sort((a,b)=>a.priority-b.priority).slice(0,2).map(c=>c.html).join('');
+}
 function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
@@ -2003,16 +2020,7 @@ function renderProductCard(p, forceBest){
         <div class="card-media">
           <div class="card-image-wrap">
             ${productImageHtml(p)}
-            <div class="badge-row">
-              ${isNewProduct(p) ? `<span class="badge badge-best" style="background:var(--teal);">Nuevo</span>` : ''}
-              ${isBest ? `<span class="badge badge-best">Más vendido</span>` : ''}
-              ${p.isKit ? `<span class="badge badge-best" style="background:var(--navy);">Combo</span>` : ''}
-              ${p.isMysteryBox ? `<span class="badge badge-best" style="background:var(--navy);">Caja sorpresa</span>` : ''}
-              ${hasPromo ? `<span class="badge badge-best" style="background:var(--rose);">Oferta</span>` : ''}
-              ${renderPromoCountdownBadge(p)}
-              ${wholesaleEligible ? `<span class="badge badge-best" style="background:var(--navy);">${wholesaleUnlocked?'Mayoreo activo':'Mayoreo disponible'}</span>` : ''}
-              ${p.stock<=3 ? `<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>` : ''}
-            </div>
+            <div class="badge-row">${renderProductBadges(p, {isBest, hasPromo, wholesaleEligible, wholesaleUnlocked})}</div>
           </div>
           ${isKioskMode() ? '' : `
           <button class="fab-add" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();${hasVariants?`openProductDetail('${p.id}')`:`addToCart('${p.id}')`}">+</button>
@@ -2022,7 +2030,7 @@ function renderProductCard(p, forceBest){
         </div>
         <div class="card-body">
           <div class="card-cat">${productCats(p).join(', ')}</div>
-          <div class="card-name">${p.name}</div>
+          <h3 class="card-name">${p.name}</h3>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
           <div class="card-price">${automaticDiscountedPrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:12px;margin-right:5px;">${money(p.price)}</s>${money(automaticDiscountedPrice(p))}` : money(p.price)}</div>
         </div>
@@ -2039,7 +2047,7 @@ function renderFaqSection(){
   if(!items.length) return '';
   return `
   <div class="section-block">
-    <div class="section-heading" style="margin-bottom:14px;">Preguntas frecuentes</div>
+    <h2 class="section-heading" style="margin-bottom:14px;">Preguntas frecuentes</h2>
     <div class="faq-list">
       ${items.map((item,i)=>`
         <div class="faq-item">
@@ -2058,7 +2066,7 @@ function renderTestimonialsSection(){
   if(!list.length) return '';
   return `
   <div class="section-block">
-    <div class="section-heading" style="margin-bottom:6px;">Lo que dicen nuestros clientes</div>
+    <h2 class="section-heading" style="margin-bottom:6px;">Lo que dicen nuestros clientes</h2>
   </div>
   <div class="testimonial-row">
       ${list.map(t=>`<div class="testimonial-card"><span class="stars">${'★'.repeat(Number(t.rating)||5)}</span><p>"${t.text}"</p>${t.name?`<div class="testimonial-name">— ${t.name}</div>`:''}</div>`).join('')}
@@ -2089,7 +2097,7 @@ function renderNewsletterSection(){
   if(!state.settings.whatsapp) return '';
   return `
   <div class="newsletter-block">
-    <div class="section-heading">¿Tienes dudas íntimas?</div>
+    <h2 class="section-heading">¿Tienes dudas íntimas?</h2>
     <div class="newsletter-text">Escríbenos, respondemos con toda discreción. Sin pena, sin juicios — solo queremos ayudarte a encontrar lo que buscas.</div>
     <a class="btn-primary" style="display:inline-block;width:auto;padding:12px 22px;" href="${waLink('Hola, tengo una duda y me gustaría preguntar con confianza.')}" target="_blank">Hablar por WhatsApp</a>
   </div>`;
@@ -2457,6 +2465,23 @@ function render(){
   restoreFocusState(root, focusInfo);
   restoreScrollPositions(root, scrollPositions);
   ensurePromoCountdownTimer();
+  updateDocumentTitle();
+}
+// El título de la pestaña antes siempre decía lo mismo sin importar qué se estuviera viendo —
+// aquí se actualiza según el producto o la categoría activa, para que se vea bien al compartir
+// el enlace o al volver a una pestaña entre varias abiertas, y ayuda un poco al SEO de las
+// páginas que Google indexa con JavaScript ejecutado.
+const DEFAULT_PAGE_TITLE = document.title;
+function updateDocumentTitle(){
+  const storeName = state.settings.storeName || 'La Casa de los Placeres';
+  if(state.orderPlaced){ document.title = `¡Pedido recibido! — ${storeName}`; return; }
+  if(state.detailProductId){
+    const p = state.products.find(x=>x.id===state.detailProductId);
+    if(p){ document.title = `${p.name} — ${storeName}`; return; }
+  }
+  if(state.activeBestSellers){ document.title = `Más vendidos — ${storeName}`; return; }
+  if(state.activeCat && state.activeCat!=='Todos'){ document.title = `${state.activeCat} — ${storeName}`; return; }
+  document.title = DEFAULT_PAGE_TITLE;
 }
 function adjustTopbarSpacer(){
   const bar = document.querySelector('.topbar');

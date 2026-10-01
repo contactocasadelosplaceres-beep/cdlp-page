@@ -10,7 +10,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
@@ -243,7 +242,7 @@ let state = {
   newCustomerMode:false, newCustomerName:"", newCustomerPhone:"", newCustomerAddress:"",
   manualDiscount:null, discountModalOpen:false, discountType:"fixed", discountValueInput:"", discountCouponInput:"", discountReasonInput:"", discountError:"",
   saleNotes:"", notesModalOpen:false, notesDraft:"",
-  barcodeScannerOpen:false,
+  barcodeScannerOpen:false, scannerLoading:false,
   salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
   exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null,
   checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
@@ -430,7 +429,7 @@ function renderExchangeModal(){
             </div>
           </div>
         ` : `
-          <input id="exchange-search-${side}" class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${searchVal}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render()">
+          <input id="exchange-search-${side}" class="field-input" placeholder="Nombre o SKU..." value="${searchVal}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render()">
           ${results.length>0 ? `<div style="max-height:160px;overflow-y:auto;margin-top:6px;">${results.map(p=>`
             <button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="pickExchangeProduct('${side}','${p.id}')">${p.name} — ${money(effectivePrice(p))}</button>
           `).join('')}</div>` : ''}
@@ -480,7 +479,9 @@ function renderWarehouseModal(){
     <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
       <h3>Almacén</h3>
       <p class="panel-sub">Busca un producto para ver dónde está ubicado. Si no coincide con lo que ves, deja una nota — le llega directo a Mensajes.</p>
-      <input id="warehouse-search-input" class="field-input" placeholder="Buscar producto por nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
+      <div class="form-field"><label>Buscar producto</label>
+        <input id="warehouse-search-input" class="field-input" placeholder="Nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
+      </div>
       <button class="btn-outline" style="width:100%;margin-top:8px;" onclick="openBarcodeScanner('warehouse')">${icon('camera',16)} Escanear código de barras</button>
       <div style="margin-top:10px;">
         ${!q ? '' : results.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` :
@@ -494,7 +495,7 @@ function renderWarehouseModal(){
                 <button class="icon-btn" title="Dejar una nota sobre este producto" onclick="state.warehouseNoteProductId=state.warehouseNoteProductId==='${p.id}'?null:'${p.id}';state.warehouseNoteText='';render()">${icon('message-circle',18)}</button>
               </div>
               ${state.warehouseNoteProductId===p.id ? `
-                <div style="margin-top:8px;">
+                <div class="form-field" style="margin-top:8px;margin-bottom:0;"><label>Nota sobre este producto</label>
                   <textarea class="field-input" rows="2" placeholder="Ej. lo encontré en el estante 4, no en el 2..." oninput="state.warehouseNoteText=this.value">${state.warehouseNoteText}</textarea>
                   <button class="btn-primary" style="width:100%;margin-top:6px;" onclick="sendWarehouseNote('${p.id}')">Enviar nota</button>
                 </div>
@@ -506,22 +507,47 @@ function renderWarehouseModal(){
     </div>
   </div>`;
 }
+// La librería del lector de códigos (html5-qrcode, ~400KB) antes se cargaba siempre al abrir el
+// POS, aunque la mayoría de las ventas nunca usan la cámara. Ahora sólo se descarga la primera
+// vez que de verdad se abre el escáner, y de ahí en adelante queda en caché para la sesión.
+let html5QrcodeLoadPromise = null;
+function loadHtml5QrcodeLib(){
+  if(typeof Html5Qrcode !== 'undefined') return Promise.resolve();
+  if(html5QrcodeLoadPromise) return html5QrcodeLoadPromise;
+  html5QrcodeLoadPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload = ()=> resolve();
+    s.onerror = ()=>{ html5QrcodeLoadPromise = null; reject(new Error('No se pudo descargar el lector')); };
+    document.head.appendChild(s);
+  });
+  return html5QrcodeLoadPromise;
+}
 function openBarcodeScanner(context){
   state.scannerContext = context || 'checkout';
-  state.barcodeScannerOpen = true; render();
-  setTimeout(()=>{
-    if(typeof Html5Qrcode === 'undefined'){ showToast('No se pudo cargar el lector de cámara — revisa tu conexión'); closeBarcodeScanner(); return; }
-    posScannerInstance = new Html5Qrcode('barcode-scanner-view');
-    posScannerInstance.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 260, height: 140 } },
-      (decodedText)=> onBarcodeScanned(decodedText),
-      ()=>{} // errores de "no encontré nada en este cuadro" — normales mientras apunta, se ignoran
-    ).catch(()=>{
-      showToast('No se pudo abrir la cámara — revisa que le hayas dado permiso a este sitio');
-      closeBarcodeScanner();
-    });
-  }, 80);
+  state.barcodeScannerOpen = true; state.scannerLoading = true; render();
+  loadHtml5QrcodeLib().then(()=>{
+    state.scannerLoading = false;
+    if(!state.barcodeScannerOpen) return; // se cerró mientras cargaba
+    render();
+    setTimeout(()=>{
+      if(typeof Html5Qrcode === 'undefined'){ showToast('No se pudo cargar el lector de cámara — revisa tu conexión'); closeBarcodeScanner(); return; }
+      posScannerInstance = new Html5Qrcode('barcode-scanner-view');
+      posScannerInstance.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 260, height: 140 } },
+        (decodedText)=> onBarcodeScanned(decodedText),
+        ()=>{} // errores de "no encontré nada en este cuadro" — normales mientras apunta, se ignoran
+      ).catch(()=>{
+        showToast('No se pudo abrir la cámara — revisa que le hayas dado permiso a este sitio');
+        closeBarcodeScanner();
+      });
+    }, 80);
+  }).catch(()=>{
+    state.scannerLoading = false;
+    showToast('No se pudo cargar el lector de cámara — revisa tu conexión');
+    closeBarcodeScanner();
+  });
 }
 function onBarcodeScanned(code){
   const match = state.products.find(p=>p.sku && p.sku.toLowerCase()===code.trim().toLowerCase());
@@ -547,8 +573,8 @@ function renderBarcodeScannerModal(){
   <div class="modal-overlay">
     <div class="modal" style="max-width:380px;text-align:center;">
       <h3>Escanear código de barras</h3>
-      <div class="panel-sub">Apunta la cámara al código del producto.</div>
-      <div id="barcode-scanner-view" style="margin:14px 0;border-radius:12px;overflow:hidden;"></div>
+      <div class="panel-sub">${state.scannerLoading ? 'Cargando el lector…' : 'Apunta la cámara al código del producto.'}</div>
+      <div id="barcode-scanner-view" style="margin:14px 0;border-radius:12px;overflow:hidden;min-height:${state.scannerLoading?'140px':'0'};display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:13px;">${state.scannerLoading ? 'Cargando…' : ''}</div>
       <button class="btn-cancel" style="width:100%;" onclick="closeBarcodeScanner()">Cancelar</button>
     </div>
   </div>`;
@@ -629,8 +655,47 @@ function handleLogout(){
 
 function selectCashier(c){ state.activeCashier = c; state.pinInput=''; state.pinError=''; state.pinConfirmed=false; render(); }
 function confirmCashierPin(){
-  if(state.pinInput === state.activeCashier.pin){ state.pinConfirmed=true; state.pinInput=''; state.pinError=''; render(); }
+  if(state.pinInput === state.activeCashier.pin){
+    state.pinConfirmed=true; state.pinInput=''; state.pinError='';
+    // El centro ya se restauró solo (si lo había) antes de llegar aquí, así que en este punto ya
+    // se sabe cajero + centro: si una venta se quedó a medias por un refresh accidental, se
+    // recupera el carrito justo aquí, antes de que se vea la pantalla principal del POS.
+    restorePosCart();
+    render();
+  }
   else{ state.pinError='PIN incorrecto'; state.pinInput=''; render(); }
+}
+/* ============== CARRITO DE VENTA: PERSISTENCIA ANTE UN REFRESH ACCIDENTAL ==============
+   Antes, si la pantalla se recargaba a media venta (un refresh sin querer, se cerró la pestaña,
+   el navegador se reinició), el carrito en curso se perdía por completo y había que volver a
+   capturar todo. Se guarda en este dispositivo, por cajero + centro (para no mezclar el carrito
+   de alguien más si cambia de cajero o de sucursal), y se borra en cuanto la venta se cobra o se
+   cancela — nunca sobrevive más allá de esa sesión de cajero+centro. */
+function posCartStorageKey(){
+  if(!state.activeCashier || !state.activeCenter) return null;
+  return `cdlp_pos_cart_${state.activeCenter.id}_${state.activeCashier.id||state.activeCashier.name}`;
+}
+function savePosCart(){
+  const key = posCartStorageKey(); if(!key) return;
+  try{
+    if(state.cart && Object.keys(state.cart).length) localStorage.setItem(key, JSON.stringify(state.cart));
+    else localStorage.removeItem(key);
+  }catch(e){ /* almacenamiento no disponible, se ignora */ }
+}
+function restorePosCart(){
+  const key = posCartStorageKey(); if(!key) return;
+  try{
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if(parsed && typeof parsed==='object' && !Array.isArray(parsed) && Object.keys(parsed).length){
+      state.cart = parsed;
+      showToast('Se recuperó una venta que había quedado a medias');
+    }
+  }catch(e){ /* dato corrupto, se ignora y el carrito queda vacío */ }
+}
+function clearPosCart(){
+  const key = posCartStorageKey();
+  if(key){ try{ localStorage.removeItem(key); }catch(e){} }
 }
 /* ---- Reporta qué cajero está usando el POS ahora mismo, para que se vea en el panel de
    administración (pestaña Caja). Se guarda un documento por cajero, con un "latido" cada minuto
@@ -660,18 +725,21 @@ async function clearActivePosSession(){
 }
 function changeCashier(){
   clearActivePosSession();
+  clearPosCart();
   state.activeCashier=null; state.pinConfirmed=false; state.cart={};
   state.activeCashRegister=null; state.cashRegisterChecked=false;
   render();
 }
 function selectCenter(id){
   const c = state.centers.find(x=>x.id===id); if(!c) return;
+  clearPosCart();
   state.activeCenter = c; state.cart={};
   state.activeCashRegister=null; state.cashRegisterChecked=false;
   try{ localStorage.setItem('cdlp_pos_center', c.id); }catch(e){}
   render();
 }
 function changeCenter(){
+  clearPosCart();
   state.activeCenter=null; state.cart={};
   state.activeCashRegister=null; state.cashRegisterChecked=false;
   render();
@@ -719,7 +787,9 @@ function renderCashOpenScreen(){
   return `<div class="select-screen"><div class="card">
     <h2>Abrir caja</h2>
     <p>${state.activeCashier.name} · ${state.activeCenter.name}<br>Registra el fondo inicial en efectivo con el que empiezas el turno.</p>
-    <input class="field-input" type="number" inputmode="decimal" placeholder="Fondo inicial (efectivo)" value="${state.openingAmountInput}" oninput="state.openingAmountInput=this.value" onkeydown="if(event.key==='Enter')openCashRegister()">
+    <div class="form-field"><label>Fondo inicial (efectivo)</label>
+      <input class="field-input" type="number" inputmode="decimal" placeholder="Ej. 500" value="${state.openingAmountInput}" oninput="state.openingAmountInput=this.value" onkeydown="if(event.key==='Enter')openCashRegister()">
+    </div>
     <div class="err">${state.openingError||''}</div>
     <button class="btn-primary" ${state.openingSubmitting?'disabled style="opacity:.5"':''} onclick="openCashRegister()">${state.openingSubmitting?'Abriendo…':'Abrir caja'}</button>
     <button class="btn-secondary" onclick="changeCashier()">Cambiar cajero</button>
@@ -779,8 +849,12 @@ function renderMovementModal(){
         <button class="pay-btn ${state.movementType==='retiro'?'active':''}" onclick="state.movementType='retiro';render()">Retiro</button>
         <button class="pay-btn ${state.movementType==='ingreso'?'active':''}" onclick="state.movementType='ingreso';render()">Ingreso</button>
       </div>
-      <input class="field-input" type="number" inputmode="decimal" placeholder="Monto" value="${state.movementAmount}" oninput="state.movementAmount=this.value">
-      <input class="field-input" type="text" placeholder="Motivo (opcional)" value="${state.movementNote}" oninput="state.movementNote=this.value">
+      <div class="form-field"><label>Monto</label>
+        <input class="field-input" type="number" inputmode="decimal" placeholder="Ej. 200" value="${state.movementAmount}" oninput="state.movementAmount=this.value">
+      </div>
+      <div class="form-field"><label>Motivo (opcional)</label>
+        <input class="field-input" type="text" placeholder="Ej. compra de bolsas" value="${state.movementNote}" oninput="state.movementNote=this.value">
+      </div>
       <div class="err">${state.movementError||''}</div>
       <button class="btn-primary" onclick="saveCashMovement()">Guardar</button>
       <button class="btn-secondary" onclick="state.movementModalOpen=false;render()">Cancelar</button>
@@ -830,9 +904,13 @@ function renderCashCloseScreen(){
       <div><span>Retiros de caja</span><span>-${money(s.retiros)}</span></div>
       <div style="font-weight:800;border-top:1px dashed var(--border);margin-top:6px;padding-top:6px;"><span>Efectivo esperado</span><span>${money(s.expectedCash)}</span></div>
     </div>
-    <input class="field-input" type="number" inputmode="decimal" placeholder="Efectivo contado" value="${state.closingCountedCash}" oninput="state.closingCountedCash=this.value">
+    <div class="form-field"><label>Efectivo contado</label>
+      <input class="field-input" type="number" inputmode="decimal" placeholder="Ej. 1200" value="${state.closingCountedCash}" oninput="state.closingCountedCash=this.value">
+    </div>
     ${diff!==null ? `<div style="text-align:center;font-weight:700;margin:-4px 0 10px;color:${diff===0?'var(--green)':(diff>0?'var(--amber)':'var(--rose)')};">${diff===0?'Cuadra exacto':(diff>0?`Sobrante de ${money(diff)}`:`Faltante de ${money(Math.abs(diff))}`)}</div>` : ''}
-    <input class="field-input" type="text" placeholder="Notas (opcional)" value="${state.closingNotes}" oninput="state.closingNotes=this.value">
+    <div class="form-field"><label>Notas (opcional)</label>
+      <input class="field-input" type="text" placeholder="Ej. faltó cambio al inicio del turno" value="${state.closingNotes}" oninput="state.closingNotes=this.value">
+    </div>
     <div class="err">${state.closingError||''}</div>
     <button class="btn-primary" onclick="confirmCashClose()">Confirmar cierre</button>
     <button class="btn-secondary" onclick="state.closingOpen=false;render()">Cancelar</button>
@@ -856,6 +934,7 @@ async function confirmCashClose(){
   }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); return; }
   showToast('Caja cerrada');
   clearActivePosSession();
+  clearPosCart();
   state.activeCashRegister=null; state.cashRegisterChecked=false; state.closingOpen=false; state.closingSummary=null;
   state.activeCashier=null; state.pinConfirmed=false; state.cart={};
   render();
@@ -947,7 +1026,7 @@ function addToCart(id){
   const wasEmpty = cartCount()===0; // primer producto de esta venta: se abre solo para que se note
   state.cart[id]=(state.cart[id]||0)+1;
   if(wasEmpty) state.cartCollapsed=false;
-  trackFrequent(id); render();
+  trackFrequent(id); savePosCart(); render();
 }
 function pickVariant(variantId){
   const p = state.products.find(x=>x.id===state.variantPickerProduct);
@@ -959,9 +1038,9 @@ function pickVariant(variantId){
   state.variantPickerProduct = null;
   if(wasEmpty) state.cartCollapsed = false;
   trackFrequent(p.id);
-  render();
+  savePosCart(); render();
 }
-function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; render(); }
+function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta; if(next<=0) delete state.cart[id]; else state.cart[id]=next; savePosCart(); render(); }
 
 /* ============== AJUSTE POR ENVÍO (descuento manual) ==============
    Adicional a los descuentos y promociones ya aplicados en el precio de cada
@@ -1037,8 +1116,12 @@ function renderDiscountModal(){
         <button class="pay-btn ${state.discountType==='coupon'?'active':''}" onclick="state.discountType='coupon';render()">Cupón</button>
       </div>
       ${state.discountType==='coupon' ? `
-        <input class="field-input" type="text" style="text-transform:uppercase;" placeholder="Código de cupón" value="${state.discountCouponInput}" oninput="state.discountCouponInput=this.value">
-        <input class="field-input" type="text" placeholder="Nota (opcional)" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+        <div class="form-field"><label>Código de cupón</label>
+          <input class="field-input" type="text" style="text-transform:uppercase;" placeholder="Ej. VERANO10" value="${state.discountCouponInput}" oninput="state.discountCouponInput=this.value">
+        </div>
+        <div class="form-field"><label>Nota (opcional)</label>
+          <input class="field-input" type="text" placeholder="Ej. cliente frecuente" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+        </div>
         <div class="err">${state.discountError||''}</div>
         <button class="btn-primary" onclick="applyCouponDiscount()">Aplicar cupón</button>
         ${state.manualDiscount && state.manualDiscount.type==='coupon' ? `<button class="btn-secondary" onclick="removeManualDiscount()">Quitar cupón</button>` : ''}
@@ -1049,9 +1132,13 @@ function renderDiscountModal(){
             ${[5,10,15,20].map(p=>`<button class="cat-chip ${Number(state.discountValueInput)===p?'active':''}" style="flex:1;text-align:center;" onclick="state.discountValueInput='${p}';render()">${p}%</button>`).join('')}
           </div>
         ` : ''}
-        <input class="field-input" type="number" inputmode="decimal" placeholder="${state.discountType==='percent'?'Porcentaje (%)':'Monto del ajuste ($)'}" value="${state.discountValueInput}" oninput="state.discountValueInput=this.value">
+        <div class="form-field"><label>${state.discountType==='percent'?'Porcentaje (%)':'Monto del ajuste ($)'}</label>
+          <input class="field-input" type="number" inputmode="decimal" placeholder="${state.discountType==='percent'?'Ej. 10':'Ej. 50'}" value="${state.discountValueInput}" oninput="state.discountValueInput=this.value">
+        </div>
         ${state.discountValueInput ? `<div style="font-size:12px;color:var(--ink-soft);margin:-4px 0 10px;">Descuento sobre esta venta: ${money(preview)}</div>` : ''}
-        <input class="field-input" type="text" placeholder="Motivo (obligatorio)" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+        <div class="form-field"><label>Motivo (obligatorio)</label>
+          <input class="field-input" type="text" placeholder="Ej. compensar envío" value="${state.discountReasonInput}" oninput="state.discountReasonInput=this.value">
+        </div>
         <div class="err">${state.discountError||''}</div>
         <button class="btn-primary" onclick="saveManualDiscount()">Aplicar ajuste</button>
         ${state.manualDiscount && state.manualDiscount.type!=='coupon' ? `<button class="btn-secondary" onclick="removeManualDiscount()">Quitar ajuste</button>` : ''}
@@ -1105,9 +1192,15 @@ function renderCustomerPickerModal(){
         </div>
         <button class="btn-secondary" style="margin-top:0;" onclick="state.newCustomerMode=true;render()">+ Agregar nuevo cliente</button>
       ` : `
-        <input class="field-input" type="text" placeholder="Nombre del cliente" value="${state.newCustomerName}" oninput="state.newCustomerName=this.value">
-        <input class="field-input" type="text" placeholder="Teléfono / WhatsApp (opcional)" value="${state.newCustomerPhone}" oninput="state.newCustomerPhone=this.value">
-        <textarea class="field-input" style="min-height:60px;resize:vertical;font-family:inherit;" placeholder="Dirección (opcional): calle, número, colonia, referencias" oninput="state.newCustomerAddress=this.value">${state.newCustomerAddress}</textarea>
+        <div class="form-field"><label>Nombre del cliente</label>
+          <input class="field-input" type="text" placeholder="Ej. María López" value="${state.newCustomerName}" oninput="state.newCustomerName=this.value">
+        </div>
+        <div class="form-field"><label>Teléfono / WhatsApp (opcional)</label>
+          <input class="field-input" type="text" placeholder="10 dígitos" value="${state.newCustomerPhone}" oninput="state.newCustomerPhone=this.value">
+        </div>
+        <div class="form-field"><label>Dirección (opcional)</label>
+          <textarea class="field-input" style="min-height:60px;resize:vertical;font-family:inherit;" placeholder="Calle, número, colonia, referencias" oninput="state.newCustomerAddress=this.value">${state.newCustomerAddress}</textarea>
+        </div>
         <button class="btn-primary" onclick="saveNewCustomerPOS()">Guardar y seleccionar</button>
         <button class="btn-secondary" onclick="state.newCustomerMode=false;render()">Cancelar</button>
       `}
@@ -1124,7 +1217,9 @@ function renderNotesModal(){
   <div class="modal-overlay">
     <div class="modal" style="max-width:380px;">
       <h3>Notas de la venta</h3>
-      <textarea class="field-input" style="min-height:90px;resize:vertical;font-family:inherit;" placeholder="Ej. cliente pidió empaque discreto extra..." oninput="state.notesDraft=this.value">${state.notesDraft}</textarea>
+      <div class="form-field"><label>Nota (visible solo para el equipo)</label>
+        <textarea class="field-input" style="min-height:90px;resize:vertical;font-family:inherit;" placeholder="Ej. cliente pidió empaque discreto extra..." oninput="state.notesDraft=this.value">${state.notesDraft}</textarea>
+      </div>
       <button class="btn-primary" onclick="saveSaleNotes()">Guardar nota</button>
       <button class="btn-secondary" onclick="state.notesModalOpen=false;render()">Cancelar</button>
     </div>
@@ -1203,6 +1298,87 @@ async function trySyncOfflineQueue(){
 window.addEventListener('online', ()=>{ state.posOffline=false; render(); trySyncOfflineQueue(); });
 window.addEventListener('offline', ()=>{ state.posOffline=true; render(); });
 setInterval(()=>{ if(!(typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine)) trySyncOfflineQueue(); }, 20000);
+/* ============== RESERVA TRANSACCIONAL DE STOCK AL COBRAR ==============
+   Antes el stock se leía una sola vez al abrir el POS y se descontaba con una escritura simple
+   al cobrar, basada en esa copia en memoria. Si dos ventas ocurrían al mismo tiempo en distintos
+   centros/cajeros (la arquitectura lo permite), ambas podían "ver" la misma última pieza
+   disponible y venderla dos veces, sin que ninguna se enterara hasta después de cobrar.
+   Ahora, antes de registrar la venta (solo cuando hay conexión — sin internet no hay con quién
+   competir por el mismo stock, así que se mantiene el descuento local de siempre), se abre una
+   transacción de Firestore que vuelve a leer el stock real de cada producto/variante/componente
+   de kit involucrado, verifica que siga alcanzando, y si no alcanza aborta toda la venta sin
+   cobrar ni descontar nada — como si nunca se hubiera intentado. */
+class InsufficientStockError extends Error {
+  constructor(items){ super('insufficient_stock'); this.name = 'InsufficientStockError'; this.insufficientItems = items; }
+}
+async function reserveStockForSale(items, centerId){
+  const demandByDoc = new Map(); // docId -> {center: qty, variants: Map(variantId->qty)}
+  function addCenterDemand(docId, qty){
+    const d = demandByDoc.get(docId) || {center:0, variants:new Map()};
+    d.center += qty; demandByDoc.set(docId, d);
+  }
+  function addVariantDemand(docId, variantId, qty){
+    const d = demandByDoc.get(docId) || {center:0, variants:new Map()};
+    d.variants.set(variantId, (d.variants.get(variantId)||0) + qty);
+    demandByDoc.set(docId, d);
+  }
+  items.forEach(it=>{
+    const p = state.products.find(x=>x.id===it.id);
+    if(p && p.isKit){
+      // El kit en sí no guarda existencias propias — se descuenta de sus componentes reales.
+      (p.kitItems||[]).forEach(ki=> addCenterDemand(ki.productId, (ki.qty||1)*it.qty));
+      return;
+    }
+    if(it.variantId){ addVariantDemand(it.id, it.variantId, it.qty); return; }
+    addCenterDemand(it.id, it.qty);
+  });
+  const docIds = Array.from(demandByDoc.keys());
+  if(!docIds.length) return {};
+  return await db.runTransaction(async (tx)=>{
+    const refs = docIds.map(id=>db.collection('products').doc(id));
+    const snaps = await Promise.all(refs.map(r=>tx.get(r)));
+    const insufficient = [];
+    const updates = [];
+    snaps.forEach((snap, idx)=>{
+      const docId = docIds[idx];
+      const demand = demandByDoc.get(docId);
+      const localP = state.products.find(x=>x.id===docId);
+      const name = (localP && localP.name) || docId;
+      if(!snap.exists){ insufficient.push({id:docId, name}); return; }
+      const data = snap.data();
+      let payload = {};
+      let ok = true;
+      if(demand.center > 0){
+        const stockByCenter = {...(data.stockByCenter||{})};
+        const current = stockByCenter[centerId] || 0;
+        if(current < demand.center){ ok = false; }
+        else{
+          stockByCenter[centerId] = current - demand.center;
+          payload.stockByCenter = stockByCenter;
+          payload.stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
+        }
+      }
+      if(ok && demand.variants.size){
+        const variants = (data.variants||[]).map(v=>({...v}));
+        let variantQtyUsed = 0;
+        for(const [variantId, qty] of demand.variants){
+          const v = variants.find(x=>x.id===variantId);
+          const current = v ? (v.stock||0) : 0;
+          if(!v || current < qty){ ok = false; break; }
+          v.stock = current - qty; variantQtyUsed += qty;
+        }
+        if(ok){ payload.variants = variants; payload.stock = Math.max(0, (data.stock||0) - variantQtyUsed); }
+      }
+      if(!ok){ insufficient.push({id:docId, name}); return; }
+      updates.push({ref: refs[idx], payload, docId});
+    });
+    if(insufficient.length) throw new InsufficientStockError(insufficient);
+    updates.forEach(u=> tx.update(u.ref, u.payload));
+    const map = {};
+    updates.forEach(u=>{ map[u.docId] = u.payload; });
+    return map;
+  });
+}
 async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
   if(!state.activeCashRegister){ showToast('Abre la caja antes de vender'); return; }
@@ -1229,13 +1405,44 @@ async function chargeSale(){
     else manualDiscountPayload.value = state.manualDiscount.value;
   }
   const isOffline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  // Con conexión, antes de tocar nada en memoria, se reserva el stock en una transacción de
+  // Firestore: así, si dos ventas chocan por la misma última pieza (dos cajeros, dos centros,
+  // al mismo tiempo), sólo una gana y la otra se cancela limpiamente en vez de dejar el
+  // inventario en negativo. Sin conexión no hay con quién competir, así que se mantiene el
+  // flujo de siempre (descuento en memoria + cola para sincronizar después).
+  if(!isOffline){
+    try{
+      await reserveStockForSale(items, centerId);
+    }catch(e){
+      if(e instanceof InsufficientStockError){
+        const names = e.insufficientItems.map(i=>i.name).join(', ');
+        showToast(`Ya no alcanza el stock de: ${names}. Revisa el carrito.`);
+        try{
+          await Promise.all(e.insufficientItems.map(async it=>{
+            const snap = await db.collection('products').doc(it.id).get();
+            if(snap.exists){
+              const idx = state.products.findIndex(x=>x.id===it.id);
+              const fresh = {id:snap.id, ...snap.data()};
+              if(idx>=0) state.products[idx] = fresh; else state.products.push(fresh);
+            }
+          }));
+        }catch(e2){ console.error('No se pudo refrescar el stock local', e2); }
+      } else {
+        console.error(e); showToast('No se pudo registrar la venta');
+      }
+      state.sending = false; render();
+      return;
+    }
+  }
   try{
-    // El inventario se descuenta en memoria siempre, aquí mismo, esté o no la conexión — así
-    // nadie puede vender dos veces lo último que queda de algo mientras el internet sigue caído.
-    // Lo único que se aplaza sin conexión es el folio consecutivo y las escrituras a Firestore
-    // (se guardan en "stockUpdates" para mandarlas en cuanto regrese la señal).
+    // El inventario se descuenta en memoria siempre, aquí mismo, esté o no la conexión, para que
+    // la interfaz se vea consistente de inmediato. Con conexión, el descuento real y a prueba de
+    // carreras ya quedó aplicado arriba por reserveStockForSale (transacción); lo de aquí sólo
+    // actualiza la copia local y el caché de stock de los kits. Sin conexión, esto es lo único
+    // que hay: se guarda en "stockUpdates" para mandarlo en cuanto regrese la señal.
     const touchedComponentIds = new Set();
     const stockUpdates = [];
+    const kitCacheUpdates = [];
     items.forEach(it=>{
       const p = state.products.find(x=>x.id===it.id);
       if(!isOffline) logStockMovement(it.id, 'venta_pos', -it.qty, `Venta`, centerId);
@@ -1271,7 +1478,7 @@ async function chargeSale(){
     // componentes se hayan movido, para que se muestre "Agotado" en cuanto ya no alcance.
     if(touchedComponentIds.size){
       const kitsToRefresh = state.products.filter(k=>k.isKit && (k.kitItems||[]).some(ki=>touchedComponentIds.has(ki.productId)));
-      kitsToRefresh.forEach(k=>{ k.stock = computeKitStock(k); if(!isOffline) stockUpdates.push({id:k.id, payload:{stock:k.stock}}); });
+      kitsToRefresh.forEach(k=>{ k.stock = computeKitStock(k); if(!isOffline) kitCacheUpdates.push({id:k.id, payload:{stock:k.stock}}); });
     }
     const couponCode = state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null;
     const saleFields = {
@@ -1293,13 +1500,16 @@ async function chargeSale(){
       showToast('Sin conexión: la venta se guardó en este dispositivo y se subirá sola cuando regrese el internet');
     } else {
       orderNumber = await getNextOrderNumber();
-      await Promise.all(stockUpdates.map(u=>db.collection('products').doc(u.id).update(u.payload)));
+      // Los productos/variantes/componentes ya se descontaron de forma atómica en reserveStockForSale;
+      // aquí sólo falta refrescar el stock cacheado de los kits afectados (no es sensible a carreras).
+      await Promise.all(kitCacheUpdates.map(u=>db.collection('products').doc(u.id).update(u.payload)));
       await db.collection('sales').add({...saleFields, orderNumber, source:"pos"});
       if(couponCode){
         try{ await db.collection('couponUsage').add({code: couponCode, date:new Date().toISOString()}); }
         catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
       }
     }
+    clearPosCart();
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true; state.checkoutReminderShown = false;
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
     // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin. Sin conexión no se puede mandar; se omite (no se reintenta al sincronizar).
