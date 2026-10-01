@@ -28,7 +28,10 @@
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
   .app{max-width:1100px;margin:0 auto;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;}
-  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 16px -10px rgba(0,0,0,0.5);position:relative;z-index:5;}
+  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px -10px rgba(0,0,0,0.5);position:relative;z-index:5;}
+  /* El nombre del cajero/centro no tenía espacio propio junto a los botones Caja/Ventas/Más —
+     con un nombre largo podía encimarse con ellos. Esta barra se ve en toda la pantalla de venta. */
+  .top>div:first-child{min-width:0;overflow-wrap:anywhere;word-break:break-word;}
   .top .brand{font-size:15.5px;font-weight:700;font-family:'League Spartan',sans-serif;letter-spacing:0.01em;}
   .top .sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
   .pill-btn{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;min-height:44px;display:inline-flex;align-items:center;border-radius:var(--radius-pill);color:#fff;font-weight:600;transition:background .15s ease;}
@@ -92,10 +95,15 @@
   .field-input{width:100%;padding:12px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);margin-bottom:10px;font-size:16px;transition:border-color .15s ease;}
   .field-input:focus{border-color:var(--primary);outline:none;}
   .cashier-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
-  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px 16px;border-radius:var(--radius-md);font-size:14.5px;font-weight:700;transition:background .15s ease,transform .1s ease;display:flex;align-items:center;justify-content:space-between;text-align:left;}
+  .cashier-item{background:var(--surface-soft);color:var(--primary-deep);padding:14px 16px;border-radius:var(--radius-md);font-size:14.5px;font-weight:700;transition:background .15s ease,transform .1s ease;display:flex;align-items:center;justify-content:space-between;text-align:left;gap:8px;}
   .cashier-item:active{transform:scale(0.98);}
   .cashier-item:hover{background:#efd9d3;}
   .cashier-item svg{opacity:.5;flex-shrink:0;}
+  /* Este botón se reutiliza en Cliente, Almacén, recordatorio de checkout y selector de cajero/
+     centro — su primer hijo (nombre) no tenía espacio propio reservado junto al segundo (teléfono,
+     precio, flecha), así que un nombre largo se montaba encima en vez de bajar de línea. */
+  .cashier-item>span:first-child,.cashier-item>div:first-child{min-width:0;overflow-wrap:anywhere;word-break:break-word;flex:1;}
+  .cashier-item>span:last-child,.cashier-item>div:last-child{flex-shrink:0;}
 
   .pos-body{flex:1;min-height:0;display:flex;flex-direction:column;}
   .toolbar{padding:14px 16px 0;display:flex;flex-direction:column;gap:10px;}
@@ -136,13 +144,16 @@
   .sale-head{padding:18px 16px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:relative;}
   .sale-items{overflow-y:auto;padding:8px 16px;flex:1;}
   .sale-item{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
-  .sale-item .name{flex:1;}
+  /* El nombre del producto no tenía espacio propio reservado junto a los botones +/- y el precio;
+     con un nombre largo (+ variante) se montaba encima de esos controles en vez de bajar de
+     línea — es la pantalla que el cajero mira en cada venta. */
+  .sale-item .name{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;}
   .qty-btn{width:44px;height:44px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;transition:background .12s ease;}
   .qty-btn:hover{background:#efd9d3;}
   .sale-foot{padding:12px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
   .total-row{display:flex;justify-content:space-between;font-weight:800;color:var(--primary-deep);font-size:16.5px;margin-bottom:12px;}
   .pay-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
-  .pay-btn{flex:1;min-width:70px;padding:10px 6px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:700;transition:all .15s ease;}
+  .pay-btn{flex:1;min-width:70px;min-height:44px;padding:10px 6px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:700;transition:all .15s ease;}
   .pay-btn.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
   .empty-cart{padding:30px;text-align:center;color:var(--ink-soft);font-size:13px;}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
@@ -419,9 +430,9 @@ function renderExchangeModal(){
     return `
       <div class="form-field"><label>${label}</label>
         ${entry ? `
-          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;">
-            <span>${entry.name}</span>
-            <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;gap:8px;">
+            <span style="min-width:0;overflow-wrap:anywhere;word-break:break-word;flex:1;">${entry.name}</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
               <button class="icon-btn" onclick="setExchangeQty('${side}', ${entry.qty-1})">−</button>
               <span>${entry.qty}</span>
               <button class="icon-btn" onclick="setExchangeQty('${side}', ${entry.qty+1})">+</button>
@@ -1693,7 +1704,7 @@ function renderPOS(){
               <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',-1)">−</button>
               <div>${qty}</div>
               <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',1)">+</button>
-              <div style="width:70px;text-align:right;font-weight:600;">${money(price*qty)}</div>
+              <div style="width:70px;text-align:right;font-weight:600;white-space:nowrap;flex-shrink:0;">${money(price*qty)}</div>
             </div>`;}).join('')}
       </div>
       <div class="sale-foot" onclick="event.stopPropagation();">

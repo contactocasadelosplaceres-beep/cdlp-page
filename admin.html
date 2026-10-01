@@ -161,6 +161,18 @@
   .row-title{font-size:13.5px;font-weight:700;overflow-wrap:anywhere;word-break:break-word;}
   .row-sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
   .row-actions{display:flex;gap:6px;flex-shrink:0;}
+  /* Antes la fila de un producto podía llegar a 7 botones de ícono sin bajar de línea (quitar de
+     categoría, quitar de etiqueta, duplicar, compartir, copiar enlace, editar, eliminar) — en
+     320-375px eso ya pesa más que la pantalla completa, antes de darle una sola columna al
+     nombre. Ahora solo Editar/Eliminar quedan a la vista; el resto vive en un menú "⋮", igual al
+     patrón que ya usa el POS en su barra superior. */
+  .row-more-wrap{position:relative;flex-shrink:0;}
+  .row-more-menu{position:absolute;top:calc(100% + 4px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:25;min-width:200px;padding:6px;}
+  .row-more-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:10px;min-height:40px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink);}
+  .row-more-menu button:hover{background:var(--surface-soft);}
+  .row-more-menu button.danger{color:var(--danger-ink);}
+  .row-more-menu hr{border:none;border-top:1px solid var(--border);margin:5px 0;}
+  .row-more-overlay{position:fixed;inset:0;z-index:24;}
   .icon-btn{width:38px;height:38px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,transform .1s ease;}
   .icon-btn:hover{background:#efd9d3;}
   .icon-btn:active{transform:scale(0.94);}
@@ -337,20 +349,27 @@
   .preview-count{font-size:12.5px;color:var(--primary-deep);font-weight:700;margin-bottom:10px;}
 
   .img-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
-  .img-thumb{position:relative;width:74px;height:74px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow-sm);}
+  .img-thumb{position:relative;width:86px;height:86px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow-sm);}
   .img-thumb img{width:100%;height:100%;object-fit:cover;}
-  .img-thumb-actions{position:absolute;inset:0;background:rgba(43,22,32,0.55);opacity:0;display:flex;align-items:center;justify-content:center;gap:4px;transition:opacity .15s ease;}
+  .img-thumb-actions{position:absolute;inset:0;background:rgba(43,22,32,0.55);opacity:0;display:flex;align-items:center;justify-content:center;gap:5px;transition:opacity .15s ease;}
+  /* Antes estos 3 botones medían 20x20px dentro de una miniatura de 74x74 — casi imposible de
+     tocar con precisión. Se agrandó la miniatura y los botones a lo máximo que cabe sin que se
+     encimen entre sí (un objetivo táctil de 44px es geométricamente imposible con 3 botones en
+     una sola fila dentro de esta miniatura; esto es lo más grande que cabe). */
   .img-thumb:active .img-thumb-actions, .img-thumb:hover .img-thumb-actions{opacity:1;}
-  .img-thumb-actions button{width:20px;height:20px;border-radius:5px;background:var(--surface);color:var(--primary-deep);font-size:11px;display:flex;align-items:center;justify-content:center;}
+  .img-thumb-actions button{width:26px;height:26px;border-radius:6px;background:var(--surface);color:var(--primary-deep);font-size:12.5px;display:flex;align-items:center;justify-content:center;}
   .add-thumb{display:flex;align-items:center;justify-content:center;background:var(--surface-soft);color:var(--primary-deep);font-size:22px;cursor:pointer;}
   .crop-box{width:280px;height:280px;max-width:100%;margin:0 auto;overflow:hidden;position:relative;border-radius:12px;background:#000;touch-action:none;cursor:grab;}
   #crop-img{position:absolute;top:0;left:0;user-select:none;pointer-events:none;}
 
-  .section-row{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s ease;}
+  .section-row{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s ease;flex-wrap:wrap;row-gap:8px;}
   .section-row:hover{box-shadow:var(--shadow-sm);}
   .section-row.dragging{opacity:0.4;}
   .drag-handle{color:var(--ink-soft);font-size:15px;letter-spacing:-2px;cursor:grab;flex-shrink:0;user-select:none;padding:4px;}
-  .section-name{flex:1;font-size:13.5px;font-weight:600;color:var(--ink);}
+  /* Antes un nombre de sección largo ("Preguntas frecuentes sobre discreción") no tenía dónde
+     partirse junto a las flechas de orden y el interruptor Visible/Oculta, y en 320-375px se
+     desbordaba empujándolos fuera de la pantalla. */
+  .section-name{flex:1;min-width:120px;overflow-wrap:anywhere;word-break:break-word;font-size:13.5px;font-weight:600;color:var(--ink);}
   .section-name.hidden-section{color:var(--ink-soft);}
   .section-arrows{display:flex;gap:3px;flex-shrink:0;}
   .arrow-btn{width:26px;height:26px;border-radius:7px;background:var(--surface-soft);color:var(--primary-deep);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s ease;}
@@ -594,7 +613,7 @@ let state = {
   selectedOrders:[], selectedProducts:[],
   importOpen:false, importPreview:[], importText:"", importFileName:"", importResult:null, newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
-  productCatFilter:"Todas", productNeedFilter:"Todas", productToolsOpen:false, adminNavOpen:false,
+  productCatFilter:"Todas", productNeedFilter:"Todas", productToolsOpen:false, adminNavOpen:false, productRowMenuOpenId:null,
   needsManageOpen:false, newNeedInput:"", catManageOpen:false, catImportOpen:false, catImport:null,
   catAssignOpen:false, catAssignSearch:"", needAssignOpen:false, needAssignSearch:"",
   designSubpanel:null,
@@ -3969,7 +3988,7 @@ function renderResumen(){
     <div class="panel">
       <div class="panel-title">Reabastecer pronto</div>
       ${m.lowStock.map(p=>`
-        <div class="list-row">
+        <div class="list-row" style="flex-wrap:wrap;row-gap:8px;">
           ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
           <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
           ${stockStatusBadge(p)}
@@ -5063,11 +5082,18 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
           <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">${stockStatusBadge(p)}${expirationBadge(p)}</div>
         </div>
         <div class="row-actions">
-          ${catFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de la categoría ${catFilter}" onclick="removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x')}</button>` : ''}
-          ${needFilter!=='Todas' ? `<button class="icon-btn" title="Quitar de esta etiqueta" onclick="removeProductTag('${p.id}','need','${needFilter}')">${icon('x')}</button>` : ''}
-          <button class="icon-btn" title="Duplicar producto" onclick="duplicateProduct('${p.id}')">${icon('copy',16)}</button>
-          <button class="icon-btn" title="Crear publicación para estados de WhatsApp" onclick="openPostModal('${p.id}')">${icon('share',16)}</button>
-          <button class="icon-btn" title="Copiar enlace directo a este producto" onclick="copyProductLink('${p.id}')">${icon('link',16)}</button>
+          <div class="row-more-wrap">
+            <button class="icon-btn" title="Más acciones" onclick="event.stopPropagation();state.productRowMenuOpenId=(state.productRowMenuOpenId==='${p.id}'?null:'${p.id}');render()">${icon('more-horizontal',16)}</button>
+            ${state.productRowMenuOpenId===p.id ? `
+            <div class="row-more-overlay" onclick="state.productRowMenuOpenId=null;render()"></div>
+            <div class="row-more-menu" onclick="event.stopPropagation()">
+              ${catFilter!=='Todas' ? `<button onclick="state.productRowMenuOpenId=null;removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x',15)} Quitar de "${catFilter}"</button>` : ''}
+              ${needFilter!=='Todas' ? `<button onclick="state.productRowMenuOpenId=null;removeProductTag('${p.id}','need','${needFilter}')">${icon('x',15)} Quitar de esta etiqueta</button>` : ''}
+              <button onclick="state.productRowMenuOpenId=null;duplicateProduct('${p.id}')">${icon('copy',15)} Duplicar producto</button>
+              <button onclick="state.productRowMenuOpenId=null;openPostModal('${p.id}')">${icon('share',15)} Crear publicación</button>
+              <button onclick="state.productRowMenuOpenId=null;copyProductLink('${p.id}')">${icon('link',15)} Copiar enlace</button>
+            </div>` : ''}
+          </div>
           <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
           <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">${icon('trash')}</button>
         </div>
@@ -6017,9 +6043,9 @@ function renderKitEditor(p){
     ${items.length===0 ? `<div class="empty-state">Aún no has agregado ningún producto a este kit.</div>` :
       items.map((ki,idx)=>{ const comp = state.products.find(x=>x.id===ki.productId); return `
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-          <div style="flex:1;font-size:13px;">${comp?comp.name:'(producto no encontrado)'}<div class="row-sub">${comp?`Existencia: ${totalStock(comp)}`:''}</div></div>
-          <input type="number" min="1" value="${ki.qty}" style="width:64px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setKitComponentQty(${idx}, this.value)">
-          <button class="icon-btn danger" onclick="removeKitComponent(${idx})">${icon('trash',14)}</button>
+          <div style="flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:13px;">${comp?comp.name:'(producto no encontrado)'}<div class="row-sub">${comp?`Existencia: ${totalStock(comp)}`:''}</div></div>
+          <input type="number" min="1" value="${ki.qty}" style="width:64px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;flex-shrink:0;" onchange="setKitComponentQty(${idx}, this.value)">
+          <button class="icon-btn danger" style="flex-shrink:0;" onclick="removeKitComponent(${idx})">${icon('trash',14)}</button>
         </div>`; }).join('')}
     <div class="form-field" style="margin-top:12px;margin-bottom:0;"><label>Agregar producto al kit</label>
       <input placeholder="Buscar producto por nombre..." value="${state.kitProductSearch||''}" oninput="state.kitProductSearch=this.value;render()">
@@ -8857,11 +8883,11 @@ function renderAuditorias(){
         ${candidates.length>0 ? `
           <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
             ${candidates.map(p=>`
-              <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
+              <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;flex-wrap:wrap;row-gap:8px;">
                 ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
                 <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
-                <button class="icon-btn" title="Editar este producto" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit',16)}</button>
-                <input id="audit-count-${p.id}" type="number" min="0" placeholder="Conteo" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
+                <button class="icon-btn" title="Editar este producto" style="flex-shrink:0;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit',16)}</button>
+                <input id="audit-count-${p.id}" type="number" min="0" placeholder="Conteo" style="width:80px;flex-shrink:0;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
               </div>
             `).join('')}
           </div>
@@ -8870,10 +8896,10 @@ function renderAuditorias(){
         ${rows.length>0 ? `
           <div class="panel-title" style="margin-bottom:10px;">Productos contados (${rows.length}) ${totalDiffs>0?`· <span style="color:var(--rose);">${totalDiffs} con diferencia</span>`:'· sin diferencias'}</div>
           ${rows.map(r=>`
-            <div class="hbar-row" style="align-items:center;">
-              <div class="hbar-label" style="width:auto;flex:1;">${r.name}</div>
-              <div style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">Sistema: ${r.system} · Contado: ${r.counted}</div>
-              <div class="hbar-val" style="color:${r.diff===0?'var(--green)':'var(--rose)'};font-weight:800;">${r.diff>0?'+':''}${r.diff}</div>
+            <div class="hbar-row" style="align-items:center;flex-wrap:wrap;row-gap:4px;">
+              <div class="hbar-label" style="width:auto;flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;">${r.name}</div>
+              <div style="font-size:12px;color:var(--ink-soft);white-space:nowrap;flex-shrink:0;">Sistema: ${r.system} · Contado: ${r.counted}</div>
+              <div class="hbar-val" style="color:${r.diff===0?'var(--green)':'var(--rose)'};font-weight:800;flex-shrink:0;">${r.diff>0?'+':''}${r.diff}</div>
             </div>
           `).join('')}
           <div class="form-field" style="margin-top:12px;"><label>Notas (opcional)</label><input value="${state.auditNotes}" oninput="state.auditNotes=this.value" placeholder="Turno, responsable, motivo de la auditoría..."></div>
@@ -10403,8 +10429,8 @@ function renderProductModal(){
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${state.centers.filter(c=>c.active).map(c=>`
               <div style="display:flex;align-items:center;gap:10px;">
-                <div style="flex:1;font-size:13px;font-weight:600;">${c.name}${c.isDefault?' <span style="color:var(--ink-soft);font-weight:400;">(Principal)</span>':''}</div>
-                <input type="number" min="0" style="width:90px;padding:9px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${(p.stockByCenter&&p.stockByCenter[c.id])||0}" onchange="setProductCenterStock('${c.id}', this.value)">
+                <div style="flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:13px;font-weight:600;">${c.name}${c.isDefault?' <span style="color:var(--ink-soft);font-weight:400;">(Principal)</span>':''}</div>
+                <input type="number" min="0" style="width:90px;flex-shrink:0;padding:9px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${(p.stockByCenter&&p.stockByCenter[c.id])||0}" onchange="setProductCenterStock('${c.id}', this.value)">
               </div>
             `).join('')}
           </div>
@@ -10621,11 +10647,13 @@ function renderVariantsEditor(p){
       ${variants.length>0 ? `
         <div class="panel-title" style="font-size:12.5px;margin:12px 0 8px;">Combinaciones (${variants.length})</div>
         ${variants.map(v=>`
-          <div class="list-row" style="align-items:center;">
+          <div class="list-row" style="align-items:center;flex-wrap:wrap;row-gap:8px;">
             <div class="row-main"><div class="row-title">${Object.entries(v.combo||{}).map(([k,val])=>`${k}: ${val}`).join(' · ')}</div></div>
-            <input placeholder="SKU" value="${v.sku||''}" style="width:110px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="setVariantField('${v.id}','sku',this.value)">
-            <input type="number" min="0" placeholder="Precio (si es distinto)" value="${v.priceOverride||''}" style="width:110px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;" onchange="setVariantField('${v.id}','priceOverride',this.value)">
-            <input type="number" min="0" placeholder="Stock" value="${v.stock||0}" style="width:70px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;" onchange="setVariantField('${v.id}','stock',this.value)">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;">
+              <input placeholder="SKU" value="${v.sku||''}" style="flex:1;min-width:90px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="setVariantField('${v.id}','sku',this.value)">
+              <input type="number" min="0" placeholder="Precio (si es distinto)" value="${v.priceOverride||''}" style="flex:1;min-width:90px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;" onchange="setVariantField('${v.id}','priceOverride',this.value)">
+              <input type="number" min="0" placeholder="Stock" value="${v.stock||0}" style="width:70px;flex-shrink:0;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;" onchange="setVariantField('${v.id}','stock',this.value)">
+            </div>
           </div>
         `).join('')}
       ` : ''}

@@ -70,10 +70,18 @@
   .search-bar-inner{padding:0 16px 12px;}
   .search-input{width:100%;padding:12px 14px;border-radius:var(--radius-pill);border:none;font-size:16px;font-family:inherit;background:rgba(255,255,255,0.14);color:#fff;}
   .search-input::placeholder{color:#e9c9dc;}
+  @media(max-width:480px){
+    /* Antes "Discreto · Confidencial..." se veía a medias ("Discreto · Confid…") en casi
+       cualquier celular porque el header no tenía espacio para el logo + nombre + 4 botones +
+       ese subtítulo completo. Es el mensaje de discreción más importante del sitio, así que en
+       vez de mostrarlo cortado se oculta aquí (ya se repite completo más abajo, en la franja de
+       confianza "Compra segura · Empaque discreto..."). */
+    .brand-sub{display:none;}
+    .brand-name{font-size:14.5px;}
+  }
   @media(max-width:359px){
     .topbar-main{padding:10px 12px;gap:8px;}
     .brand-name{font-size:14px;}
-    .brand-sub{display:none;}
     .cart-btn{width:40px;height:40px;}
     .icon-btn{width:40px;height:40px;}
   }
@@ -272,14 +280,18 @@
   .drawer-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 20px;}
   .cart-item{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);}
   .cart-item-swatch{width:48px;height:48px;border-radius:10px;flex-shrink:0;object-fit:cover;}
-  .cart-item-info{flex:1;}
-  .cart-item-name{font-size:13.5px;font-weight:700;}
+  .cart-item-info{flex:1;min-width:0;}
+  .cart-item-name{font-size:13.5px;font-weight:700;overflow-wrap:anywhere;word-break:break-word;}
   .cart-item-price{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
-  .qty-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .qty-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;row-gap:4px;}
   .qty-btn{width:44px;height:44px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .qty-val{font-size:13px;font-weight:700;min-width:20px;text-align:center;}
-  .cart-item-subtotal{margin-left:auto;font-size:13px;font-weight:800;color:var(--primary-deep);}
-  .remove-link{font-size:11.5px;color:var(--rose);font-weight:600;padding:8px 0 8px 10px;}
+  /* Antes el subtotal y "Quitar" vivían en la misma fila que los botones +/-, y en 320-375px
+     ese grupo (dos botones de 44px + cantidad + precio + Quitar) ya no cabía: "Quitar" quedaba
+     cortado fuera de la pantalla. Ahora van en su propia fila, siempre con su propio espacio. */
+  .cart-item-bottom-row{display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:4px;}
+  .cart-item-subtotal{font-size:13px;font-weight:800;color:var(--primary-deep);}
+  .remove-link{font-size:11.5px;color:var(--rose);font-weight:600;padding:8px 0 8px 10px;flex-shrink:0;}
   .drawer-foot{padding:16px 20px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
   .total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:800;margin-bottom:12px;color:var(--primary-deep);}
   .btn-primary{width:100%;background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:14px;min-height:48px;border-radius:var(--radius-sm);font-size:14.5px;font-weight:700;display:block;text-align:center;text-decoration:none;box-shadow:0 10px 22px -10px rgba(188,53,92,0.5);transition:transform .12s ease,opacity .12s ease;}
@@ -2264,8 +2276,10 @@ function renderCartDrawer(){
                 <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
                 <div class="qty-val">${qty}</div>
                 <button class="qty-btn" onclick="changeQty('${key}',1)">+</button>
-                <span class="cart-item-subtotal">${money(price*qty)}</span>
-                <a class="remove-link" onclick="removeFromCart('${key}')">Quitar</a>
+                <div class="cart-item-bottom-row">
+                  <span class="cart-item-subtotal">${money(price*qty)}</span>
+                  <a class="remove-link" onclick="removeFromCart('${key}')">Quitar</a>
+                </div>
               </div>
             </div>
           </div>`;}).join('')}
