@@ -2379,7 +2379,21 @@ function renderStore(){
   // guardada de antes no conocía todavía, se agrega al final por default, para no perderla.
   const savedSections = (state.settings.sections && state.settings.sections.length) ? state.settings.sections : DEFAULT_SECTIONS;
   const knownKeys = new Set(savedSections.map(s=>s.key));
-  const order = [...savedSections.map(s=>s.key), ...DEFAULT_SECTIONS.filter(s=>!knownKeys.has(s.key)).map(s=>s.key)];
+  const order = savedSections.map(s=>s.key);
+  // Una sección nueva que una configuración guardada de antes no conocía (ej. cuando se agregó
+  // "faq" a DEFAULT_SECTIONS, las tiendas que ya tenían guardado su orden en Diseño → Secciones
+  // nunca se enteraron) se insertaba siempre al final de todo — después del pie de página,
+  // fuera del flujo visual de la tienda. Ahora se inserta justo después de la sección conocida
+  // más cercana en el orden por default, para que aparezca donde el diseño por default la puso
+  // (ej. preguntas frecuentes después de testimonios, no después del pie).
+  DEFAULT_SECTIONS.forEach((defSection, idx)=>{
+    if(knownKeys.has(defSection.key)) return;
+    let insertAfterKey = null;
+    for(let i=idx-1;i>=0;i--){ if(knownKeys.has(DEFAULT_SECTIONS[i].key)){ insertAfterKey = DEFAULT_SECTIONS[i].key; break; } }
+    const insertPos = insertAfterKey ? order.indexOf(insertAfterKey)+1 : 0;
+    order.splice(insertPos, 0, defSection.key);
+    knownKeys.add(defSection.key);
+  });
   const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
   const after = { hero: ['trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
   const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
