@@ -173,7 +173,9 @@
   .row-more-menu button.danger{color:var(--danger-ink);}
   .row-more-menu hr{border:none;border-top:1px solid var(--border);margin:5px 0;}
   .row-more-overlay{position:fixed;inset:0;z-index:24;}
-  .icon-btn{width:38px;height:38px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,transform .1s ease;}
+  /* 38px -> 44px: mismo tamaño táctil mínimo que ya usan la tienda y el POS, para que las
+     3 interfaces se sientan consistentes al tocarlas. */
+  .icon-btn{width:44px;height:44px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,transform .1s ease;}
   .icon-btn:hover{background:#efd9d3;}
   .icon-btn:active{transform:scale(0.94);}
   .icon-btn.danger{background:var(--danger-bg);color:var(--danger-ink);}
@@ -372,7 +374,7 @@
   .section-name{flex:1;min-width:120px;overflow-wrap:anywhere;word-break:break-word;font-size:13.5px;font-weight:600;color:var(--ink);}
   .section-name.hidden-section{color:var(--ink-soft);}
   .section-arrows{display:flex;gap:3px;flex-shrink:0;}
-  .arrow-btn{width:26px;height:26px;border-radius:7px;background:var(--surface-soft);color:var(--primary-deep);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s ease;}
+  .arrow-btn{width:44px;height:44px;border-radius:7px;background:var(--surface-soft);color:var(--primary-deep);font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s ease;}
   .arrow-btn:hover{background:#efd9d3;}
   .visibility-toggle{flex-shrink:0;padding:6px 12px;border-radius:var(--radius-pill);font-size:11px;font-weight:700;white-space:nowrap;}
   .visibility-toggle.on{background:var(--surface-soft);color:var(--primary-deep);}
