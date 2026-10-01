@@ -61,6 +61,11 @@
   .admin-tabs{display:flex;gap:4px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;position:sticky;top:0;z-index:20;}
   .admin-tabs::-webkit-scrollbar{display:none;}
   .admin-tab{padding:9px 15px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;color:var(--ink-soft);white-space:nowrap;transition:all .15s ease;}
+  .stats-subtabs-wrap{padding:12px 16px 4px;background:var(--surface);border-bottom:1px solid var(--border);}
+  .stats-tab-group{margin-bottom:10px;}
+  .stats-tab-group-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin-bottom:6px;}
+  .stats-tab-group-row{display:flex;flex-wrap:wrap;gap:4px;}
+  .stats-tab-group-row .admin-tab{background:var(--surface-soft);}
   .admin-tab.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
   .tab-badge{display:inline-block;background:#BC355C;color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:2px;}
   .admin-tabs-sep{width:1px;flex-shrink:0;background:var(--border);margin:6px 4px;}
@@ -159,7 +164,7 @@
   .icon-btn.danger:hover{filter:brightness(0.94);}
   .status-badge{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:var(--radius-pill);color:#fff;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;}
   .status-badge svg{flex-shrink:0;}
-  .status-badge.status-out{background:#6b5a63;}
+  .status-badge.status-out{background:var(--navy);}
   .status-badge.status-critical{background:#BC355C;color:#fff;}
   .status-badge.status-low{background:var(--amber);color:#2B1620;}
   .status-badge.status-ok{background:var(--green);color:#2B1620;}
@@ -426,7 +431,9 @@ const DEFAULT_NEEDS = [
   {key:'empezando', label:'Estoy empezando'},
 ];
 const STATUS_FLOW = ["Nuevo","Preparando","En camino","Entregado","Cancelado"];
-const STATUS_COLOR = {"Nuevo":"#BC355C","Preparando":"#F6A030","En camino":"#1AA0B2","Entregado":"#6E9E1A","Cancelado":"#8a6b78"};
+// Colores de los 7 hex de marca aprobados — antes "En camino", "Entregado" y "Cancelado" usaban
+// tonos parecidos pero no exactos a la paleta (#1AA0B2, #6E9E1A, #8a6b78).
+const STATUS_COLOR = {"Nuevo":"#BC355C","Preparando":"#F6A030","En camino":"#20B7CA","Entregado":"#7AB71A","Cancelado":"#0A4A5B"};
 // Texto oscuro donde el fondo es demasiado claro para que el blanco se lea bien (verificado con
 // la fórmula de contraste WCAG): "Preparando", "En camino" y "Entregado" fallan con texto blanco.
 const STATUS_TEXT_COLOR = {"Nuevo":"#fff","Preparando":"#2B1620","En camino":"#2B1620","Entregado":"#2B1620","Cancelado":"#fff"};
@@ -530,6 +537,20 @@ Cambios a este aviso
 Este aviso puede actualizarse para reflejar cambios en nuestras prácticas o en la ley aplicable. La versión vigente siempre estará disponible en este catálogo.
 
 Al marcar la casilla de aceptación antes de confirmar tu pedido, declaras que leíste y aceptas este aviso de privacidad.`,
+  // Mismo texto por defecto que en index.html (se repite por la misma razón que privacyPolicyText
+  // de arriba) — editable desde Configuración → Datos operativos.
+  returnPolicyText: `POLÍTICA DE DEVOLUCIONES Y CAMBIOS
+
+Por ser productos de uso íntimo, y por razones de higiene y salud, no aceptamos devoluciones ni cambios de productos que ya hayan sido abiertos, usados o retirados de su empaque original — esto aplica aunque el producto esté en buen estado.
+
+Sí aceptamos cambio o devolución cuando el producto presenta un defecto de fábrica (por ejemplo: no enciende, no funciona correctamente, llega dañado o incompleto), siempre que:
+- Nos contactes por WhatsApp lo antes posible después de recibir tu pedido, idealmente antes de usar el producto.
+- El producto se encuentre en su empaque original, junto con todos sus accesorios.
+- Puedas mostrarnos evidencia del defecto (foto o video) cuando te lo pidamos, para agilizar tu caso.
+
+En estos casos ofrecemos cambio por el mismo producto o uno equivalente; si no es posible reponerlo, se acuerda contigo la devolución del pago por el mismo medio en que se realizó.
+
+Cualquier caso fuera de lo anterior lo revisamos directamente contigo por WhatsApp — escríbenos y con gusto te ayudamos a encontrar la mejor solución.`,
   theme:{},
   historicalOrderCountOffset:0,
   dashboardNotes: [],
@@ -906,7 +927,7 @@ const SETTINGS_FIELD_LABELS = {
   repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
   churnRiskDays:'Días para clientes en riesgo de fuga', churnRiskMinPurchases:'Compras mínimas para riesgo de fuga',
   storePaused:'Tienda en pausa', storePausedMessage:'Mensaje de tienda en pausa', ageGateEnabled:'Verificación de mayoría de edad',
-  termsEnabled:'Aceptación del aviso de privacidad', termsText:'Texto de la casilla de aceptación', privacyPolicyText:'Aviso de privacidad completo',
+  termsEnabled:'Aceptación del aviso de privacidad', termsText:'Texto de la casilla de aceptación', privacyPolicyText:'Aviso de privacidad completo', returnPolicyText:'Política de devoluciones y cambios',
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
@@ -3585,12 +3606,17 @@ function renderLogin(){
 // Agrupación puramente visual/de navegación de las pestañas del admin (mismas 15 pestañas,
 // mismas funciones, mismo adminTab): solo cambia cómo se llega a ellas, para que en celular
 // no dependan de un scroll horizontal a ciegas entre 15 opciones sueltas.
+// Reagrupado para que cada grupo sea una sola cosa: antes "Catálogo" mezclaba productos/
+// inventario con Marketing (7 herramientas propias) y Diseño (apariencia pública), y "Personas"
+// mezclaba clientes con el equipo interno (cajeros/usuarios). Mismas pestañas, mismo adminTab,
+// cero cambio de función — solo reordenado y re-etiquetado.
 const ADMIN_NAV_GROUPS = [
   {label:'Ventas', tabs:['resumen','pedidos','caja']},
-  {label:'Catálogo', tabs:['productos','centros','marketing','diseño']},
-  {label:'Personas', tabs:['clientes','mensajes','cajeros']},
+  {label:'Catálogo', tabs:['productos','centros']},
+  {label:'Clientes', tabs:['clientes','mensajes']},
+  {label:'Marketing', tabs:['marketing']},
   {label:'Analítica', tabs:['estadísticas']},
-  {label:'Sistema', tabs:['configuración']},
+  {label:'Configuración', tabs:['diseño','cajeros','configuración']},
 ];
 const TAB_ICON = {
   resumen:'grid', pedidos:'receipt', caja:'bag', productos:'package', centros:'map-pin',
@@ -4192,27 +4218,49 @@ function ensureRealtimeTimer(active){
 }
 
 /* ============== RENDER: ESTADÍSTICAS ============== */
+// Antes eran 16 sub-pestañas sueltas en una sola franja horizontal sin ningún orden — el mismo
+// problema que ya se corrigió en la navegación principal del admin. Agrupadas aquí por el tipo de
+// pregunta de negocio que responden; mismo state.statsSubview, mismas funciones de render, cero
+// cambio de lógica o de datos.
+const STATS_SUBTAB_GROUPS = [
+  {label:'Ventas', items:[
+    {key:'general', label:'General'},
+    {key:'pagos', label:'Pagos'},
+    {key:'comisiones', label:'Comisiones'},
+    {key:'carritoabandonado', label:'Carrito abandonado'},
+  ]},
+  {label:'Productos', items:[
+    {key:'productos', label:'Productos'},
+    {key:'margen', label:'Margen por categoría'},
+    {key:'margenproveedor', label:'Rentabilidad por proveedor'},
+    {key:'embudoproducto', label:'Embudo por producto'},
+    {key:'busquedas', label:'Búsquedas sin resultado'},
+  ]},
+  {label:'Clientes y tráfico', items:[
+    {key:'trafico', label:'Fuentes de tráfico'},
+    {key:'visitas', label:'Visitas'},
+    {key:'mejorhoraredes', label:'Mejor hora para redes'},
+  ]},
+  {label:'Operación', items:[
+    {key:'tiemporeal', label:'Tiempo real'},
+    {key:'mapacalor', label:'Mapa de calor'},
+    {key:'gastos', label:'Gastos y utilidad'},
+    {key:'horaspico', label:'Horas pico por cajero'},
+  ]},
+];
 function renderEstadisticas(){
   const sub = state.statsSubview || 'general';
   const goSub = (s) => `state.statsSubview='${s}';render()`;
   return `
-    <div class="admin-tabs" style="padding:0 0 14px;border-bottom:none;">
-      <button class="admin-tab ${sub==='general'?'active':''}" onclick="${goSub('general')}">General</button>
-      <button class="admin-tab ${sub==='pagos'?'active':''}" onclick="${goSub('pagos')}">Pagos</button>
-      <button class="admin-tab ${sub==='productos'?'active':''}" onclick="${goSub('productos')}">Productos</button>
-      <button class="admin-tab ${sub==='trafico'?'active':''}" onclick="${goSub('trafico')}">Fuentes de tráfico</button>
-      <button class="admin-tab ${sub==='tiemporeal'?'active':''}" onclick="${goSub('tiemporeal')}">Tiempo real</button>
-      <button class="admin-tab ${sub==='visitas'?'active':''}" onclick="${goSub('visitas')}">Visitas</button>
-      <button class="admin-tab ${sub==='margen'?'active':''}" onclick="${goSub('margen')}">Margen por categoría</button>
-      <button class="admin-tab ${sub==='margenproveedor'?'active':''}" onclick="${goSub('margenproveedor')}">Rentabilidad por proveedor</button>
-      <button class="admin-tab ${sub==='mapacalor'?'active':''}" onclick="${goSub('mapacalor')}">Mapa de calor</button>
-      <button class="admin-tab ${sub==='gastos'?'active':''}" onclick="${goSub('gastos')}">Gastos y utilidad</button>
-      <button class="admin-tab ${sub==='busquedas'?'active':''}" onclick="${goSub('busquedas')}">Búsquedas sin resultado</button>
-      <button class="admin-tab ${sub==='comisiones'?'active':''}" onclick="${goSub('comisiones')}">Comisiones</button>
-      <button class="admin-tab ${sub==='carritoabandonado'?'active':''}" onclick="${goSub('carritoabandonado')}">Encuesta de carrito abandonado</button>
-      <button class="admin-tab ${sub==='horaspico'?'active':''}" onclick="${goSub('horaspico')}">Horas pico por cajero</button>
-      <button class="admin-tab ${sub==='embudoproducto'?'active':''}" onclick="${goSub('embudoproducto')}">Embudo por producto</button>
-      <button class="admin-tab ${sub==='mejorhoraredes'?'active':''}" onclick="${goSub('mejorhoraredes')}">Mejor hora para redes</button>
+    <div class="stats-subtabs-wrap">
+      ${STATS_SUBTAB_GROUPS.map(g=>`
+        <div class="stats-tab-group">
+          <div class="stats-tab-group-label">${g.label}</div>
+          <div class="stats-tab-group-row">
+            ${g.items.map(it=>`<button class="admin-tab ${sub===it.key?'active':''}" onclick="${goSub(it.key)}">${it.label}</button>`).join('')}
+          </div>
+        </div>
+      `).join('')}
     </div>
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
@@ -5584,7 +5632,8 @@ function renderOrderRow(o){
    "storeMessages" (solo creación pública, lectura/edición con el permiso "mensajes", ver
    firestore.rules). Cada mensaje trae nombre, teléfono, un tipo (pregunta/sugerencia/queja/otro)
    y el texto; aquí se pueden marcar como leídos/respondidos y responder por WhatsApp en un clic. */
-const MESSAGE_STATUS_COLOR = {nuevo:'#bc355c', leido:'#c9a227', respondido:'#4CAF7D'};
+// Colores de marca aprobados — antes "leído" y "respondido" usaban tonos fuera de la paleta de 7.
+const MESSAGE_STATUS_COLOR = {nuevo:'#bc355c', leido:'#F6A030', respondido:'#7AB71A'};
 const MESSAGE_STATUS_TEXT_COLOR = {nuevo:'#fff', leido:'#2B1620', respondido:'#2B1620'};
 const MESSAGE_STATUS_LABEL = {nuevo:'Nuevo', leido:'Leído', respondido:'Respondido'};
 const MESSAGE_TYPE_LABEL = {pregunta:'Pregunta', sugerencia:'Sugerencia', queja:'Queja', otro:'Otro', almacen:'Nota de almacén'};
@@ -6366,7 +6415,7 @@ function renderRestockDemandPanel(){
   <div class="panel">
     <div class="panel-title">Clientes esperando producto</div>
     <div class="panel-sub">Personas que dejaron su WhatsApp para que les avises cuando llegue. Arriba están los que más gente espera.</div>
-    ${stale.length ? `<div class="note-box" style="margin-bottom:10px;">${stale.length} aviso${stale.length===1?'':'s'} de más de 60 días. <button class="btn-tertiary" onclick="archiveStaleRestockRequests()">Archivar los viejos</button></div>` : ''}
+    ${stale.length ? `<div class="note-box" style="margin-bottom:10px;">${stale.length} aviso${stale.length===1?'':'s'} de más de 60 días. <button class="btn-tertiary" onclick="archiveStaleRestockRequests()">Eliminar avisos viejos</button></div>` : ''}
     ${demand.length ? demand.map(g=>`
       <div class="list-row" style="flex-wrap:wrap;">
         <div class="row-main">
@@ -9644,15 +9693,24 @@ function saveCustomCss(){
    Antes "Asistente IA" era su propia pestaña y esta pestaña solo tenía 4 campos sueltos.
    Se agrupan con el mismo patrón de lista + "volver" que ya usa Diseño/Marketing, y se deja
    claro en la nota de arriba que el nombre/logo/colores/textos de la tienda viven en Diseño. */
-const CONFIG_SUBPANELS = [
-  {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos)'},
-  {key:'encuesta', icon:icon('message-square'), label:'Encuesta post-entrega'},
-  {key:'asistente', icon:icon('message-circle'), label:'Asistente IA'},
-  {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
-  {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
-  {key:'exportar', icon:icon('download'), label:'Exportar tus datos', ownerOnly:true},
-  {key:'errores', icon:icon('alert-triangle'), label:'Registro de errores del sistema', ownerOnly:true},
+// Agrupado igual que ya se hizo en Diseño — antes era una lista plana de 7 ítems sin ningún
+// orden. Mismas claves, mismo renderConfigSubpanel, cero cambio de función.
+const CONFIG_SUBPANEL_GROUPS = [
+  { title: "Operación de tienda", items: [
+    {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos)'},
+    {key:'encuesta', icon:icon('message-square'), label:'Encuesta post-entrega'},
+    {key:'asistente', icon:icon('message-circle'), label:'Asistente IA'},
+  ]},
+  { title: "Seguridad", items: [
+    {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
+  ]},
+  { title: "Avanzado", items: [
+    {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
+    {key:'exportar', icon:icon('download'), label:'Exportar tus datos', ownerOnly:true},
+    {key:'errores', icon:icon('alert-triangle'), label:'Registro de errores del sistema', ownerOnly:true},
+  ]},
 ];
+const CONFIG_SUBPANELS = CONFIG_SUBPANEL_GROUPS.flatMap(g=>g.items);
 function downloadCSV(filename, rows){
   const csvContent = rows.map(row => row.map(cell => {
     const s = (cell===null||cell===undefined) ? '' : String(cell);
@@ -9746,18 +9804,23 @@ function printCatalogPDF(category){
 }
 function renderConfig(){
   if(state.configSubpanel) return renderConfigSubpanel(state.configSubpanel);
-  const items = CONFIG_SUBPANELS.filter(sp=> !sp.ownerOnly || !state.myPermissions);
   return `
     <div class="note-box" style="margin-bottom:16px;">Ajustes generales de operación. Para el nombre, logo, colores, tipografía, textos y secciones de la página de inicio de tu tienda, ve a la pestaña <strong>Diseño</strong>.</div>
-    <div class="panel">
-      ${items.map(sp=>`
-        <div class="subpanel-item" onclick="state.configSubpanel='${sp.key}';render()">
-          <span>${sp.icon}&nbsp;&nbsp;${sp.label}</span>
-          <span class="chev">›</span>
-        </div>
-      `).join('')}
-    </div>
-    <div class="note-box" style="margin-top:14px;">Para agregar más administradores o cambiar tu contraseña, hazlo desde la consola de Firebase → Authentication → Users.</div>
+    ${CONFIG_SUBPANEL_GROUPS.map(g=>{
+      const items = g.items.filter(sp=> !sp.ownerOnly || !state.myPermissions);
+      if(!items.length) return '';
+      return `
+      <div class="panel">
+        <div class="panel-title">${g.title}</div>
+        ${items.map(sp=>`
+          <div class="subpanel-item" onclick="state.configSubpanel='${sp.key}';render()">
+            <span>${sp.icon}&nbsp;&nbsp;${sp.label}</span>
+            <span class="chev">›</span>
+          </div>
+        `).join('')}
+      </div>`;
+    }).join('')}
+    <div class="note-box" style="margin-top:4px;">Para agregar más administradores o cambiar tu contraseña, hazlo desde la consola de Firebase → Authentication → Users.</div>
   `;
 }
 /* ============== REGISTRO DE ERRORES DEL SISTEMA (panel) ==============
@@ -9858,6 +9921,9 @@ function renderOperativoSubpanel(){
     </div>
     <div class="form-field" style="margin-top:8px;"><label>Aviso de privacidad completo (se ve al hacer clic en "Leer el aviso completo")</label>
       <textarea id="set-privacy-policy-text" rows="10" oninput="state.settings.privacyPolicyText=this.value">${escDescHtml(s.privacyPolicyText||'')}</textarea>
+    </div>
+    <div class="form-field" style="margin-top:8px;"><label>Política de devoluciones y cambios (se muestra junto con el aviso de privacidad)</label>
+      <textarea id="set-return-policy-text" rows="10" oninput="state.settings.returnPolicyText=this.value">${escDescHtml(s.returnPolicyText||'')}</textarea>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
   </div>
@@ -10171,7 +10237,7 @@ function renderProductModal(){
         <div class="panel-sub" style="margin-bottom:0;">El stock de esta caja se maneja como cualquier producto (ajústalo tú mismo abajo, en Inventario) — represéntalo como cuántas cajas puedes armar por ahora.</div>
       </div>` : ''}
 
-      <div class="form-section-label">Información principal</div>
+      <div class="form-section-label">Multimedia</div>
       <div class="form-field"><label>Imágenes (máx. 5) — la primera es la portada</label>
         <div class="img-thumbs">
           ${(p.images||[]).map((src,idx)=>`
@@ -10188,6 +10254,7 @@ function renderProductModal(){
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
       </div>
 
+      <div class="form-section-label">Información básica</div>
       <div class="form-field"><label>Nombre</label><input id="pf-name" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
 
       <div class="two-col">
@@ -10235,6 +10302,7 @@ function renderProductModal(){
         ` : `<div class="panel-sub" style="margin:4px 0 0;">Genera o escribe un SKU arriba para poder crear su código de barras.</div>`}
       </div>
 
+      <div class="form-section-label">Categorización</div>
       <div class="form-field">
         <label>Categorías</label>
           <div style="max-height:110px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;">

@@ -248,7 +248,7 @@
   .drawer.drawer-detail{max-width:480px;}
   .detail-main-img-wrap{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--surface-soft);flex-shrink:0;touch-action:pan-y;}
   .detail-main-img-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
-  .detail-nav-btn{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;background:rgba(43,22,32,0.55);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;}
+  .detail-nav-btn{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(43,22,32,0.55);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;}
   .detail-nav-btn.prev{left:10px;}
   .detail-nav-btn.next{right:10px;}
   .detail-dots{position:absolute;bottom:12px;left:0;right:0;display:flex;justify-content:center;gap:6px;}
@@ -276,7 +276,7 @@
   .cart-item-name{font-size:13.5px;font-weight:700;}
   .cart-item-price{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
   .qty-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
-  .qty-btn{width:32px;height:32px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .qty-btn{width:44px;height:44px;border-radius:8px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .qty-val{font-size:13px;font-weight:700;min-width:20px;text-align:center;}
   .cart-item-subtotal{margin-left:auto;font-size:13px;font-weight:800;color:var(--primary-deep);}
   .remove-link{font-size:11.5px;color:var(--rose);font-weight:600;padding:8px 0 8px 10px;}
@@ -389,7 +389,9 @@ async function getNextOrderNumber(){
 }
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : ''; }
 
-const PALETTE = ["#BC355C","#993477","#20B7CA","#0A4A5B","#ED7578","#5C1F49","#F6A030","#7AB71A","#8a6b78","#993477","#20B7CA","#7AB71A"];
+// Solo los 7 colores de marca aprobados — antes se mezclaban con 2 tonos fuera de paleta
+// (#5C1F49 y #8a6b78) para pintar el fondo de categorías sin imagen.
+const PALETTE = ["#993477","#BC355C","#ED7578","#F6A030","#7AB71A","#20B7CA","#0A4A5B"];
 const ICONS = ["✦","●","◐","▲","♥","◆","■","◯","✧","✺","❖","✤"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
 const DEFAULT_NEEDS = [
@@ -473,9 +475,43 @@ Cambios a este aviso
 Este aviso puede actualizarse para reflejar cambios en nuestras prácticas o en la ley aplicable. La versión vigente siempre estará disponible en este catálogo.
 
 Al marcar la casilla de aceptación antes de confirmar tu pedido, declaras que leíste y aceptas este aviso de privacidad.`,
+  // Mismo texto por defecto que en admin.html (DEFAULT_SETTINGS.returnPolicyText), por la misma
+  // razón que privacyPolicyText de arriba. Se puede editar desde Configuración → Aviso de
+  // privacidad y devoluciones cuando Ale quiera ajustar el plazo o las condiciones exactas.
+  returnPolicyText: `POLÍTICA DE DEVOLUCIONES Y CAMBIOS
+
+Por ser productos de uso íntimo, y por razones de higiene y salud, no aceptamos devoluciones ni cambios de productos que ya hayan sido abiertos, usados o retirados de su empaque original — esto aplica aunque el producto esté en buen estado.
+
+Sí aceptamos cambio o devolución cuando el producto presenta un defecto de fábrica (por ejemplo: no enciende, no funciona correctamente, llega dañado o incompleto), siempre que:
+- Nos contactes por WhatsApp lo antes posible después de recibir tu pedido, idealmente antes de usar el producto.
+- El producto se encuentre en su empaque original, junto con todos sus accesorios.
+- Puedas mostrarnos evidencia del defecto (foto o video) cuando te lo pidamos, para agilizar tu caso.
+
+En estos casos ofrecemos cambio por el mismo producto o uno equivalente; si no es posible reponerlo, se acuerda contigo la devolución del pago por el mismo medio en que se realizó.
+
+Cualquier caso fuera de lo anterior lo revisamos directamente contigo por WhatsApp — escríbenos y con gusto te ayudamos a encontrar la mejor solución.`,
 };
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart:{}, activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'', privacyPolicyOpen:false };
+/* ============== PERSISTENCIA DEL CARRITO ==============
+   Antes el carrito solo vivía en memoria: un refresh accidental, cerrar la pestaña, o que el
+   celular descargue la pestaña en segundo plano lo borraba por completo sin ningún aviso. Ahora
+   se guarda en este mismo celular/navegador (igual que el perfil y la lista de deseos) y se
+   restaura solo al volver a entrar. Si algún producto del carrito guardado ya no existe o aún no
+   cargó, simplemente no se muestra hasta que el catálogo completo esté disponible (parseCartKey
+   ya maneja eso) — no se cae la página. */
+const CART_STORAGE_KEY = 'cdlp_cart';
+function loadStoredCart(){
+  try{
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return (parsed && typeof parsed==='object' && !Array.isArray(parsed)) ? parsed : {};
+  }catch(e){ return {}; }
+}
+function saveCart(){
+  try{ localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart)); }catch(e){ /* almacenamiento no disponible, se ignora */ }
+}
+
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart: loadStoredCart(), activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'', privacyPolicyOpen:false };
 
 async function loadData(){
   try{
@@ -1096,10 +1132,10 @@ function addToCart(id, variantId){
   const key = cartKey(id, variantId);
   const available = itemStock(p, v);
   if(available<=0 || available<=(state.cart[key]||0)){ showToast('Sin existencias'); return; }
-  state.cart[key]=(state.cart[key]||0)+1; showToast('Agregado al carrito'); trackEvent('add_to_cart', {productId:id}); render();
+  state.cart[key]=(state.cart[key]||0)+1; saveCart(); showToast('Agregado al carrito'); trackEvent('add_to_cart', {productId:id}); render();
 }
-function changeQty(key,delta){ const cur=state.cart[key]||0; const next=cur+delta; if(next<=0) delete state.cart[key]; else state.cart[key]=next; render(); }
-function removeFromCart(key){ delete state.cart[key]; render(); }
+function changeQty(key,delta){ const cur=state.cart[key]||0; const next=cur+delta; if(next<=0) delete state.cart[key]; else state.cart[key]=next; saveCart(); render(); }
+function removeFromCart(key){ delete state.cart[key]; saveCart(); render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
 function goHome(){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; state.activeBestSellers=false; render(); window.scrollTo({top:0, behavior:'smooth'}); }
@@ -1231,7 +1267,7 @@ async function submitOrder(formData){
   if(couponCode){
     try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString(), phone: (formData.phone||'').replace(/\D/g,'')}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
   }
-  state.cart = {}; state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; render();
+  state.cart = {}; saveCart(); state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; render();
 
   // Mensaje de confirmación de compra: se abre solo, listo para que el cliente lo mande por
   // WhatsApp al número de la tienda (state.settings.whatsapp, configurable en Configuración).
@@ -1251,6 +1287,7 @@ function handleCheckoutSubmit(){
   const notes = document.getElementById('ck-notes').value.trim();
   const remember = document.getElementById('ck-remember').checked;
   if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
+  if(phone.replace(/\D/g,'').length < 10){ showToast('Escribe tu WhatsApp con 10 dígitos para poder contactarte'); return; }
   if(needsTermsAcceptance()){
     const termsEl = document.getElementById('ck-terms');
     if(!termsEl || !termsEl.checked){ showToast('Debes aceptar el aviso de privacidad para continuar'); return; }
@@ -1314,10 +1351,13 @@ function needsTermsAcceptance(){
 // casilla, sin ningún lugar donde leer el aviso completo.
 function renderPrivacyPolicyDrawer(){
   const text = state.settings.privacyPolicyText || DEFAULT_SETTINGS.privacyPolicyText;
+  const returnsText = state.settings.returnPolicyText || DEFAULT_SETTINGS.returnPolicyText;
   return `
     <div class="drawer-head"><h2>Aviso de privacidad</h2><button class="close-x" onclick="state.privacyPolicyOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;">${text}</div>
+      <div style="height:1px;background:var(--border);margin:18px 0;"></div>
+      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;">${returnsText}</div>
     </div>
   `;
 }
@@ -1571,6 +1611,11 @@ function renderProductDetailDrawer(){
         ` : ''}
         ${p.isMysteryBox ? `<div class="note-box" style="margin-bottom:10px;">🎁 Es una caja sorpresa: incluye ${p.mysteryItemCount||3} producto(s) elegidos al azar${p.mysteryCategory&&p.mysteryCategory!=='Cualquiera'?` de ${p.mysteryCategory}`:''}. No se elige el contenido, ¡es parte de la sorpresa!</div>` : ''}
         ${p.desc ? `<div class="detail-desc">${p.desc}</div>` : ''}
+        ${!isKioskMode() ? `
+        <div class="note-box" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;">
+          <div style="display:flex;gap:6px;align-items:flex-start;">${icon('package')}<span><b>Empaque discreto:</b> sin logotipos ni nada que indique el contenido.</span></div>
+          <div style="display:flex;gap:6px;align-items:flex-start;">${icon('home')}<span><b>Entrega:</b> ${state.settings.shippingNote || DEFAULT_SETTINGS.shippingNote}</span></div>
+        </div>` : ''}
       </div>
     </div>
     <div class="drawer-foot">

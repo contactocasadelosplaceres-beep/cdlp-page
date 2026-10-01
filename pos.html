@@ -16,6 +16,7 @@
     --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
     --primary:#993477; --primary-deep:#5C1F49; --rose:#BC355C; --coral:#ED7578; --amber:#F6A030;
     --green:#7AB71A; --teal:#20B7CA; --navy:#0A4A5B; --border:#EBD9D3;
+    --danger-bg:#FBE2E6; --danger-ink:#A02040;
     --radius-sm:10px; --radius-md:14px; --radius-lg:18px; --radius-pill:999px;
     --shadow-sm:0 2px 8px -4px rgba(43,22,32,0.16);
     --shadow-md:0 12px 28px -12px rgba(43,22,32,0.22);
@@ -31,8 +32,41 @@
   .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 16px -10px rgba(0,0,0,0.5);position:relative;z-index:5;}
   .top .brand{font-size:15.5px;font-weight:700;font-family:'League Spartan',sans-serif;letter-spacing:0.01em;}
   .top .sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
-  .pill-btn{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;border-radius:var(--radius-pill);color:#fff;font-weight:600;transition:background .15s ease;}
+  .pill-btn{font-size:12px;background:rgba(255,255,255,0.14);padding:8px 13px;min-height:44px;display:inline-flex;align-items:center;border-radius:var(--radius-pill);color:#fff;font-weight:600;transition:background .15s ease;}
   .pill-btn:hover{background:rgba(255,255,255,0.22);}
+  /* Antes las 7 acciones de la barra superior (Caja, Ventas, Cambio, Almacén, Cambiar centro,
+     Cambiar cajero, Salir) tenían todas el mismo peso visual y en celular angosto se partían en
+     2-3 filas, empujando los productos hacia abajo. Ahora solo "Caja" y "Ventas" (las de uso
+     frecuente durante una venta) quedan a la vista; el resto vive en un menú "Más". */
+  .top-more-wrap{position:relative;}
+  .top-more-menu{position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:180px;padding:6px;}
+  .top-more-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:11px 10px;min-height:44px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink);}
+  .top-more-menu button:hover{background:var(--surface-soft);}
+  .top-more-menu hr{border:none;border-top:1px solid var(--border);margin:5px 0;}
+  .top-more-overlay{position:fixed;inset:0;z-index:19;}
+  /* ===== Clases reutilizadas del sistema visual de Admin, agregadas aquí porque las usan
+     Cambio de producto, Almacén, el banner de sin conexión y el escáner, pero nunca se
+     definieron en el POS — esas pantallas se veían con el estilo crudo del navegador. ===== */
+  .panel-sub{font-size:11.5px;color:var(--ink-soft);margin-top:-10px;margin-bottom:14px;}
+  .list-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s ease;}
+  .list-row:hover{box-shadow:var(--shadow-sm);}
+  .icon-btn{width:44px;height:44px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,transform .1s ease;}
+  .icon-btn:hover{background:#efd9d3;}
+  .icon-btn:active{transform:scale(0.94);}
+  .icon-btn.danger{background:var(--danger-bg);color:var(--danger-ink);}
+  .icon-btn.danger:hover{filter:brightness(0.94);}
+  .note-box{background:var(--surface-soft);border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
+  .form-field{margin-bottom:12px;}
+  .form-field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:5px;}
+  .form-field input,.form-field textarea,.form-field select{width:100%;padding:11px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:16px;background:var(--bg);color:var(--ink);transition:border-color .15s ease;}
+  .form-field input:focus,.form-field textarea:focus,.form-field select:focus{border-color:var(--primary);outline:none;}
+  .form-field textarea{resize:vertical;min-height:60px;}
+  .btn-outline{background:var(--surface);border:1.5px solid var(--primary);color:var(--primary);padding:10px 17px;min-height:44px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;transition:background .15s ease,opacity .15s ease;}
+  .btn-outline:hover{background:var(--surface-soft);}
+  .btn-outline:disabled{opacity:.45;}
+  .btn-cancel{background:var(--surface-soft);color:var(--ink-soft);padding:12px;min-height:44px;border-radius:var(--radius-md);font-size:13.5px;font-weight:700;transition:background .15s ease;}
+  .btn-cancel:hover{background:#efd9d3;}
+  .btn-cancel:disabled{opacity:.45;}
   .login-screen,.select-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden;
     background:radial-gradient(1200px 600px at 15% -10%, rgba(237,117,120,0.35), transparent 60%),
                radial-gradient(900px 500px at 110% 110%, rgba(32,183,202,0.22), transparent 55%),
@@ -76,7 +110,7 @@
   .search-row .scan-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);}
   .cats{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;}
   .cats::-webkit-scrollbar{display:none;}
-  .cat-chip{flex-shrink:0;padding:8px 14px;min-height:38px;display:inline-flex;align-items:center;border-radius:var(--radius-sm);background:var(--surface);border:1.5px solid var(--border);color:var(--ink-soft);font-size:12.5px;font-weight:600;white-space:nowrap;transition:all .15s ease;}
+  .cat-chip{flex-shrink:0;padding:8px 14px;min-height:44px;display:inline-flex;align-items:center;border-radius:var(--radius-sm);background:var(--surface);border:1.5px solid var(--border);color:var(--ink-soft);font-size:12.5px;font-weight:600;white-space:nowrap;transition:all .15s ease;}
   .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);font-weight:700;}
   .layout{display:flex;flex:1;min-height:0;}
   .prod-grid{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 100px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start;}
@@ -104,7 +138,7 @@
   .sale-items{overflow-y:auto;padding:8px 16px;flex:1;}
   .sale-item{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
   .sale-item .name{flex:1;}
-  .qty-btn{width:34px;height:34px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;transition:background .12s ease;}
+  .qty-btn{width:44px;height:44px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;transition:background .12s ease;}
   .qty-btn:hover{background:#efd9d3;}
   .sale-foot{padding:12px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
   .total-row{display:flex;justify-content:space-between;font-weight:800;color:var(--primary-deep);font-size:16.5px;margin-bottom:12px;}
@@ -177,7 +211,8 @@ async function getNextOrderNumber(){
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : ''; }
 const auth = firebase.auth();
 
-const PALETTE = ["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
+// Solo los 7 colores de marca aprobados — antes se mezclaban con 5 tonos fuera de paleta.
+const PALETTE = ["#993477","#BC355C","#ED7578","#F6A030","#7AB71A","#20B7CA","#0A4A5B"];
 function catColor(cat){ const i = state.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
 const PAY_METHODS = ["Efectivo","Tarjeta","Transferencia"];
 // Devuelve el desglose de pago de una venta ya guardada: usa "payments" (ventas divididas
@@ -215,6 +250,7 @@ let state = {
   warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
   scannerContext:'checkout',
   posSessionReported:false,
+  posMoreMenuOpen:false,
   posOffline: (typeof navigator!=='undefined' && 'onLine' in navigator) ? !navigator.onLine : false,
 };
 state.offlineQueueCount = loadOfflineQueue().length;
@@ -1373,14 +1409,23 @@ function renderPOS(){
       : state.offlineQueueCount>0 ? `<div class="note-box" style="background:#EAF3D8;color:#3d5c1a;margin-bottom:10px;">${icon('history',14)} Sincronizando ${state.offlineQueueCount} venta(s) pendiente(s) de cuando no había internet…</div>` : ''}
     <div class="top">
       <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;">
         <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
         <button class="pill-btn" onclick="openSalesList()">${icon('receipt')} Ventas</button>
-        <button class="pill-btn" onclick="openExchangeModal()">${icon('refresh-cw')} Cambio</button>
-        <button class="pill-btn" onclick="openWarehouseView()">${icon('map-pin')} Almacén</button>
-        <button class="pill-btn" onclick="changeCenter()">Cambiar centro</button>
-        <button class="pill-btn" onclick="changeCashier()">Cambiar cajero</button>
-        <button class="pill-btn" onclick="handleLogout()">Salir</button>
+        <div class="top-more-wrap">
+          <button class="pill-btn" onclick="event.stopPropagation();state.posMoreMenuOpen=!state.posMoreMenuOpen;render()" aria-label="Más opciones">⋮ Más</button>
+          ${state.posMoreMenuOpen ? `
+          <div class="top-more-overlay" onclick="state.posMoreMenuOpen=false;render()"></div>
+          <div class="top-more-menu" onclick="event.stopPropagation()">
+            <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Cambio de producto</button>
+            <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén</button>
+            <hr>
+            <button onclick="state.posMoreMenuOpen=false;changeCenter()">Cambiar centro</button>
+            <button onclick="state.posMoreMenuOpen=false;changeCashier()">Cambiar cajero</button>
+            <hr>
+            <button onclick="state.posMoreMenuOpen=false;handleLogout()">Salir</button>
+          </div>` : ''}
+        </div>
       </div>
     </div>
     ${state.cashRegisterStale ? `
