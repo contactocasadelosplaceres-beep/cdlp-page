@@ -1854,6 +1854,21 @@ function restoreScrollPositions(root, positions){
   const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
   els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
 }
+/* Menús desplegables siempre dentro de la pantalla: se abren alineados a la derecha de su botón,
+   pero en celular el botón puede quedar del lado izquierdo (ej. "Herramientas" en Productos) y el
+   menú se salía cortado por la izquierda. Después de cada render se mide cada menú abierto y, si
+   se sale por cualquier lado, se recorre lo necesario para que quepa completo. */
+function fitFloatingMenus(){
+  const vw = document.documentElement.clientWidth, pad = 8;
+  document.querySelectorAll('.row-more-menu,.order-actions-menu,.top-more-menu').forEach(el=>{
+    el.style.transform = ''; el.style.maxWidth = `calc(100vw - ${pad*2}px)`;
+    const r = el.getBoundingClientRect();
+    let dx = 0;
+    if(r.left < pad) dx = pad - r.left;
+    else if(r.right > vw - pad) dx = (vw - pad) - r.right;
+    if(dx) el.style.transform = `translateX(${Math.round(dx)}px)`;
+  });
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
@@ -1888,6 +1903,7 @@ function render(){
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   restoreFocusState(root, focusInfo);
   restoreScrollPositions(root, scrollPositions);
+  try{ fitFloatingMenus(); }catch(e){}
 }
 render();
 </script>

@@ -246,6 +246,7 @@
   .btn-tools{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1.5px solid var(--border);color:var(--ink);padding:10px 15px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;}
   .btn-tools:hover{border-color:var(--primary);color:var(--primary);}
   .tools-menu{min-width:270px;left:auto;right:0;}
+  @media(max-width:600px){.tools-menu{left:0;right:auto;}}
   .tools-menu-label{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);padding:8px 10px 4px;}
   .prod-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;margin-bottom:10px;}
   .prod-filters .prod-search{flex:1 1 260px;min-width:0;margin:0;}
@@ -10745,6 +10746,21 @@ function restoreScrollPositions(root, positions){
   const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
   els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
 }
+/* Menús desplegables siempre dentro de la pantalla: se abren alineados a la derecha de su botón,
+   pero en celular el botón puede quedar del lado izquierdo (ej. "Herramientas" en Productos) y el
+   menú se salía cortado por la izquierda. Después de cada render se mide cada menú abierto y, si
+   se sale por cualquier lado, se recorre lo necesario para que quepa completo. */
+function fitFloatingMenus(){
+  const vw = document.documentElement.clientWidth, pad = 8;
+  document.querySelectorAll('.row-more-menu,.order-actions-menu,.top-more-menu').forEach(el=>{
+    el.style.transform = ''; el.style.maxWidth = `calc(100vw - ${pad*2}px)`;
+    const r = el.getBoundingClientRect();
+    let dx = 0;
+    if(r.left < pad) dx = pad - r.left;
+    else if(r.right > vw - pad) dx = (vw - pad) - r.right;
+    if(dx) el.style.transform = `translateX(${Math.round(dx)}px)`;
+  });
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
@@ -10762,6 +10778,7 @@ function render(){
   const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
   restoreFocusState(root, focusInfo);
   restoreScrollPositions(root, scrollPositions);
+  try{ fitFloatingMenus(); }catch(e){}
 }
 render();
 </script>
