@@ -650,7 +650,7 @@ let state = {
   expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
   shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'',
   restockRequests:[], notifyModalProductId:null,
-  searchMisses:[], searchMissDays:30, cartAbandonSurveys:[],
+  searchMisses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
   seasonNewName:'', seasonNewMonth:1, seasonNewDay:1,
   postModalProductId:null, postImageIdx:0, postText:'',
@@ -777,13 +777,17 @@ async function loadData(){
     // Firestore más recientes), el panel sigue cargando normal y solo avisa en Resumen cuál falló.
     state.loadWarnings = [];
     const safeGet = async (label, query) => { try{ return await query.get(); }catch(e){ console.error('No se pudo cargar '+label, e); state.loadWarnings.push(label); return {docs:[]}; } };
-    const [expSnap, shrSnap, reqSnap, missSnap, pcbSnap, casSnap] = await Promise.all([
+    const [expSnap, shrSnap, reqSnap, missSnap, pcbSnap, casSnap, pexSnap] = await Promise.all([
       safeGet('gastos', db.collection('expenses').orderBy('date','desc').limit(1500)),
       safeGet('mermas', db.collection('shrinkage').orderBy('date','desc').limit(1000)),
       safeGet('avisos "avísame cuando llegue"', db.collection('restockRequests').limit(2000)),
       safeGet('búsquedas sin resultado', db.collection('searchMisses').orderBy('date','desc').limit(1500)),
       safeGet('cambios masivos de precio', db.collection('priceChangeBatches').orderBy('date','desc').limit(10)),
       safeGet('encuesta de carrito abandonado', db.collection('cartAbandonSurveys').orderBy('date','desc').limit(1000)),
+      // "Cambio de producto" del POS (devolver uno y llevarse otro) se guardaba en esta colección
+      // desde hace tiempo, pero nada en Admin lo leía todavía -- se queda registrado pero invisible.
+      // Se agrega aquí para mostrarlo en Estadísticas → Productos → "Cambios de producto".
+      safeGet('cambios de producto', db.collection('productExchanges').orderBy('date','desc').limit(1000)),
     ]);
     state.expenses = expSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.shrinkage = shrSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -791,6 +795,7 @@ async function loadData(){
     state.searchMisses = missSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.priceChangeBatches = pcbSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cartAbandonSurveys = casSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.productExchanges = pexSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.aiSettings = aiSnap.exists ? {...DEFAULT_AI_SETTINGS, ...aiSnap.data()} : {...DEFAULT_AI_SETTINGS};
     if(needsSeedSettings) await saveSettings();
@@ -822,7 +827,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.cartAbandonSurveys = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.cartAbandonSurveys = []; state.productExchanges = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -4266,6 +4271,7 @@ const STATS_SUBTAB_GROUPS = [
     {key:'margenproveedor', label:'Rentabilidad por proveedor'},
     {key:'embudoproducto', label:'Embudo por producto'},
     {key:'busquedas', label:'Búsquedas sin resultado'},
+    {key:'cambiosproducto', label:'Cambios de producto'},
   ]},
   {label:'Clientes y tráfico', items:[
     {key:'trafico', label:'Fuentes de tráfico'},
@@ -4306,6 +4312,7 @@ function renderEstadisticas(){
     ${sub==='busquedas' ? renderStatsBusquedas() : ''}
     ${sub==='comisiones' ? renderStatsComisiones() : ''}
     ${sub==='carritoabandonado' ? renderStatsCarritoAbandonado() : ''}
+    ${sub==='cambiosproducto' ? renderStatsCambiosProducto() : ''}
     ${sub==='horaspico' ? renderStatsHorasPico() : ''}
     ${sub==='embudoproducto' ? renderStatsEmbudoProducto() : ''}
     ${sub==='mejorhoraredes' ? renderStatsMejorHoraRedes() : ''}
@@ -6821,6 +6828,51 @@ function renderStatsCarritoAbandonado(){
           <div class="row-main"><div class="row-title">${r.reason||'Sin especificar'}</div><div class="row-sub">Carrito de ${money(r.cartTotal||0)} · ${r.itemCount||0} artículo(s) · ${r.date?new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div></div>
         </div>`).join('')}
       <button class="btn-tertiary" style="margin-top:10px;" onclick="clearCartAbandonSurveys()">${icon('trash',13)} Borrar todas las respuestas</button>
+    `}
+  `;
+}
+/* ============== CAMBIOS DE PRODUCTO (POS) ==============
+   Cada vez que en el POS se usa "Cambio de producto" (el cliente regresa uno y se lleva otro),
+   se guarda un registro completo del cambio -- esto ya pasaba desde hace tiempo, pero ningún
+   lugar de Admin lo mostraba todavía (el ajuste de stock sí quedaba en el historial del
+   producto, pero el cambio en sí, con ambos productos y la diferencia de precio, no se veía en
+   ningún lado). Se agrega aquí: total de cambios, cuánto se ha cobrado de más / regresado de
+   menos en total, y el detalle de cada cambio reciente. */
+function computeProductExchangeStats(days){
+  const since = days ? Date.now() - days*86400000 : 0;
+  const rows = (state.productExchanges||[]).filter(r=> new Date(r.date).getTime() >= since);
+  const total = rows.length;
+  let extraCharged = 0, refunded = 0;
+  rows.forEach(r=>{ const d = r.priceDifference||0; if(d>0) extraCharged += d; else refunded += -d; });
+  const recent = [...rows].sort((a,b)=> new Date(b.date) - new Date(a.date)).slice(0,100);
+  return { total, extraCharged, refunded, recent };
+}
+function renderStatsCambiosProducto(){
+  const days = state.productExchangeDays || 30;
+  const { total, extraCharged, refunded, recent } = computeProductExchangeStats(days);
+  return `
+    <div class="panel-title" style="margin-bottom:4px;">Cambios de producto</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Cuando en el POS se regresa un producto y se lleva otro distinto ("Cambio de producto"), el cambio queda registrado aquí con ambos productos, quién lo hizo y la diferencia de precio.</div>
+    <div class="form-field" style="max-width:240px;"><select onchange="state.productExchangeDays=Number(this.value);render()">${[7,30,90,3650].map(d=>`<option value="${d}" ${days===d?'selected':''}>${d===3650?'Todo':`Últimos ${d} días`}</option>`).join('')}</select></div>
+    ${total===0 ? `<div class="empty-state">No hay cambios de producto registrados en este periodo.</div>` : `
+      <div class="panel" style="margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+        <div><div class="panel-sub">Cambios</div><div style="font-size:20px;font-weight:700;">${total}</div></div>
+        <div><div class="panel-sub">Cobrado de más</div><div style="font-size:20px;font-weight:700;">${money(extraCharged)}</div></div>
+        <div><div class="panel-sub">Regresado al cliente</div><div style="font-size:20px;font-weight:700;">${money(refunded)}</div></div>
+      </div>
+      <div class="panel-title" style="margin-bottom:8px;">Detalle reciente</div>
+      ${recent.map(r=>{
+        const center = state.centers.find(c=>c.id===r.centerId);
+        const diff = r.priceDifference||0;
+        const diffLabel = diff>0 ? `Cliente pagó ${money(diff)} más` : diff<0 ? `Se le regresaron ${money(-diff)}` : 'Sin diferencia de precio';
+        return `
+        <div class="list-row">
+          <div class="row-main">
+            <div class="row-title">${(r.outProduct&&r.outProduct.name)||'—'} → ${(r.inProduct&&r.inProduct.name)||'—'}</div>
+            <div class="row-sub">${diffLabel} · ${r.cashierName||'—'}${center?' · '+center.name:''} · ${r.date?new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>
+          </div>
+        </div>`;
+      }).join('')}
     `}
   `;
 }
