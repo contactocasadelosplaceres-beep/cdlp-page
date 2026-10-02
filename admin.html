@@ -469,6 +469,17 @@ function cashDiffLabel(diff){
   return diff>0 ? `Sobrante ${money(diff)}` : `Faltante ${money(Math.abs(diff))}`;
 }
 
+// Nombres exactos de los productos de prueba que se colaron en producción por el bug de
+// auto-relleno ya corregido (ver loadData) -- confirmados contra el documento de respaldo
+// "catalog/products" que los originó. Se usan para encontrarlos en la herramienta de
+// mantenimiento sin adivinar por heurística (sin SKU, sin imagen, etc.), que podría atrapar
+// algún producto real legítimo que todavía no tenga foto.
+const KNOWN_TEST_PRODUCT_NAMES = [
+  "Set de dilatadores progresivos","Lubricante base agua 100ml","Anillo vibrador recargable",
+  "Plug mediano silicona","Boxer Zuppo edición discreta","Masturbador de manga texturizada",
+  "Vibrador punto G","Dildo realista mediano",
+];
+
 const DEFAULT_SECTIONS = [
   {key:"hero", label:"Mensaje de bienvenida", visible:true},
   {key:"promoBanner", label:"Banner promocional", visible:false},
@@ -626,6 +637,7 @@ let state = {
   storeMessages:[], messageStatusFilter:"Todos", messageSearch:"", newMessageCount:0, lastMessageCheck:null, selectedMessages:[], showArchivedMessages:false,
   marketingSubpanel:null, configSubpanel:null,
   bgFixOpen:false, bgFixScanning:false, bgFixCandidates:[], bgFixScanProgress:0, bgFixScanTotal:0,
+  catalogMaintOpen:false, catalogMaintTestChecked:null, catalogMaintCatTargets:null,
   productHistoryOpen:false, productHistoryProductId:null, productHistoryLoading:false, productHistoryItems:[],
   auditLogOpen:false, auditLogLoading:false, auditLogItems:[],
   editingGoal:false,
@@ -3389,59 +3401,35 @@ function toggleImportAll(checked){
   (state.importResult&&state.importResult.rows||[]).forEach(r=>{ if(!r.ambiguous) r.checked=checked; });
   render();
 }
-async function commitImport(mode){
+async function commitImport(){
   const rows = (state.importResult&&state.importResult.rows||[]).filter(r=>r.checked && !r.ambiguous);
   if(rows.length===0){ showToast('No hay productos seleccionados para importar'); return; }
-  const newCats = new Set(mode==='replace' ? [] : state.settings.categories);
+  const newCats = new Set(state.settings.categories);
   const addCatsFrom = (obj)=>{ if(obj.cat) newCats.add(obj.cat); (obj.categories||[]).forEach(c=>newCats.add(c)); };
-  // Esta operación (sobre todo "reemplazar") puede borrar o reescribir cientos de productos de
-  // golpe y antes no quedaba ningún rastro en la bitácora de quién la hizo ni cuándo -- se
-  // registra antes de tocar nada, para que sí quede registro aunque algo salga mal a medio
-  // proceso.
-  logAdminAction(
-    mode==='replace' ? 'importacion_catalogo_reemplazo' : 'importacion_catalogo_agregar_actualizar',
-    'productos',
-    `${rows.length} producto(s)`,
-    mode==='replace' ? `Borró ${state.products.length} producto(s) existentes y los reemplazó por ${rows.length} nuevo(s) desde ${state.importFileName||'archivo'}` : `Desde ${state.importFileName||'archivo'}`
-  );
+  // Se quitó el modo "reemplazar catálogo completo": borraba todos los productos existentes y
+  // los recreaba desde cero, perdiendo imágenes, categorías múltiples, SKU y demás campos que no
+  // vienen en el archivo importado. Ahora esta función solo agrega productos nuevos o actualiza
+  // los campos del archivo en los existentes (sin tocar lo demás) -- se registra en la bitácora
+  // antes de tocar nada, para que quede registro aunque algo salga mal a medio proceso.
+  logAdminAction('importacion_catalogo_agregar_actualizar', 'productos', `${rows.length} producto(s)`, `Desde ${state.importFileName||'archivo'}`);
   try{
-    if(mode==='replace'){
-      const batchDel = db.batch();
-      state.products.forEach(p=>batchDel.delete(db.collection('products').doc(p.id)));
-      await batchDel.commit();
-      const newProducts = [];
-      for(let i=0;i<rows.length;i+=400){
-        const chunk = rows.slice(i,i+400);
-        const batch = db.batch();
-        chunk.forEach(r=>{
+    for(let i=0;i<rows.length;i+=400){
+      const chunk = rows.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(r=>{
+        if(r.productId){
+          const existing = state.products.find(p=>p.id===r.productId);
+          if(existing){ Object.assign(existing, r.patch); addCatsFrom(existing); }
+          batch.update(db.collection('products').doc(r.productId), r.patch);
+        }else{
           const ref = db.collection('products').doc();
           const fresh = {name:r.name, cat:'Otros', price:0, stock:0, desc:'', images:[], needs:[], ...r.patch};
           addCatsFrom(fresh);
           batch.set(ref, fresh);
-          newProducts.push({id:ref.id, ...fresh});
-        });
-        await batch.commit();
-      }
-      state.products = newProducts;
-    }else{
-      for(let i=0;i<rows.length;i+=400){
-        const chunk = rows.slice(i,i+400);
-        const batch = db.batch();
-        chunk.forEach(r=>{
-          if(r.productId){
-            const existing = state.products.find(p=>p.id===r.productId);
-            if(existing){ Object.assign(existing, r.patch); addCatsFrom(existing); }
-            batch.update(db.collection('products').doc(r.productId), r.patch);
-          }else{
-            const ref = db.collection('products').doc();
-            const fresh = {name:r.name, cat:'Otros', price:0, stock:0, desc:'', images:[], needs:[], ...r.patch};
-            addCatsFrom(fresh);
-            batch.set(ref, fresh);
-            state.products.push({id:ref.id, ...fresh});
-          }
-        });
-        await batch.commit();
-      }
+          state.products.push({id:ref.id, ...fresh});
+        }
+      });
+      await batch.commit();
     }
     state.settings.categories = Array.from(newCats);
     await saveSettings();
@@ -3765,6 +3753,7 @@ function renderAdmin(){
   ${state.abandonedCartsOpen ? renderAbandonedCartsModal() : ''}
   ${state.globalSearchOpen ? renderGlobalSearchModal() : ''}
   ${state.catImportOpen ? renderCategoryImportModal() : ''}
+  ${state.catalogMaintOpen ? renderCatalogMaintenanceModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
@@ -5031,6 +5020,7 @@ function renderProductos(){
       <button class="btn-outline" onclick="fixRunTogetherWordsTool()">Separar palabras pegadas en descripciones</button>
       <button class="btn-outline" onclick="openRecompressTool()">Aligerar fotos ya guardadas</button>
       ${state.priceChangeBatches.find(b=>!b.undone) ? `<button class="btn-outline" onclick="undoLastMassPriceChange()">Deshacer el último cambio masivo de precios</button>` : ''}
+      <button class="btn-outline" style="border-color:var(--primary);color:var(--primary);" onclick="openCatalogMaintenance()">${icon('alert-triangle',14)} Mantenimiento: productos de prueba y categorías</button>
     </div>` : ''}
     <div class="form-field" style="max-width:420px;">
       <input id="product-search-input" type="search" placeholder="Buscar por nombre, categoría, SKU o ubicación..." value="${(state.productSearch||'').replace(/"/g,'&quot;')}" oninput="onProductSearchInput(this.value)">
@@ -5260,10 +5250,7 @@ function renderImportModal(){
       ` : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeImportModal()">Cancelar</button>
-        <button class="btn-primary" style="flex:1;" onclick="commitImport('merge')" ${checkedCount===0?'disabled':''}>Agregar / actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-primary" style="width:100%;background:var(--navy);" onclick="if(confirm('Esto reemplaza TODO tu catálogo actual. ¿Continuar?'))commitImport('replace')" ${checkedCount===0?'disabled':''}>Reemplazar catálogo completo</button>
+        <button class="btn-primary" style="flex:1;" onclick="commitImport()" ${checkedCount===0?'disabled':''}>Agregar / actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
       </div>
     </div>
   </div>`;
@@ -5510,6 +5497,173 @@ function renderCategoryImportModal(){
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.catImportOpen=false;state.catImport=null;render()">Cancelar</button>
         <button class="btn-primary" style="flex:1;" onclick="commitCategoryImport()" ${checkedCount===0?'disabled':''}>Actualizar${checkedCount>0?` (${checkedCount})`:''}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============== MANTENIMIENTO: PRODUCTOS DE PRUEBA + RECONCILIAR CATEGORÍAS ==============
+   Herramienta de una sola vez para cerrar lo que quedó pendiente de la reimportación grande del
+   catálogo: productos de prueba que se colaron por el bug ya corregido de loadData(), y
+   categorías heredadas de Tiendanube que no coinciden con los 9 botones de filtro de la tienda
+   (por eso un producto puede estar en "Catálogo completo" pero no aparecer al filtrar por
+   categoría). Todo con vista previa — nada se guarda sin que se revise y se aplique a propósito. */
+function openCatalogMaintenance(){
+  if(!state.catalogMaintTestChecked){
+    state.catalogMaintTestChecked = {};
+    findTestProducts().forEach(p=>{ state.catalogMaintTestChecked[p.id] = true; });
+  }
+  if(!state.catalogMaintCatTargets) state.catalogMaintCatTargets = defaultCatMappingTargets();
+  state.catalogMaintOpen = true;
+  render();
+}
+function closeCatalogMaintenance(){ state.catalogMaintOpen=false; render(); }
+function findTestProducts(){
+  return state.products.filter(p=>KNOWN_TEST_PRODUCT_NAMES.includes(p.name));
+}
+// Propuesta inicial de a dónde va cada categoría heredada de Tiendanube que no coincide con
+// ninguno de los 9 botones de filtro actuales de la tienda. Se puede cambiar cada una desde la
+// propia herramienta antes de aplicar -- esto es solo el punto de partida.
+function defaultCatMappingTargets(){
+  return {
+    "Complementos":"Complementos", "Sadomasoquismo":"Sadomasoquismo", "Comestibles":"Comestibles",
+    "Juegos":"Juegos", "Ropa masculina":"Ropa masculina", "Tarjetas de regalo":"Tarjetas de regalo",
+    "Ropa femenina":"Ropa interior", "Satisfyer":"Juguetes", "Extras":"Otros",
+  };
+}
+// Categorías que hoy traen los productos (vía el campo "categories" o, si no tienen, el campo
+// viejo "cat") y que no están entre los 9 botones de filtro configurados -- estas son las que
+// hacen falta reconciliar. Se recalcula cada vez que se abre/renderiza, así que una vez
+// reconciliada una categoría (y agregada a los botones oficiales) deja de aparecer en la lista.
+function findUnofficialCategories(){
+  const official = new Set(state.settings.categories);
+  const counts = {};
+  state.products.forEach(p=>{
+    productCats(p).forEach(c=>{ if(!official.has(c)) counts[c] = (counts[c]||0)+1; });
+  });
+  return counts;
+}
+function toggleCatalogMaintTest(id){
+  state.catalogMaintTestChecked[id] = !state.catalogMaintTestChecked[id];
+  render();
+}
+function setCatalogMaintCatTarget(oldCat, value){
+  state.catalogMaintCatTargets[oldCat] = value;
+  render();
+}
+// Compara la categoría efectiva de cada producto (igual que la calcula la tienda, con el mismo
+// respaldo a "cat" cuando no hay "categories") contra el mapeo elegido, y arma la lista de qué
+// cambiaría -- reemplaza solo la(s) categoría(s) sin reconciliar dentro de la lista de cada
+// producto, sin tocar las demás categorías que ya tuviera bien puestas.
+function buildCatRemapPreview(){
+  const targets = state.catalogMaintCatTargets || {};
+  const rows = [];
+  state.products.forEach(p=>{
+    const current = productCats(p);
+    if(!current.length) return;
+    let changed = false;
+    const mapped = [];
+    current.forEach(c=>{
+      const to = targets[c];
+      const finalCat = (to && to.trim()) ? to.trim() : c;
+      if(finalCat!==c) changed = true;
+      if(!mapped.includes(finalCat)) mapped.push(finalCat);
+    });
+    if(changed) rows.push({productId:p.id, name:p.name, from:current, to:mapped});
+  });
+  return rows;
+}
+async function applyCatalogMaintTestDelete(){
+  const ids = Object.keys(state.catalogMaintTestChecked||{}).filter(id=>state.catalogMaintTestChecked[id]);
+  const realIds = ids.filter(id=>state.products.some(p=>p.id===id));
+  if(!realIds.length){ showToast('No hay productos de prueba seleccionados'); return; }
+  if(!confirm(`Vas a eliminar ${realIds.length} producto(s) de prueba de forma permanente. ¿Continuar?`)) return;
+  try{
+    const names = realIds.map(id=>{ const p=state.products.find(x=>x.id===id); return p?p.name:id; });
+    for(let i=0;i<realIds.length;i+=400){
+      const chunk = realIds.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(id=>batch.delete(db.collection('products').doc(id)));
+      await batch.commit();
+    }
+    state.products = state.products.filter(p=>!realIds.includes(p.id));
+    realIds.forEach(id=>delete state.catalogMaintTestChecked[id]);
+    logAdminAction('eliminacion_lote', 'producto', `${realIds.length} producto(s) de prueba`, names.join(', ').slice(0,500));
+    showToast(`${realIds.length} producto(s) de prueba eliminado(s)`);
+    render();
+  }catch(e){ console.error(e); showToast('Error al eliminar: '+(e.message||'error desconocido')); }
+}
+async function applyCatalogMaintCatRemap(){
+  const rows = buildCatRemapPreview();
+  if(!rows.length){ showToast('No hay categorías por reconciliar'); return; }
+  if(!confirm(`Vas a actualizar la categoría de ${rows.length} producto(s). ¿Continuar?`)) return;
+  try{
+    const targets = state.catalogMaintCatTargets || {};
+    const newCatsNeeded = new Set(Object.values(targets).map(v=>(v||'').trim()).filter(Boolean));
+    let addedAny = false;
+    newCatsNeeded.forEach(c=>{ if(!state.settings.categories.includes(c)){ state.settings.categories.push(c); addedAny = true; } });
+    if(addedAny) await saveSettings();
+    for(let i=0;i<rows.length;i+=400){
+      const chunk = rows.slice(i,i+400);
+      const batch = db.batch();
+      chunk.forEach(r=>batch.update(db.collection('products').doc(r.productId), {categories:r.to, cat:r.to[0]}));
+      await batch.commit();
+    }
+    rows.forEach(r=>{ const p=state.products.find(x=>x.id===r.productId); if(p){ p.categories=r.to; p.cat=r.to[0]; } });
+    logAdminAction('reconciliacion_categorias', 'productos', `${rows.length} producto(s)`, `Mapeo aplicado: ${JSON.stringify(targets)}`.slice(0,800));
+    showToast(`${rows.length} producto(s) actualizado(s) con su categoría reconciliada`);
+    render();
+  }catch(e){ console.error(e); showToast('Error al actualizar: '+(e.message||'error desconocido')); }
+}
+function renderCatalogMaintenanceModal(){
+  const testProducts = findTestProducts();
+  const testCheckedCount = testProducts.filter(p=>state.catalogMaintTestChecked && state.catalogMaintTestChecked[p.id]).length;
+  const unofficial = findUnofficialCategories();
+  const unofficialNames = Object.keys(unofficial).sort((a,b)=>unofficial[b]-unofficial[a]);
+  const remapRows = unofficialNames.length ? buildCatRemapPreview() : [];
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:760px;">
+      <h3>Mantenimiento de catálogo</h3>
+
+      <div class="panel-title" style="margin-top:4px;">1. Productos de prueba</div>
+      ${testProducts.length ? `
+        <div class="note-box">Estos productos entraron por el bug de auto-relleno ya corregido (ver bitácora). Revisa y confirma antes de eliminar — es permanente.</div>
+        <div style="margin:6px 0;">
+          <label style="font-size:13px;"><input type="checkbox" ${testCheckedCount===testProducts.length?'checked':''} onchange="testProducts.forEach(p=>state.catalogMaintTestChecked[p.id]=this.checked);render()" onclick="testProducts.forEach(p=>state.catalogMaintTestChecked[p.id]=this.checked)"> Seleccionar todos</label>
+        </div>
+        <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+          ${testProducts.map(p=>`
+            <label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;">
+              <input type="checkbox" ${state.catalogMaintTestChecked[p.id]?'checked':''} onchange="toggleCatalogMaintTest('${p.id}')">
+              <span>${escDescHtml(p.name)}</span>
+              <span style="margin-left:auto;color:var(--ink-soft);font-size:12px;">${money(p.price||0)}</span>
+            </label>
+          `).join('')}
+        </div>
+        <button class="btn-primary" style="background:var(--danger,#c0392b);" onclick="applyCatalogMaintTestDelete()" ${testCheckedCount===0?'disabled':''}>Eliminar seleccionados (${testCheckedCount})</button>
+      ` : `<div class="note-box">No se encontró ninguno de los productos de prueba conocidos en este momento — nada que borrar.</div>`}
+
+      <div class="panel-title" style="margin-top:22px;">2. Reconciliar categorías heredadas de Tiendanube</div>
+      ${unofficialNames.length ? `
+        <div class="note-box">Estas categorías vienen de tu catálogo de Tiendanube pero no coinciden con ninguno de tus botones de filtro actuales, así que esos productos no aparecen al filtrar por categoría (sí en "Catálogo completo"). Elige a dónde va cada una — puedes dejarla como categoría nueva o fusionarla con una que ya exista.</div>
+        <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
+          ${unofficialNames.map(oldCat=>`
+            <div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;">
+              <div style="flex:1;"><strong>${escDescHtml(oldCat)}</strong> <span style="color:var(--ink-soft);">(${unofficial[oldCat]} producto${unofficial[oldCat]===1?'':'s'})</span></div>
+              <span style="color:var(--ink-soft);">→</span>
+              <select style="flex:1;max-width:220px;" onchange="setCatalogMaintCatTarget('${oldCat.replace(/'/g,"\\'")}', this.value)">
+                <option value="${escDescHtml(oldCat)}" ${(!state.catalogMaintCatTargets[oldCat] || state.catalogMaintCatTargets[oldCat]===oldCat)?'selected':''}>Dejar como categoría nueva: "${escDescHtml(oldCat)}"</option>
+                ${state.settings.categories.map(c=>`<option value="${escDescHtml(c)}" ${state.catalogMaintCatTargets[oldCat]===c?'selected':''}>Fusionar con "${escDescHtml(c)}"</option>`).join('')}
+              </select>
+            </div>
+          `).join('')}
+        </div>
+        <button class="btn-primary" onclick="applyCatalogMaintCatRemap()" ${remapRows.length===0?'disabled':''}>Aplicar reconciliación (${remapRows.length} producto${remapRows.length===1?'':'s'})</button>
+      ` : `<div class="note-box">No quedan categorías por reconciliar — todas coinciden con tus botones de filtro.</div>`}
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn-cancel" onclick="closeCatalogMaintenance()">Cerrar</button>
       </div>
     </div>
   </div>`;
