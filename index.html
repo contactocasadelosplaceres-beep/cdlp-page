@@ -1905,6 +1905,8 @@ function renderGridSection(){
     emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   } else if(state.activeCat!=="Todos"){
     filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
+    heading = state.activeCat;
+    emptyMsg = `Todavía no tenemos productos en esta categoría. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
     // Si Ale fijó un orden a mano para esta categoría (Productos → filtrar por categoría →
     // flechas), esos productos van primero en ese orden; el resto sigue mezclándose entre sí
     // como siempre (sort estable: los sin orden mantienen su posición relativa del shuffle).
