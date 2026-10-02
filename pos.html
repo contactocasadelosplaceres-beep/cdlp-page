@@ -28,7 +28,7 @@
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
   .app{max-width:1100px;margin:0 auto;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;}
-  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px -10px rgba(0,0,0,0.5);position:relative;z-index:5;}
+  .top{background:var(--navy);color:#fff;padding:14px 18px;display:flex;flex-wrap:wrap;row-gap:10px;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px -10px rgba(0,0,0,0.5);position:relative;z-index:5;}
   /* El nombre del cajero/centro no tenía espacio propio junto a los botones Caja/Ventas/Más —
      con un nombre largo podía encimarse con ellos. Esta barra se ve en toda la pantalla de venta. */
   .top>div:first-child{min-width:0;overflow-wrap:anywhere;word-break:break-word;}
@@ -152,8 +152,10 @@
   .qty-btn:hover{background:#efd9d3;}
   .sale-foot{padding:12px 16px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
   .total-row{display:flex;justify-content:space-between;font-weight:800;color:var(--primary-deep);font-size:16.5px;margin-bottom:12px;}
-  .pay-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
-  .pay-btn{flex:1;min-width:70px;min-height:44px;padding:10px 6px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:700;transition:all .15s ease;}
+  /* 4 métodos de pago en una fila; en pantallas angostas, 2x2 (antes "Transferencia" se cortaba). */
+  .pay-row{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;margin-bottom:10px;}
+  @media(max-width:400px){.pay-row.pay-methods{grid-auto-flow:row;grid-template-columns:repeat(2,1fr);}}
+  .pay-btn{min-width:0;min-height:44px;padding:10px 6px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--ink-soft);font-size:12.5px;font-weight:700;transition:all .15s ease;}
   .pay-btn.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
   .empty-cart{padding:30px;text-align:center;color:var(--ink-soft);font-size:13px;}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
@@ -172,7 +174,7 @@
     .pill-btn{padding:7px 10px;font-size:11.5px;}
     .toolbar{padding:12px 14px 0;}
     .prod-grid{padding:0 14px 100px;gap:8px;}
-    .pay-btn{min-width:60px;font-size:11.5px;padding:10px 4px;}
+    .pay-btn{font-size:11.5px;padding:10px 4px;}
     .sale-head{padding:16px 14px 10px;}
     .sale-items{padding:8px 14px;}
     .sale-foot{padding:10px 14px calc(14px + env(safe-area-inset-bottom));}
@@ -1644,8 +1646,8 @@ function renderPOS(){
     ${state.posOffline ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;margin-bottom:10px;">${icon('alert-triangle',14)} Sin conexión — puedes seguir vendiendo, las ventas se guardan en este dispositivo y se suben solas cuando regrese el internet.</div>`
       : state.offlineQueueCount>0 ? `<div class="note-box" style="background:#EAF3D8;color:#3d5c1a;margin-bottom:10px;">${icon('history',14)} Sincronizando ${state.offlineQueueCount} venta(s) pendiente(s) de cuando no había internet…</div>` : ''}
     <div class="top">
-      <div><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;">
+      <div style="flex:1 1 160px;min-width:0;"><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;margin-left:auto;">
         <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
         <button class="pill-btn" onclick="openSalesList()">${icon('receipt')} Ventas</button>
         <div class="top-more-wrap">
@@ -1728,7 +1730,7 @@ function renderPOS(){
           <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
         ` : ''}
         <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
-        <div class="pay-row">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
+        <div class="pay-row pay-methods">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
         ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
         <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
       </div>
