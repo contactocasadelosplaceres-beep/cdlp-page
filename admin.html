@@ -3394,6 +3394,16 @@ async function commitImport(mode){
   if(rows.length===0){ showToast('No hay productos seleccionados para importar'); return; }
   const newCats = new Set(mode==='replace' ? [] : state.settings.categories);
   const addCatsFrom = (obj)=>{ if(obj.cat) newCats.add(obj.cat); (obj.categories||[]).forEach(c=>newCats.add(c)); };
+  // Esta operación (sobre todo "reemplazar") puede borrar o reescribir cientos de productos de
+  // golpe y antes no quedaba ningún rastro en la bitácora de quién la hizo ni cuándo -- se
+  // registra antes de tocar nada, para que sí quede registro aunque algo salga mal a medio
+  // proceso.
+  logAdminAction(
+    mode==='replace' ? 'importacion_catalogo_reemplazo' : 'importacion_catalogo_agregar_actualizar',
+    'productos',
+    `${rows.length} producto(s)`,
+    mode==='replace' ? `Borró ${state.products.length} producto(s) existentes y los reemplazó por ${rows.length} nuevo(s) desde ${state.importFileName||'archivo'}` : `Desde ${state.importFileName||'archivo'}`
+  );
   try{
     if(mode==='replace'){
       const batchDel = db.batch();
@@ -5430,6 +5440,8 @@ async function commitCategoryImport(){
   if(!ci || !ci.matched) return;
   const toApply = ci.matched.filter(r=>r.checked);
   if(toApply.length===0){ showToast('No hay categorías seleccionadas'); return; }
+  // Esta importación tampoco dejaba rastro en la bitácora -- se registra antes de aplicar.
+  logAdminAction('importacion_categorias_tiendanube', 'productos', `${toApply.length} producto(s)`, `Desde ${ci.fileName||'archivo'}`);
   try{
     if(ci.newCategoryNames && ci.newCategoryNames.length){
       const usedNames = new Set(toApply.flatMap(r=>r.newCategories));
