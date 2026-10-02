@@ -317,7 +317,9 @@ function computeKitStock(p){
   return min===Infinity ? 0 : Math.max(0, min);
 }
 
-async function loadData(){
+async function loadData(attempt){
+  attempt = attempt || 1;
+  state.loadFailed = false;
   try{
     const [prodSnap, setSnap, cashiersSnap, centersSnap, customersSnap] = await Promise.all([
       db.collection('products').get(),
@@ -343,7 +345,14 @@ async function loadData(){
       const match = state.centers.find(c=>c.id===savedCenterId);
       if(match) state.activeCenter = match;
     }
-  }catch(e){ console.error(e); showToast('No se pudo cargar la información'); }
+  }catch(e){
+    console.error(e);
+    // Antes: un solo fallo de conexión dejaba el punto de venta abierto pero SIN productos ni
+    // cajeras (solo un aviso de 2 segundos). Ahora reintenta, y si no puede, muestra una
+    // pantalla clara con "Reintentar" en vez de una caja vacía.
+    if(attempt < 3){ await new Promise(r=>setTimeout(r, 1500*attempt)); return loadData(attempt+1); }
+    state.loadFailed = true;
+  }
   state.loaded = true; render();
 }
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
@@ -358,6 +367,7 @@ function icon(name, size){
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/>',
     percent:'<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.2"/><circle cx="17.5" cy="17.5" r="2.2"/>',
     'file-text':'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/>',
+    truck:'<path d="M1 4h14v12H1z"/><path d="M15 9h4l3 3v4h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="17.5" cy="18.5" r="2"/>',
     'message-circle':'<path d="M21 12a8.5 8.5 0 0 1-8.5 8.5c-1.4 0-2.7-.3-3.9-.9L3 21l1.4-4.9A8.5 8.5 0 1 1 21 12Z"/>',
     star:'<path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8L6 21l1.6-7-5.4-4.7 7.1-.6L12 2Z"/>',
     'alert-triangle':'<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
@@ -640,7 +650,8 @@ function renderSalesListModal(){
           <span>Total (${detail.paymentMethod||''})</span><span>${money(detail.total)}</span>
         </div>
         ${detail.customerName ? `<div class="panel-sub" style="margin-top:8px;">Cliente: ${detail.customerName}</div>` : ''}
-        <button class="btn-secondary" style="margin-top:14px;" onclick="state.salesListDetailId=null;render()">← Volver a la lista</button>
+        <button class="btn-secondary" style="margin-top:14px;" onclick="sendSaleToDelivery(state.salesListItems.find(v=>v.id===state.salesListDetailId))">${icon('truck',15)} Enviar al repartidor</button>
+        <button class="btn-secondary" style="margin-top:8px;" onclick="state.salesListDetailId=null;render()">← Volver a la lista</button>
       ` : `
         <h3>Ventas de hoy</h3>
         ${state.salesListLoading ? `<div style="padding:20px 0;text-align:center;color:var(--ink-soft);">Cargando…</div>` :
@@ -1539,6 +1550,7 @@ async function chargeSale(){
     }
     clearPosCart();
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true; state.checkoutReminderShown = false;
+    state.lastSale = {...saleFields, orderNumber};
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
     // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin. Sin conexión no se puede mandar; se omite (no se reintenta al sincronizar).
     if(!isOffline){
@@ -1776,6 +1788,28 @@ function sendReceiptWhatsapp(){
   if(!phone) return;
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(receiptWhatsappMessage())}`, '_blank');
 }
+// "Enviar al repartidor" desde el punto de venta: mismo mensaje que el botón del detalle de
+// pedido en el admin (folio, origen, destino, teléfono, monto), con los productos incluidos
+// para que el repartidor sepa qué lleva. Usa el WhatsApp del repartidor y la dirección de origen
+// de Configuración → Datos operativos.
+function buildSaleDeliveryMessage(v){
+  const origen = (state.settings && state.settings.storeAddress) || (state.activeCenter ? state.activeCenter.name : '');
+  const direccion = v.customerAddress || '(sin dirección: completar)';
+  const destino = [direccion, v.notes].filter(Boolean).join(' — ');
+  const productos = (v.items||[]).map(it=>`• ${it.qty}x ${it.name}`).join('\n');
+  return `*PEDIDO ${v.orderNumber ? formatFolio(v.orderNumber) : '(sin folio aún)'}*\n\n` +
+         `*De* ${origen}\n\n` +
+         `*A* ${v.customerName ? v.customerName+' — ' : ''}${destino}\n${v.customerPhone||''}\n\n` +
+         (productos ? `*Lleva*\n${productos}\n\n` : '') +
+         `*Producto* $${Math.round(v.total||0)}\n\n` +
+         `*Cobrar al cliente* $`;
+}
+function sendSaleToDelivery(v){
+  if(!v){ showToast('No se encontró la venta'); return; }
+  const wa = ((state.settings && state.settings.deliveryWhatsapp) || '').replace(/\D/g,'');
+  if(!wa){ showToast('Falta el WhatsApp del repartidor (admin → Configuración → Datos operativos)'); return; }
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(buildSaleDeliveryMessage(v))}`, '_blank');
+}
 function renderReceipt(){
   return `<div class="receipt-screen"><div class="receipt-card">
     <div class="mark">${icon('check',26)}</div>
@@ -1783,6 +1817,7 @@ function renderReceipt(){
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : `<div style="font-weight:700;color:var(--amber);font-size:13px;margin:6px 0 -6px;">${icon('alert-triangle',13)} Guardada sin conexión — el folio se asigna al sincronizar</div>`}
     <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>${(state.lastPayments&&state.lastPayments.length>1) ? `Pago dividido: ${state.lastPayments.map(p=>`${p.method} ${money(p.amount)}`).join(' · ')}` : `Método: ${(state.lastPayments&&state.lastPayments[0]&&state.lastPayments[0].method)||state.payMethod}`}<br>Atendió: ${state.activeCashier.name}</p>
     ${state.lastCustomerPhone ? `<button class="btn-secondary" style="color:var(--green);margin-bottom:8px;" onclick="sendReceiptWhatsapp()">${icon('message-circle',15)} Enviar recibo por WhatsApp a ${state.lastCustomerName||'cliente'}</button>` : ''}
+    <button class="btn-secondary" style="margin-bottom:8px;" onclick="sendSaleToDelivery(state.lastSale)">${icon('truck',15)} Enviar al repartidor</button>
     <button class="btn-primary" onclick="newSale()">Nueva venta</button>
   </div></div>`;
 }
@@ -1826,6 +1861,7 @@ function render(){
   if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando…</div>`; restoreFocusState(root, focusInfo); return; }
+  if(state.loadFailed){ root.innerHTML = `<div class="loading-screen" style="flex-direction:column;gap:14px;padding:24px;text-align:center;"><div style="font-size:18px;">No se pudo conectar</div><div style="font-family:Inter,system-ui,sans-serif;font-size:14px;color:var(--ink-soft);max-width:320px;">Revisa el internet del dispositivo y vuelve a intentar.</div><button class="btn-primary" style="width:auto;padding:12px 22px;" onclick="state.loaded=false;state.loadFailed=false;render();loadData()">Reintentar</button></div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.activeCashier){ root.innerHTML = renderCashierSelect(); }
   else if(!state.pinConfirmed){ root.innerHTML = renderPinScreen(); }
   else if(!state.activeCenter){ root.innerHTML = renderCenterSelect(); }

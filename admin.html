@@ -262,6 +262,18 @@
   .seg-toggle button.active{background:var(--surface);color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.08);}
   .dup-group{border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 10px 4px;margin-bottom:12px;background:var(--surface-soft);}
   .dup-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .cost-history{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;}
+  .cost-history-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--primary-deep);}
+  .cost-entry-form{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;background:var(--surface);padding:8px;border-radius:var(--radius-sm);border:1px solid var(--border);}
+  .cost-entry-form input,.cost-entry-form select{padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;}
+  .cost-entry-form > div{grid-column:1/-1;justify-content:flex-end;}
+  .cost-history-list{max-height:200px;overflow-y:auto;}
+  .cost-history-row{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
+  .cost-history-row .ch-date{color:var(--ink-soft);white-space:nowrap;}
+  .cost-history-row .ch-cost{font-weight:700;white-space:nowrap;}
+  .cost-history-row .ch-cost em{font-style:normal;font-size:11px;font-weight:700;}
+  .cost-history-row .ch-cost em.up{color:var(--danger-ink,#b42318);} .cost-history-row .ch-cost em.down{color:var(--green,#3d7a1a);}
+  .cost-history-row .ch-sup{grid-column:1/-1;min-width:0;overflow-wrap:anywhere;color:var(--ink-soft);font-size:12px;} .cost-history-row small{color:var(--ink-soft);}
   .qstock{display:inline-flex;align-items:center;gap:4px;}
   .qstock button{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--primary-deep);font-size:16px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;}
   .qstock button:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
@@ -699,7 +711,9 @@ let state = {
 };
 
 /* ============== LOAD + MIGRATION ============== */
-async function loadData(){
+async function loadData(attempt){
+  attempt = attempt || 1;
+  state.loadFailed = false;
   try{
     // Antes, si la colección "products" estaba vacía al abrir Admin, se autocompletaba sola con
     // 10 productos de ejemplo (DEFAULT_PRODUCTS) o con un respaldo viejo de migración
@@ -757,6 +771,7 @@ async function loadData(){
     ]);
     let needsSeedSettings = !setSnap.exists;
     state.settings = needsSeedSettings ? {...DEFAULT_SETTINGS} : {...DEFAULT_SETTINGS, ...setSnap.data()};
+    state.settingsReady = true; // ya se leyó la configuración real: a partir de aquí sí es seguro guardarla
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
     if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
@@ -865,10 +880,19 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.trashProducts = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.cartAbandonSurveys = []; state.productExchanges = []; state.settings = {...DEFAULT_SETTINGS};
-    state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
-    state.cashRegisters = [];
-    showToast('No se pudo cargar todo desde el servidor');
+    // ANTES: si esta carga fallaba una sola vez (señal débil, internet que se corta), el panel
+    // seguía con datos vacíos y la configuración "de fábrica" — y el recálculo automático de
+    // "más vendidos" (más abajo) la GUARDABA encima de la configuración real de la tienda:
+    // categorías, diseño, cupones y promociones se perdían. Ahora se reintenta, y si de plano no
+    // se puede, el panel muestra una pantalla de error con "Reintentar" y no deja guardar nada.
+    if(attempt < 3){
+      await new Promise(r=>setTimeout(r, 1500*attempt));
+      return loadData(attempt+1);
+    }
+    state.settingsReady = false;
+    state.loadFailed = true; state.loaded = true;
+    render();
+    return;
   }
   computeMyPermissions();
   if(state.myPermissions && !canAccessTab(state.adminTab)) state.adminTab = firstAccessibleTab() || state.adminTab;
@@ -1015,7 +1039,17 @@ const SETTINGS_FIELD_LABELS = {
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
 const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified','churnRiskNotified','dashboardNotes']);
+function renderLoadFailedScreen(){
+  return `<div class="loading-screen" style="flex-direction:column;gap:14px;padding:24px;text-align:center;">
+    <div style="font-size:18px;font-weight:700;">No se pudo conectar con la base de datos</div>
+    <div style="font-family:Inter,system-ui,sans-serif;font-size:14px;color:var(--ink-soft);max-width:340px;">Revisa tu conexión a internet. Para proteger tu información, el panel no deja hacer cambios hasta que cargue completo.</div>
+    <button class="btn-primary" style="width:auto;padding:12px 22px;" onclick="state.loaded=false;state.loadFailed=false;render();loadData()">Reintentar</button>
+  </div>`;
+}
 async function saveSettings(){
+  // Nunca guardar la configuración si no se pudo leer la real primero: .set() reemplaza el
+  // documento completo, así que guardar los valores "de fábrica" borraría los de la tienda.
+  if(!state.settingsReady){ showToast('No se guardó: la configuración no terminó de cargar. Recarga la página.'); return; }
   try{
     if(_settingsAuditBaseline){
       try{
@@ -2331,6 +2365,156 @@ function computeFrequentlyBoughtTogether(productId, limit){
     .sort((a,b)=>b.count-a.count)
     .slice(0,limit);
 }
+function supplierNameById(id){ const s = state.suppliers.find(x=>x.id===id); return s ? s.name : ''; }
+function isPromoActive(p){ return Number(p.promoPrice)>0 && Number(p.promoPrice) < Number(p.price||0); }
+// Sección de la ficha de producto: lista de costos (más reciente arriba) con la diferencia
+// contra el anterior, y un mini formulario para registrar un costo con fecha y proveedor a mano
+// (ej. una compra de hace semanas). Lo registrado aquí se guarda junto con el producto.
+function renderCostHistorySection(p){
+  const hist = [...(p.costHistory||[])].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const d = state.costEntryDraft;
+  const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : 'Antes';
+  const srcLabel = {ficha:'cambio en la ficha', recepcion:'recepción de mercancía', manual:'registrado a mano', previo:'costo anterior'};
+  return `
+    <div class="cost-history">
+      <div class="cost-history-head">
+        <strong>Historial de costos</strong>
+        ${d ? '' : `<button class="btn-tertiary" style="padding:6px 10px;" onclick="state.costEntryDraft={cost:'',date:new Date().toISOString().slice(0,10),supplierId:document.getElementById('pf-supplier')?document.getElementById('pf-supplier').value:''};render()">+ Registrar costo</button>`}
+      </div>
+      ${d ? `
+        <div class="cost-entry-form">
+          <input type="number" min="0" step="0.01" placeholder="Costo" value="${escDescHtml(d.cost)}" oninput="state.costEntryDraft.cost=this.value">
+          <input type="date" value="${escDescHtml(d.date)}" oninput="state.costEntryDraft.date=this.value">
+          <select onchange="state.costEntryDraft.supplierId=this.value">
+            <option value="">Sin proveedor</option>
+            ${state.suppliers.map(s=>`<option value="${s.id}" ${d.supplierId===s.id?'selected':''}>${escDescHtml(s.name)}</option>`).join('')}
+          </select>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-cancel" style="padding:8px 12px;" onclick="state.costEntryDraft=null;render()">Cancelar</button>
+            <button class="btn-primary" style="width:auto;padding:8px 14px;" onclick="addManualCostEntry()">Agregar</button>
+          </div>
+        </div>` : ''}
+      ${hist.length===0 ? `<div class="row-sub">Aún no hay costos registrados. Se registran solos cada vez que cambies el costo o recibas mercancía de un proveedor.</div>` :
+        `<div class="cost-history-list">${hist.map((h,i)=>{ const prev = hist[i+1]; const diff = prev ? Number(h.cost)-Number(prev.cost) : 0; return `
+          <div class="cost-history-row">
+            <span class="ch-date">${fmtDate(h.date)}</span>
+            <span class="ch-cost">${money(h.cost)}${diff ? ` <em class="${diff>0?'up':'down'}">${diff>0?'▲':'▼'} ${money(Math.abs(diff))}</em>` : ''}</span>
+            <span class="ch-sup">${escDescHtml(h.supplierName||'Sin proveedor')}${h.qty?` · ${h.qty} pza`:''}${srcLabel[h.source]?` · ${srcLabel[h.source]}`:''}</span>
+          </div>`; }).join('')}</div>`}
+      ${(p.costHistory||[]).length>1 ? `<div class="row-sub" style="margin-top:6px;">Promedio: ${money((p.costHistory||[]).reduce((s,h)=>s+Number(h.cost||0),0)/(p.costHistory||[]).length)} · Más bajo: ${money(Math.min(...(p.costHistory||[]).map(h=>Number(h.cost)||0)))}</div>` : ''}
+    </div>`;
+}
+function addManualCostEntry(){
+  const d = state.costEntryDraft; if(!d) return;
+  const cost = Number(d.cost);
+  if(!(cost>0)){ showToast('Escribe el costo'); return; }
+  if(!d.date){ showToast('Elige la fecha'); return; }
+  const m = state.productModal;
+  const entry = {cost, date:new Date(d.date+'T12:00:00').toISOString(), supplierId:d.supplierId||'', supplierName:supplierNameById(d.supplierId), source:'manual', by: state.user?state.user.email:''};
+  const base = [...(m.costHistory||[])]; seedPreviousCost(base, state.products.find(x=>x.id===m.id), cost);
+  m.costHistory = [...base, entry];
+  // Si es el registro más reciente, ese pasa a ser el costo actual del producto.
+  const newest = [...m.costHistory].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).pop();
+  if(newest===entry){ m.cost = cost; const el=document.getElementById('pf-cost'); if(el) el.value = cost; }
+  state.costEntryDraft = null;
+  showToast('Costo agregado — se guarda al darle Guardar al producto');
+  render();
+}
+/* ============== LISTA DE PRODUCTOS EN PROMOCIÓN ==============
+   Todos los productos con precio promocional activo, con cuántos días lleva cada promoción y
+   un botón para quitarla (uno por uno o en lote). La fecha de inicio sale de promoSince (se
+   guarda desde 2026-10-02 al poner/cambiar un precio promocional); para promociones más viejas
+   se recupera de la bitácora (último "cambio_precio_promo" de ese producto). */
+async function openPromoList(){
+  state.promoListOpen = true; state.promoListSelected = []; state.promoAuditDates = state.promoAuditDates || null;
+  render();
+  if(state.promoAuditDates) return;
+  try{
+    const snap = await db.collection('adminAuditLog').where('action','==','cambio_precio_promo').get();
+    const latest = {};
+    snap.docs.forEach(d=>{ const x=d.data(); if(!x.targetId) return; if(!latest[x.targetId] || (x.date||'')>latest[x.targetId].date) latest[x.targetId]={date:x.date||'', details:x.details||''}; });
+    state.promoAuditDates = {};
+    Object.entries(latest).forEach(([id,v])=>{ if(!/→\s*\$0(\D|$)/.test(v.details)) state.promoAuditDates[id] = v.date; });
+  }catch(e){ console.error('No se pudo leer la bitácora de promociones', e); state.promoAuditDates = {}; }
+  render();
+}
+function promoStartDate(p){ return p.promoSince || (state.promoAuditDates||{})[p.id] || null; }
+function promoDays(p){ const d = promoStartDate(p); return d ? Math.max(0, Math.floor((Date.now()-new Date(d).getTime())/86400000)) : null; }
+async function removePromos(ids){
+  const list = state.products.filter(p=>ids.includes(p.id));
+  if(!list.length) return;
+  if(!confirm(list.length===1 ? `¿Quitar la promoción de "${list[0].name}"? Vuelve a su precio normal de ${money(list[0].price)}.` : `¿Quitar la promoción de ${list.length} productos? Vuelven a su precio normal.`)) return;
+  try{
+    for(let i=0;i<list.length;i+=400){
+      const batch = db.batch();
+      list.slice(i,i+400).forEach(p=>batch.update(db.collection('products').doc(p.id), {promoPrice:0, promoSince:null}));
+      await batch.commit();
+    }
+    list.forEach(p=>{
+      logAdminAction('cambio_precio_promo', 'producto', p.name, `Precio promocional: ${money(p.promoPrice||0)} → $0 MXN (quitada desde la lista de promociones, llevaba ${promoDays(p)??'?'} día(s))`, p.id);
+      p.promoPrice = 0; p.promoSince = null;
+    });
+    state.promoListSelected = [];
+    showToast(list.length===1 ? 'Promoción quitada' : `${list.length} promociones quitadas`);
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo quitar: '+(e.message||'error')); }
+}
+function renderPromoListModal(){
+  const items = state.products.filter(isPromoActive)
+    .sort((a,b)=>(promoDays(b)??-1)-(promoDays(a)??-1));
+  const sel = state.promoListSelected||[];
+  const loadingDates = state.promoAuditDates===null;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.promoListOpen=false;render()}">
+    <div class="modal" style="max-width:640px;">
+      <h3>Productos en promoción</h3>
+      <div class="panel-sub" style="margin-top:0;">${items.length} producto${items.length===1?'':'s'} con precio promocional activo. Los que llevan más tiempo van primero.</div>
+      ${items.length===0 ? `<div class="empty-state">No tienes productos con precio promocional.</div>` : `
+        <div class="prod-selectbar" style="padding-left:2px;">
+          <label><input type="checkbox" ${sel.length===items.length?'checked':''} onchange="state.promoListSelected=this.checked?state.products.filter(isPromoActive).map(p=>p.id):[];render()"> Seleccionar todos</label>
+          ${sel.length ? `<button class="btn-danger-text" style="margin-left:auto;" onclick="removePromos(state.promoListSelected)">Quitar promoción a ${sel.length}</button>` : ''}
+        </div>
+        ${items.map(p=>{ const days = promoDays(p); const pct = Math.round((1-p.promoPrice/p.price)*100); const start = promoStartDate(p); return `
+          <div class="list-row">
+            <input type="checkbox" ${sel.includes(p.id)?'checked':''} onchange="state.promoListSelected=this.checked?[...(state.promoListSelected||[]),'${p.id}']:(state.promoListSelected||[]).filter(x=>x!=='${p.id}');render()">
+            ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+            <div class="row-main">
+              <div class="row-title">${escDescHtml(p.name)}</div>
+              <div class="row-sub"><s>${money(p.price)}</s> → <strong>${money(p.promoPrice)}</strong> · ${pct}% menos${p.stock<=0?' · agotado':''}</div>
+              <div style="margin-top:5px;">${days!==null
+                ? `<span class="status-badge ${days>=30?'status-low':'status-ok'}">${days===0?'Activa desde hoy':`Activa hace ${days} día${days===1?'':'s'}`}</span> <span class="row-sub">desde ${new Date(start).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}</span>`
+                : `<span class="row-sub">${loadingDates?'Buscando fecha…':'Sin fecha registrada (se puso antes de que se guardara)'}</span>`}</div>
+            </div>
+            <div class="row-actions">
+              <button class="btn-outline" style="padding:7px 12px;font-size:12.5px;white-space:nowrap;" onclick="removePromos(['${p.id}'])">Quitar promoción</button>
+            </div>
+          </div>`; }).join('')}`}
+      <div class="modal-actions"><button class="btn-primary" style="flex:1;" onclick="state.promoListOpen=false;render()">Listo</button></div>
+    </div>
+  </div>`;
+}
+// La primera vez que se registra un costo de un producto que ya tenía uno, se guarda también
+// ese costo anterior (fecha: cuando se dio de alta), para no perder contra qué se compara.
+function seedPreviousCost(hist, old, newCost){
+  if(hist.length || !old) return;
+  const prev = Number(old.cost)||0;
+  if(prev>0 && prev!==newCost) hist.push({cost:prev, date: old.createdAt||'', supplierId:old.supplierId||'', supplierName:supplierNameById(old.supplierId), source:'previo'});
+}
+function nextCostHistory(p, old){
+  const hist = [...(p.costHistory || (old && old.costHistory) || [])];
+  const cost = Number(p.cost)||0;
+  seedPreviousCost(hist, old, cost);
+  const last = [...hist].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).pop();
+  if(cost>0 && (!last || Number(last.cost)!==cost)){
+    hist.push({cost, date:new Date().toISOString(), supplierId:p.supplierId||'', supplierName:supplierNameById(p.supplierId), source:'ficha', by: state.user?state.user.email:''});
+  }
+  return hist;
+}
+function nextPromoSince(p, old){
+  if(!isPromoActive(p)) return null;
+  if(old && isPromoActive(old) && Number(old.promoPrice)===Number(p.promoPrice)) return old.promoSince || null;
+  return new Date().toISOString();
+}
 async function saveProduct(p){
   const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
   if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
@@ -2356,6 +2540,12 @@ async function saveProduct(p){
     // creación (para la etiqueta "Nuevo") se preservan explícitamente por eso.
     categorySortOrder: p.categorySortOrder || (old && old.categorySortOrder) || {},
     createdAt: (old && old.createdAt) || p.createdAt || new Date().toISOString(),
+    // Historial de costos (costo, fecha, proveedor): se conserva siempre (.set() reemplaza el
+    // documento) y se le suma un renglón solo si el costo cambió respecto al último registrado.
+    costHistory: nextCostHistory(p, old),
+    // Desde cuándo está activa la promoción: se conserva si el precio promocional no cambió,
+    // se reinicia si se puso o cambió, y se borra si se quitó.
+    promoSince: nextPromoSince(p, old),
   };
   try{
     if(p.id){
@@ -3522,6 +3712,7 @@ function renderAdmin(){
   ${state.catManageOpen ? renderOrganizeModal('cat') : ''}
   ${state.bulkTagModal ? renderBulkTagModal() : ''}
   ${state.trashOpen ? renderTrashModal() : ''}
+  ${state.promoListOpen ? renderPromoListModal() : ''}
   ${state.duplicatesOpen ? renderDuplicatesModal() : ''}
   ${state.needsManageOpen ? renderOrganizeModal('need') : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
@@ -4976,6 +5167,8 @@ function renderProductos(){
             <div class="tools-menu-label">Organizar</div>
             <button onclick="state.productToolsOpen=false;state.catManageOpen=true;render()">${icon('edit',15)} Categorías</button>
             <button onclick="state.productToolsOpen=false;state.needsManageOpen=true;render()">${icon('tag',15)} Etiquetas "para quién"</button>
+            <div class="tools-menu-label">Precios</div>
+            <button onclick="state.productToolsOpen=false;openPromoList()">${icon('percent',15)} Productos en promoción (${state.products.filter(isPromoActive).length})</button>
             <div class="tools-menu-label">Mantenimiento</div>
             <button onclick="state.productToolsOpen=false;openDuplicatesTool()">${icon('copy',15)} Buscar productos duplicados</button>
             <button onclick="state.productToolsOpen=false;state.trashOpen=true;render()">${icon('trash',15)} Papelera${state.trashProducts.length?` (${state.trashProducts.length})`:''}</button>
@@ -5092,6 +5285,7 @@ function duplicateProduct(id){
   clone.categorySortOrder = {}; // el orden manual no se hereda, para no pelear posición con el original
   clone.createdAt = new Date().toISOString();
   clone.hidden = true; // se crea oculta por default, para revisarla antes de publicarla
+  clone.costHistory = []; clone.promoSince = null; // el historial es del producto original, no se hereda
   state.productModal = clone;
   showToast('Producto duplicado — revisa y guarda para crearlo');
   render();
@@ -8234,7 +8428,12 @@ function openReceiveGoodsModal(supplierId){
   state.receiveGoodsModalOpen = true;
   state.receiveGoodsSupplierId = supplierId;
   state.receiveGoodsQuantities = {};
-  items.forEach(it=>{ state.receiveGoodsQuantities[it.id] = it.qty; });
+  state.receiveGoodsCosts = {};
+  items.forEach(it=>{
+    state.receiveGoodsQuantities[it.id] = it.qty;
+    const p = state.products.find(x=>x.id===it.productId);
+    state.receiveGoodsCosts[it.id] = p && p.cost ? p.cost : '';
+  });
   render();
 }
 function closeReceiveGoodsModal(){ state.receiveGoodsModalOpen = false; state.receiveGoodsSupplierId = null; state.receiveGoodsQuantities = {}; render(); }
@@ -8252,7 +8451,21 @@ async function confirmReceiveGoods(){
           if(!p.stockByCenter) p.stockByCenter = {};
           p.stockByCenter[centerId] = (p.stockByCenter[centerId]||0) + received;
           p.stock = totalStock(p);
-          await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock});
+          // Cada recepción queda en el historial de costos del producto (costo por pieza, fecha,
+          // proveedor y cuántas llegaron); si el costo cambió, pasa a ser el costo actual.
+          const unitCost = Number((state.receiveGoodsCosts||{})[item.id])||0;
+          const upd = {stockByCenter:p.stockByCenter, stock:p.stock};
+          if(unitCost>0){
+            const entry = {cost:unitCost, date:new Date().toISOString(), supplierId:supplierId||'', supplierName:supplier?supplier.name:'', qty:received, source:'recepcion', by: state.user?state.user.email:''};
+            const base = [...(p.costHistory||[])]; seedPreviousCost(base, p, unitCost);
+            upd.costHistory = [...base, entry];
+            if(Number(p.cost)!==unitCost){
+              logAdminAction('cambio_costo', 'producto', p.name, `Costo: ${money(p.cost||0)} → ${money(unitCost)} (recepción de ${supplier?supplier.name:'proveedor'})`, p.id);
+              upd.cost = unitCost;
+            }
+          }
+          await db.collection('products').doc(p.id).update(upd);
+          Object.assign(p, upd);
           logStockMovement(p.id, 'recepcion_mercancia', received, `Recibido de ${supplier?supplier.name:'proveedor'}`, centerId);
         }
       }
@@ -8271,11 +8484,12 @@ function renderReceiveGoodsModal(){
   <div class="modal-overlay">
     <div class="modal" style="max-width:460px;max-height:80vh;overflow-y:auto;">
       <h3>Recibir mercancía${supplier?` — ${supplier.name}`:''}</h3>
-      <p class="panel-sub">Confirma cuánto llegó de cada uno — si es distinto a lo pedido, ajústalo aquí.</p>
+      <p class="panel-sub">Confirma cuánto llegó de cada uno y a qué costo por pieza — queda en el historial de costos del producto, con este proveedor y la fecha de hoy.</p>
       ${items.map(it=>`
         <div class="list-row">
           <div class="row-main"><div class="row-title">${it.productName}</div><div class="row-sub">Pedido: ${it.qty}</div></div>
-          <input type="number" min="0" value="${state.receiveGoodsQuantities[it.id]}" style="width:80px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" oninput="state.receiveGoodsQuantities['${it.id}']=this.value">
+          <label style="display:flex;flex-direction:column;font-size:11px;color:var(--ink-soft);gap:2px;">Llegaron<input type="number" min="0" value="${state.receiveGoodsQuantities[it.id]}" style="width:76px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" oninput="state.receiveGoodsQuantities['${it.id}']=this.value"></label>
+          <label style="display:flex;flex-direction:column;font-size:11px;color:var(--ink-soft);gap:2px;">Costo c/u<input type="number" min="0" step="0.01" value="${(state.receiveGoodsCosts||{})[it.id]}" placeholder="$" style="width:86px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" oninput="state.receiveGoodsCosts['${it.id}']=this.value"></label>
         </div>
       `).join('')}
       <div class="modal-actions">
@@ -10090,7 +10304,7 @@ function renderProductModal(){
 
       <div class="two-col">
         <div class="form-field"><label>Proveedor (opcional)</label>
-          <select id="pf-supplier">
+          <select id="pf-supplier" onchange="state.productModal.supplierId=this.value">
             <option value="">Sin proveedor</option>
             ${state.suppliers.map(s=>`<option value="${s.id}" ${p.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}
           </select>
@@ -10102,7 +10316,7 @@ function renderProductModal(){
           <input id="pf-expiration" type="date" value="${p.expirationDate||''}" oninput="state.productModal.expirationDate=this.value">
         </div>
         <div class="form-field"><label>Avisarme cuando queden (opcional)</label>
-          <input id="pf-low-stock-threshold" type="number" min="1" placeholder="3 (por default)" value="${p.lowStockThreshold||''}">
+          <input id="pf-low-stock-threshold" type="number" min="1" placeholder="3 (por default)" value="${p.lowStockThreshold||''}" oninput="state.productModal.lowStockThreshold=this.value">
         </div>
       </div>
 
@@ -10141,6 +10355,7 @@ function renderProductModal(){
         </div>
         <div class="form-field"><label>Costo</label><input id="pf-cost" type="number" value="${p.cost||''}" oninput="state.productModal.cost=this.value;updatePriceCalc()"></div>
         <div class="panel-sub" style="margin-bottom:0;">Es de uso interno, tus clientes no lo verán en la tienda.</div>
+        ${renderCostHistorySection(p)}
         <div class="two-col" style="margin-top:10px;">
           <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="font-size:16px;color:var(--primary-deep);">${margin}%</strong></div>
           <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="font-size:16px;color:var(--green);">${money(profit)}</strong></div>
@@ -10462,6 +10677,7 @@ function handleSaveProduct(existingId){
     id: existingId||null, name, sku, location, supplierId, expirationDate, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
     variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
+    costHistory: state.productModal.costHistory||[],
   });
 }
 
@@ -10537,6 +10753,7 @@ function render(){
   if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
   if(state.totpRequired && !state.totpVerified){ root.innerHTML = renderTotpChallenge(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
+  if(state.loadFailed){ root.innerHTML = renderLoadFailedScreen(); restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
   if(state.productModal && document.getElementById('pf-barcode-svg')){ drawProductBarcode(); }
   if(state.postModalProductId && document.getElementById('post-canvas')){ drawPostCanvas(); }
