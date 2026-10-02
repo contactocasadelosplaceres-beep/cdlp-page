@@ -5557,12 +5557,16 @@ function findUnofficialCategories(){
   const official = new Set(state.settings.categories);
   const counts = {};
   state.products.forEach(p=>{
-    productCats(p).forEach(c=>{ if(!official.has(c)) counts[c] = (counts[c]||0)+1; });
+    prodCats(p).forEach(c=>{ if(!official.has(c)) counts[c] = (counts[c]||0)+1; });
   });
   return counts;
 }
 function toggleCatalogMaintTest(id){
   state.catalogMaintTestChecked[id] = !state.catalogMaintTestChecked[id];
+  render();
+}
+function setAllCatalogMaintTest(checked){
+  findTestProducts().forEach(p=>{ state.catalogMaintTestChecked[p.id] = checked; });
   render();
 }
 function setCatalogMaintCatTarget(oldCat, value){
@@ -5577,7 +5581,7 @@ function buildCatRemapPreview(){
   const targets = state.catalogMaintCatTargets || {};
   const rows = [];
   state.products.forEach(p=>{
-    const current = productCats(p);
+    const current = prodCats(p);
     if(!current.length) return;
     let changed = false;
     const mapped = [];
@@ -5648,7 +5652,7 @@ function renderCatalogMaintenanceModal(){
       ${testProducts.length ? `
         <div class="note-box">Estos productos entraron por el bug de auto-relleno ya corregido (ver bitácora). Revisa y confirma antes de eliminar — es permanente.</div>
         <div style="margin:6px 0;">
-          <label style="font-size:13px;"><input type="checkbox" ${testCheckedCount===testProducts.length?'checked':''} onchange="testProducts.forEach(p=>state.catalogMaintTestChecked[p.id]=this.checked);render()" onclick="testProducts.forEach(p=>state.catalogMaintTestChecked[p.id]=this.checked)"> Seleccionar todos</label>
+          <label style="font-size:13px;"><input type="checkbox" ${testCheckedCount===testProducts.length?'checked':''} onchange="setAllCatalogMaintTest(this.checked)"> Seleccionar todos</label>
         </div>
         <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
           ${testProducts.map(p=>`
