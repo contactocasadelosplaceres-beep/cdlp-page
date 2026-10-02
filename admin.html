@@ -711,6 +711,23 @@ async function loadData(){
     if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
     if(!state.settings.sections || !state.settings.sections.length) state.settings.sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
+    // Si se agrega una sección nueva a DEFAULT_SECTIONS (ej. "faq"), una tienda con su lista ya
+    // guardada de antes no la conocía y el editor de Diseño → Secciones nunca mostraba esa fila
+    // -- así nadie podía verla ni moverla desde Admin, aunque la tienda sí la mostrara (al final
+    // de todo, por el mismo motivo que se corrigió en index.html). Se agrega aquí también, en la
+    // posición que le corresponde según el orden por default, para que aparezca como una fila
+    // más en el editor.
+    (function(){
+      const known = new Set(state.settings.sections.map(s=>s.key));
+      DEFAULT_SECTIONS.forEach((defSection, idx)=>{
+        if(known.has(defSection.key)) return;
+        let insertAfterKey = null;
+        for(let i=idx-1;i>=0;i--){ if(known.has(DEFAULT_SECTIONS[i].key)){ insertAfterKey = DEFAULT_SECTIONS[i].key; break; } }
+        const insertPos = insertAfterKey ? state.settings.sections.findIndex(s=>s.key===insertAfterKey)+1 : 0;
+        state.settings.sections.splice(insertPos, 0, {...defSection});
+        known.add(defSection.key);
+      });
+    })();
     if(!state.settings.promoBanner) state.settings.promoBanner = {title:"",text:"",image:"",buttonText:"",buttonLink:""};
     if(!state.settings.promoBannerPresets) state.settings.promoBannerPresets = [];
     // Migración de una sola vez: si ya tenías un banner escrito de cuando solo existía "uno" y
