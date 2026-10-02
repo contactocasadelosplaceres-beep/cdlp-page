@@ -537,7 +537,7 @@ async function loadData(){
     // así que sirve como número real de pedidos para el rating-line, sin exponer ningún
     // dato de pedidos individuales (eso sigue protegido detrás del permiso "pedidos").
     state.orderCount = counterSnap.exists ? Math.max(0, (counterSnap.data().next||1) - 1) : 0;
-    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
+    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
     state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
     if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
@@ -597,7 +597,7 @@ async function openProductFromURL(){
   if(!p){
     try{
       const doc = await db.collection('products').doc(id).get();
-      if(doc.exists){
+      if(doc.exists && !doc.data().deletedAt){
         p = {id: doc.id, ...doc.data()};
         if(!state.products.find(x=>x.id===p.id)) state.products.push(p);
       }
@@ -612,7 +612,7 @@ async function loadFullCatalogWithRetry(attempt){
   attempt = attempt || 1;
   try{
     const fullSnap = await db.collection('products').orderBy('name').get();
-    state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden);
+    state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
     state.catalogIncomplete = false; state.fullCatalogLoaded = true;
     render();
   }catch(e){

@@ -256,6 +256,15 @@
   .prod-count{font-size:13px;font-weight:800;color:var(--primary-deep);margin:6px 2px 8px;}
   .prod-selectbar{display:flex;align-items:center;gap:10px;padding:6px 12px;margin-bottom:8px;font-size:13px;color:var(--ink-soft);font-weight:600;}
   .prod-selectbar label{display:flex;align-items:center;gap:8px;cursor:pointer;}
+  .seg-toggle{display:flex;gap:4px;background:var(--surface-soft);border-radius:var(--radius-sm);padding:4px;margin-bottom:10px;}
+  .seg-toggle button{flex:1;padding:9px 10px;border-radius:calc(var(--radius-sm) - 2px);background:transparent;color:var(--ink-soft);font-size:13px;font-weight:700;}
+  .seg-toggle button.active{background:var(--surface);color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+  .dup-group{border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 10px 4px;margin-bottom:12px;background:var(--surface-soft);}
+  .dup-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .qstock{display:inline-flex;align-items:center;gap:4px;}
+  .qstock button{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--primary-deep);font-size:16px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+  .qstock button:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
+  .qstock button:disabled{opacity:.35;}
   .prod-link{background:none;color:var(--primary);font-weight:700;font-size:13px;padding:0;text-decoration:underline;}
   @media(max-width:600px){.prod-select{flex:1 1 45%;min-width:0;}.prod-head-actions{width:100%;}.prod-head-actions .btn-add-new{flex:1;}}
   /* Encabezado de sección dentro de formularios largos (ej. modal de producto), para que se
@@ -630,7 +639,7 @@ let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   totpRequired:false, totpVerified:false, totpSecretForChallenge:null, totpSetup:null, totpDisableCode:"", totpChallengeInput:"", totpChallengeError:"", adminSessions:undefined,
   changePasswordCurrent:"", changePasswordNew:"", changePasswordConfirm:"", changePasswordError:"", changePasswordSubmitting:false,
-  products:[], orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
+  products:[], trashProducts:[], trashOpen:false, duplicatesOpen:false, duplicateGroups:null, orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   statsSubview:"general", visitsPeriod:"hoy",
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
   selectedOrders:[], selectedProducts:[],
@@ -700,7 +709,13 @@ async function loadData(){
     // día hace falta poblar productos de ejemplo para probar algo, se hace a propósito, nunca
     // de forma automática.
     const prodSnap = await db.collection('products').get();
-    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    const allProducts = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    // Papelera: un producto eliminado se queda en la colección marcado con deletedAt (así no
+    // depende de que las reglas permitan otra colección) y no aparece en ningún lado del panel,
+    // la tienda ni el POS. Pasados 30 días se borra de verdad, aquí mismo, al cargar el panel.
+    state.products = allProducts.filter(p=>!p.deletedAt);
+    state.trashProducts = allProducts.filter(p=>p.deletedAt);
+    purgeExpiredTrash();
 
     const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, aiSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap, suppliersSnap, restockItemsSnap, commissionAgentsSnap, activePosSessionsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
@@ -849,7 +864,7 @@ async function loadData(){
     if(needsMigration){ try{ await migrationBatch.commit(); }catch(e){ console.error('No se pudo migrar el inventario a centros', e); } }
   }catch(e){
     console.error(e);
-    state.products = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.cartAbandonSurveys = []; state.productExchanges = []; state.settings = {...DEFAULT_SETTINGS};
+    state.products = []; state.trashProducts = []; state.orders = []; state.visits = []; state.analyticsEvents = []; state.cashiers = []; state.abandonedCarts = []; state.storeMessages = []; state.suppliers = []; state.restockItems = []; state.commissionAgents = []; state.activePosSessions = []; state.expenses = []; state.shrinkage = []; state.restockRequests = []; state.searchMisses = []; state.priceChangeBatches = []; state.cartAbandonSurveys = []; state.productExchanges = []; state.settings = {...DEFAULT_SETTINGS};
     state.centers = []; state.transfers = []; state.audits = []; state.customers = []; state.couponUsage = [];
     state.cashRegisters = [];
     showToast('No se pudo cargar todo desde el servidor');
@@ -978,6 +993,7 @@ let _settingsAuditBaseline = null;
 // Nombres amigables para el detalle de la bitácora. Un campo que no está aquí simplemente se
 // muestra con su nombre técnico — no impide que el cambio quede registrado.
 const SETTINGS_FIELD_LABELS = {
+  duplicatesIgnored:"Productos marcados como no duplicados",
   storeName:'Nombre de la tienda', whatsapp:'WhatsApp de la tienda', schedule:'Horario',
   heroTitle:'Título principal', heroSubtitle:'Subtítulo principal', categories:'Categorías',
   hiddenCategories:'Categorías ocultas', needs:'Necesidades/etiquetas', sections:'Secciones visibles',
@@ -2404,17 +2420,192 @@ function exportProductsJSON(){
   saveSettings();
   logAdminAction('exportacion', 'respaldo de catálogo (JSON)', `${data.length} producto(s)`);
 }
+/* ============== DETECTOR DE PRODUCTOS DUPLICADOS ==============
+   Agrupa productos que probablemente son el mismo: nombre igual (sin acentos, mayúsculas ni
+   signos), nombre casi igual (errores de dedo, una palabra de más) o el mismo SKU. Si la única
+   diferencia entre dos nombres es una talla o un número ("Plug M" / "Plug L", "120 ml" /
+   "250 ml"), NO se marcan: suelen ser presentaciones distintas a propósito. Lo que se marque
+   como "no son duplicados" se recuerda (settings.duplicatesIgnored) para no volver a salir. */
+function levenshtein(a, b){
+  if(a===b) return 0;
+  const m=a.length, n=b.length; if(!m) return n; if(!n) return m;
+  let prev = Array.from({length:n+1},(_,j)=>j), cur = new Array(n+1);
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    [prev,cur]=[cur,prev];
+  }
+  return prev[n];
+}
+const VARIANT_TOKEN = /^(\d.*|xs|s|m|l|xl|xxl|xxxl|ch|med|gde|chico|mediano|grande|ml|gr|g|oz|cm|pzs?|piezas?)$/;
+function onlyVariantDifference(na, nb){
+  const ta = new Set(na.split(' ')), tb = new Set(nb.split(' '));
+  const diff = [...ta].filter(t=>!tb.has(t)).concat([...tb].filter(t=>!ta.has(t)));
+  return diff.length>0 && diff.every(t=>VARIANT_TOKEN.test(t));
+}
+function computeDuplicateGroups(){
+  const items = state.products.map(p=>({p, n:normName(p.name), sku:(p.sku||'').trim().toUpperCase()}));
+  const parent = items.map((_,i)=>i);
+  const find = i => parent[i]===i ? i : (parent[i]=find(parent[i]));
+  const reasons = {};
+  const link = (i,j,why)=>{ const a=find(i), b=find(j); if(a!==b) parent[a]=b; reasons[i]=reasons[i]||why; reasons[j]=reasons[j]||why; };
+  for(let i=0;i<items.length;i++){
+    for(let j=i+1;j<items.length;j++){
+      const A=items[i], B=items[j];
+      if(A.sku && A.sku===B.sku){ link(i,j,'Mismo SKU'); continue; }
+      if(!A.n || !B.n) continue;
+      if(A.n===B.n){ link(i,j,'Mismo nombre'); continue; }
+      const maxLen = Math.max(A.n.length, B.n.length);
+      if(maxLen<8 || Math.abs(A.n.length-B.n.length) > maxLen*0.15) continue;
+      if(onlyVariantDifference(A.n, B.n)) continue;
+      if(levenshtein(A.n, B.n) <= Math.max(2, Math.floor(maxLen*0.12))) link(i,j,'Nombre casi igual');
+    }
+  }
+  const byRoot = {};
+  items.forEach((it,i)=>{ const r=find(i); (byRoot[r]=byRoot[r]||[]).push(i); });
+  const ignored = new Set(state.settings.duplicatesIgnored||[]);
+  return Object.values(byRoot).filter(g=>g.length>1).map(g=>{
+    const products = g.map(i=>items[i].p);
+    const key = products.map(p=>p.id).sort().join('|');
+    return {key, products, reason: reasons[g[0]]||'Parecidos'};
+  }).filter(g=>!ignored.has(g.key)).sort((a,b)=>(a.products[0].name||'').localeCompare(b.products[0].name||''));
+}
+function openDuplicatesTool(){
+  state.duplicatesOpen = true; state.duplicateGroups = null; render();
+  setTimeout(()=>{ state.duplicateGroups = computeDuplicateGroups(); render(); }, 30);
+}
+async function ignoreDuplicateGroup(key){
+  state.settings.duplicatesIgnored = [...(state.settings.duplicatesIgnored||[]), key];
+  state.duplicateGroups = (state.duplicateGroups||[]).filter(g=>g.key!==key);
+  render();
+  await saveSettings();
+}
+async function trashFromDuplicates(id){
+  await moveProductsToTrash([id]);
+  state.duplicateGroups = (state.duplicateGroups||[])
+    .map(g=>({...g, products:g.products.filter(p=>p.id!==id)}))
+    .filter(g=>g.products.length>1);
+  render();
+}
+function renderDuplicatesModal(){
+  const groups = state.duplicateGroups;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.duplicatesOpen=false;render()}">
+    <div class="modal" style="max-width:720px;">
+      <h3>Productos duplicados</h3>
+      <div class="panel-sub" style="margin-top:0;">Productos con el mismo nombre, nombre casi igual o el mismo SKU. Revisa cada grupo: edita el que quieras conservar y manda el sobrante a la papelera, o márcalo como "no son duplicados" para que no vuelva a salir.</div>
+      ${groups===null ? `<div class="empty-state">Revisando ${state.products.length} productos…</div>`
+        : groups.length===0 ? `<div class="empty-state">${icon('check',16)} No se encontraron duplicados.</div>`
+        : `<div class="prod-count" style="margin-top:4px;">${groups.length} grupo${groups.length===1?'':'s'} para revisar</div>` + groups.map(g=>`
+          <div class="dup-group">
+            <div class="dup-head"><span class="status-badge status-low">${g.reason}</span>
+              <button class="prod-link" onclick="ignoreDuplicateGroup('${g.key}')">No son duplicados</button></div>
+            ${g.products.map(p=>`
+              <div class="list-row" style="margin:0 0 6px;">
+                ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+                <div class="row-main">
+                  <div class="row-title">${escDescHtml(p.name)} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
+                  <div class="row-sub">${money(p.price||0)} · stock ${p.stock||0} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU ${escDescHtml(p.sku)}`:''}${p.createdAt?` · alta ${new Date(p.createdAt).toLocaleDateString('es-MX')}`:''}</div>
+                </div>
+                <div class="row-actions">
+                  <button class="icon-btn" title="Editar" onclick='state.duplicatesOpen=false;state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
+                  <button class="icon-btn danger" title="Enviar a la papelera" onclick="trashFromDuplicates('${p.id}')">${icon('trash')}</button>
+                </div>
+              </div>`).join('')}
+          </div>`).join('')}
+      <div class="modal-actions"><button class="btn-primary" style="flex:1;" onclick="state.duplicatesOpen=false;render()">Listo</button></div>
+    </div>
+  </div>`;
+}
+const TRASH_DAYS = 30;
 async function deleteProduct(id){
-  const p = state.products.find(x=>x.id===id);
+  return moveProductsToTrash([id]);
+}
+async function moveProductsToTrash(ids){
+  const now = new Date().toISOString();
+  const by = state.user ? state.user.email : '';
   try{
-    await db.collection('products').doc(id).delete();
-    state.products = state.products.filter(x=>x.id!==id);
-    if(p) logAdminAction('eliminacion', 'producto', p.name, `SKU: ${p.sku||'sin SKU'}`);
-    showToast('Producto eliminado'); render();
+    for(let i=0;i<ids.length;i+=400){
+      const batch = db.batch();
+      ids.slice(i,i+400).forEach(id=>batch.update(db.collection('products').doc(id), {deletedAt:now, deletedBy:by}));
+      await batch.commit();
+    }
+    const moved = state.products.filter(p=>ids.includes(p.id));
+    moved.forEach(p=>{ p.deletedAt = now; p.deletedBy = by; });
+    state.trashProducts = [...moved, ...state.trashProducts];
+    state.products = state.products.filter(p=>!ids.includes(p.id));
+    state.selectedProducts = (state.selectedProducts||[]).filter(id=>!ids.includes(id));
+    if(moved.length===1) logAdminAction('eliminacion', 'producto', moved[0].name, `A la papelera · SKU: ${moved[0].sku||'sin SKU'}`, moved[0].id);
+    else logAdminAction('eliminacion_lote', 'producto', `${moved.length} producto(s)`, ('A la papelera: '+moved.map(p=>p.name).join(', ')).slice(0,500));
+    showToast(`${moved.length===1?'Producto enviado':moved.length+' productos enviados'} a la papelera`);
+    render();
   }catch(e){
     console.error(e);
     showToast('No se pudo eliminar: ' + (e.message||'error desconocido'));
   }
+}
+async function restoreFromTrash(ids){
+  try{
+    for(let i=0;i<ids.length;i+=400){
+      const batch = db.batch();
+      ids.slice(i,i+400).forEach(id=>batch.update(db.collection('products').doc(id), {deletedAt:firebase.firestore.FieldValue.delete(), deletedBy:firebase.firestore.FieldValue.delete()}));
+      await batch.commit();
+    }
+    const back = state.trashProducts.filter(p=>ids.includes(p.id));
+    back.forEach(p=>{ delete p.deletedAt; delete p.deletedBy; });
+    state.products = [...state.products, ...back];
+    state.trashProducts = state.trashProducts.filter(p=>!ids.includes(p.id));
+    logAdminAction('restauracion', 'producto', back.length===1?back[0].name:`${back.length} producto(s)`, 'Recuperado de la papelera');
+    showToast(`${back.length===1?'Producto recuperado':back.length+' productos recuperados'}`);
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo recuperar: '+(e.message||'error')); }
+}
+async function deleteForever(ids, silent){
+  try{
+    for(let i=0;i<ids.length;i+=400){
+      const batch = db.batch();
+      ids.slice(i,i+400).forEach(id=>batch.delete(db.collection('products').doc(id)));
+      await batch.commit();
+    }
+    const gone = state.trashProducts.filter(p=>ids.includes(p.id));
+    state.trashProducts = state.trashProducts.filter(p=>!ids.includes(p.id));
+    logAdminAction('eliminacion_definitiva', 'producto', gone.length===1?gone[0].name:`${gone.length} producto(s)`, silent?`Más de ${TRASH_DAYS} días en la papelera`:'Borrado definitivo desde la papelera');
+    if(!silent){ showToast('Eliminado definitivamente'); render(); }
+  }catch(e){ console.error(e); if(!silent) showToast('No se pudo eliminar: '+(e.message||'error')); }
+}
+function trashDaysLeft(p){
+  const passed = Math.floor((Date.now()-new Date(p.deletedAt).getTime())/86400000);
+  return Math.max(0, TRASH_DAYS - passed);
+}
+function purgeExpiredTrash(){
+  const expired = state.trashProducts.filter(p=>Date.now()-new Date(p.deletedAt).getTime() > TRASH_DAYS*86400000).map(p=>p.id);
+  if(expired.length) deleteForever(expired, true);
+}
+function renderTrashModal(){
+  const items = [...state.trashProducts].sort((a,b)=>(b.deletedAt||'').localeCompare(a.deletedAt||''));
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.trashOpen=false;render()}">
+    <div class="modal" style="max-width:640px;">
+      <h3>Papelera</h3>
+      <div class="panel-sub" style="margin-top:0;">Los productos eliminados se quedan aquí ${TRASH_DAYS} días y luego se borran solos. Mientras estén aquí no aparecen en la tienda ni en el punto de venta.</div>
+      ${items.length===0 ? `<div class="empty-state">La papelera está vacía.</div>` : items.map(p=>`
+        <div class="list-row">
+          ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+          <div class="row-main">
+            <div class="row-title">${escDescHtml(p.name)}</div>
+            <div class="row-sub">${money(p.price||0)} · eliminado ${timeAgo(p.deletedAt)}${p.deletedBy?` por ${escDescHtml(p.deletedBy)}`:''} · se borra en ${trashDaysLeft(p)} día${trashDaysLeft(p)===1?'':'s'}</div>
+          </div>
+          <div class="row-actions">
+            <button class="btn-outline" style="padding:7px 12px;font-size:12.5px;" onclick="restoreFromTrash(['${p.id}'])">Recuperar</button>
+            <button class="icon-btn danger" title="Eliminar definitivamente" onclick="if(confirm('¿Eliminar definitivamente &quot;${escDescHtml(p.name).replace(/'/g,"\\'")}&quot;? Ya no se podrá recuperar.'))deleteForever(['${p.id}'])">${icon('trash')}</button>
+          </div>
+        </div>`).join('')}
+      <div class="modal-actions">
+        ${items.length ? `<button class="btn-danger-text" onclick="if(confirm('¿Vaciar la papelera? Se eliminarán definitivamente ${items.length} producto(s).'))deleteForever(state.trashProducts.map(p=>p.id))">Vaciar papelera</button>` : ''}
+        <button class="btn-primary" style="flex:1;" onclick="state.trashOpen=false;render()">Listo</button>
+      </div>
+    </div>
+  </div>`;
 }
 // Guarda un renglón en el historial de movimientos de un producto — la base del "Ver
 // movimientos" que se ve desde su ficha. qtyChange positivo = entró inventario, negativo = salió.
@@ -3328,6 +3519,9 @@ function renderAdmin(){
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.catManageOpen ? renderOrganizeModal('cat') : ''}
+  ${state.bulkTagModal ? renderBulkTagModal() : ''}
+  ${state.trashOpen ? renderTrashModal() : ''}
+  ${state.duplicatesOpen ? renderDuplicatesModal() : ''}
   ${state.needsManageOpen ? renderOrganizeModal('need') : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
   ${state.auditLogOpen ? renderAuditLogModal() : ''}
@@ -4555,6 +4749,96 @@ function renderCategoriesManagePanel(){
       </div>
     </div>`;
 }
+/* ============== CATEGORÍA / ETIQUETA EN LOTE ============== */
+function openBulkTagModal(){
+  state.bulkTagModal = {kind:'cat', action:'add', value: state.settings.categories[0]||''};
+  render();
+}
+function bulkTagOptions(kind){
+  return kind==='cat'
+    ? state.settings.categories.map(c=>({value:c, label:c}))
+    : (state.settings.needs || DEFAULT_NEEDS).map(n=>({value:n.key, label:n.label}));
+}
+// Calcula qué cambia en cada seleccionado sin guardar nada: así la ventana dice cuántos se
+// van a modificar, cuántos ya estaban así y cuántos se saltan (quitar la única categoría de
+// un producto lo dejaría sin categoría, y entonces no aparecería en ningún filtro).
+function buildBulkTagPlan(){
+  const m = state.bulkTagModal; const ids = state.selectedProducts||[];
+  const plan = {updates:[], unchanged:0, skippedLastCat:0};
+  ids.forEach(id=>{
+    const p = state.products.find(x=>x.id===id); if(!p) return;
+    if(m.kind==='cat'){
+      const cur = prodCats(p);
+      const has = cur.includes(m.value);
+      if(m.action==='add'){ if(has){ plan.unchanged++; return; } plan.updates.push({id, data:{categories:[...cur, m.value], cat:cur[0]||m.value}}); }
+      else{
+        if(!has){ plan.unchanged++; return; }
+        const next = cur.filter(c=>c!==m.value);
+        if(!next.length){ plan.skippedLastCat++; return; }
+        plan.updates.push({id, data:{categories:next, cat:next[0]}});
+      }
+    }else{
+      const cur = p.needs||[]; const has = cur.includes(m.value);
+      if(m.action==='add'){ if(has){ plan.unchanged++; return; } plan.updates.push({id, data:{needs:[...cur, m.value]}}); }
+      else{ if(!has){ plan.unchanged++; return; } plan.updates.push({id, data:{needs:cur.filter(n=>n!==m.value)}}); }
+    }
+  });
+  return plan;
+}
+async function applyBulkTag(){
+  const m = state.bulkTagModal; if(!m || !m.value || m.saving) return;
+  const plan = buildBulkTagPlan();
+  if(!plan.updates.length){ showToast('No hay nada que cambiar con esta selección'); return; }
+  m.saving = true; render();
+  try{
+    for(let i=0;i<plan.updates.length;i+=400){
+      const batch = db.batch();
+      plan.updates.slice(i,i+400).forEach(u=>batch.update(db.collection('products').doc(u.id), u.data));
+      await batch.commit();
+    }
+    plan.updates.forEach(u=>{ const p=state.products.find(x=>x.id===u.id); if(p) Object.assign(p, u.data); });
+    const label = (bulkTagOptions(m.kind).find(o=>o.value===m.value)||{}).label || m.value;
+    logAdminAction('edicion_lote', 'producto', `${plan.updates.length} producto(s)`, `${m.action==='add'?'Se agregó':'Se quitó'} ${m.kind==='cat'?'la categoría':'la etiqueta'} "${label}"`);
+    showToast(`${plan.updates.length} producto(s) actualizado(s)`);
+    state.bulkTagModal = null; state.selectedProducts = [];
+  }catch(e){ console.error(e); m.saving = false; showToast('No se pudo actualizar: '+(e.message||'error')); }
+  render();
+}
+function renderBulkTagModal(){
+  const m = state.bulkTagModal;
+  const opts = bulkTagOptions(m.kind);
+  if(!opts.some(o=>o.value===m.value)) m.value = (opts[0]||{}).value || '';
+  const plan = buildBulkTagPlan();
+  const n = (state.selectedProducts||[]).length;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){state.bulkTagModal=null;render()}">
+    <div class="modal">
+      <h3>Categoría o etiqueta a ${n} producto${n===1?'':'s'}</h3>
+      <div class="seg-toggle">
+        <button class="${m.action==='add'?'active':''}" onclick="state.bulkTagModal.action='add';render()">Agregar</button>
+        <button class="${m.action==='remove'?'active':''}" onclick="state.bulkTagModal.action='remove';render()">Quitar</button>
+      </div>
+      <div class="seg-toggle">
+        <button class="${m.kind==='cat'?'active':''}" onclick="state.bulkTagModal.kind='cat';state.bulkTagModal.value='';render()">Categoría</button>
+        <button class="${m.kind==='need'?'active':''}" onclick="state.bulkTagModal.kind='need';state.bulkTagModal.value='';render()">Etiqueta "para quién"</button>
+      </div>
+      <div class="form-field">
+        <select onchange="state.bulkTagModal.value=this.value;render()">
+          ${opts.map(o=>`<option value="${escDescHtml(o.value)}" ${m.value===o.value?'selected':''}>${escDescHtml(o.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="note-box">
+        Se ${m.action==='add'?'agrega a':'quita de'} <strong>${plan.updates.length}</strong> producto${plan.updates.length===1?'':'s'}.
+        ${plan.unchanged ? `${plan.unchanged} ya ${m.action==='add'?'la tenían':'no la tenían'}.` : ''}
+        ${plan.skippedLastCat ? `${plan.skippedLastCat} se saltan porque es su única categoría.` : ''}
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.bulkTagModal=null;render()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" ${!plan.updates.length||m.saving?'disabled':''} onclick="applyBulkTag()">${m.saving?'Guardando…':'Aplicar'}</button>
+      </div>
+    </div>
+  </div>`;
+}
 function renderOrganizeModal(kind){
   const closeKey = kind==='cat' ? 'catManageOpen' : 'needsManageOpen';
   return `
@@ -4571,6 +4855,89 @@ function toggleCategoryHidden(cat){
   if(i>=0) hidden.splice(i,1); else hidden.push(cat);
   saveSettings(); render();
 }
+/* ============== PRODUCTOS: filtro por estado, orden, stock rápido ============== */
+const PRODUCT_STATUS_FILTERS = [
+  {key:'todos', label:'Estado: todos'},
+  {key:'agotados', label:'Agotados'},
+  {key:'bajo', label:'Stock bajo'},
+  {key:'ocultos', label:'Ocultos'},
+  {key:'sinfoto', label:'Sin foto'},
+  {key:'promo', label:'En promoción'},
+];
+const PRODUCT_SORTS = [
+  {key:'auto', label:'Orden: predeterminado'},
+  {key:'recientes', label:'Más recientes'},
+  {key:'nombre', label:'Nombre (A-Z)'},
+  {key:'precio-asc', label:'Precio: menor a mayor'},
+  {key:'precio-desc', label:'Precio: mayor a menor'},
+  {key:'stock-asc', label:'Menos stock primero'},
+  {key:'vendidos', label:'Más vendidos (90 días)'},
+];
+function lowStockLimit(p){ return p.lowStockThreshold>0 ? p.lowStockThreshold : 3; }
+// Mismo criterio que la etiqueta de cada fila (stockStatusBadge): "bajo" no incluye agotados.
+function productMatchesStatus(p, key){
+  const stock = p.stock||0;
+  if(key==='agotados') return stock<=0;
+  if(key==='bajo') return stock>0 && stock<=lowStockLimit(p);
+  if(key==='ocultos') return !!p.hidden;
+  if(key==='sinfoto') return !(p.images && p.images.length);
+  if(key==='promo') return p.promoPrice>0 && p.promoPrice<(p.price||0);
+  return true;
+}
+// Unidades vendidas por producto en los últimos 90 días (pedidos y ventas no canceladas).
+// Se calcula una vez por render de la lista, no por cada comparación del sort.
+function unitsSoldByProduct(days){
+  const since = Date.now() - days*86400000;
+  const units = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado' || new Date(o.date).getTime()<since) return;
+    (o.items||[]).forEach(it=>{ if(it.id) units[it.id]=(units[it.id]||0)+(Number(it.qty)||0); });
+  });
+  return units;
+}
+function sortProductsBy(list, key){
+  const arr = [...list];
+  const byName = (a,b)=>(a.name||'').localeCompare(b.name||'', 'es', {sensitivity:'base'});
+  if(key==='nombre') return arr.sort(byName);
+  if(key==='recientes') return arr.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'') || byName(a,b));
+  const eff = p => (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : (p.price||0);
+  if(key==='precio-asc') return arr.sort((a,b)=>eff(a)-eff(b) || byName(a,b));
+  if(key==='precio-desc') return arr.sort((a,b)=>eff(b)-eff(a) || byName(a,b));
+  if(key==='stock-asc') return arr.sort((a,b)=>(a.stock||0)-(b.stock||0) || byName(a,b));
+  if(key==='vendidos'){ const u = unitsSoldByProduct(90); return arr.sort((a,b)=>(u[b.id]||0)-(u[a.id]||0) || byName(a,b)); }
+  return arr;
+}
+// +/- de stock desde la fila. Solo para productos de stock simple: los que tienen variantes o
+// son kit se siguen ajustando desde su ficha (el stock de un kit se calcula de sus piezas).
+// Se mueve el centro donde ya vive el stock si es uno solo; si no, el centro principal.
+function quickStockCenterId(p){
+  const keys = Object.keys(p.stockByCenter||{});
+  if(keys.length===1) return keys[0];
+  return (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id || null;
+}
+function canQuickAdjustStock(p){ return !p.isKit && !(p.variants && p.variants.length) && !!quickStockCenterId(p); }
+const quickStockBusy = {};
+async function quickAdjustStock(id, delta){
+  const p = state.products.find(x=>x.id===id); if(!p || quickStockBusy[id]) return;
+  if(!canQuickAdjustStock(p)){ showToast('Este producto se ajusta desde su ficha'); return; }
+  const cid = quickStockCenterId(p);
+  const sbc = {...(p.stockByCenter||{})};
+  const current = sbc[cid]||0;
+  if(current+delta<0){ showToast('No hay piezas que restar en ese centro'); return; }
+  sbc[cid] = current+delta;
+  const prev = {stockByCenter:p.stockByCenter, stock:p.stock};
+  const newStock = Object.values(sbc).reduce((s,n)=>s+(n||0),0);
+  quickStockBusy[id] = true;
+  try{
+    await db.collection('products').doc(id).update({stockByCenter:sbc, stock:newStock});
+    p.stockByCenter = sbc; p.stock = newStock;
+    const center = state.centers.find(c=>c.id===cid);
+    logStockMovement(id, 'ajuste_manual', delta, 'Ajuste rápido desde la lista de productos', cid);
+    recomputeKitStocksFor([id]);
+    showToast(`${p.name}: ${newStock} en stock${center && state.centers.length>1?` (${center.name})`:''}`);
+  }catch(e){ console.error(e); Object.assign(p, prev); showToast('No se pudo ajustar el stock'); }
+  finally{ delete quickStockBusy[id]; render(); }
+}
 function renderProductos(){
   const q = (state.productSearch||'').trim().toLowerCase();
   const catFilter = state.productCatFilter || 'Todas';
@@ -4582,9 +4949,13 @@ function renderProductos(){
   if(needFilter!=='Todas') filtered = filtered.filter(p => (p.needs||[]).includes(needFilter));
   // Con una sola categoría filtrada (y sin buscar/filtrar por etiqueta) se muestra en el orden
   // manual que se haya fijado para esa categoría, para poder reordenar con las flechas.
-  const canReorder = catFilter!=='Todas' && needFilter==='Todas' && !q;
+  const statusFilter = state.productStatusFilter || 'todos';
+  const sortBy = state.productSort || 'auto';
+  if(statusFilter!=='todos') filtered = filtered.filter(p=>productMatchesStatus(p, statusFilter));
+  const canReorder = catFilter!=='Todas' && needFilter==='Todas' && !q && statusFilter==='todos' && sortBy==='auto';
   if(canReorder) filtered = sortByCategoryOrder(filtered, catFilter);
-  const filterCount = (q?1:0) + (catFilter!=='Todas'?1:0) + (needFilter!=='Todas'?1:0);
+  else if(sortBy!=='auto') filtered = sortProductsBy(filtered, sortBy);
+  const filterCount = (q?1:0) + (catFilter!=='Todas'?1:0) + (needFilter!=='Todas'?1:0) + (statusFilter!=='todos'?1:0);
   const daysSinceExport = state.settings.lastExportAt ? Math.floor((Date.now()-new Date(state.settings.lastExportAt).getTime())/86400000) : null;
   const hiddenCount = state.products.filter(p=>p.hidden).length;
   const needLabel = needFilter!=='Todas' ? ((needsList.find(n=>n.key===needFilter)||{}).label || needFilter) : '';
@@ -4605,6 +4976,8 @@ function renderProductos(){
             <button onclick="state.productToolsOpen=false;state.catManageOpen=true;render()">${icon('edit',15)} Categorías</button>
             <button onclick="state.productToolsOpen=false;state.needsManageOpen=true;render()">${icon('tag',15)} Etiquetas "para quién"</button>
             <div class="tools-menu-label">Mantenimiento</div>
+            <button onclick="state.productToolsOpen=false;openDuplicatesTool()">${icon('copy',15)} Buscar productos duplicados</button>
+            <button onclick="state.productToolsOpen=false;state.trashOpen=true;render()">${icon('trash',15)} Papelera${state.trashProducts.length?` (${state.trashProducts.length})`:''}</button>
             <button onclick="state.productToolsOpen=false;openRecompressTool()">${icon('download',15)} Aligerar fotos ya guardadas</button>
             <button onclick="state.productToolsOpen=false;exportProductsJSON()">${icon('copy',15)} Exportar respaldo del catálogo</button>
             ${undoPrice ? `<button onclick="state.productToolsOpen=false;undoLastMassPriceChange()">${icon('history',15)} Deshacer último cambio de precios</button>` : ''}
@@ -4624,7 +4997,13 @@ function renderProductos(){
         <option value="Todas">Para quién: todos</option>
         ${needsList.map(n=>`<option value="${escDescHtml(n.key)}" ${needFilter===n.key?'selected':''}>${escDescHtml(n.label)}</option>`).join('')}
       </select>
-      ${filterCount ? `<button class="prod-clear" onclick="state.productSearch='';state.productCatFilter='Todas';state.productNeedFilter='Todas';resetShowMore('productListShowMore');render()">${icon('x',14)} Limpiar</button>` : ''}
+      <select class="prod-select ${statusFilter!=='todos'?'is-set':''}" onchange="state.productStatusFilter=this.value;resetShowMore('productListShowMore');render()">
+        ${PRODUCT_STATUS_FILTERS.map(o=>`<option value="${o.key}" ${statusFilter===o.key?'selected':''}>${o.label}${o.key!=='todos'?` (${state.products.filter(p=>productMatchesStatus(p,o.key)).length})`:''}</option>`).join('')}
+      </select>
+      <select class="prod-select ${sortBy!=='auto'?'is-set':''}" onchange="state.productSort=this.value;resetShowMore('productListShowMore');render()">
+        ${PRODUCT_SORTS.map(o=>`<option value="${o.key}" ${sortBy===o.key?'selected':''}>${o.label}</option>`).join('')}
+      </select>
+      ${(filterCount || sortBy!=='auto') ? `<button class="prod-clear" onclick="state.productSearch='';state.productCatFilter='Todas';state.productNeedFilter='Todas';state.productStatusFilter='todos';state.productSort='auto';resetShowMore('productListShowMore');render()">${icon('x',14)} Limpiar</button>` : ''}
     </div>
     ${(catFilter!=='Todas' || needFilter!=='Todas') ? `
     <div class="prod-assign">
@@ -4645,6 +5024,7 @@ function renderProductos(){
         ${selected.length>0 ? `
           <div class="bulk-actions-bar">
             <span>${selected.length} seleccionado${selected.length===1?'':'s'}</span>
+            <button class="btn-tertiary" onclick="openBulkTagModal()">${icon('tag',14)} Categoría / etiqueta</button>
             <button class="btn-tertiary" onclick="openMassPriceModal()">${icon('dollar-sign',14)} Cambiar precios</button>
             <button class="btn-tertiary" onclick='printProductLabelsBulk(${JSON.stringify(selected)})'>${icon('printer',14)} Imprimir etiquetas</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(true)">Ocultar</button>
@@ -4672,7 +5052,12 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
         <div class="row-main">
           <div class="row-title">${p.name} ${p.isKit?'<span class="status-badge" style="background:var(--teal);">Kit</span>':''} ${p.isMysteryBox?'<span class="status-badge" style="background:var(--navy);">Caja sorpresa</span>':''} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
           <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}${p.isKit?` · ${(p.kitItems||[]).length} producto(s) en el kit`:''}${p.isMysteryBox?` · ${p.mysteryItemCount||3} producto(s) sorpresa de ${p.mysteryCategory||'Cualquiera'}`:''}</div>
-          <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">${stockStatusBadge(p)}${expirationBadge(p)}</div>
+          <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            ${canQuickAdjustStock(p) ? `<span class="qstock" title="Ajuste rápido de stock">
+              <button onclick="quickAdjustStock('${p.id}',-1)" ${(p.stock||0)<=0?'disabled':''} aria-label="Restar uno">−</button>
+              ${stockStatusBadge(p)}
+              <button onclick="quickAdjustStock('${p.id}',1)" aria-label="Sumar uno">+</button>
+            </span>` : stockStatusBadge(p)}${expirationBadge(p)}</div>
         </div>
         <div class="row-actions">
           <div class="row-more-wrap">
@@ -4688,7 +5073,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
             </div>` : ''}
           </div>
           <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
-          <button class="icon-btn danger" onclick="if(confirm('¿Eliminar este producto?'))deleteProduct('${p.id}')">${icon('trash')}</button>
+          <button class="icon-btn danger" title="Enviar a la papelera" onclick="deleteProduct('${p.id}')">${icon('trash')}</button>
         </div>
       </div>`;
 }
@@ -4766,20 +5151,8 @@ async function bulkSetProductsHidden(hidden){
 }
 async function bulkDeleteProducts(){
   const ids = [...(state.selectedProducts||[])];
-  if(!confirm(`¿Eliminar ${ids.length} producto(s)? No se puede deshacer.`)) return;
-  try{
-    for(let i=0;i<ids.length;i+=400){
-      const chunk = ids.slice(i,i+400);
-      const batch = db.batch();
-      chunk.forEach(id=>batch.delete(db.collection('products').doc(id)));
-      await batch.commit();
-    }
-    logAdminAction('eliminacion_lote', 'producto', `${ids.length} producto(s)`, ids.map(id=>{const p=state.products.find(x=>x.id===id); return p?p.name:id;}).join(', ').slice(0,500));
-    state.products = state.products.filter(p=>!ids.includes(p.id));
-    state.selectedProducts = [];
-    showToast(`${ids.length} producto(s) eliminado(s)`);
-    render();
-  }catch(e){ console.error(e); showToast('No se pudo eliminar'); }
+  if(!confirm(`¿Enviar ${ids.length} producto(s) a la papelera? Podrás recuperarlos durante ${TRASH_DAYS} días.`)) return;
+  await moveProductsToTrash(ids);
 }
 function onProductSearchInput(v){
   state.productSearch = v;

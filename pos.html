@@ -324,7 +324,7 @@ async function loadData(){
       db.collection('distributionCenters').get(),
       db.collection('customers').get(),
     ]);
-    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.deletedAt); // los que están en la papelera del admin no se venden
     state.settings = setSnap.exists ? setSnap.data() : {};
     state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
     state.coupons = setSnap.exists ? (setSnap.data().coupons||[]) : [];
