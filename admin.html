@@ -242,7 +242,7 @@
   .prod-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
   .prod-title{font-family:var(--font-heading);font-size:24px;font-weight:800;color:var(--primary-deep);line-height:1.1;}
   .prod-sub{font-size:13px;color:var(--ink-soft);margin-top:4px;}
-  .prod-head-actions{display:flex;gap:8px;align-items:center;}
+  .prod-head-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .btn-tools{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1.5px solid var(--border);color:var(--ink);padding:10px 15px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:700;}
   .btn-tools:hover{border-color:var(--primary);color:var(--primary);}
   .tools-menu{min-width:270px;left:auto;right:0;}
@@ -279,6 +279,16 @@
   .qstock button{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--primary-deep);font-size:16px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;}
   .qstock button:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
   .qstock button:disabled{opacity:.35;}
+  .seg-chip{display:inline-flex;align-items:center;gap:6px;padding:10px 13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);color:var(--ink-soft);font-size:13px;font-weight:700;white-space:nowrap;}
+  .seg-chip.active{border-color:var(--primary);background:var(--surface-soft);color:var(--primary);}
+  .cust-avatar{flex:0 0 auto;width:42px;height:42px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  .cust-avatar.auto{background:var(--surface-soft);color:var(--primary-deep);}
+  .cust-auto{font-weight:600;font-size:10.5px;color:var(--ink-soft);background:var(--surface-soft);padding:2px 7px;border-radius:var(--radius-pill);margin-left:4px;vertical-align:middle;}
+  .cust-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
+  .cust-total{font-weight:800;color:var(--primary-deep);text-align:right;margin-right:6px;white-space:nowrap;}
+  .sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:28px 0 12px;padding-top:18px;border-top:1px solid var(--border);}
+  .sec-title{font-family:var(--font-heading);font-size:18px;font-weight:800;color:var(--primary-deep);}
+  .sec-n{display:inline-block;margin-left:6px;padding:0 8px;border-radius:10px;background:var(--surface-soft);font-size:12px;line-height:20px;font-family:inherit;color:var(--primary);}
   .prod-link{background:none;color:var(--primary);font-weight:700;font-size:13px;padding:0;text-decoration:underline;}
   @media(max-width:600px){.prod-select{flex:1 1 45%;min-width:0;}.prod-head-actions{width:100%;}.prod-head-actions .btn-add-new{flex:1;}}
   /* Encabezado de sección dentro de formularios largos (ej. modal de producto), para que se
@@ -5680,43 +5690,55 @@ function filteredStoreMessages(){
   if(q) list = list.filter(m=> (m.name||'').toLowerCase().includes(q) || (m.message||'').toLowerCase().includes(q) || (m.phone||'').includes(q));
   return list;
 }
+function onMessageSearchInput(v){
+  state.messageSearch=v; resetShowMore('messagesShowMore'); render();
+  const i=document.getElementById('message-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
 function renderMensajes(){
-  const filters = [
-    {key:'Todos', label:'Todos'},
-    {key:'nuevo', label:'Nuevos'},
-    {key:'leido', label:'Leídos'},
-    {key:'respondido', label:'Respondidos'},
-  ];
   const list = filteredStoreMessages();
-  const unansweredOld = state.storeMessages.filter(m=>!m.archived && (m.status||'nuevo')!=='respondido' && m.date && (Date.now()-new Date(m.date).getTime())>24*60*60000);
-  const archivedCount = state.storeMessages.filter(m=>m.archived).length;
+  const live = state.storeMessages.filter(m=>!m.archived);
+  const unansweredOld = live.filter(m=>(m.status||'nuevo')!=='respondido' && m.date && (Date.now()-new Date(m.date).getTime())>24*60*60000);
+  const archivedCount = state.storeMessages.length - live.length;
+  const newCount = live.filter(m=>(m.status||'nuevo')==='nuevo').length;
   const selectedOnScreen = state.selectedMessages.filter(id=>list.some(m=>m.id===id));
+  const scope = state.storeMessages.filter(m=> state.showArchivedMessages ? m.archived : !m.archived);
+  const filters = [
+    {key:'Todos', label:'Todos', n:scope.length},
+    {key:'nuevo', label:'Nuevos', n:scope.filter(m=>(m.status||'nuevo')==='nuevo').length},
+    {key:'leido', label:'Leídos', n:scope.filter(m=>m.status==='leido').length},
+    {key:'respondido', label:'Respondidos', n:scope.filter(m=>m.status==='respondido').length},
+  ];
+  const q = (state.messageSearch||'').trim();
+  const filterCount = (q?1:0) + (state.messageStatusFilter!=='Todos'?1:0);
   return `
-    <div class="note-box" style="margin-bottom:14px;">Los clientes dejan estos mensajes desde el enlace "Buzón de sugerencias" en el pie de página de tu tienda. Si dejaron teléfono, puedes responder directo por WhatsApp.</div>
-    ${unansweredOld.length>0 ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;">${icon('alert-triangle',14)} ${unansweredOld.length} mensaje(s) llevan más de 24 horas sin marcarse como respondidos.</div>` : ''}
-    <div class="status-filter">${filters.map(f=>`<button class="${state.messageStatusFilter===f.key?'active':''}" onclick="state.messageStatusFilter='${f.key}';resetShowMore('messagesShowMore');render()">${f.label}</button>`).join('')}</div>
-    <div class="two-col" style="max-width:600px;margin:10px 0 16px;">
-      <input id="message-search-input" placeholder="Buscar por nombre, teléfono o texto..." value="${(state.messageSearch||'').replace(/"/g,'&quot;')}" oninput="state.messageSearch=this.value;resetShowMore('messagesShowMore');render()">
-      <label class="checkbox-row" style="margin:0;">
-        <input type="checkbox" ${state.groupMessagesByCustomer?'checked':''} onchange="state.groupMessagesByCustomer=this.checked;render()">
-        <span>Agrupar por cliente</span>
-      </label>
-    </div>
-    <label class="checkbox-row" style="margin-bottom:12px;">
-      <input type="checkbox" ${state.showArchivedMessages?'checked':''} onchange="state.showArchivedMessages=this.checked;state.selectedMessages=[];resetShowMore('messagesShowMore');render()">
-      <span>Ver archivados${archivedCount>0?` (${archivedCount})`:''}</span>
-    </label>
-    ${selectedOnScreen.length>0 ? `
-    <div class="note-box" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
-      <span>${selectedOnScreen.length} seleccionado${selectedOnScreen.length===1?'':'s'}</span>
-      <div style="display:flex;gap:8px;">
-        ${state.showArchivedMessages
-          ? `<button class="btn-tertiary" onclick='archiveMessages(${JSON.stringify(selectedOnScreen)}, false)'>${icon('arrow-up',14)} Restaurar</button>`
-          : `<button class="btn-tertiary" onclick='archiveMessages(${JSON.stringify(selectedOnScreen)}, true)'>${icon('folder',14)} Archivar</button>`}
-        <button class="btn-outline" onclick="state.selectedMessages=[];render()">Cancelar</button>
+    <div class="prod-head">
+      <div>
+        <div class="prod-title">Mensajes</div>
+        <div class="prod-sub">${live.length} en el buzón${newCount?` · <strong style="color:var(--primary);">${newCount} nuevo${newCount===1?'':'s'}</strong>`:''}${archivedCount?` · ${archivedCount} archivado${archivedCount===1?'':'s'}`:''}</div>
       </div>
+    </div>
+    <div class="note-box" style="margin-bottom:12px;">Los clientes dejan estos mensajes desde "Buzón de sugerencias" en el pie de tu tienda. Si dejaron teléfono, puedes responder por WhatsApp.</div>
+    ${unansweredOld.length>0 ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;margin-bottom:12px;">${icon('alert-triangle',14)} ${unansweredOld.length} mensaje(s) llevan más de 24 horas sin marcarse como respondidos.</div>` : ''}
+    <div class="status-filter ord-chips">${filters.map(f=>`<button class="${state.messageStatusFilter===f.key?'active':''}" onclick="state.messageStatusFilter='${f.key}';resetShowMore('messagesShowMore');render()">${f.label} <span class="chip-n">${f.n}</span></button>`).join('')}</div>
+    <div class="prod-filters">
+      <input id="message-search-input" class="prod-search" type="search" placeholder="Buscar por nombre, teléfono o texto..." value="${escDescHtml(state.messageSearch||'')}" oninput="onMessageSearchInput(this.value)">
+      <select class="prod-select ${state.showArchivedMessages?'is-set':''}" onchange="state.showArchivedMessages=(this.value==='1');state.selectedMessages=[];resetShowMore('messagesShowMore');render()">
+        <option value="0" ${!state.showArchivedMessages?'selected':''}>Bandeja (${live.length})</option>
+        <option value="1" ${state.showArchivedMessages?'selected':''}>Archivados (${archivedCount})</option>
+      </select>
+      <button class="seg-chip ${state.groupMessagesByCustomer?'active':''}" onclick="state.groupMessagesByCustomer=!state.groupMessagesByCustomer;render()">${icon('layers',14)} Agrupar por cliente</button>
+      ${filterCount ? `<button class="prod-clear" onclick="state.messageSearch='';state.messageStatusFilter='Todos';resetShowMore('messagesShowMore');render()">${icon('x',14)} Limpiar</button>` : ''}
+    </div>
+    <div class="prod-count">${list.length} mensaje${list.length===1?'':'s'}${state.showArchivedMessages?' archivados':''}</div>
+    ${selectedOnScreen.length>0 ? `
+    <div class="bulk-actions-bar">
+      <span>${selectedOnScreen.length} seleccionado${selectedOnScreen.length===1?'':'s'}</span>
+      ${state.showArchivedMessages
+        ? `<button class="btn-tertiary" onclick='archiveMessages(${JSON.stringify(selectedOnScreen)}, false)'>${icon('arrow-up',14)} Restaurar</button>`
+        : `<button class="btn-tertiary" onclick='archiveMessages(${JSON.stringify(selectedOnScreen)}, true)'>${icon('folder',14)} Archivar</button>`}
+      <button class="btn-tertiary" onclick="state.selectedMessages=[];render()">Cancelar</button>
     </div>` : ''}
-    <div class="panel-title" style="margin-bottom:12px;">Mensajes (${list.length})</div>
     ${list.length===0 ? `<div class="empty-state">No hay mensajes en este filtro.</div>` :
       state.groupMessagesByCustomer ? renderMessagesGrouped(list) :
       (()=>{ const {shown, remaining} = showMoreSlice('messagesShowMore', list); return shown.map(m=>renderMessageRow(m)).join('') + renderShowMoreButton('messagesShowMore', remaining); })()}
@@ -5729,9 +5751,9 @@ function renderMessageRow(m){
     <div class="list-row" style="align-items:flex-start;">
       <input type="checkbox" style="margin-top:4px;" ${state.selectedMessages.includes(m.id)?'checked':''} onchange="toggleMessageSelected('${m.id}')">
       <div class="row-main">
-        <div class="row-title">${m.name||'Sin nombre'} <span class="status-badge" style="background:var(--teal);color:#2B1620;">${MESSAGE_TYPE_LABEL[m.type]||'Otro'}</span></div>
+        <div class="row-title">${escDescHtml(m.name||'Sin nombre')} <span class="status-badge" style="background:var(--teal);color:#2B1620;">${MESSAGE_TYPE_LABEL[m.type]||'Otro'}</span></div>
         <div class="row-sub">${m.date ? new Date(m.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''} ${m.phone?`· ${m.phone}`:''}</div>
-        <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5;">${(m.message||'').replace(/</g,'&lt;')}</div>
+        <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5;font-size:14px;">${(m.message||'').replace(/</g,'&lt;')}</div>
         <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
           <span class="status-badge" style="background:${MESSAGE_STATUS_COLOR[status]};color:${MESSAGE_STATUS_TEXT_COLOR[status]}">${MESSAGE_STATUS_LABEL[status]}</span>
           ${status!=='leido' ? `<button class="btn-tertiary" style="padding:4px 10px;" onclick="updateMessageStatus('${m.id}','leido')">Marcar leído</button>` : ''}
@@ -5763,7 +5785,7 @@ function renderMessagesGrouped(list){
     const first = msgs[0];
     return `
       <div class="panel" style="margin-bottom:14px;">
-        <div class="panel-title" style="font-size:14px;margin-bottom:2px;">${first.name||'Sin nombre'}${first.phone?` · ${first.phone}`:''}</div>
+        <div class="panel-title" style="font-size:14px;margin-bottom:2px;">${escDescHtml(first.name||'Sin nombre')}${first.phone?` · ${first.phone}`:''}</div>
         <div class="panel-sub" style="margin-bottom:10px;">${msgs.length} mensaje${msgs.length===1?'':'s'}</div>
         ${msgs.map(m=>renderMessageRow(m)).join('')}
       </div>
@@ -5774,41 +5796,55 @@ function renderMessagesGrouped(list){
 function renderCajeros(){
   const ROLE_LABEL = {cajero:'Cajero', administrador:'Administrador', colaborador:'Colaborador'};
   const NOTIF_LABEL = {ventas:'Ventas', pedidos:'Pedidos', stockBajo:'Stock bajo'};
+  const activeN = state.cashiers.filter(c=>c.active).length;
   return `
-    <div class="note-box">Aquí administras a las personas que trabajan contigo: cajeros que usan el Punto de Venta con su PIN, colaboradores con acceso limitado y personalizable al panel, y quién debería enterarse de qué (ventas nuevas, pedidos, stock bajo). Crear la cuenta de acceso (administrador o colaborador) todavía se hace desde la consola de Firebase — aquí solo defines qué puede ver y hacer una vez que entra.</div>
-    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.cashierModal={role:'cajero',notify:{},permissions:{}};render()">+ Agregar</button>
-    <button class="btn-outline" style="margin-bottom:14px;margin-left:8px;" onclick="openAuditLog()">${icon('history',14)} Ver bitácora de acciones</button>
-    <div class="panel-title" style="margin-bottom:12px;">Usuarios (${state.cashiers.length})</div>
+    <div class="prod-head">
+      <div>
+        <div class="prod-title">Usuarios</div>
+        <div class="prod-sub">${state.cashiers.length} persona${state.cashiers.length===1?'':'s'} · ${activeN} activa${activeN===1?'':'s'} · ${state.commissionAgents.length} comisionista${state.commissionAgents.length===1?'':'s'}</div>
+      </div>
+      <div class="prod-head-actions">
+        <button class="btn-tools" onclick="openAuditLog()">${icon('history',15)} Bitácora de acciones</button>
+        <button class="btn-add-new" onclick="state.cashierModal={role:'cajero',notify:{},permissions:{}};render()">+ Nuevo usuario</button>
+      </div>
+    </div>
+    <div class="note-box" style="margin-bottom:14px;">Cajeros (Punto de Venta con PIN), colaboradores con acceso limitado al panel y quién recibe qué avisos. La cuenta de acceso de administradores y colaboradores se crea en la consola de Firebase; aquí defines qué pueden ver y hacer.</div>
     ${state.cashiers.length===0 ? `<div class="empty-state">Aún no has agregado a nadie.</div>` :
       state.cashiers.map(c=>`
-        <div class="list-row" style="flex-direction:column;align-items:stretch;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div class="row-title">${c.name} ${!c.active?'<span class="status-badge" style="background:#8a6b78;">Inactivo</span>':''}</div>
-            <div class="row-actions">
-              <button class="icon-btn" onclick="toggleCashierActive('${c.id}')">${c.active?'⏸':'▶'}</button>
-              <button class="icon-btn" onclick='state.cashierModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(c))}"));render()'>${icon('edit')}</button>
-              <button class="icon-btn danger" onclick="if(confirm('¿Eliminar a este usuario?'))deleteCashier('${c.id}')">${icon('trash')}</button>
+        <div class="list-row" style="${c.active?'':'opacity:.6;'}">
+          <div class="cust-avatar ${c.role==='administrador'?'':'auto'}">${escDescHtml(customerInitials(c.name))}</div>
+          <div class="row-main">
+            <div class="row-title">${escDescHtml(c.name)} ${!c.active?'<span class="cust-auto">Inactivo</span>':''}</div>
+            <div class="row-sub">${escDescHtml(c.email||'Sin email')} · PIN: ${escDescHtml(c.pin||'—')}</div>
+            <div class="cust-tags">
+              <span class="status-badge" style="background:var(--primary);">${ROLE_LABEL[c.role]||'Cajero'}</span>
+              ${c.role==='colaborador' ? PERMISSION_DEFS.filter(p=>c.permissions&&c.permissions[p.key]).map(p=>`<span class="status-badge" style="background:var(--teal);color:#2B1620;">${p.label.split(' (')[0]}</span>`).join('') : ''}
+              ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--amber);color:#2B1620;">${NOTIF_LABEL[k]||k}</span>`).join('')}
             </div>
           </div>
-          <div class="row-sub">${c.email||'Sin email'} · PIN: ${c.pin||'—'}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-            <span class="status-badge" style="background:var(--primary);">${ROLE_LABEL[c.role]||'Cajero'}</span>
-            ${c.role==='colaborador' ? PERMISSION_DEFS.filter(p=>c.permissions&&c.permissions[p.key]).map(p=>`<span class="status-badge" style="background:var(--teal);color:#2B1620;">${p.label.split(' (')[0]}</span>`).join('') : ''}
-            ${Object.entries(c.notify||{}).filter(([,v])=>v).map(([k])=>`<span class="status-badge" style="background:var(--amber);color:#2B1620;">${NOTIF_LABEL[k]||k}</span>`).join('')}
+          <div class="row-actions">
+            <button class="icon-btn" title="${c.active?'Desactivar':'Activar'}" onclick="toggleCashierActive('${c.id}')">${c.active?'⏸':'▶'}</button>
+            <button class="icon-btn" title="Editar" onclick='state.cashierModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(c))}"));render()'>${icon('edit')}</button>
+            <button class="icon-btn danger" title="Eliminar" onclick="if(confirm('¿Eliminar a este usuario?'))deleteCashier('${c.id}')">${icon('trash')}</button>
           </div>
         </div>
       `).join('')
     }
-    <div class="panel-title" style="margin:20px 0 12px;">Comisionistas (${state.commissionAgents.length})</div>
-    <div class="note-box">Personas que te ayudan a vender por un porcentaje — asígnalas a ventas específicas desde Pedidos.</div>
-    <button class="btn-add-new" style="margin-bottom:14px;" onclick="state.commissionAgentModal={};render()">+ Agregar comisionista</button>
+    <div class="sec-head">
+      <div>
+        <div class="sec-title">Comisionistas <span class="sec-n">${state.commissionAgents.length}</span></div>
+        <div class="prod-sub" style="margin-top:2px;">Personas que te ayudan a vender por un porcentaje; se asignan desde Pedidos.</div>
+      </div>
+      <button class="btn-tools" onclick="state.commissionAgentModal={};render()">+ Agregar comisionista</button>
+    </div>
     ${state.commissionAgents.length===0 ? `<div class="empty-state">Aún no tienes comisionistas.</div>` :
       state.commissionAgents.map(a=>`
         <div class="list-row">
-          <div class="row-main"><div class="row-title">${a.name}</div><div class="row-sub">${a.defaultPct}% por default</div></div>
+          <div class="cust-avatar auto">${escDescHtml(customerInitials(a.name))}</div>
+          <div class="row-main"><div class="row-title">${escDescHtml(a.name)}</div><div class="row-sub">${a.defaultPct}% por default</div></div>
           <div class="row-actions">
-            <button class="icon-btn" onclick='state.commissionAgentModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(a))}"));render()'>${icon('edit')}</button>
-            <button class="icon-btn danger" onclick="deleteCommissionAgent('${a.id}')">${icon('trash')}</button>
+            <button class="icon-btn" title="Editar" onclick='state.commissionAgentModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(a))}"));render()'>${icon('edit')}</button>
+            <button class="icon-btn danger" title="Eliminar" onclick="deleteCommissionAgent('${a.id}')">${icon('trash')}</button>
           </div>
         </div>
       `).join('')}
@@ -7419,69 +7455,81 @@ async function commitCustomerImport(){
     showToast('Clientes importados'); render();
   }catch(e){ console.error(e); showToast('Ocurrió un error al importar'); }
 }
+function onCustomerSearchInput(v){
+  state.customerSearch=v; resetShowMore('customersShowMore'); render();
+  const i=document.getElementById('customer-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+function setCustomerFilter(k,v){ state.customerFilters[k]=v; resetShowMore('customersShowMore'); render(); }
+function resetCustomerFilters(){
+  state.customerSearch='';
+  const f=state.customerFilters;
+  f.regDate='Todas'; f.inactive=false; f.country='Todos'; f.state='Todos'; f.city='Todos'; f.tag='Todas';
+  resetShowMore('customersShowMore'); render();
+}
+function customerInitials(name){
+  const w=(name||'?').trim().split(/\s+/).filter(Boolean);
+  return ((w[0]||'?')[0] + (w.length>1?w[1][0]:'')).toUpperCase();
+}
 function renderClientes(){
   const list = filteredCustomers();
+  const f = state.customerFilters;
+  const total = computeCustomersList().length;
+  const selOpts = (key, all, vals)=>`<select class="prod-select ${f[key]&&f[key]!==all?'is-set':''}" onchange="setCustomerFilter('${key}',this.value)">
+      <option value="${all}">${key==='tag'?'Etiqueta: todas':key==='country'?'País: todos':key==='state'?'Estado: todos':'Ciudad: todas'}</option>
+      ${vals.map(v=>`<option value="${escDescHtml(v)}" ${f[key]===v?'selected':''}>${escDescHtml(v)}</option>`).join('')}
+    </select>`;
+  const countries = distinctCustomerValues('country'), states = distinctCustomerValues('state'), cities = distinctCustomerValues('city'), tags = distinctCustomerTags();
+  const filterCount = (state.customerSearch?1:0) + (f.regDate&&f.regDate!=='Todas'?1:0) + (f.inactive?1:0) + ['country','state','city','tag'].filter(k=>f[k] && f[k]!=='Todos' && f[k]!=='Todas').length;
   return `
-    <div class="toolbar">
-      <button class="btn-add-new" onclick="openCustomerModal(null)">+ Agregar nuevo cliente</button>
-      <button class="btn-outline" onclick="state.customerImportOpen=true;render()">Importar</button>
-      <button class="btn-outline" onclick="exportCustomersCSV()">Exportar</button>
+    <div class="prod-head">
+      <div>
+        <div class="prod-title">Clientes</div>
+        <div class="prod-sub">${total} registrado${total===1?'':'s'}${list.length!==total?` · mostrando ${list.length}`:''}</div>
+      </div>
+      <div class="prod-head-actions">
+        <div class="row-more-wrap">
+          <button class="btn-tools" onclick="event.stopPropagation();state.customerToolsOpen=!state.customerToolsOpen;render()">${icon('sliders',15)} Herramientas</button>
+          ${state.customerToolsOpen ? `
+          <div class="row-more-overlay" onclick="state.customerToolsOpen=false;render()"></div>
+          <div class="row-more-menu tools-menu" onclick="event.stopPropagation()">
+            <div class="tools-menu-label">Datos</div>
+            <button onclick="state.customerToolsOpen=false;state.customerImportOpen=true;render()">${icon('download',15)} Importar clientes (CSV)</button>
+            <button onclick="state.customerToolsOpen=false;exportCustomersCSV()">${icon('copy',15)} Exportar lista actual (CSV)</button>
+          </div>` : ''}
+        </div>
+        <button class="btn-add-new" onclick="openCustomerModal(null)">+ Nuevo cliente</button>
+      </div>
     </div>
-    <div class="two-col" style="margin-bottom:12px;">
-      <input id="customer-search-input" placeholder="Buscar por nombre, teléfono o email..." value="${state.customerSearch}" oninput="state.customerSearch=this.value;resetShowMore('customersShowMore');render()">
-      <select onchange="state.customerFilters.regDate=this.value;resetShowMore('customersShowMore');render()">
-        ${['Todas','Último día','Últimos 7 días','Últimos 30 días'].map(d=>`<option ${state.customerFilters.regDate===d?'selected':''}>${d}</option>`).join('')}
+    <div class="prod-filters">
+      <input id="customer-search-input" class="prod-search" type="search" placeholder="Buscar por nombre, teléfono o email..." value="${escDescHtml(state.customerSearch||'')}" oninput="onCustomerSearchInput(this.value)">
+      <select class="prod-select ${f.regDate&&f.regDate!=='Todas'?'is-set':''}" onchange="setCustomerFilter('regDate',this.value)">
+        ${['Todas','Último día','Últimos 7 días','Últimos 30 días'].map(d=>`<option value="${d}" ${f.regDate===d?'selected':''}>${d==='Todas'?'Registro: todos':d}</option>`).join('')}
       </select>
+      ${countries.length>1 ? selOpts('country','Todos',countries) : ''}
+      ${states.length>1 ? selOpts('state','Todos',states) : ''}
+      ${cities.length>1 ? selOpts('city','Todos',cities) : ''}
+      ${tags.length>0 ? selOpts('tag','Todas',tags) : ''}
+      <button class="seg-chip ${f.inactive?'active':''}" title="2+ compras antes y nada en los últimos 60 días" onclick="setCustomerFilter('inactive',${!f.inactive})">${icon('history',14)} Dejaron de comprar</button>
+      ${filterCount ? `<button class="prod-clear" onclick="resetCustomerFilters()">${icon('x',14)} Limpiar</button>` : ''}
     </div>
-    <label class="checkbox-row" style="margin-bottom:16px;">
-      <input type="checkbox" ${state.customerFilters.inactive?'checked':''} onchange="state.customerFilters.inactive=this.checked;resetShowMore('customersShowMore');render()">
-      <span>Solo clientes que dejaron de comprar (2+ compras antes, nada en los últimos 60 días)</span>
-    </label>
-    ${(()=>{
-      const f = state.customerFilters;
-      const activeCount = ['country','state','city','tag'].filter(k=>f[k] && f[k]!=='Todos' && f[k]!=='Todas').length;
-      return `
-    <button class="btn-outline" style="margin-bottom:16px;" onclick="state.customerMoreFiltersOpen=!state.customerMoreFiltersOpen;render()">
-      ${state.customerMoreFiltersOpen?'▲':'▼'} Más filtros${activeCount>0?` (${activeCount} activo${activeCount>1?'s':''})`:''}
-    </button>
-    ${state.customerMoreFiltersOpen ? `
-    <div class="two-col" style="margin-bottom:16px;">
-      <select onchange="state.customerFilters.country=this.value;resetShowMore('customersShowMore');render()">
-        <option>Todos</option>${distinctCustomerValues('country').map(v=>`<option ${state.customerFilters.country===v?'selected':''}>${v}</option>`).join('')}
-      </select>
-      <select onchange="state.customerFilters.state=this.value;resetShowMore('customersShowMore');render()">
-        <option>Todos</option>${distinctCustomerValues('state').map(v=>`<option ${state.customerFilters.state===v?'selected':''}>${v}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-field" style="max-width:50%;margin-bottom:16px;">
-      <select onchange="state.customerFilters.city=this.value;resetShowMore('customersShowMore');render()">
-        <option>Todos</option>${distinctCustomerValues('city').map(v=>`<option ${state.customerFilters.city===v?'selected':''}>${v}</option>`).join('')}
-      </select>
-    </div>
-    ${distinctCustomerTags().length>0 ? `
-    <div class="form-field" style="max-width:50%;margin-bottom:16px;">
-      <label>Etiqueta</label>
-      <select onchange="state.customerFilters.tag=this.value;resetShowMore('customersShowMore');render()">
-        <option>Todas</option>${distinctCustomerTags().map(t=>`<option ${state.customerFilters.tag===t?'selected':''}>${t}</option>`).join('')}
-      </select>
-    </div>` : ''}` : ''}`;
-    })()}
-    <div class="panel-title" style="margin-bottom:12px;">Clientes (${list.length})</div>
-    ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan.</div>` :
+    <div class="prod-count">${filterCount ? `${list.length} de ${total} clientes` : `${list.length} cliente${list.length===1?'':'s'}`}${f.inactive?' · sin comprar en 60+ días':''}</div>
+    ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan con este filtro.</div>` :
       (()=>{ const {shown, remaining} = showMoreSlice('customersShowMore', list); return shown.map(c=>`
         <div class="list-row">
+          <div class="cust-avatar ${c.isManual?'':'auto'}">${escDescHtml(customerInitials(c.name))}</div>
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
-            <div class="row-title">${c.name}${c.isManual?'':' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">(automático)</span>'}</div>
-            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}${state.customerFilters.inactive?` (hace ${Math.floor((Date.now()-new Date(c.lastDate).getTime())/86400000)} días)`:''} · `:'Sin compras · '}${c.purchaseCount} compra(s)${(c.tags&&c.tags.length)?` · ${c.tags.map(t=>`<span class="status-badge" style="background:var(--surface-soft);color:var(--ink);font-weight:600;">${t}</span>`).join(' ')}`:''}</div>
+            <div class="row-title">${escDescHtml(c.name)}${c.isManual?'':' <span class="cust-auto">automático</span>'}</div>
+            <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}${f.inactive?` (hace ${Math.floor((Date.now()-new Date(c.lastDate).getTime())/86400000)} días)`:''} · `:'Sin compras · '}${c.purchaseCount} compra${c.purchaseCount===1?'':'s'}${c.phone?` · ${escDescHtml(c.phone)}`:''}</div>
+            ${(c.tags&&c.tags.length)?`<div class="cust-tags">${c.tags.map(t=>`<span class="status-badge" style="background:var(--surface-soft);color:var(--ink);font-weight:600;">${escDescHtml(t)}</span>`).join('')}</div>`:''}
           </div>
-          <div style="text-align:right;margin-right:10px;">
-            <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
-          </div>
+          <div class="cust-total">${money(c.totalSpent)}</div>
           <div class="row-actions">
-            ${c.phone ? `<a class="icon-btn" href="https://wa.me/${normalizePhone(c.phone)}" target="_blank" title="WhatsApp">
+            ${c.phone ? `<a class="icon-btn" href="https://wa.me/${normalizePhone(c.phone)}" target="_blank" rel="noopener" title="WhatsApp">
               <svg width="15" height="15" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
             </a>` : ''}
-            ${c.isManual ? `<button class="icon-btn danger" onclick="event.stopPropagation();deleteCustomerProfile('${c.manualId}')">${icon('trash')}</button>` : ''}
+            <button class="icon-btn" title="Ver / editar" onclick="event.stopPropagation();openCustomerModal('${c.manualId||''}')">${icon('edit')}</button>
+            ${c.isManual ? `<button class="icon-btn danger" title="Eliminar perfil" onclick="event.stopPropagation();deleteCustomerProfile('${c.manualId}')">${icon('trash')}</button>` : ''}
           </div>
         </div>
       `).join('') + renderShowMoreButton('customersShowMore', remaining); })()}
