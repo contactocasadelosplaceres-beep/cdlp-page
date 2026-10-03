@@ -343,7 +343,7 @@
   .order-actions-cell{position:relative;text-align:right;}
   .order-actions-btn{width:38px;height:38px;border-radius:9px;background:var(--surface-soft);color:var(--primary-deep);font-size:16px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;transition:background .15s ease;}
   .order-actions-btn:hover{background:#efd9d3;}
-  .order-actions-menu{position:absolute;top:38px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:170px;padding:6px;white-space:nowrap;}
+  .order-actions-menu{position:absolute;top:38px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:190px;padding:6px;white-space:nowrap;text-align:left;}
   .order-actions-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 10px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink);}
   .order-actions-menu button:hover{background:var(--surface-soft);}
   .order-actions-menu button.active-status{color:var(--primary-deep);font-weight:800;}
@@ -353,41 +353,59 @@
   .products-detail-row .pd-line{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;}
   .products-detail-row .pd-extra{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);padding:3px 0;border-top:1px dashed var(--border);margin-top:4px;}
 
-  /* ===== TABLA DE PEDIDOS EN CELULAR: se convierte en tarjetas, no en tabla con scroll =====
-     Solo afecta la tabla de Pedidos (.pedidos-table); la tabla de Inventario por centro,
-     que también usa la clase base .orders-table pero tiene columnas distintas, no se toca. */
-  @media(max-width:760px){
-    .pedidos-table{min-width:0;width:100%;}
-    .orders-table-wrap:has(.pedidos-table){overflow-x:visible;border:none;box-shadow:none;background:transparent;}
+  /* ===== TABLA DE PEDIDOS =====
+     Escritorio: tabla compacta que cabe sin scroll horizontal (columnas con clase c-*).
+     Celular y pantallas medianas (<=1080px): cada pedido es una tarjeta. Solo afecta .pedidos-table; la tabla de
+     Inventario por centro comparte la clase base .orders-table y no se toca. */
+  .ord-wrap{overflow:visible;background:var(--surface);}
+  .pedidos-table{min-width:0;table-layout:auto;}
+  .pedidos-table th:first-child{border-top-left-radius:var(--radius-md);} .pedidos-table th:last-child{border-top-right-radius:var(--radius-md);}
+  .pedidos-table td{white-space:normal;vertical-align:middle;padding:10px 8px;}
+  .pedidos-table th{padding:11px 8px;}
+  .pedidos-table .c-check{width:34px;padding-right:0;}
+  .pedidos-table .c-folio,.pedidos-table .c-status{white-space:nowrap;}
+  .pedidos-table .c-cust{min-width:0;max-width:190px;}
+  .pedidos-table .ord-cust-name{font-weight:700;overflow-wrap:anywhere;}
+  .pedidos-table .order-source-tag{white-space:normal;}
+  .pedidos-table .order-ship-sub{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+  .pedidos-table .c-total{white-space:nowrap;} .pedidos-table .c-total strong{display:block;margin-bottom:3px;}
+  .pedidos-table .c-act{white-space:nowrap;width:1%;}
+  .pedidos-table .c-act > *{vertical-align:middle;}
+  .ord-next{display:inline-flex;align-items:center;margin-right:4px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--primary);color:#fff;font-size:12px;font-weight:800;white-space:nowrap;}
+  .ord-next:hover{background:var(--primary-deep);}
+  .ord-chips{flex-wrap:wrap;margin-bottom:10px;}
+  @media(max-width:600px){.ord-chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none;}.ord-chips::-webkit-scrollbar{display:none;}}
+  .ord-chips .chip-n{display:inline-block;min-width:18px;margin-left:3px;padding:0 5px;border-radius:9px;background:rgba(0,0,0,.08);font-size:11px;line-height:18px;text-align:center;}
+  .ord-chips button.active .chip-n{background:rgba(255,255,255,.28);}
+  tr.selected-row{background:var(--surface-soft);}
+  @media(max-width:1080px){
+    .ord-wrap{border:none;box-shadow:none;background:transparent;}
     .pedidos-table thead{display:none;}
     .pedidos-table tbody{display:block;}
     .pedidos-table tbody tr:not(.products-detail-row){
-      display:grid;grid-template-columns:1fr auto;column-gap:12px;row-gap:6px;
-      grid-template-areas:"folio status" "customer customer" "total pay" "date products" "actions actions";
-      background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md) var(--radius-md) 0 0;
-      box-shadow:var(--shadow-sm);padding:13px 14px;margin:0 0 12px;
+      display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;row-gap:8px;align-items:center;
+      grid-template-areas:"check folio status" "cust cust cust" "total total prod" "act act act";
+      background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
+      box-shadow:var(--shadow-sm);padding:12px 14px;margin:0 0 12px;
     }
-    .pedidos-table tbody tr:not(.products-detail-row):has(+ tr.products-detail-row){
-      border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0;
-    }
-    .pedidos-table tr:last-child td{border-bottom:none;}
-    .pedidos-table td{padding:0;border-bottom:none;white-space:normal;display:block;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(1){grid-area:folio;align-self:center;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(2){grid-area:date;align-self:center;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(3){grid-area:customer;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(4){grid-area:total;font-size:15px;align-self:center;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(5){grid-area:products;justify-self:end;align-self:center;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(6){grid-area:pay;align-self:center;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(7){grid-area:status;justify-self:end;text-align:right;}
-    .pedidos-table tbody tr:not(.products-detail-row) td:nth-child(8){grid-area:actions;margin-top:4px;}
+    .pedidos-table tbody tr:not(.products-detail-row):has(+ tr.products-detail-row){border-radius:var(--radius-md) var(--radius-md) 0 0;margin-bottom:0;}
+    .pedidos-table td{padding:0;border-bottom:none;display:block;min-width:0;}
+    .pedidos-table .c-check{grid-area:check;width:auto;} .pedidos-table .c-folio{grid-area:folio;}
+    .pedidos-table .c-status{grid-area:status;justify-self:end;}
+    .pedidos-table .c-cust{grid-area:cust;max-width:none;}
+    .pedidos-table .c-total{grid-area:total;font-size:15px;} .pedidos-table .c-total strong{display:inline;margin:0 8px 0 0;}
+    .pedidos-table .c-prod{grid-area:prod;justify-self:end;}
+    .pedidos-table .c-act{grid-area:act;width:auto;display:flex;gap:8px;align-items:stretch;position:relative;}
+    .pedidos-table .c-total{display:flex;flex-wrap:wrap;align-items:center;gap:4px;}
     .pedidos-table tr.products-detail-row{display:block;}
     .pedidos-table tr.products-detail-row td{
       display:block;background:var(--bg);border:1px solid var(--border);border-top:none;
-      border-radius:0 0 var(--radius-md) var(--radius-md);padding:10px 14px 12px;margin:-12px 0 12px;
+      border-radius:0 0 var(--radius-md) var(--radius-md);padding:10px 14px 12px;margin:0 0 12px;
     }
-    .pedidos-table .order-products-toggle{width:100%;justify-content:flex-end;padding:6px 8px;border-radius:8px;}
-    .pedidos-table .order-actions-cell{text-align:left;}
-    .pedidos-table .order-actions-btn{width:100%;height:38px;border-radius:var(--radius-sm);font-size:0;gap:6px;}
+    .pedidos-table .order-products-toggle{padding:6px 4px;}
+    .pedidos-table .ord-next{flex:1;justify-content:center;margin:0;height:40px;}
+    .pedidos-table .order-actions-btn{flex:1;height:40px;width:auto;border-radius:var(--radius-sm);font-size:0;gap:6px;}
+    .pedidos-table .c-act:not(:has(.ord-next)) .order-actions-btn{flex:1 1 100%;}
     .pedidos-table .order-actions-btn::before{content:"Más acciones";font-size:12.5px;font-weight:700;}
     .pedidos-table .order-actions-btn::after{content:"⋮";font-size:16px;}
     .pedidos-table .order-actions-menu{left:0;right:0;top:calc(100% + 4px);}
@@ -655,7 +673,7 @@ let state = {
   changePasswordCurrent:"", changePasswordNew:"", changePasswordConfirm:"", changePasswordError:"", changePasswordSubmitting:false,
   products:[], trashProducts:[], trashOpen:false, duplicatesOpen:false, duplicateGroups:null, orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS}, aiSettings:{...DEFAULT_AI_SETTINGS},
   statsSubview:"general", visitsPeriod:"hoy",
-  adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", showArchived:false, loaded:false,
+  adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", orderSearch:"", showArchived:false, loaded:false,
   selectedOrders:[], selectedProducts:[],
   importOpen:false, importPreview:[], importText:"", importFileName:"", importResult:null, newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
@@ -1328,6 +1346,7 @@ function icon(name, size){
     grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/>',
     users:'<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 13c2.5 0 4.5 2 4.5 4.5"/>',
+    'truck':'<path d="M1 4h14v12H1z"/><path d="M15 9h4l3 3v4h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="17.5" cy="18.5" r="2"/>',
     'map-pin':'<path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/>',
     'bar-chart':'<path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/>',
     menu:'<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
@@ -5388,27 +5407,70 @@ function normName(s){
 // cambiaría -- reemplaza solo la(s) categoría(s) sin reconciliar dentro de la lista de cada
 // producto, sin tocar las demás categorías que ya tuviera bien puestas.
 
+function orderMatchesSearch(o, q){
+  if(!q) return true;
+  const hay = [formatFolio(o.orderNumber), String(o.orderNumber||''), o.customer, o.customerName, o.phone, o.customerPhone, o.cashierName, o.address,
+    ...(o.items||[]).map(it=>it.name)].filter(Boolean).join(' ').toLowerCase();
+  return q.split(/\s+/).every(w=>hay.includes(w));
+}
+function onOrderSearchInput(v){
+  state.orderSearch = v;
+  state.selectedOrders = [];
+  resetShowMore('ordersShowMore');
+  render();
+  const i = document.getElementById('order-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+function resetOrderFilters(){
+  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter='Todos';
+  state.selectedOrders=[]; resetShowMore('ordersShowMore'); render();
+}
+function setOrderFilter(key, val){
+  state[key]=val; state.selectedOrders=[]; resetShowMore('ordersShowMore'); render();
+}
+const ORDER_NEXT_STATUS = {"Nuevo":"Preparando","Preparando":"En camino","En camino":"Entregado"};
 function renderPedidos(){
-  const filters = ["Todos", ...STATUS_FLOW];
-  let shown = state.orders.filter(o=> state.showArchived ? o.archived : !o.archived);
-  if(state.orderSourceFilter && state.orderSourceFilter!=="Todos") shown = shown.filter(o=>o.source===state.orderSourceFilter);
-  if(state.orderStatusFilter!=="Todos") shown = shown.filter(o=>o.status===state.orderStatusFilter);
+  const q = (state.orderSearch||'').trim().toLowerCase();
+  const source = state.orderSourceFilter||'Todos';
+  const statusF = state.orderStatusFilter||'Todos';
+  const scope = state.orders.filter(o=> state.showArchived ? o.archived : !o.archived);
+  const activeCount = state.orders.filter(o=>!o.archived).length;
+  const archivedCount = state.orders.length - activeCount;
+  const newCount = state.orders.filter(o=>!o.archived && o.status==='Nuevo').length;
+  const base = scope.filter(o=> (source==='Todos'||o.source===source) && orderMatchesSearch(o,q));
+  const shown = base.filter(o=> statusF==='Todos' || o.status===statusF);
   const abandonedCount = pendingAbandonedCarts().length;
+  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!=='Todos'?1:0);
+  const chips = ["Todos", ...STATUS_FLOW].map(f=>{
+    const n = f==='Todos' ? base.length : base.filter(o=>o.status===f).length;
+    return `<button class="${statusF===f?'active':''}" onclick="setOrderFilter('orderStatusFilter','${f}')">${f} <span class="chip-n">${n}</span></button>`;
+  }).join('');
   return `
-    <div class="toolbar" style="margin-bottom:6px;">
-      <button class="btn-tertiary" onclick="state.abandonedCartsOpen=true;render()">${icon('bag',14)} Carritos abandonados${abandonedCount?` (${abandonedCount})`:''}</button>
+    <div class="prod-head">
+      <div>
+        <div class="prod-title">Pedidos</div>
+        <div class="prod-sub">${activeCount} activo${activeCount===1?'':'s'}${newCount?` · <strong style="color:var(--primary);">${newCount} nuevo${newCount===1?'':'s'} por atender</strong>`:''}${archivedCount?` · ${archivedCount} archivado${archivedCount===1?'':'s'}`:''}</div>
+      </div>
+      <div class="prod-head-actions">
+        <button class="btn-tools" onclick="state.abandonedCartsOpen=true;render()">${icon('bag',15)} Carritos abandonados${abandonedCount?` (${abandonedCount})`:''}</button>
+      </div>
     </div>
-    <div class="status-filter">
-      <button class="${!state.showArchived?'active':''}" onclick="state.showArchived=false;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Activos</button>
-      <button class="${state.showArchived?'active':''}" onclick="state.showArchived=true;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Archivados</button>
+    <div class="status-filter ord-chips">${chips}</div>
+    <div class="prod-filters">
+      <input id="order-search-input" class="prod-search" type="search" placeholder="Buscar por folio, cliente, teléfono o producto..." value="${escDescHtml(state.orderSearch||'')}" oninput="onOrderSearchInput(this.value)">
+      <select class="prod-select ${source!=='Todos'?'is-set':''}" onchange="setOrderFilter('orderSourceFilter',this.value)">
+        <option value="Todos">Origen: todos</option>
+        <option value="tienda" ${source==='tienda'?'selected':''}>Tienda en línea</option>
+        <option value="pos" ${source==='pos'?'selected':''}>Punto de venta</option>
+      </select>
+      <select class="prod-select ${state.showArchived?'is-set':''}" onchange="state.showArchived=(this.value==='1');state.selectedOrders=[];resetShowMore('ordersShowMore');render()">
+        <option value="0" ${!state.showArchived?'selected':''}>Activos (${activeCount})</option>
+        <option value="1" ${state.showArchived?'selected':''}>Archivados (${archivedCount})</option>
+      </select>
+      ${filterCount ? `<button class="prod-clear" onclick="resetOrderFilters()">${icon('x',14)} Limpiar</button>` : ''}
     </div>
-    <div class="status-filter">
-      <button class="${!state.orderSourceFilter||state.orderSourceFilter==='Todos'?'active':''}" onclick="state.orderSourceFilter='Todos';state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Todos los orígenes</button>
-      <button class="${state.orderSourceFilter==='tienda'?'active':''}" onclick="state.orderSourceFilter='tienda';state.selectedOrders=[];resetShowMore('ordersShowMore');render()">${icon('bag')} Tienda</button>
-      <button class="${state.orderSourceFilter==='pos'?'active':''}" onclick="state.orderSourceFilter='pos';state.selectedOrders=[];resetShowMore('ordersShowMore');render()">${icon('receipt')} Punto de venta</button>
-    </div>
-    <div class="status-filter">${filters.map(f=>`<button class="${state.orderStatusFilter===f?'active':''}" onclick="state.orderStatusFilter='${f}';state.selectedOrders=[];resetShowMore('ordersShowMore');render()">${f}</button>`).join('')}</div>
-    ${shown.length===0 ? `<div class="empty-state">No hay pedidos en este filtro.</div>` : (()=>{
+    <div class="prod-count">${filterCount ? `${shown.length} de ${scope.length} pedidos` : `${shown.length} pedido${shown.length===1?'':'s'}`}${state.showArchived?' archivados':''}</div>
+    ${shown.length===0 ? `<div class="empty-state">No hay pedidos que coincidan con este filtro${q?` ("${escDescHtml(state.orderSearch)}")`:''}.</div>` : (()=>{
       const {shown:visible, remaining} = showMoreSlice('ordersShowMore', shown);
       const visibleIds = visible.map(o=>o.id);
       const selected = state.selectedOrders||[];
@@ -5425,16 +5487,16 @@ function renderPedidos(){
         ${state.commissionAgents.length>0 ? `
         <select onchange="if(this.value){const ag=state.commissionAgents.find(a=>a.id===this.value); bulkAssignCommission(this.value, ag.defaultPct);this.value='';}">
           <option value="">Asignar comisionista...</option>
-          ${state.commissionAgents.map(a=>`<option value="${a.id}">${a.name} (${a.defaultPct}%)</option>`).join('')}
+          ${state.commissionAgents.map(a=>`<option value="${a.id}">${escDescHtml(a.name)} (${a.defaultPct}%)</option>`).join('')}
         </select>` : ''}
         <button class="btn-danger-text" onclick="bulkDeleteOrders()">${icon('trash',14)} Eliminar</button>
         <button class="btn-tertiary" onclick="state.selectedOrders=[];render()">Cancelar</button>
       </div>` : ''}
-    <div class="orders-table-wrap">
+    <div class="orders-table-wrap ord-wrap">
       <table class="orders-table pedidos-table">
         <thead><tr>
-          <th><input type="checkbox" ${allVisibleSelected?'checked':''} onchange='toggleSelectAllOrders(${JSON.stringify(visibleIds)}, this.checked)'></th>
-          <th>Folio</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Productos</th><th>Pago</th><th>Estado</th><th></th>
+          <th class="c-check"><input type="checkbox" title="Seleccionar visibles" ${allVisibleSelected?'checked':''} onchange='toggleSelectAllOrders(${JSON.stringify(visibleIds)}, this.checked)'></th>
+          <th>Folio</th><th>Cliente</th><th>Total y pago</th><th>Productos</th><th>Estado</th><th></th>
         </tr></thead>
         <tbody>
           ${visible.map(o=>renderOrderRow(o)).join('')}
@@ -5487,48 +5549,52 @@ function renderOrderRow(o){
   const menuOpen = state.orderActionsMenu===o.id;
   const isSelected = (state.selectedOrders||[]).includes(o.id);
   const itemCount = (o.items||[]).reduce((s,it)=>s+it.qty,0);
-  const shipLabel = isPos ? 'Retirada' : (o.status==='Entregado' ? 'Entregada' : o.status==='Cancelado' ? 'Cancelada' : 'Por enviar');
-  const shipSub = isPos ? 'Retirado en Punto de Venta' : (o.address || '—');
+  const shipSub = isPos ? '' : (o.address || '');
   const isSplitPay = isPos && salePayments(o).length > 1;
   const payLabel = isPos ? paymentMethodShortLabel(o) : 'Contra entrega';
   const payLabelFull = isPos ? paymentMethodLabel(o) : 'Contra entrega';
+  const next = !o.archived ? ORDER_NEXT_STATUS[o.status] : null;
   let rows = `
     <tr class="${o.archived?'archived-row':''}${isSelected?' selected-row':''}">
-      <td><input type="checkbox" ${isSelected?'checked':''} onclick="event.stopPropagation();toggleOrderSelection('${o.id}')"></td>
-      <td><button class="order-folio-btn" onclick="event.stopPropagation();openOrderDetailModal('${o.id}')">${formatFolio(o.orderNumber)}</button></td>
-      <td>
-        <div class="order-date-main">${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}</div>
-        <div class="order-date-sub">${new Date(o.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
+      <td class="c-check"><input type="checkbox" ${isSelected?'checked':''} onclick="event.stopPropagation();toggleOrderSelection('${o.id}')"></td>
+      <td class="c-folio"><button class="order-folio-btn" onclick="event.stopPropagation();openOrderDetailModal('${o.id}')">${formatFolio(o.orderNumber)}</button>
+        <div class="order-date-sub">${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${new Date(o.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
       </td>
-      <td>
-        <div>${o.customer || (isPos?'Venta en tienda física':'Cliente')} ${(()=>{
+      <td class="c-cust">
+        <div class="ord-cust-name">${escDescHtml(o.customer || (isPos?'Venta en tienda física':'Cliente'))} ${(()=>{
           const matched = orderContactPhone(o) ? findCustomerByPhone(orderContactPhone(o)) : null;
           const orderName = (isPos ? o.customerName : o.customer) || '';
           const mismatch = matched && orderName && matched.name.trim().toLowerCase() !== orderName.trim().toLowerCase();
           return mismatch ? `<span title="Ya tienes registrada a ${escDescHtml(matched.name)} con este teléfono">${icon('alert-triangle',13)}</span>` : '';
         })()}</div>
-        <div class="order-source-tag">${isPos?`${icon('receipt')} ${o.cashierName||'Punto de venta'}`:icon('bag')+' Tienda online'}</div>
+        <div class="order-source-tag">${isPos?`${icon('receipt')} Punto de venta · ${escDescHtml(o.cashierName||'')}`:icon('bag')+' Tienda en línea'}</div>
+        ${shipSub ? `<div class="order-ship-sub" title="${escDescHtml(shipSub)}">${icon('map-pin',11)} ${escDescHtml(shipSub)}</div>` : ''}
       </td>
-      <td><strong>${money(o.total)}</strong></td>
-      <td>
+      <td class="c-total">
+        <strong>${money(o.total)}</strong>
+        <span class="order-pay-pill ${isSplitPay?'split':''}" ${isSplitPay?`title="${escDescHtml(payLabelFull)}"`:''}>${isSplitPay?icon('layers',12):'$'} ${escDescHtml(payLabel)}</span>
+      </td>
+      <td class="c-prod">
         <button class="order-products-toggle ${productsOpen?'open':''}" onclick="state.orderDetail=state.orderDetail==='${o.id}'?null:'${o.id}';render()">
           ${itemCount} unid. <span class="chev">▾</span>
         </button>
       </td>
-      <td><span class="order-pay-pill ${isSplitPay?'split':''}" ${isSplitPay?`title="${payLabelFull.replace(/"/g,'&quot;')}"`:''}>${isSplitPay?icon('layers',12):'$'} ${payLabel}</span></td>
-      <td>
+      <td class="c-status">
         <span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'};color:${STATUS_TEXT_COLOR[o.status]||'#fff'}">${o.status||'—'}</span>
-        <div class="order-ship-sub">${shipSub}</div>
       </td>
-      <td class="order-actions-cell">
+      <td class="order-actions-cell c-act">
+        ${next ? `<button class="ord-next" title="Pasar a ${next}" onclick="event.stopPropagation();updateOrderStatus('${o.id}','${next}')">→ ${next}</button>` : ''}
         ${menuOpen ? `<div class="order-actions-overlay" onclick="state.orderActionsMenu=null;render()"></div>` : ''}
-        <button class="order-actions-btn" onclick="event.stopPropagation();state.orderActionsMenu=state.orderActionsMenu==='${o.id}'?null:'${o.id}';render()">⋮</button>
+        <button class="order-actions-btn" aria-label="Más acciones" onclick="event.stopPropagation();state.orderActionsMenu=state.orderActionsMenu==='${o.id}'?null:'${o.id}';render()">⋮</button>
         ${menuOpen ? `
           <div class="order-actions-menu">
+            <div class="tools-menu-label">Cambiar estado</div>
             ${STATUS_FLOW.map(s=>`<button class="${o.status===s?'active-status':''}" onclick="state.orderActionsMenu=null;updateOrderStatus('${o.id}','${s}')">${o.status===s?icon('check')+' ':''}${s}</button>`).join('')}
             <hr>
+            <button onclick="state.orderActionsMenu=null;openOrderDetailModal('${o.id}')">${icon('receipt',14)} Ver detalle</button>
+            ${!isPos ? `<button onclick="state.orderActionsMenu=null;sendToDelivery('${o.id}')">${icon('truck',14)} Enviar al repartidor</button>` : ''}
             ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
-            <button onclick="state.orderActionsMenu=null;state.assignCommissionOrderId='${o.id}';render()">${icon('percent',14)} ${o.commissionAgentName?`Comisión: ${o.commissionAgentName}`:'Asignar comisionista'}</button>
+            <button onclick="state.orderActionsMenu=null;state.assignCommissionOrderId='${o.id}';render()">${icon('percent',14)} ${o.commissionAgentName?`Comisión: ${escDescHtml(o.commissionAgentName)}`:'Asignar comisionista'}</button>
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
             <button class="btn-danger-text" onclick="state.orderActionsMenu=null;deleteOrder('${o.id}','${o.source}')">${icon('trash',14)} Eliminar</button>
           </div>
@@ -5537,13 +5603,13 @@ function renderOrderRow(o){
     </tr>`;
   if(productsOpen){
     rows += `
-    <tr class="products-detail-row"><td colspan="9">
-      ${(o.items||[]).map(it=>`<div class="pd-line"><span>${it.qty}x ${it.name}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
+    <tr class="products-detail-row"><td colspan="8">
+      ${(o.items||[]).map(it=>`<div class="pd-line"><span>${it.qty}x ${escDescHtml(it.name)}</span><span>${money(it.price*it.qty)}</span></div>`).join('')}
       ${isPos
-        ? `<div class="pd-extra"><span>Método de pago</span><span>${paymentMethodLabel(o)}</span></div>`
-        : `<div class="pd-extra"><span>Teléfono</span><span>${o.phone||'—'}</span></div>
-           <div class="pd-extra"><span>Dirección</span><span>${o.address||'—'}</span></div>
-           ${o.notes?`<div class="pd-extra"><span>Notas</span><span>${o.notes}</span></div>`:''}`
+        ? `<div class="pd-extra"><span>Método de pago</span><span>${escDescHtml(paymentMethodLabel(o))}</span></div>`
+        : `<div class="pd-extra"><span>Teléfono</span><span>${escDescHtml(o.phone||'—')}</span></div>
+           <div class="pd-extra"><span>Dirección</span><span>${escDescHtml(o.address||'—')}</span></div>
+           ${o.notes?`<div class="pd-extra"><span>Notas</span><span>${escDescHtml(o.notes)}</span></div>`:''}`
       }
     </td></tr>`;
   }
