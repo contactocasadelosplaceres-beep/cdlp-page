@@ -289,6 +289,9 @@
   .sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:28px 0 12px;padding-top:18px;border-top:1px solid var(--border);}
   .sec-title{font-family:var(--font-heading);font-size:18px;font-weight:800;color:var(--primary-deep);}
   .sec-n{display:inline-block;margin-left:6px;padding:0 8px;border-radius:10px;background:var(--surface-soft);font-size:12px;line-height:20px;font-family:inherit;color:var(--primary);}
+  /* Campos sueltos del panel (buscadores, selects fuera de .form-field) con el mismo look que los filtros */
+  :where(.admin-body) :where(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]):not([type=range]):not([type=button]),select,textarea){padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:14px;font-family:inherit;color:var(--ink);}
+  :where(.admin-body) :where(input,select,textarea):focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(153,52,119,.12);}
   .prod-link{background:none;color:var(--primary);font-weight:700;font-size:13px;padding:0;text-decoration:underline;}
   @media(max-width:600px){.prod-select{flex:1 1 45%;min-width:0;}.prod-head-actions{width:100%;}.prod-head-actions .btn-add-new{flex:1;}}
   /* Encabezado de sección dentro de formularios largos (ej. modal de producto), para que se
@@ -1265,6 +1268,20 @@ function renderAssignCommissionModal(){
    "Usuarios" (este mismo panel) nunca aparece en la lista: si un colaborador pudiera
    editar permisos, podría dárselos a sí mismo. Administrar usuarios queda reservado a
    cuentas sin restricciones (las que no tienen un documento de colaborador con ese correo). */
+const PAGE_HEADS = {
+  resumen:['Resumen','Cómo va tu negocio hoy'],
+  'estadísticas':['Estadísticas','Ventas, productos, clientes y operación en números'],
+  caja:['Caja','Aperturas y cierres del Punto de Venta'],
+  centros:['Centros','Sucursales, inventario, transferencias y reabasto'],
+  marketing:['Marketing','Mayoreo, cupones, promociones y recordatorios'],
+  'diseño':['Diseño','La apariencia de tu tienda en línea'],
+  'configuración':['Configuración','Ajustes de operación, seguridad y datos'],
+};
+function pageHead(tab){
+  const h = PAGE_HEADS[tab]; if(!h) return '';
+  if((tab==='marketing'&&state.marketingSubpanel)||(tab==='diseño'&&state.designSubpanel)||(tab==='configuración'&&state.configSubpanel)) return '';
+  return `<div class="prod-head"><div><div class="prod-title">${h[0]}</div><div class="prod-sub">${h[1]}</div></div></div>`;
+}
 const PERMISSION_DEFS = [
   {key:'resumen', label:'Resumen (ventas totales, ingresos)'},
   {key:'pedidos', label:'Pedidos (ver y gestionar pedidos y ventas)'},
@@ -3715,18 +3732,18 @@ function renderAdmin(){
     </div>
     <div class="admin-body">
       ${!canAccessTab(state.adminTab) ? `<div class="empty-state">No tienes permiso para ver esta sección.</div>` : `
-      ${state.adminTab==='resumen' ? renderResumen() : ''}
-      ${state.adminTab==='estadísticas' ? renderEstadisticas() : ''}
+      ${state.adminTab==='resumen' ? pageHead('resumen')+renderResumen() : ''}
+      ${state.adminTab==='estadísticas' ? pageHead('estadísticas')+renderEstadisticas() : ''}
       ${state.adminTab==='productos' ? renderProductos() : ''}
       ${state.adminTab==='pedidos' ? renderPedidos() : ''}
       ${state.adminTab==='clientes' ? renderClientes() : ''}
       ${state.adminTab==='mensajes' ? renderMensajes() : ''}
       ${state.adminTab==='cajeros' ? renderCajeros() : ''}
-      ${state.adminTab==='caja' ? renderCaja() : ''}
-      ${state.adminTab==='centros' ? renderCentros() : ''}
-      ${state.adminTab==='marketing' ? renderMarketing() : ''}
-      ${state.adminTab==='diseño' ? renderDiseno() : ''}
-      ${state.adminTab==='configuración' ? renderConfig() : ''}
+      ${state.adminTab==='caja' ? pageHead('caja')+renderCaja() : ''}
+      ${state.adminTab==='centros' ? pageHead('centros')+renderCentros() : ''}
+      ${state.adminTab==='marketing' ? pageHead('marketing')+renderMarketing() : ''}
+      ${state.adminTab==='diseño' ? pageHead('diseño')+renderDiseno() : ''}
+      ${state.adminTab==='configuración' ? pageHead('configuración')+renderConfig() : ''}
       `}
     </div>
   </div>
