@@ -1585,11 +1585,18 @@ async function deleteOrder(id, source, skipConfirm){
   try{
     const col = source==='pos'?'sales':'orders';
     const backup = o ? (()=>{ const c={...o}; delete c.id; delete c.source; return c; })() : null;
+    // Pedido de la tienda ya descontado: al eliminarlo las piezas regresan al inventario.
+    const restoreStock = !!(o && source!=='pos' && o.stockDeducted);
+    if(restoreStock){
+      const rr = await adjustStockForSale({...o, centerId:o.stockCenterId||defaultCenterId()}, 1, {kind:'tienda'});
+      if(rr && rr.ok===false) return;
+    }
     await db.collection(col).doc(id).delete();
     state.orders = state.orders.filter(x=>x.id!==id);
     if(!skipConfirm){
       render();
       if(backup) showUndo(`Se eliminó ${label}`, async()=>{
+        if(restoreStock) await adjustStockForSale({...backup, id, centerId:backup.stockCenterId||defaultCenterId()}, -1, {kind:'tienda'});
         await db.collection(col).doc(id).set(backup);
         state.orders = [{id, source, ...backup}, ...state.orders].sort((a,b)=> new Date(b.date) - new Date(a.date));
         showToast('Pedido recuperado'); render();
