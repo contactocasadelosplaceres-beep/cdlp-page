@@ -397,6 +397,39 @@
   .abandon-opt:active{border-color:var(--primary);}
   .abandon-skip{display:block;width:100%;padding:12px;margin-top:4px;background:none;color:#666666;font-size:14px;text-align:center;text-decoration:underline;text-underline-offset:3px;}
   .coupon-apply{flex:0 0 auto;height:48px;padding:0 16px;border-radius:8px;border:1.5px solid var(--rose);color:var(--rose);background:#fff;font-size:14px;font-weight:700;}
+
+  /* ===== Pantalla de carga con siluetas ===== */
+  .sk{background:linear-gradient(90deg,#ECE6EA 25%,#F7F3F6 37%,#ECE6EA 63%);background-size:400% 100%;animation:skShimmer 1.4s ease infinite;border-radius:10px;}
+  @keyframes skShimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+  @media(prefers-reduced-motion:reduce){.sk{animation:none;}}
+  .sk-top{height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;background:#fff;border-bottom:1px solid #EFE9ED;}
+  .sk-wrap{max-width:1200px;margin:0 auto;padding:0 16px 40px;}
+  .sk-hero{height:210px;margin:16px 0;border-radius:14px;}
+  .sk-chips{display:flex;gap:8px;overflow:hidden;margin-bottom:16px;}
+  .sk-chip{height:34px;width:92px;border-radius:999px;flex:none;}
+  .sk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+  @media(min-width:640px){.sk-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+  @media(min-width:960px){.sk-grid{grid-template-columns:repeat(4,minmax(0,1fr));}}
+  .sk-card{background:#fff;border-radius:12px;padding:8px;}
+  .sk-img{aspect-ratio:1/1;width:100%;}
+  .sk-l1{height:14px;margin:10px 0 6px;width:85%;}
+  .sk-l2{height:14px;width:50%;}
+  .sk-btn{height:40px;margin-top:10px;}
+  /* ===== Búsqueda sin resultados ===== */
+  .noresults{text-align:center;padding:34px 12px 26px;max-width:520px;margin:0 auto;}
+  .noresults .nr-ico{width:54px;height:54px;border-radius:50%;background:#F5E4EA;color:var(--rose);display:inline-flex;align-items:center;justify-content:center;}
+  .noresults h3{font-family:var(--font-heading);font-size:20px;line-height:1.25;margin:14px 0 8px;color:var(--ink);word-break:break-word;}
+  .noresults p{color:var(--ink-soft);font-size:15px;line-height:1.5;margin:0 0 18px;}
+  .noresults .hero-btn-primary{width:100%;text-decoration:none;gap:8px;}
+  .nr-sub{margin:24px 0 10px;font-size:13px;font-weight:600;color:var(--ink-soft);}
+  .nr-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+  /* ===== Botón flotante de WhatsApp ===== */
+  .wa-fab{position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:34;width:52px;height:52px;border-radius:50%;background:var(--primary-deep);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 22px -8px rgba(10,74,91,.6);text-decoration:none;transition:transform .15s ease;}
+  .wa-fab:active{transform:scale(.94);}
+  .wa-fab.wa-cart{bottom:calc(76px + env(safe-area-inset-bottom));}
+  .wa-fab.wa-cmp{bottom:calc(88px + env(safe-area-inset-bottom));}
+  .wa-fab.wa-cart.wa-cmp{bottom:calc(144px + env(safe-area-inset-bottom));}
+  @media(min-width:640px){.wa-fab.wa-cart{bottom:calc(20px + env(safe-area-inset-bottom));}.wa-fab.wa-cart.wa-cmp{bottom:calc(88px + env(safe-area-inset-bottom));}}
 </style>
 </head>
 <body>
@@ -2072,7 +2105,22 @@ function renderGridSection(){
              <span class="load-more-count">${filtered.length - shown.length} producto${filtered.length-shown.length===1?'':'s'} más te esperan</span>
            </div>
          ` : ''}`
-      : `<div class="empty-state">${emptyMsg}</div>`}
+      : (state.searchQuery.trim() && !state.activeBestSellers ? renderNoResults(state.searchQuery.trim()) : `<div class="empty-state">${emptyMsg}</div>`)}
+  </div>`;
+}
+// Una búsqueda sin resultados ya no es un callejón sin salida: se ofrece pedirlo por WhatsApp
+// (con lo que buscó ya escrito en el mensaje) y se sugieren las categorías para seguir mirando.
+function renderNoResults(q){
+  const cats = visibleCategories().slice(0,8);
+  const safe = q.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const msg = `Hola, estoy buscando "${q}" y no lo encontré en el catálogo, ¿me ayudan a conseguirlo?`;
+  return `<div class="noresults">
+    <span class="nr-ico">${icon('search',24)}</span>
+    <h3>No encontramos "${safe}"</h3>
+    <p>Prueba con otra palabra o dinos qué buscas: lo conseguimos para ti, con total discreción.</p>
+    ${state.settings.whatsapp ? `<a class="hero-btn-primary" href="${waLink(msg)}" target="_blank" rel="noopener">${icon('whatsapp',18)} Pídelo por WhatsApp</a>` : ''}
+    ${cats.length ? `<div class="nr-sub">O sigue explorando por categoría</div>
+    <div class="nr-chips">${cats.map(c=>`<button class="cat-chip" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>` : ''}
   </div>`;
 }
 const GRID_PAGE_SIZE = 20;
@@ -2569,6 +2617,7 @@ function renderStore(){
     <div class="mobile-cart-spacer ${showBar||showCompareBar?'show':''}"></div>
   </div>
   ${showCompareBar ? `<div style="position:fixed;left:0;right:0;bottom:${showBar?'56px':'0'};z-index:39;">${renderCompareBar()}</div>` : ''}
+  ${(!isKioskMode() && state.settings.whatsapp) ? `<a class="wa-fab ${showBar?'wa-cart':''} ${showCompareBar?'wa-cmp':''}" href="${waLink('Hola, tengo una duda sobre un producto.')}" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp">${icon('whatsapp',26)}</a>` : ''}
   <div class="mobile-cart-bar ${showBar?'show':''}">
     <div class="mobile-cart-bar-info">
       <span class="mobile-cart-bar-count">${cartCount()} artículo${cartCount()===1?'':'s'}</span>
@@ -2625,11 +2674,23 @@ function restoreScrollPositions(root, positions){
   const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
   els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
 }
+// Mientras llega el catálogo se dibujan siluetas con la forma de la tienda (en vez de una
+// pantalla en blanco con un texto) — así se siente más rápida y no parece que se trabó.
+function renderSkeleton(){
+  const card = `<div class="sk-card"><div class="sk sk-img"></div><div class="sk sk-l1"></div><div class="sk sk-l2"></div><div class="sk sk-btn"></div></div>`;
+  return `<div role="status" aria-label="Cargando catálogo">
+    <div class="sk-top"><div class="sk" style="height:22px;width:150px;"></div><div class="sk" style="height:34px;width:104px;"></div></div>
+    <div class="sk-wrap">
+      <div class="sk sk-hero"></div>
+      <div class="sk-chips">${'<div class="sk sk-chip"></div>'.repeat(5)}</div>
+      <div class="sk-grid">${card.repeat(6)}</div>
+    </div></div>`;
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
   const scrollPositions = captureScrollPositions(root);
-  if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando catálogo…</div>`; restoreFocusState(root, focusInfo); return; }
+  if(!state.loaded){ root.innerHTML = renderSkeleton(); restoreFocusState(root, focusInfo); return; }
   if(state.settings.ageGateEnabled!==false && !hasConfirmedAge()){ root.innerHTML = renderAgeGate(); restoreFocusState(root, focusInfo); return; }
   root.innerHTML = state.orderPlaced ? renderSuccess() : renderStore();
   if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
@@ -2784,6 +2845,18 @@ function navLayers(){
 }
 
 { const _renderBase = render; render = function(){ _renderBase(); navSync(); }; }
+
+/* ===== AVISO ANTES DE PERDER LO ESCRITO =====
+   Si alguien recarga o cierra la pestaña con el checkout (o un mensaje) a medias, el navegador
+   pregunta antes de salir. Solo salta cuando de verdad hay texto escrito; el carrito no cuenta
+   porque ese ya se guarda solo. */
+window.addEventListener('beforeunload', (e)=>{
+  if(state.orderPlaced || state.submittingOrder) return;
+  const v = id => { const el = document.getElementById(id); return !!(el && el.value && el.value.trim()); };
+  const dirty = (state.checkoutOpen && (v('ck-name')||v('ck-phone')||v('ck-address')))
+    || (state.messageDrawerOpen && !state.messageSent && state.messageDraft && state.messageDraft.text && state.messageDraft.text.trim());
+  if(dirty){ e.preventDefault(); e.returnValue = ''; return ''; }
+});
 </script>
 </body>
 </html>

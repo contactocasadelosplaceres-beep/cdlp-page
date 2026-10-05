@@ -10979,6 +10979,12 @@ function navLayers(){
 }
 
 { const _renderBase = render; render = function(){ _renderBase(); navSync(); }; }
+
+/* ===== AVISO ANTES DE PERDER UNA FICHA DE PRODUCTO A MEDIAS ===== */
+window.addEventListener('beforeunload', (e)=>{
+  if(state.productModal===null || state.productModal===undefined) return;
+  e.preventDefault(); e.returnValue = ''; return '';
+});
 </script>
 </body>
 </html>

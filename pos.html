@@ -1964,6 +1964,14 @@ function navLayers(){
 }
 
 { const _renderBase = render; render = function(){ _renderBase(); navSync(); }; }
+
+/* ===== AVISO ANTES DE PERDER UNA VENTA A MEDIAS =====
+   Si se recarga o se cierra la pestaña con productos en el carrito y la venta sin cobrar, el
+   navegador pregunta antes de salir (un jalón accidental hacia abajo en el celular recarga todo). */
+window.addEventListener('beforeunload', (e)=>{
+  if(state.saleDone || !state.cart || !Object.keys(state.cart).length) return;
+  e.preventDefault(); e.returnValue = ''; return '';
+});
 </script>
 </body>
 </html>
