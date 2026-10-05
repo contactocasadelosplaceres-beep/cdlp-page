@@ -565,6 +565,23 @@
   .pm-stock-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);}
   .pm-stock-row:first-of-type{border-top:none;}
   .pm-stock-total{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:var(--surface-soft);border-radius:10px;font-size:13px;font-weight:600;}
+  /* ---- Aviso "Deshacer" (aparece unos segundos tras archivar, cancelar, eliminar o ajustar) ---- */
+  .undo-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);min-width:min(280px,calc(100% - 32px));background:#5C1F49;color:#fff;padding:8px 8px 8px 16px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:85;opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;box-shadow:var(--shadow-md);}
+  .undo-bar.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(-6px);}
+  .undo-bar .undo-msg{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.3;}
+  .undo-bar button{flex:0 0 auto;width:auto;min-height:36px;padding:0 16px;border:none;border-radius:var(--radius-pill);background:#fff;color:#5C1F49;font-weight:800;font-size:13px;cursor:pointer;}
+  /* ---- Qué hacer hoy + señales de riesgo en pedidos ---- */
+  .today-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .today-item{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:10px 12px;background:var(--surface-soft);border:1px solid var(--border);border-radius:12px;text-align:left;font:inherit;color:var(--ink);cursor:pointer;}
+  .today-item:hover{border-color:var(--primary);}
+  .today-dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;}
+  .today-dot.rojo{background:var(--rose);} .today-dot.ambar{background:var(--amber);} .today-dot.info{background:var(--primary);}
+  .today-n{flex:0 0 auto;min-width:28px;height:28px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:#fff;border:1px solid var(--border);font-weight:800;font-size:13px;}
+  .today-text{flex:1;min-width:0;font-size:13.5px;line-height:1.35;overflow-wrap:anywhere;}
+  .today-go{flex:0 0 auto;color:var(--primary-deep);font-weight:700;font-size:12.5px;white-space:nowrap;}
+  .today-ok{margin-top:8px;padding:12px 14px;background:var(--surface-soft);border-radius:12px;font-size:13.5px;color:var(--ink-soft);}
+  .order-risk-tag{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px;font-size:11.5px;font-weight:700;color:#8a5a1a;background:#FDEBD3;padding:4px 8px;border-radius:10px;overflow-wrap:anywhere;}
+  .order-risk-tag button{flex:0 0 auto;width:auto;min-height:26px;padding:0 10px;border:1px solid #8a5a1a;background:transparent;color:#8a5a1a;border-radius:999px;font-size:11.5px;font-weight:700;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -1509,11 +1526,20 @@ async function assignFolioToOrder(id, source){
 async function deleteOrder(id, source, skipConfirm){
   const o = state.orders.find(x=>x.id===id);
   const label = o ? `${formatFolio(o.orderNumber)} — ${o.customer||'este pedido'}` : 'este pedido';
-  if(!skipConfirm && !confirm(`¿Eliminar ${label}? Esta acción no se puede deshacer.`)) return;
   try{
-    await db.collection(source==='pos'?'sales':'orders').doc(id).delete();
+    const col = source==='pos'?'sales':'orders';
+    const backup = o ? (()=>{ const c={...o}; delete c.id; delete c.source; return c; })() : null;
+    await db.collection(col).doc(id).delete();
     state.orders = state.orders.filter(x=>x.id!==id);
-    if(!skipConfirm){ showToast('Pedido eliminado'); render(); }
+    if(!skipConfirm){
+      render();
+      if(backup) showUndo(`Se eliminó ${label}`, async()=>{
+        await db.collection(col).doc(id).set(backup);
+        state.orders = [{id, source, ...backup}, ...state.orders].sort((a,b)=> new Date(b.date) - new Date(a.date));
+        showToast('Pedido recuperado'); render();
+      }, 10000);
+      else showToast('Pedido eliminado');
+    }
   }catch(e){ console.error(e); if(!skipConfirm) showToast('No se pudo eliminar el pedido'); }
 }
 
@@ -1561,11 +1587,12 @@ async function saveOrderDiscount(id, source){
   const amount = state.orderDiscountType==='percent' ? Math.round(subtotal*(value/100)) : Math.min(value, subtotal);
   const newTotal = Math.max(0, subtotal - amount);
   const payload = { subtotal, manualDiscount:{type: state.orderDiscountType, value, amount, reason}, total:newTotal };
+  const prevSnap = orderPricingSnapshot(o);
   try{
     await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
     Object.assign(o, payload);
     state.orderDiscountEditing = false;
-    showToast('Ajuste guardado'); render();
+    render(); showUndo('Ajuste guardado', ()=>restoreOrderPricing(id, source, prevSnap));
   }catch(e){ console.error(e); showToast('No se pudo guardar el ajuste'); }
 }
 async function applyOrderCoupon(id, source){
@@ -1601,15 +1628,32 @@ async function applyOrderCoupon(id, source){
     showToast('Cupón aplicado'); render();
   }catch(e){ console.error(e); showToast('No se pudo aplicar el cupón'); }
 }
+// Foto de los campos de precio de un pedido, para poder devolverlos tal cual si se deshace un ajuste.
+function orderPricingSnapshot(o){
+  return {
+    subtotal: o.subtotal, total: o.total, couponCode: o.couponCode,
+    manualDiscount: o.manualDiscount ? JSON.parse(JSON.stringify(o.manualDiscount)) : undefined,
+  };
+}
+async function restoreOrderPricing(id, source, snap){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const del = firebase.firestore.FieldValue.delete();
+  const payload = {};
+  ['subtotal','total','couponCode','manualDiscount'].forEach(k=>{ payload[k] = snap[k]===undefined ? del : snap[k]; });
+  await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
+  ['subtotal','total','couponCode','manualDiscount'].forEach(k=>{ if(snap[k]===undefined) delete o[k]; else o[k]=snap[k]; });
+  showToast('Ajuste restaurado'); render();
+}
 async function removeOrderDiscount(id, source){
   const o = state.orders.find(x=>x.id===id); if(!o) return;
   const restoredTotal = o.subtotal!=null ? o.subtotal : o.total;
   const payload = { manualDiscount: firebase.firestore.FieldValue.delete(), total: restoredTotal };
   if(o.couponCode) payload.couponCode = firebase.firestore.FieldValue.delete();
+  const prevSnap = orderPricingSnapshot(o);
   try{
     await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
     delete o.manualDiscount; o.total = restoredTotal; delete o.couponCode;
-    showToast('Ajuste eliminado'); render();
+    render(); showUndo('Ajuste eliminado', ()=>restoreOrderPricing(id, source, prevSnap));
   }catch(e){ console.error(e); showToast('No se pudo eliminar el ajuste'); }
 }
 /* ============== HISTORIAL DE CONVERSACIÓN POR CLIENTE ==============
@@ -1932,6 +1976,7 @@ function renderOrderDetailModal(){
         ${isPos?icon('receipt')+' Punto de venta':icon('bag')+' Tienda online'} · ${new Date(o.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
       </div>
 
+      ${!isPos ? riskTagHtml(o) : ''}
       <div class="two-col" style="margin-bottom:14px;">
         <div><div class="row-sub">Estado</div><span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'};color:${STATUS_TEXT_COLOR[o.status]||'#fff'}">${o.status||'—'}</span></div>
         <div><div class="row-sub">Total</div><strong style="font-size:16px;">${money(o.total)}</strong></div>
@@ -2139,6 +2184,29 @@ function showToast(msg){
   const t=document.getElementById('toast'); if(!t) return;
   t.textContent=msg; t.classList.add('show');
   clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+/* ---- Aviso "Deshacer": reemplaza al toast en acciones que se pueden revertir. ----
+   Vive en <body> (fuera de #root) para que render() no lo borre mientras corre su cuenta atrás. */
+let _undoFn = null, _undoTimer = null;
+function showUndo(msg, fn, ms){
+  let bar = document.getElementById('undo-bar');
+  if(!bar){
+    bar = document.createElement('div'); bar.id='undo-bar'; bar.className='undo-bar';
+    bar.setAttribute('role','status'); bar.setAttribute('aria-live','polite');
+    bar.innerHTML = '<span class="undo-msg"></span><button type="button" onclick="runUndo()">Deshacer</button>';
+    document.body.appendChild(bar);
+  }
+  bar.querySelector('.undo-msg').textContent = msg;
+  _undoFn = fn;
+  bar.classList.add('show');
+  clearTimeout(_undoTimer); _undoTimer = setTimeout(hideUndo, ms||8000);
+}
+function hideUndo(){ const b=document.getElementById('undo-bar'); if(b) b.classList.remove('show'); _undoFn=null; clearTimeout(_undoTimer); }
+async function runUndo(){
+  const fn = _undoFn; hideUndo();
+  if(!fn) return;
+  try{ await fn(); }catch(e){ console.error(e); showToast('No se pudo deshacer'); }
 }
 
 /* ============== AUTH ============== */
@@ -2857,8 +2925,8 @@ async function moveProductsToTrash(ids){
     state.selectedProducts = (state.selectedProducts||[]).filter(id=>!ids.includes(id));
     if(moved.length===1) logAdminAction('eliminacion', 'producto', moved[0].name, `A la papelera · SKU: ${moved[0].sku||'sin SKU'}`, moved[0].id);
     else logAdminAction('eliminacion_lote', 'producto', `${moved.length} producto(s)`, ('A la papelera: '+moved.map(p=>p.name).join(', ')).slice(0,500));
-    showToast(`${moved.length===1?'Producto enviado':moved.length+' productos enviados'} a la papelera`);
     render();
+    showUndo(`${moved.length===1?'Producto enviado':moved.length+' productos enviados'} a la papelera`, ()=>restoreFromTrash(moved.map(p=>p.id)));
   }catch(e){
     console.error(e);
     showToast('No se pudo eliminar: ' + (e.message||'error desconocido'));
@@ -2949,7 +3017,7 @@ async function logAdminAction(action, targetType, targetName, details, targetId)
     });
   }catch(e){ console.error('No se pudo registrar en la bitácora', e); }
 }
-async function updateOrderStatus(id,status){
+async function updateOrderStatus(id,status,fromUndo){
   const o=state.orders.find(x=>x.id===id); if(!o) return;
   const prevStatus = o.status;
   o.status=status;
@@ -2966,6 +3034,9 @@ async function updateOrderStatus(id,status){
     else if(prevStatus==='Cancelado' && status!=='Cancelado') await adjustStockForSale(o, -1);
   }
   render();
+  if(status==='Cancelado' && prevStatus!=='Cancelado' && !fromUndo){
+    showUndo(`${o.source==='pos'?'Venta':'Pedido'} ${formatFolio(o.orderNumber)} cancelado`, ()=>updateOrderStatus(id, prevStatus, true));
+  }
 }
 // sign=1 restaura stock (venta cancelada); sign=-1 lo vuelve a descontar (venta reactivada
 // desde "Cancelado" a cualquier otro estado). Refleja exactamente el descuento que hace
@@ -3012,7 +3083,7 @@ async function adjustStockForSale(sale, sign){
   }
   catch(e){ console.error('No se pudo ajustar el inventario de esta venta', e); showToast('No se pudo ajustar el inventario de esta venta'); }
 }
-async function toggleArchiveOrder(id,archived,silent){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); if(!silent){ showToast(archived?'Pedido archivado':'Pedido restaurado'); render(); } }
+async function toggleArchiveOrder(id,archived,silent,fromUndo){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); if(!silent){ render(); if(archived && !fromUndo) showUndo('Pedido archivado', ()=>toggleArchiveOrder(id,false,false,true)); else showToast(archived?'Pedido archivado':'Pedido restaurado'); } }
 async function saveSettingsForm(s){ state.settings={...state.settings,...s}; await saveSettings(); showToast('Configuración guardada'); render(); }
 
 /* ============== USUARIOS Y NOTIFICACIONES (antes "Cajeros") ============== */
@@ -4045,6 +4116,107 @@ function computeSalesAnomaly(){
 // Junta varias señales que ya calculamos por separado en un solo semáforo, para que de un
 // vistazo en Resumen sepas si hay algo que merece tu atención hoy — sin tener que entrar a
 // cada pestaña a revisar una por una.
+/* ============== SEÑALES DE RIESGO EN PEDIDOS (antifraude simple) ==============
+   Son pistas, no veredictos: un pedido con señales se marca "Revisar" para que Ale lo confirme
+   por WhatsApp antes de preparar el envío. "Es válido" quita la marca de ese pedido. */
+function riskGuardOn(){ return state.settings.fraudGuardEnabled!==false; }
+function riskPhoneKey(ph){ const d=String(ph||'').replace(/\D/g,''); return d.length>10 ? d.slice(-10) : d; }
+let _riskIdxCache = null;
+function riskIndex(){
+  const key = state.orders.length+':'+state.orders.filter(o=>o.status==='Cancelado').length;
+  if(_riskIdxCache && _riskIdxCache.key===key) return _riskIdxCache;
+  const byPhone = {}; let sum=0, n=0;
+  state.orders.forEach(o=>{
+    if(o.source==='pos') return;
+    const k = riskPhoneKey(o.phone); if(k) (byPhone[k] = byPhone[k]||[]).push(o);
+    if(o.status!=='Cancelado'){ sum += o.total||0; n++; }
+  });
+  _riskIdxCache = {key, byPhone, avg: n? sum/n : 0, n};
+  return _riskIdxCache;
+}
+function orderRiskReasons(o){
+  if(!riskGuardOn() || !o || o.source==='pos') return [];
+  const r = [];
+  const k = riskPhoneKey(o.phone);
+  const distinct = new Set(k.split('')).size;
+  if(k.length<10 || distinct<=3 || /^(0123456789|1234567890|9876543210)$/.test(k)) r.push('Teléfono dudoso');
+  const idx = riskIndex();
+  const same = (idx.byPhone[k]||[]);
+  const t0 = new Date(o.date).getTime();
+  const near = same.filter(x=>Math.abs(new Date(x.date).getTime()-t0) <= 24*3600*1000).length;
+  if(k && near>=3) r.push(`${near} pedidos con este teléfono en 24 h`);
+  const canceled = same.filter(x=>x.id!==o.id && x.status==='Cancelado').length;
+  if(canceled>=2) r.push(`${canceled} pedidos anteriores cancelados con este teléfono`);
+  const nm = String(o.customer||'').trim();
+  const letters = (nm.match(/[a-záéíóúüñ]/gi)||[]).length;
+  if(letters<3 || /(.)\1{3,}/i.test(nm) || /https?:|www\.|@/i.test(nm)) r.push('Nombre dudoso');
+  const ad = String(o.address||'').trim();
+  if(ad.length<10) r.push('Dirección muy corta');
+  if(idx.n>=10 && (o.total||0) > Math.max(idx.avg*4, 2000)) r.push('Monto muy superior a tu pedido típico');
+  if((o.fraudSignals||[]).includes('rapido')) r.push('Formulario enviado en menos de 4 segundos');
+  return r;
+}
+function riskOrders(){
+  return state.orders.filter(o=>o.source!=='pos' && !o.archived && !o.riskReviewed && (o.status==='Nuevo'||o.status==='Preparando') && orderRiskReasons(o).length);
+}
+async function markOrderRiskReviewed(id, valid){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const prev = !!o.riskReviewed;
+  try{
+    await db.collection('orders').doc(id).update({riskReviewed: valid});
+    o.riskReviewed = valid; render();
+    showUndo(valid?'Pedido marcado como válido':'Se volvió a marcar para revisar', async()=>{
+      await db.collection('orders').doc(id).update({riskReviewed: prev}); o.riskReviewed = prev; render();
+    });
+  }catch(e){ console.error(e); showToast('No se pudo actualizar el pedido'); }
+}
+function riskTagHtml(o){
+  if(o.riskReviewed || (o.status!=='Nuevo' && o.status!=='Preparando')) return '';
+  const r = orderRiskReasons(o); if(!r.length) return '';
+  return `<div class="order-risk-tag">${icon('alert-triangle',12)} <span>Revisar: ${r.map(escDescHtml).join(' · ')}</span><button type="button" onclick="event.stopPropagation();markOrderRiskReviewed('${o.id}',true)">Es válido</button></div>`;
+}
+
+/* ============== QUÉ HACER HOY ============== */
+function computeTodayTasks(){
+  const t = [];
+  const live = state.orders.filter(o=>!o.archived);
+  const nuevos = live.filter(o=>o.status==='Nuevo');
+  if(nuevos.length){
+    const old = nuevos.filter(o=>Date.now()-new Date(o.date).getTime() > 2*3600*1000).length;
+    t.push({tone: old?'rojo':'ambar', n:nuevos.length, text:`pedido${nuevos.length===1?'':'s'} nuevo${nuevos.length===1?'':'s'} por confirmar${old?` (${old} con más de 2 horas esperando)`:''}`, go:"state.adminTab='pedidos';state.orderStatusFilter='Nuevo';state.orderRiskOnly=false;render()"});
+  }
+  const risky = riskOrders();
+  if(risky.length) t.push({tone:'rojo', n:risky.length, text:`pedido${risky.length===1?'':'s'} con señales sospechosas — confírmalo${risky.length===1?'':'s'} por WhatsApp antes de enviar`, go:"state.adminTab='pedidos';state.orderStatusFilter='Todos';state.orderSourceFilter='Todos';state.showArchived=false;state.orderRiskOnly=true;render()"});
+  const prep = live.filter(o=>o.status==='Preparando');
+  if(prep.length) t.push({tone:'info', n:prep.length, text:`pedido${prep.length===1?'':'s'} en preparación por enviar`, go:"state.adminTab='pedidos';state.orderStatusFilter='Preparando';state.orderRiskOnly=false;render()"});
+  const stuck = live.filter(o=>o.status==='En camino' && Date.now()-new Date(o.date).getTime() > 2*86400000);
+  if(stuck.length) t.push({tone:'ambar', n:stuck.length, text:`pedido${stuck.length===1?'':'s'} en camino desde hace más de 2 días — confirma si ya llegó${stuck.length===1?'':'ron'}`, go:"state.adminTab='pedidos';state.orderStatusFilter='En camino';state.orderRiskOnly=false;render()"});
+  const msgsNew = (state.storeMessages||[]).filter(m=>!m.archived && (m.status||'nuevo')==='nuevo').length;
+  if(msgsNew) t.push({tone:'ambar', n:msgsNew, text:`mensaje${msgsNew===1?'':'s'} del buzón sin responder`, go:"state.adminTab='mensajes';state.newMessageCount=0;render()"});
+  const carts = pendingAbandonedCarts().filter(c=>!c.contacted).length;
+  if(carts) t.push({tone:'info', n:carts, text:`carrito${carts===1?'':'s'} abandonado${carts===1?'':'s'} sin contactar`, go:"state.adminTab='pedidos';state.abandonedCartsOpen=true;render()"});
+  const openRegs = (state.cashRegisters||[]).filter(r=>r.status==='abierta');
+  const oldReg = openRegs.filter(r=>(Date.now()-new Date(r.openedAt).getTime())>=24*3600*1000).length;
+  if(oldReg) t.push({tone:'rojo', n:oldReg, text:`caja${oldReg===1?' abierta':'s abiertas'} desde un día anterior — haz el cierre`, go:"state.adminTab='caja';render()"});
+  const waiting = computeRestockDemand().filter(g=>g.stock>0).reduce((s,g)=>s+g.people.length,0);
+  if(waiting) t.push({tone:'ambar', n:waiting, text:`persona${waiting===1?'':'s'} esperando productos que ya repusiste — avísales`, go:"state.adminTab='centros';state.centersSubview='reabasto';render()"});
+  const m = computeMetrics();
+  if(m.lowStock.length) t.push({tone:'ambar', n:m.lowStock.length, text:`producto${m.lowStock.length===1?'':'s'} con poco stock o agotado${m.lowStock.length===1?'':'s'}`, go:"var e=document.getElementById('resumen-reabasto');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
+  if(m.expiringOrExpired) t.push({tone:'ambar', n:m.expiringOrExpired, text:`producto${m.expiringOrExpired===1?'':'s'} por caducar o caducado${m.expiringOrExpired===1?'':'s'}`, go:"state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"});
+  return t;
+}
+function renderTodayPanel(){
+  const tasks = computeTodayTasks();
+  const dateTxt = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
+  return `<div class="panel" id="today-panel">
+    <div class="panel-title" style="margin:0;">Qué hacer hoy</div>
+    <div class="panel-sub" style="margin:2px 0 0;text-transform:capitalize;">${dateTxt}</div>
+    ${tasks.length ? `<div class="today-list">${tasks.map(x=>`
+      <button type="button" class="today-item" onclick="${x.go.replace(/"/g,'&quot;')}">
+        <span class="today-dot ${x.tone}"></span><span class="today-n">${x.n}</span><span class="today-text">${x.text}</span><span class="today-go">Ir ›</span>
+      </button>`).join('')}</div>` : `<div class="today-ok">Todo al día: no hay pedidos, mensajes ni avisos pendientes.</div>`}
+  </div>`;
+}
 function computeBusinessHealth(){
   const issues = [];
   const openRegs = state.cashRegisters.filter(r=>r.status==='abierta');
@@ -4138,6 +4310,7 @@ function renderResumen(){
   const healthLabel = {rojo:'Necesita atención', ambar:'Con pendientes', verde:'Todo en orden'}[health.level];
   return `
     ${state.loadWarnings && state.loadWarnings.length ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;">${icon('alert-triangle',14)} No se pudo cargar: ${state.loadWarnings.join(', ')}. Casi seguro falta publicar las reglas de Firestore más recientes (Firebase → Firestore → Reglas → pegar el archivo → Publicar).</div>` : ''}
+    ${renderTodayPanel()}
     ${renderDashboardNotesPanel()}
     <div class="panel" style="border-left:5px solid ${healthColor};">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:${health.issues.length?'10px':'0'};">
@@ -4187,7 +4360,7 @@ function renderResumen(){
     </div>
     <div class="panel"><div class="panel-title">Ingresos — últimos 7 días</div>${renderBarChart(m.dayRevenue)}</div>
     ${m.lowStock.length>0 ? `
-    <div class="panel">
+    <div class="panel" id="resumen-reabasto">
       <div class="panel-title">Reabastecer pronto</div>
       ${m.lowStock.map(p=>`
         <div class="list-row row-wrap" style="row-gap:8px;">
@@ -5762,7 +5935,7 @@ function onOrderSearchInput(v){
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 function resetOrderFilters(){
-  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter='Todos';
+  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter='Todos'; state.orderRiskOnly=false;
   state.selectedOrders=[]; resetShowMore('ordersShowMore'); render();
 }
 function setOrderFilter(key, val){
@@ -5778,13 +5951,15 @@ function renderPedidos(){
   const archivedCount = state.orders.length - activeCount;
   const newCount = state.orders.filter(o=>!o.archived && o.status==='Nuevo').length;
   const base = scope.filter(o=> (source==='Todos'||o.source===source) && orderMatchesSearch(o,q));
-  const shown = base.filter(o=> statusF==='Todos' || o.status===statusF);
+  const riskOnly = !!state.orderRiskOnly;
+  const riskIds = new Set(riskOrders().map(o=>o.id));
+  const shown = base.filter(o=> (statusF==='Todos' || o.status===statusF) && (!riskOnly || riskIds.has(o.id)));
   const abandonedCount = pendingAbandonedCarts().length;
-  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!=='Todos'?1:0);
+  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!=='Todos'?1:0) + (riskOnly?1:0);
   const chips = ["Todos", ...STATUS_FLOW].map(f=>{
     const n = f==='Todos' ? base.length : base.filter(o=>o.status===f).length;
     return `<button class="${statusF===f?'active':''}" onclick="setOrderFilter('orderStatusFilter','${f}')">${f} <span class="chip-n">${n}</span></button>`;
-  }).join('');
+  }).join('') + (riskIds.size || riskOnly ? `<button class="${riskOnly?'active':''}" onclick="state.orderRiskOnly=!state.orderRiskOnly;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Revisar <span class="chip-n">${riskIds.size}</span></button>` : '');
   return `
     <div class="prod-head">
       <div>
@@ -5909,6 +6084,7 @@ function renderOrderRow(o){
         })()}</div>
         <div class="order-source-tag">${isPos?`${icon('receipt')} Punto de venta · ${escDescHtml(o.cashierName||'')}`:icon('bag')+' Tienda en línea'}</div>
         ${(!isPos && o.campaign)?`<div class="order-camp-tag">Campaña: ${escDescHtml(o.campaign)}</div>`:''}
+        ${!isPos ? riskTagHtml(o) : ''}
         ${shipSub ? `<div class="order-ship-sub" title="${escDescHtml(shipSub)}">${icon('map-pin',11)} ${escDescHtml(shipSub)}</div>` : ''}
       </td>
       <td class="c-total">
@@ -6001,14 +6177,16 @@ function toggleMessageSelected(id){
 }
 // Archivar es reversible (a diferencia de eliminar): el mensaje simplemente deja de aparecer en
 // la bandeja principal, pero se puede traer de vuelta con "Ver archivados" en cualquier momento.
-async function archiveMessages(ids, archived){
+async function archiveMessages(ids, archived, fromUndo){
   if(!ids.length) return;
   try{
     await Promise.all(ids.map(id=>db.collection('storeMessages').doc(id).update({archived})));
     ids.forEach(id=>{ const m = state.storeMessages.find(x=>x.id===id); if(m) m.archived = archived; });
     state.selectedMessages = [];
-    showToast(archived ? `${ids.length} mensaje${ids.length===1?'':'s'} archivado${ids.length===1?'':'s'}` : `${ids.length} mensaje${ids.length===1?'':'s'} restaurado${ids.length===1?'':'s'}`);
     render();
+    const nMsg = `${ids.length} mensaje${ids.length===1?'':'s'}`;
+    if(archived && !fromUndo) showUndo(`${nMsg} archivado${ids.length===1?'':'s'}`, ()=>archiveMessages(ids, false, true));
+    else showToast(archived ? `${nMsg} archivado${ids.length===1?'':'s'}` : `${nMsg} restaurado${ids.length===1?'':'s'}`);
   }catch(e){ console.error(e); showToast('No se pudo actualizar los mensajes'); }
 }
 function filteredStoreMessages(){
@@ -6635,12 +6813,17 @@ async function addExpense(){
 }
 async function deleteExpense(id){
   const e = state.expenses.find(x=>x.id===id); if(!e) return;
-  if(!confirm(`¿Borrar el gasto de ${money(e.amount)} (${e.category})?`)) return;
   try{
+    const backup = {...e}; delete backup.id;
     await db.collection('expenses').doc(id).delete();
     state.expenses = state.expenses.filter(x=>x.id!==id);
     logAdminAction('gasto_eliminado', 'gasto', e.category+(e.note?': '+e.note:''), money(e.amount));
-    showToast('Gasto borrado'); render();
+    render();
+    showUndo(`Gasto de ${money(e.amount)} borrado`, async()=>{
+      await db.collection('expenses').doc(id).set(backup);
+      state.expenses = [{id, ...backup}, ...state.expenses];
+      showToast('Gasto recuperado'); render();
+    });
   }catch(err){ console.error(err); showToast('No se pudo borrar'); }
 }
 function renderStatsGastos(){
@@ -7728,11 +7911,18 @@ async function saveCustomerModal(){
   }catch(e){ console.error(e); showToast('No se pudo guardar el cliente'); }
 }
 async function deleteCustomerProfile(id){
-  if(!confirm('¿Eliminar este perfil de cliente? (su historial de compras no se borra, solo el perfil manual)')) return;
+  const prof = state.customers.find(c=>c.id===id);
   try{
+    const backup = prof ? (()=>{ const c={...prof}; delete c.id; return c; })() : null;
     await db.collection('customers').doc(id).delete();
     state.customers = state.customers.filter(c=>c.id!==id);
-    showToast('Perfil eliminado'); render();
+    render();
+    if(backup) showUndo('Perfil de cliente eliminado (su historial de compras no se borra)', async()=>{
+      await db.collection('customers').doc(id).set(backup);
+      state.customers = [{id, ...backup}, ...state.customers];
+      showToast('Perfil recuperado'); render();
+    });
+    else showToast('Perfil eliminado');
   }catch(e){ console.error(e); showToast('No se pudo eliminar'); }
 }
 function exportCustomersCSV(){
@@ -8204,12 +8394,18 @@ async function saveCoupon(){
   state.couponModal=null; showToast('Cupón guardado'); render();
 }
 async function deleteCoupon(id){
-  if(!confirm('¿Eliminar este cupón?')) return;
-  const updated = state.settings.coupons.filter(x=>x.id!==id);
+  const before = state.settings.coupons.slice();
+  const gone = before.find(x=>x.id===id);
+  const updated = before.filter(x=>x.id!==id);
   try{
     await db.collection('settings').doc('store').update({coupons: updated});
     state.settings.coupons = updated;
-    showToast('Eliminado'); render();
+    render();
+    showUndo(`Cupón ${gone?gone.code:''} eliminado`.replace('  ',' '), async()=>{
+      await db.collection('settings').doc('store').update({coupons: before});
+      state.settings.coupons = before;
+      showToast('Cupón recuperado'); render();
+    });
   }catch(e){ console.error(e); showToast('No se pudo eliminar: ' + (e.message||'error desconocido')); }
 }
 async function toggleCouponActive(id){
@@ -8672,6 +8868,7 @@ function renderCajaDetailModal(){
           <div><span>Retiros de caja</span><span>-${money(r.cashRetiros||0)}</span></div>
           <div><span>Efectivo esperado</span><span>${money(r.expectedCash||0)}</span></div>
           <div><span>Efectivo contado</span><span>${money(r.countedCash||0)}</span></div>
+          ${r.countedBreakdown ? `<div style="display:block;font-size:12px;color:var(--ink-soft);line-height:1.6;">Conteo: ${Object.entries(r.countedBreakdown).map(([k,n])=>{ const lab={b1000:'billete $1,000',b500:'billete $500',b200:'billete $200',b100:'billete $100',b50:'billete $50',b20:'billete $20',m20:'moneda $20',m10:'moneda $10',m5:'moneda $5',m2:'moneda $2',m1:'moneda $1',m050:'moneda 50¢'}[k]||k; return `${n} × ${lab}`; }).join(' · ')}</div>` : ''}
           <div style="font-weight:800;"><span>Diferencia</span><span style="color:${(r.difference||0)===0?'var(--green)':((r.difference||0)>0?'var(--amber)':'var(--rose)')}">${cashDiffLabel(r.difference)}</span></div>
           ${r.closingNotes?`<div><span>Notas</span><span style="text-align:right;">${r.closingNotes}</span></div>`:''}
         ` : `<div style="color:var(--ink-soft);padding-top:4px;">Esta caja sigue abierta.</div>`}
@@ -10536,6 +10733,16 @@ function renderOperativoSubpanel(){
       <textarea id="set-return-policy-text" rows="10" oninput="state.settings.returnPolicyText=this.value">${escDescHtml(s.returnPolicyText||'')}</textarea>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
+  `})}
+  ${pmSection('op_fraude','Protección contra pedidos falsos',{icon:'shield', collapsible:true, open:false, badge:s.fraudGuardEnabled!==false?'Activa':'Apagada', hint:'Límite por dispositivo y pedidos marcados "Revisar"', body:`
+    <div class="panel-sub">Tres frenos sencillos: la tienda limita cuántos pedidos puede enviar un mismo celular al día, un campo invisible descarta a los bots, y aquí en el panel los pedidos con señales raras (teléfono dudoso, varios pedidos del mismo teléfono en 24 h, nombre o dirección sospechosos, monto muy alto, formulario enviado en segundos) quedan marcados como <strong>Revisar</strong> hasta que los confirmes. Sin servidor propio no es infalible, pero frena el spam más común.</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.fraudGuardEnabled!==false?'checked':''} onchange="state.settings.fraudGuardEnabled=this.checked;saveSettings();render()">
+      <span>Activar protección y marcas de revisión</span>
+    </label>
+    <div class="form-field" style="margin-top:8px;"><label>Máximo de pedidos por celular en 24 horas (0 = sin límite)</label>
+      <input id="set-fraud-max" type="number" inputmode="numeric" min="0" max="20" step="1" value="${s.fraudMaxOrdersPerDay==null?3:s.fraudMaxOrdersPerDay}" onchange="state.settings.fraudMaxOrdersPerDay=Math.max(0,Math.min(20,parseInt(this.value,10)||0));saveSettings();showToast('Límite guardado');render()">
+    </div>
   `})}
   ${pmSection('op_kiosko','Modo kiosko / vitrina',{icon:'grid', collapsible:true, open:false, badge:'', hint:'Catálogo sin compras para una tablet del mostrador', body:`
     <div class="panel-sub">Para una tablet en el mostrador de la tienda física: muestra el catálogo para que la clienta lo hojee (fotos, precios, existencias), pero sin botones de comprar ni carrito — cualquier compra la completa el personal desde el Punto de Venta. Abre el enlace de abajo una sola vez en esa tablet; queda activado en ese dispositivo aunque se apague o se recargue la página.</div>

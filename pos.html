@@ -179,6 +179,19 @@
     .sale-items{padding:8px 14px;}
     .sale-foot{padding:10px 14px calc(14px + env(safe-area-inset-bottom));}
   }
+  /* ---- Arqueo por denominaciones al cerrar caja ---- */
+  .close-card{max-width:420px!important;width:100%;padding:26px 14px!important;}
+  .denom-toggle{width:100%;min-height:44px;margin:0 0 10px;padding:0 14px;border:1.5px dashed var(--primary);background:var(--surface-soft);color:var(--primary-deep);border-radius:var(--radius-sm);font-weight:700;font-size:14px;cursor:pointer;}
+  .denom-box{border:1px solid var(--border);border-radius:12px;padding:6px 8px;margin-bottom:10px;}
+  .denom-group{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:8px 0 2px;}
+  .denom-row{display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid var(--border);}
+  .denom-group + .denom-row{border-top:none;}
+  .denom-label{flex:0 0 46px;min-width:0;font-weight:700;font-size:14px;white-space:nowrap;}
+  .denom-step{flex:0 0 auto;display:flex;align-items:center;gap:3px;}
+  .denom-step button{flex:0 0 auto;width:36px;height:36px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--ink);font-size:18px;font-weight:700;line-height:1;cursor:pointer;padding:0;}
+  .denom-step input{width:44px!important;min-width:0;height:36px;margin:0!important;padding:0 2px!important;text-align:center;font-size:16px;font-weight:700;border:1.5px solid var(--border);border-radius:10px;}
+  .denom-sub{flex:1 1 0;min-width:0;text-align:right;white-space:nowrap;font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+  .denom-total{display:flex;justify-content:space-between;align-items:center;gap:8px;white-space:nowrap;padding:10px 0 4px;border-top:2px solid var(--border);margin-top:4px;font-weight:800;}
 </style>
 </head>
 <body>
@@ -264,7 +277,7 @@ let state = {
   activeCashRegister:null, cashRegisterChecked:false, cashRegisterLoading:false,
   openingAmountInput:"", openingError:"", openingSubmitting:false,
   cashPanelOpen:false, movementModalOpen:false, movementType:"retiro", movementAmount:"", movementNote:"", movementError:"",
-  closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"",
+  closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"", closingDenomMode:false, closingDenoms:{},
   // Cliente, ajuste por envío y notas de la venta actual.
   customers:[], activeCustomer:null, customerPickerOpen:false, customerSearchPOS:"",
   newCustomerMode:false, newCustomerName:"", newCustomerPhone:"", newCustomerAddress:"",
@@ -356,6 +369,8 @@ async function loadData(attempt){
   state.loaded = true; render();
 }
 function money(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX') + ' MXN'; }
+// Igual que money() pero conserva los centavos cuando los hay (monedas de 50 centavos en el arqueo).
+function moneyExact(n){ n=Math.round(Number(n)*100)/100; return Number.isInteger(n) ? money(n) : '$' + n.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' MXN'; }
 function icon(name, size){
   size = size || 15;
   const P = {
@@ -901,6 +916,72 @@ function renderMovementModal(){
   </div>`;
 }
 
+/* ---- Arqueo por denominaciones: cuenta billetes y monedas, y el total pasa solo a "Efectivo contado". ---- */
+const CASH_DENOMS = [
+  {k:'b1000', v:1000, label:'$1,000', group:'Billetes'}, {k:'b500', v:500, label:'$500', group:'Billetes'},
+  {k:'b200', v:200, label:'$200', group:'Billetes'}, {k:'b100', v:100, label:'$100', group:'Billetes'},
+  {k:'b50', v:50, label:'$50', group:'Billetes'}, {k:'b20', v:20, label:'$20', group:'Billetes'},
+  {k:'m20', v:20, label:'$20', group:'Monedas'}, {k:'m10', v:10, label:'$10', group:'Monedas'},
+  {k:'m5', v:5, label:'$5', group:'Monedas'}, {k:'m2', v:2, label:'$2', group:'Monedas'},
+  {k:'m1', v:1, label:'$1', group:'Monedas'}, {k:'m050', v:0.5, label:'50¢', group:'Monedas'},
+];
+function moneyCompact(n){ return moneyExact(n).replace(' MXN',''); }
+function denomTotal(){
+  const d = state.closingDenoms||{};
+  return Math.round(CASH_DENOMS.reduce((s,x)=>s+(d[x.k]||0)*x.v,0)*100)/100;
+}
+function closeDiffHtml(){
+  const s = state.closingSummary; if(!s) return '';
+  if(state.closingCountedCash.trim()==='') return '';
+  const diff = Math.round(((Number(state.closingCountedCash)||0) - s.expectedCash)*100)/100;
+  return `<div style="text-align:center;font-weight:700;margin:-4px 0 10px;color:${diff===0?'var(--green)':(diff>0?'var(--amber)':'var(--rose)')};">${diff===0?'Cuadra exacto':(diff>0?`Sobrante de ${moneyExact(diff)}`:`Faltante de ${moneyExact(Math.abs(diff))}`)}</div>`;
+}
+// Actualiza solo los números en pantalla (sin volver a dibujar todo) para no perder el foco al teclear.
+function refreshCloseTotals(){
+  if(state.closingDenomMode){
+    const t = denomTotal();
+    state.closingCountedCash = t>0 ? String(t) : '';
+    CASH_DENOMS.forEach(x=>{ const el=document.getElementById('dn-sub-'+x.k); if(el) el.textContent = moneyCompact((state.closingDenoms[x.k]||0)*x.v); });
+    const tt = document.getElementById('dn-total'); if(tt) tt.textContent = moneyExact(t);
+  }
+  const dv = document.getElementById('close-diff'); if(dv) dv.innerHTML = closeDiffHtml();
+}
+function setDenom(k, val){
+  const n = Math.max(0, Math.min(99999, parseInt(val,10)||0));
+  if(!state.closingDenoms) state.closingDenoms = {};
+  state.closingDenoms[k] = n;
+  const inp = document.getElementById('dn-in-'+k); if(inp && String(inp.value)!==String(n) && document.activeElement!==inp) inp.value = n;
+  refreshCloseTotals();
+}
+function stepDenom(k, delta){
+  const cur = (state.closingDenoms&&state.closingDenoms[k])||0;
+  setDenom(k, cur+delta);
+  const inp = document.getElementById('dn-in-'+k); if(inp) inp.value = (state.closingDenoms[k]||0);
+}
+function toggleDenomMode(){
+  state.closingDenomMode = !state.closingDenomMode;
+  if(state.closingDenomMode){ const t=denomTotal(); state.closingCountedCash = t>0 ? String(t) : ''; }
+  render();
+}
+function renderDenomBox(){
+  const d = state.closingDenoms||{};
+  let lastGroup = '';
+  const rows = CASH_DENOMS.map(x=>{
+    const head = x.group!==lastGroup ? `<div class="denom-group">${x.group}</div>` : '';
+    lastGroup = x.group;
+    const n = d[x.k]||0;
+    return `${head}<div class="denom-row">
+      <div class="denom-label">${x.label}</div>
+      <div class="denom-step">
+        <button type="button" aria-label="Quitar uno de ${x.group==='Billetes'?'billete':'moneda'} de ${x.label}" onclick="stepDenom('${x.k}',-1)">−</button>
+        <input id="dn-in-${x.k}" type="number" inputmode="numeric" min="0" step="1" value="${n||''}" placeholder="0" aria-label="Cantidad de ${x.group==='Billetes'?'billetes':'monedas'} de ${x.label}" oninput="setDenom('${x.k}',this.value)">
+        <button type="button" aria-label="Agregar uno de ${x.group==='Billetes'?'billete':'moneda'} de ${x.label}" onclick="stepDenom('${x.k}',1)">+</button>
+      </div>
+      <div class="denom-sub" id="dn-sub-${x.k}">${moneyCompact(n*x.v)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="denom-box">${rows}<div class="denom-total"><span>Total</span><span id="dn-total">${moneyExact(denomTotal())}</span></div></div>`;
+}
 async function openCashClose(){
   state.closingLoading = true; render();
   try{
@@ -921,7 +1002,7 @@ async function openCashClose(){
     const retiros = movs.filter(m=>m.type==='retiro').reduce((s,m)=>s+m.amount,0);
     const expectedCash = (state.activeCashRegister.openingAmount||0) + (byPayment['Efectivo']||0) + ingresos - retiros;
     state.closingSummary = { salesCount: sales.length, total, byPayment, ingresos, retiros, expectedCash };
-    state.closingCountedCash=''; state.closingNotes=''; state.closingError='';
+    state.closingCountedCash=''; state.closingNotes=''; state.closingError=''; state.closingDenomMode=false; state.closingDenoms={};
     state.closingOpen = true;
   }catch(e){ console.error(e); showToast('No se pudo preparar el cierre de caja'); }
   state.closingLoading=false; render();
@@ -932,7 +1013,7 @@ function renderCashCloseScreen(){
   const hasCounted = state.closingCountedCash.trim()!=='';
   const counted = Number(state.closingCountedCash)||0;
   const diff = hasCounted ? (counted - s.expectedCash) : null;
-  return `<div class="receipt-screen"><div class="receipt-card" style="max-width:400px;text-align:left;">
+  return `<div class="receipt-screen"><div class="receipt-card close-card" style="text-align:left;">
     <h2 style="text-align:center;margin-bottom:14px;">Cerrar caja</h2>
     <div class="order-detail" style="margin-bottom:12px;">
       <div><span>Cajero</span><span>${cr.cashierName}</span></div>
@@ -943,10 +1024,11 @@ function renderCashCloseScreen(){
       <div><span>Retiros de caja</span><span>-${money(s.retiros)}</span></div>
       <div style="font-weight:800;border-top:1px dashed var(--border);margin-top:6px;padding-top:6px;"><span>Efectivo esperado</span><span>${money(s.expectedCash)}</span></div>
     </div>
-    <div class="form-field"><label>Efectivo contado</label>
-      <input class="field-input" type="number" inputmode="decimal" placeholder="Ej. 1200" value="${state.closingCountedCash}" oninput="state.closingCountedCash=this.value">
-    </div>
-    ${diff!==null ? `<div style="text-align:center;font-weight:700;margin:-4px 0 10px;color:${diff===0?'var(--green)':(diff>0?'var(--amber)':'var(--rose)')};">${diff===0?'Cuadra exacto':(diff>0?`Sobrante de ${money(diff)}`:`Faltante de ${money(Math.abs(diff))}`)}</div>` : ''}
+    <button type="button" class="denom-toggle" onclick="toggleDenomMode()">${state.closingDenomMode?'Escribir el total directo':'Contar por billetes y monedas'}</button>
+    ${state.closingDenomMode ? renderDenomBox() : `<div class="form-field"><label>Efectivo contado</label>
+      <input class="field-input" type="number" inputmode="decimal" placeholder="Ej. 1200" value="${state.closingCountedCash}" oninput="state.closingCountedCash=this.value;refreshCloseTotals()">
+    </div>`}
+    <div id="close-diff">${closeDiffHtml()}</div>
     <div class="form-field"><label>Notas (opcional)</label>
       <input class="field-input" type="text" placeholder="Ej. faltó cambio al inicio del turno" value="${state.closingNotes}" oninput="state.closingNotes=this.value">
     </div>
@@ -968,6 +1050,11 @@ async function confirmCashClose(){
     expectedCash: s.expectedCash, countedCash: counted, difference: diff,
     closingNotes: state.closingNotes.trim(),
   };
+  if(state.closingDenomMode){
+    const bd = {};
+    CASH_DENOMS.forEach(x=>{ const n=(state.closingDenoms||{})[x.k]||0; if(n>0) bd[x.k]=n; });
+    if(Object.keys(bd).length) payload.countedBreakdown = bd;
+  }
   try{
     await db.collection('cashRegisters').doc(state.activeCashRegister.id).update(payload);
   }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); return; }

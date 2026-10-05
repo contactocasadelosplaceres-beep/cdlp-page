@@ -494,6 +494,7 @@
   .qty-step small{font-weight:500;font-size:11px;color:var(--ink-soft);}
   .qty-step.mini{margin-top:auto;height:36px;}
   @media(max-width:360px){.qty-step small{display:none;}}
+  .ck-hp{position:absolute!important;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;}
 </style>
 </head>
 <body>
@@ -1284,7 +1285,7 @@ function proceedToCheckout(){
     render();
     return;
   }
-  state.cartOpen=false; state.checkoutOpen=true; trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
+  state.cartOpen=false; state.checkoutOpen=true; state.checkoutOpenedAt=Date.now(); trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
 }
 function addReminderProductToCart(id){
   addToCart(id);
@@ -1295,7 +1296,7 @@ function addReminderProductToCart(id){
 function continueCheckoutWithoutReminder(){
   state.checkoutReminderShown = true;
   state.checkoutReminderOpen = false;
-  state.cartOpen=false; state.checkoutOpen=true; trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
+  state.cartOpen=false; state.checkoutOpen=true; state.checkoutOpenedAt=Date.now(); trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
 }
 function renderCheckoutReminderDrawer(){
   // Solo se sugiere lo que todavía no lleva en el carrito (ver reminderProductsNotInCart), y
@@ -1476,8 +1477,33 @@ function pickMysteryBoxItems(box, qty){
   }
   return Object.values(picks);
 }
+/* ---- Protección simple contra pedidos falsos o repetidos ----
+   Sin servidor propio no se puede garantizar nada al 100%, así que son tres frenos baratos:
+   1) un límite de pedidos por dispositivo en 24 h (configurable; 0 = sin límite),
+   2) un campo trampa invisible que solo llenan los bots, y
+   3) una señal "rápido" si el formulario se envió en menos de 4 segundos (no bloquea: solo se
+      anota en el pedido para que el panel lo marque como "Revisar").
+   El resto de las señales (teléfono dudoso, varios pedidos del mismo teléfono, etc.) las calcula
+   el panel de administración con los pedidos ya guardados. */
+const ORDER_LOG_KEY = 'cdlp_order_log';
+function fraudGuardOn(){ return state.settings.fraudGuardEnabled!==false; }
+function fraudMaxPerDay(){ const n = state.settings.fraudMaxOrdersPerDay; return (n===undefined||n===null||n==='') ? 3 : Math.max(0, Number(n)||0); }
+function recentOrderLog(){
+  try{ const arr = JSON.parse(localStorage.getItem(ORDER_LOG_KEY)||'[]'); const cut = Date.now()-24*3600*1000; return arr.filter(t=>typeof t==='number' && t>cut); }
+  catch(e){ return []; }
+}
+function recordOrderInLog(){
+  try{ const arr = recentOrderLog(); arr.push(Date.now()); localStorage.setItem(ORDER_LOG_KEY, JSON.stringify(arr)); }catch(e){}
+}
 async function submitOrder(formData){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); state.submittingOrder=false; render(); return; }
+  if(fraudGuardOn()){
+    const max = fraudMaxPerDay();
+    if(max>0 && recentOrderLog().length >= max){
+      showToast('Ya enviaste varios pedidos hoy. Escríbenos por WhatsApp y te ayudamos.');
+      state.submittingOrder=false; render(); return;
+    }
+  }
   if(state.appliedCoupon && state.appliedCoupon.singleUsePerCustomer){
     const alreadyUsed = await couponUsedByPhone(state.appliedCoupon.code, formData.phone);
     if(alreadyUsed){
@@ -1508,8 +1534,10 @@ async function submitOrder(formData){
   const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
   const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
   const orderCampaign = activeCampaign(); if(orderCampaign) order.campaign = orderCampaign;
+  if(fraudGuardOn() && state.checkoutOpenedAt && (Date.now()-state.checkoutOpenedAt) < 4000) order.fraudSignals = ['rapido'];
   try{ await db.collection('orders').add(order); }
   catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); state.submittingOrder=false; render(); return; }
+  recordOrderInLog();
   trackEvent('purchase', {orderTotal: order.total});
   clearTimeout(abandonedCartTimer);
   clearAbandonedCartDraft(formData.phone);
@@ -1530,6 +1558,11 @@ async function submitOrder(formData){
 }
 function handleCheckoutSubmit(){
   if(state.submittingOrder) return; // evita doble envío si tocan el botón varias veces
+  const trap = document.getElementById('ck-company-site');
+  if(trap && trap.value.trim()){
+    // Campo trampa lleno = bot. Se simula éxito para no darle pistas, pero no se guarda nada.
+    state.cart = {}; saveCart(); state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=null; render(); return;
+  }
   const name = document.getElementById('ck-name').value.trim();
   const phone = document.getElementById('ck-phone').value.trim();
   const address = document.getElementById('ck-address').value.trim();
@@ -3088,6 +3121,7 @@ function renderCheckoutDrawer(){
       <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
       <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="scheduleAbandonedCartSave()">${p.address||''}</textarea></div>
       <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="scheduleAbandonedCartSave()">${p.notes||''}</textarea></div>
+      <div class="ck-hp" aria-hidden="true"><label>Sitio web de tu empresa (déjalo vacío)<input id="ck-company-site" type="text" name="company_site" tabindex="-1" autocomplete="off"></label></div>
       <label class="ck-check" style="color:var(--ink-soft);margin-top:-2px;">
         <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''}>
         <span>Recordar mis datos en este celular para la próxima compra</span>
