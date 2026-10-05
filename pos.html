@@ -192,6 +192,16 @@
   .denom-step input{width:44px!important;min-width:0;height:36px;margin:0!important;padding:0 2px!important;text-align:center;font-size:16px;font-weight:700;border:1.5px solid var(--border);border-radius:10px;}
   .denom-sub{flex:1 1 0;min-width:0;text-align:right;white-space:nowrap;font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
   .denom-total{display:flex;justify-content:space-between;align-items:center;gap:8px;white-space:nowrap;padding:10px 0 4px;border-top:2px solid var(--border);margin-top:4px;font-weight:800;}
+  /* ADAPTABLE: ESCRITORIO */
+  @media(min-width:900px){
+    :root{--cart-w:400px;}
+    .app:has(.sale-panel){max-width:none;margin:0;padding-right:var(--cart-w);}
+    .app:has(.sale-panel) .prod-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));}
+    .sale-panel{left:auto;width:var(--cart-w);top:0;max-height:none;border-radius:0;border-top:0;border-left:1px solid var(--border);box-shadow:-16px 0 40px -22px rgba(43,22,32,0.28);}
+    .sale-panel .sale-arrow{display:none;}
+    .sale-head{cursor:default!important;}
+  }
+  @media(min-width:1500px){:root{--cart-w:440px;}}
 </style>
 </head>
 <body>
@@ -266,6 +276,8 @@ function splitRemaining(){
   return Math.round(saleTotal() - assigned);
 }
 
+function posDesktop(){ return window.matchMedia('(min-width:900px)').matches; }
+window.matchMedia('(min-width:900px)').addEventListener('change',()=>{ try{render()}catch(e){} });
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   loaded:false, products:[], categories:[], coupons:[], cashiers:[], centers:[], activeCenter:null,
@@ -1774,6 +1786,7 @@ function renderPOS(){
     filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
   }
   if(state.search.trim()) filtered = filtered.filter(p=>p.name.toLowerCase().includes(state.search.trim().toLowerCase()));
+  const cartCol = state.cartCollapsed && !posDesktop();
   const entries = Object.entries(state.cart);
   return `
   <div class="app">
@@ -1833,15 +1846,15 @@ function renderPOS(){
         })()}
       </div>
     </div>
-    <div class="sale-panel ${state.cartCollapsed?'collapsed':''}">
-      <div class="sale-head" onclick="state.cartCollapsed=!state.cartCollapsed;render()" style="cursor:pointer;">
+    <div class="sale-panel ${cartCol?'collapsed':''}">
+      <div class="sale-head" onclick="if(!posDesktop()){state.cartCollapsed=!state.cartCollapsed;render()}" style="cursor:pointer;">
         <h3>Venta actual (${cartCount()})</h3>
         <div style="display:flex;align-items:center;gap:10px;">
-          ${state.cartCollapsed ? `<strong style="color:var(--primary-deep);font-size:15px;">${money(saleTotal())}</strong>` : ''}
-          <span style="color:var(--ink-soft);font-size:13px;">${state.cartCollapsed?'▾':'▴'}</span>
+          ${cartCol ? `<strong style="color:var(--primary-deep);font-size:15px;">${money(saleTotal())}</strong>` : ''}
+          <span class="sale-arrow" style="color:var(--ink-soft);font-size:13px;">${cartCol?'▾':'▴'}</span>
         </div>
       </div>
-      ${!state.cartCollapsed ? `
+      ${!cartCol ? `
       <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;">
         <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="event.stopPropagation();openCustomerPicker()">${icon('user')} ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
         <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="event.stopPropagation();openDiscountModal()">${icon('percent')} ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>

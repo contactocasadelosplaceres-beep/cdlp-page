@@ -499,6 +499,59 @@
   .qty-step.mini{margin-top:auto;height:36px;}
   @media(max-width:360px){.qty-step small{display:none;}}
   .ck-hp{position:absolute!important;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;}
+  /* ===== ADAPTABLE: TABLET Y ESCRITORIO =====
+     En celular todo es una columna; aquí el contenido se centra en un ancho cómodo (1240 px), la franja
+     oscura de la bienvenida y el pie ocupan todo el ancho de la pantalla, la bienvenida pasa a dos
+     columnas, el catálogo crece a 5 columnas y la ficha del producto es una ventana centrada con la
+     foto a la izquierda en vez de un cajón angosto. */
+  .topbar-main,.search-wrap{max-width:1240px;margin-left:auto;margin-right:auto;}
+  .hero{background:none;isolation:isolate;}
+  .hero::before{content:'';position:absolute;z-index:-1;top:0;bottom:42%;left:50%;width:100vw;margin-left:-50vw;background:var(--primary-deep);}
+  .site-foot{box-shadow:0 0 0 100vmax var(--primary-deep);clip-path:inset(0 -100vmax);}
+  .hero-art{display:none;}
+  @media(min-width:720px){
+    .hero{padding:44px 20px 36px;}
+    .hero-inner{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:32px;align-items:center;padding:40px 44px;border-radius:28px;}
+    .hero h1{font-size:34px;max-width:560px;}
+    .hero p{font-size:16px;max-width:520px;margin-top:14px;}
+    .hero-actions{flex-direction:row;flex-wrap:wrap;align-items:center;max-width:none;gap:12px;margin-top:24px;}
+    .hero-btn-primary{padding:0 28px;min-width:190px;}
+    .hero-btn-outline{padding:0 24px;min-height:48px;}
+    .hero-art{display:flex;align-items:center;justify-content:center;min-height:220px;border-radius:24px;background:linear-gradient(135deg,var(--primary) 0%,var(--rose) 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.15);}
+    .hero-art img{width:min(190px,60%);height:auto;border-radius:26px;display:block;}
+  }
+  @media(min-width:900px){
+    .app{max-width:1240px;}
+    .topbar-main{padding:10px 20px;gap:18px;}
+    .search-bar-inner{padding:0 20px 10px;}
+    .brand-name{font-size:17px;}
+    .brand-sub{font-size:11.5px;}
+    .brand-mark-img,.brand-mark{width:38px;height:38px;}
+    .hero{padding:48px 20px 40px;}
+    .hero-inner{gap:40px;padding:48px 52px;}
+    .hero h1{font-size:40px;}
+    .hero p{font-size:16.5px;}
+    .hero-art{min-height:260px;}
+    .hero-art img{width:min(210px,60%);}
+    .trust-bar{max-width:900px;gap:20px;padding:22px 12px;}
+    .trust-item{flex-direction:row;font-size:13.5px;gap:10px;justify-content:center;}
+    .section-heading{font-size:24px;}
+    .drawer{max-width:440px;}
+    .drawer.drawer-detail{top:50%;left:50%;right:auto;height:min(86vh,800px);width:min(1020px,92vw);max-width:none;border-radius:22px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(43,22,32,.55);transform:translate(-50%,-46%) scale(.98);opacity:0;visibility:hidden;pointer-events:none;transition:transform .2s ease,opacity .2s ease,visibility 0s linear .2s;}
+    .drawer.drawer-detail.open{transform:translate(-50%,-50%);opacity:1;visibility:visible;pointer-events:auto;transition:transform .2s ease,opacity .2s ease;}
+    .drawer-detail .drawer-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto 1fr;align-content:start;}
+    .drawer-detail .detail-main-img-wrap{grid-column:1;grid-row:1;position:sticky;top:0;align-self:start;aspect-ratio:1/1;}
+    .drawer-detail .detail-thumbs{grid-column:1;grid-row:2;align-self:start;padding:12px 20px;}
+    .drawer-detail .detail-info{grid-column:2;grid-row:1 / span 2;padding:20px 28px 16px;}
+    .drawer-detail .detail-name{font-size:24px;}
+    .drawer-detail .detail-price{font-size:26px;}
+    .drawer-detail .detail-desc{font-size:14.5px;}
+  }
+  @media(min-width:1200px){
+    .grid{grid-template-columns:repeat(5,minmax(0,1fr));}
+    .sk-grid{grid-template-columns:repeat(5,minmax(0,1fr));}
+  }
+  @media(min-width:1600px){ .hero h1{font-size:44px;} }
 </style>
 </head>
 <body>
@@ -2452,13 +2505,16 @@ function renderHeroSection(){
   return `
   <div class="hero">
     <div class="hero-inner">
-      <h1>${state.settings.heroTitle}</h1>
-      <p>${state.settings.heroSubtitle}</p>
-      <div class="hero-actions">
-        <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Explorar catálogo</button>
-        <button class="hero-btn-outline" onclick="goToFeatured()">Ver más vendidos</button>
-        <a class="hero-btn-wa" href="${waLink('Hola, quiero conocer más de su catálogo.')}" target="_blank" rel="noopener">${icon('whatsapp',18)} Hablar por WhatsApp</a>
+      <div class="hero-copy">
+        <h1>${state.settings.heroTitle}</h1>
+        <p>${state.settings.heroSubtitle}</p>
+        <div class="hero-actions">
+          <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Explorar catálogo</button>
+          <button class="hero-btn-outline" onclick="goToFeatured()">Ver más vendidos</button>
+          <a class="hero-btn-wa" href="${waLink('Hola, quiero conocer más de su catálogo.')}" target="_blank" rel="noopener">${icon('whatsapp',18)} Hablar por WhatsApp</a>
+        </div>
       </div>
+      <div class="hero-art" aria-hidden="true"><img src="${state.settings.logoUrl || 'assets/logo.png'}" alt="" onerror="this.style.display='none'"></div>
     </div>
   </div>`;
 }
