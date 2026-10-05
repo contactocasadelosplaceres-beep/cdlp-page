@@ -571,6 +571,7 @@ const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
   announceEnabled:true, announceText:"Atendemos {horario}", announceLink:"", announceColor:"navy",
+  searchSynonyms:[],
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
@@ -1053,7 +1054,7 @@ let _settingsAuditBaseline = null;
 const SETTINGS_FIELD_LABELS = {
   duplicatesIgnored:"Productos marcados como no duplicados",
   storeName:'Nombre de la tienda', whatsapp:'WhatsApp de la tienda', schedule:'Horario',
-  announceEnabled:'Barra de anuncio visible', announceText:'Texto de la barra de anuncio', announceLink:'Enlace de la barra de anuncio', announceColor:'Color de la barra de anuncio',
+  searchSynonyms:'Sinónimos del buscador', announceEnabled:'Barra de anuncio visible', announceText:'Texto de la barra de anuncio', announceLink:'Enlace de la barra de anuncio', announceColor:'Color de la barra de anuncio',
   heroTitle:'Título principal', heroSubtitle:'Subtítulo principal', categories:'Categorías',
   hiddenCategories:'Categorías ocultas', needs:'Necesidades/etiquetas', sections:'Secciones visibles',
   headerSubtitle:'Subtítulo del encabezado', showHeaderSubtitle:'Mostrar subtítulo del encabezado',
@@ -9930,6 +9931,7 @@ const CONFIG_SUBPANEL_GROUPS = [
     {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos)'},
     {key:'encuesta', icon:icon('message-square'), label:'Encuesta post-entrega'},
     {key:'asistente', icon:icon('message-circle'), label:'Asistente IA'},
+    {key:'sinonimos', icon:icon('search'), label:'Sinónimos del buscador'},
   ]},
   { title: "Seguridad", items: [
     {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
@@ -10113,9 +10115,56 @@ function renderSystemErrorsSubpanel(){
 }
 function renderConfigSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.configSubpanel=null;render()">‹ Volver a Configuración</button>`;
-  const map = {operativo: renderOperativoSubpanel, encuesta: renderSurveySubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel, errores: renderSystemErrorsSubpanel};
+  const map = {operativo: renderOperativoSubpanel, sinonimos: renderSynonymsSubpanel, encuesta: renderSurveySubpanel, asistente: renderAsistenteIA, seguridad: renderTotpSubpanel, herramientas: renderHerramientasSubpanel, exportar: renderExportSubpanel, errores: renderSystemErrorsSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
+
+/* ============== SINÓNIMOS DEL BUSCADOR ==============
+   Una línea por grupo, palabras separadas por coma: "consolador, dildo". En la tienda, buscar
+   cualquiera de ellas encuentra los productos de todas. Abajo se sugieren las palabras que tus
+   clientes buscaron y no encontraron (de "Búsquedas sin resultado"), para convertirlas en grupos. */
+const SYNONYM_EXAMPLES = ['consolador, dildo', 'esposas, ataduras', 'lenceria, babydoll, body', 'juguete, juguetes sexuales'];
+function synonymLines(){ return (state.settings.searchSynonyms||[]).join('\n'); }
+function renderSynonymsSubpanel(){
+  const misses = computeSearchMisses(30).slice(0,12);
+  return `
+  <div class="panel">
+    <div class="panel-title">${icon('search',15)} Sinónimos del buscador</div>
+    <div class="panel-sub">Enséñale al buscador de tu tienda que distintas palabras significan lo mismo. Escribe un grupo por línea, separando las palabras con coma. Ejemplo: <b>consolador, dildo</b>. Así, quien busque “consolador” también verá los productos que se llaman “dildo” (y al revés). Los acentos y las mayúsculas no importan.</div>
+    <div class="form-field"><label>Grupos de sinónimos</label>
+      <textarea id="syn-text" rows="8" placeholder="consolador, dildo&#10;esposas, ataduras" style="font-family:inherit;">${synonymLines().replace(/</g,'&lt;')}</textarea>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <button class="btn-tertiary" onclick="addSynonymExamples()">+ Agregar ejemplos</button>
+    </div>
+    <button class="btn-primary" onclick="saveSynonyms()">Guardar</button>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Lo que buscan tus clientes y no encuentran</div>
+    <div class="panel-sub">Últimos 30 días. Toca una palabra para agregarla como un grupo nuevo y escribe después de la coma cómo se llama en tu catálogo.</div>
+    ${misses.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${misses.map(m=>`<button class="seg-chip" onclick="addSynonymSeed(decodeURIComponent('${attrEnc(m.term)}'))">${(m.term||'').replace(/</g,'&lt;')} <span style="opacity:.6;">×${m.count}</span></button>`).join('')}</div>` : `<div class="empty-state" style="padding:20px;">Todavía no hay búsquedas sin resultado.</div>`}
+  </div>`;
+}
+function addSynonymExamples(){
+  const ta = document.getElementById('syn-text'); if(!ta) return;
+  const have = ta.value.split('\n').map(x=>x.trim().toLowerCase());
+  const add = SYNONYM_EXAMPLES.filter(x=>!have.includes(x));
+  if(!add.length){ showToast('Los ejemplos ya están'); return; }
+  ta.value = (ta.value.trim() ? ta.value.replace(/\s+$/,'') + '\n' : '') + add.join('\n');
+  ta.focus();
+}
+function addSynonymSeed(term){
+  const ta = document.getElementById('syn-text'); if(!ta) return;
+  ta.value = (ta.value.trim() ? ta.value.replace(/\s+$/,'') + '\n' : '') + term + ', ';
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function saveSynonyms(){
+  const lines = (document.getElementById('syn-text').value||'').split('\n')
+    .map(l=>l.split(',').map(x=>x.trim()).filter(Boolean).join(', '))
+    .filter(l=>l.split(', ').length>=2);
+  saveSettingsForm({ searchSynonyms: lines });
+}
+
 function renderOperativoSubpanel(){
   const s = state.settings;
   return `

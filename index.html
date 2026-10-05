@@ -482,6 +482,18 @@
   .quiz-opt:active,.quiz-opt.active{border-color:var(--rose);background:#FBEFF3;color:var(--rose);}
   .quiz-skip{border-style:dashed;color:var(--ink-soft);font-weight:500;}
   .quiz-sum{font-size:13px;color:var(--ink-soft);margin-bottom:10px;}
+
+  /* ===== Ahorro y selector de cantidad ===== */
+  .card-save{font-size:12px;font-weight:700;color:var(--green);margin-top:2px;}
+  .detail-save{display:inline-block;background:#EAF3D8;color:var(--green);font-weight:700;font-size:13px;padding:4px 10px;border-radius:999px;margin-bottom:8px;}
+  .save-row{display:flex;align-items:center;justify-content:center;gap:6px;background:#EAF3D8;color:var(--green);font-weight:700;font-size:13px;padding:8px 10px;border-radius:8px;margin-bottom:8px;}
+  .qty-step{margin-top:8px;height:38px;border-radius:8px;border:1.5px solid var(--rose);background:#fff;display:flex;align-items:center;justify-content:space-between;overflow:hidden;}
+  .qty-step button{width:44px;height:100%;background:none;border:0;color:var(--rose);font-size:20px;font-weight:700;line-height:1;cursor:pointer;font-family:inherit;flex:none;}
+  .qty-step button:active{background:#FBEFF3;}
+  .qty-step span{flex:1;text-align:center;font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;}
+  .qty-step small{font-weight:500;font-size:11px;color:var(--ink-soft);}
+  .qty-step.mini{margin-top:auto;height:36px;}
+  @media(max-width:360px){.qty-step small{display:none;}}
 </style>
 </head>
 <body>
@@ -581,6 +593,7 @@ const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
   announceEnabled:true, announceText:"Atendemos {horario}", announceLink:"", announceColor:"navy",
+  searchSynonyms:[],
   heroTitle:"Descubre nuevas formas de disfrutar.",
   heroSubtitle:"Explora nuestro catálogo, recibe tu pedido en la comodidad de tu casa y compra con total discreción.",
   categories:[...DEFAULT_CATEGORIES],
@@ -1800,6 +1813,7 @@ function renderProductDetailDrawer(){
         <div class="detail-cat">${productCats(p).join(' · ')}</div>
         <h2 class="detail-name">${p.name}</h2>
         <div class="detail-price">${p.promoPrice>0 && p.promoPrice<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
+        ${(!matchedVariant || !(matchedVariant.priceOverride>0)) && savingsLabel(p) ? `<div class="detail-save">${savingsLabel(p)}</div>` : ''}
         ${renderPromoCountdownBadge(p) ? `<div style="margin-bottom:8px;">${renderPromoCountdownBadge(p)}</div>` : ''}
         ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
         ${hasVariants ? `
@@ -1933,15 +1947,94 @@ function productSearchScore(p, tokens, full){
   }
   return score;
 }
+// Sinónimos configurables (Admin → Configuración → Sinónimos del buscador): cada línea es un grupo
+// de palabras que significan lo mismo ("consolador, dildo"). Buscar una equivale a buscar todas;
+// los resultados por sinónimo salen justo después de los que coinciden con lo escrito tal cual.
+let _synSig = '', _synGroups = [];
+function synonymGroups(){
+  const raw = state.settings.searchSynonyms;
+  const sig = JSON.stringify(raw||[]);
+  if(sig!==_synSig){
+    _synSig = sig;
+    _synGroups = (Array.isArray(raw)?raw:[]).map(line=>String(line).split(',').map(x=>searchClean(x)).filter(Boolean)).filter(g=>g.length>=2);
+  }
+  return _synGroups;
+}
+function queryVariants(full){
+  const out = [full], groups = synonymGroups();
+  if(!groups.length) return out;
+  const tokens = full.split(' ');
+  groups.forEach(g=>{
+    g.forEach((phrase,pi)=>{
+      let build = null;
+      if((' '+full+' ').includes(' '+phrase+' ')) build = (other)=>(' '+full+' ').replace(' '+phrase+' ', ' '+other+' ').trim();
+      else if(!phrase.includes(' ')){
+        const t = tokens.find(x=>x.length>=4 && phrase.startsWith(x)); // a medio escribir ("consol…")
+        if(t) build = (other)=>tokens.map(x=>x===t?other:x).join(' ');
+      }
+      if(!build) return;
+      g.forEach((other,oi)=>{ if(oi!==pi){ const v = build(other); if(v && !out.includes(v)) out.push(v); } });
+    });
+  });
+  return out.slice(0, 8);
+}
 function searchProducts(q, pool){
   const full = searchClean(q);
   const tokens = full.split(' ').filter(Boolean);
   const list = pool || state.products;
   if(!tokens.length) return list;
+  const variants = queryVariants(full).map(v=>({v, toks:v.split(' ').filter(Boolean)}));
   const out = [];
-  list.forEach((p,i)=>{ const sc = productSearchScore(p, tokens, full); if(sc>=0) out.push({p, sc, i}); });
+  list.forEach((p,i)=>{
+    let best = -1;
+    variants.forEach((x,vi)=>{
+      const sc = productSearchScore(p, x.toks, x.v);
+      if(sc>=0){ const adj = vi===0 ? sc : sc-0.5; if(adj>best) best = adj; }
+    });
+    if(best>=0) out.push({p, sc:best, i});
+  });
   out.sort((a,b)=> b.sc-a.sc || a.i-b.i);
   return out.map(x=>x.p);
+}
+
+/* ============== "AHORRAS $X" ==============
+   Diferencia entre el precio de lista y lo que de verdad se paga (promoción del producto,
+   promociones automáticas, mayoreo y cupón). Solo es un aviso: no cambia ningún precio. */
+function moneyShort(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX'); }
+function listPriceOf(p, v){ return v && v.priceOverride>0 ? v.priceOverride : p.price; }
+function unitSavings(p){ const s = p.price - automaticDiscountedPrice(p); return s>=1 ? s : 0; }
+function cartSavings(){
+  let total = 0;
+  Object.entries(state.cart).forEach(([key,qty])=>{
+    const {p,v} = parseCartKey(key); if(!p) return;
+    let price = v ? (v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p)) : automaticDiscountedPrice(p);
+    price = couponDiscountedPrice(p, price);
+    const diff = listPriceOf(p,v) - price;
+    if(diff>0) total += diff*qty;
+  });
+  total += buyXPayYAdjustment();
+  return Math.round(total);
+}
+function savingsLabel(p){
+  const sv = unitSavings(p);
+  if(!sv) return '';
+  return `Ahorras ${moneyShort(sv)} (−${Math.round(sv/p.price*100)}%)`;
+}
+
+/* ============== CANTIDAD − / + EN LA TARJETA ==============
+   Después de agregar un producto (sin variantes), el botón "Agregar" se convierte en un
+   selector de cantidad, para sumar o quitar piezas sin abrir el carrito. */
+function cardAction(p, kind){
+  const base = kind==='mini' ? 'rel-add' : 'card-add';
+  const hasVariants = p.variantGroups && p.variantGroups.length>0;
+  if(p.stock<=0) return `<button class="${base}" disabled>Agotado</button>`;
+  if(hasVariants) return `<button class="${base} alt" onclick="event.stopPropagation();openProductDetail('${p.id}')">Elegir opciones</button>`;
+  const key = cartKey(p.id, null), qty = state.cart[key] || 0;
+  if(qty>0) return `<div class="qty-step ${kind==='mini'?'mini':''}" onclick="event.stopPropagation()">
+    <button aria-label="Quitar una pieza" onclick="event.stopPropagation();changeQty('${key}',-1)">−</button>
+    <span aria-live="polite">${qty} <small>en tu carrito</small></span>
+    <button aria-label="Agregar una pieza más" onclick="event.stopPropagation();addToCart('${p.id}')">+</button></div>`;
+  return `<button class="${base}" onclick="event.stopPropagation();addToCart('${p.id}')">Agregar</button>`;
 }
 
 /* ============== POPULARES Y TARJETAS CHICAS ============== */
@@ -1969,7 +2062,7 @@ function renderMiniCard(p, opts){
     <div class="rel-img">${img}</div>
     <div class="rel-name">${p.name}</div>
     <div class="rel-price">${money(automaticDiscountedPrice(p))}</div>
-    ${isKioskMode() ? '' : `<button class="rel-add ${hasVariants?'alt':''}" onclick="event.stopPropagation();${hasVariants?`${pre}openProductDetail('${p.id}')`:`addToCart('${p.id}')`}">${hasVariants?'Elegir opciones':'Agregar'}</button>`}
+    ${isKioskMode() ? '' : cardAction(p,'mini')}
   </div>`;
 }
 
@@ -2652,7 +2745,8 @@ function renderProductCard(p, forceBest){
           <h3 class="card-name">${p.name}</h3>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
           <div class="card-price">${automaticDiscountedPrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:500;font-size:12px;margin-right:5px;">${money(p.price)}</s>${money(automaticDiscountedPrice(p))}` : money(p.price)}</div>
-          ${isKioskMode() ? '' : `<button class="card-add ${hasVariants&&p.stock>0?'alt':''}" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();${hasVariants?`openProductDetail('${p.id}')`:`addToCart('${p.id}')`}">${p.stock<=0?'Agotado':hasVariants?'Elegir opciones':'Agregar'}</button>`}
+          ${savingsLabel(p) ? `<div class="card-save">${savingsLabel(p)}</div>` : ''}
+          ${isKioskMode() ? '' : cardAction(p,'card')}
         </div>
       </div>`;
 }
@@ -2943,6 +3037,7 @@ function renderCartDrawer(){
     </div>
     <div class="drawer-foot">
       ${state.settings.shippingNote ? `<div class="ship-badge">${icon('truck',15)} <span>${state.settings.shippingNote}</span></div>` : ''}
+      ${cartSavings()>0 ? `<div class="save-row">${icon('check',14)} Ahorras ${money(cartSavings())} en este pedido</div>` : ''}
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
       <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="proceedToCheckout()">Continuar pedido</button>
     </div>`;
