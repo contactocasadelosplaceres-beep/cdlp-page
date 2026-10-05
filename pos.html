@@ -208,6 +208,54 @@
     .sale-head{cursor:default!important;}
   }
   @media(min-width:1500px){:root{--cart-w:440px;}}
+
+  /* REDISEÑO PANTALLA DE VENTA (escritorio/tablet): buscar primero, catálogo en ventana, carrito plegable */
+  @media(min-width:900px){
+    .app.dk-closed{padding-right:0;}
+    .dk-main{flex:1;min-height:0;overflow-y:auto;padding:22px 26px 40px;display:flex;flex-direction:column;gap:18px;max-width:980px;width:100%;margin:0 auto;}
+    .dk-search{display:flex;gap:10px;align-items:stretch;}
+    .dk-search .search-row{flex:1;min-width:0;}
+    .dk-search .search-row input{padding-top:17px;padding-bottom:17px;font-size:17px;}
+    .dk-catbtn{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;padding:0 22px;border-radius:var(--radius-md);background:var(--primary-deep);color:#fff;font-weight:700;font-size:14px;border:0;cursor:pointer;}
+    .dk-catbtn:hover{filter:brightness(1.1);}
+    .dk-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+    .dk-tile{display:flex;align-items:center;gap:12px;text-align:left;padding:14px;border-radius:var(--radius-md);background:var(--surface);border:1.5px solid var(--border);cursor:pointer;min-width:0;transition:border-color .15s,box-shadow .15s,transform .1s;}
+    .dk-tile:hover{border-color:var(--primary);box-shadow:var(--shadow-sm);}
+    .dk-tile:active{transform:scale(.98);}
+    .dk-tile.active{border-color:var(--primary);background:var(--surface-soft);}
+    .dk-ic{flex:0 0 40px;height:40px;border-radius:12px;background:var(--surface-soft);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;}
+    .dk-tile.active .dk-ic{background:var(--primary-deep);color:#fff;}
+    .dk-tx{min-width:0;display:flex;flex-direction:column;gap:2px;}
+    .dk-tx b{font-size:14px;color:var(--ink);}
+    .dk-tx small{font-size:12px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .dk-ghost{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:var(--radius-md);background:var(--surface);border:1.5px solid var(--border);color:var(--primary-deep);font-weight:700;font-size:14px;cursor:pointer;}
+    .dk-ghost:hover{border-color:var(--primary);}
+    .catalog-modal>*{flex-shrink:0;}
+    .catalog-modal .catalog-grid{flex-shrink:1;}
+    .dk-hint{margin:auto;text-align:center;max-width:420px;padding:30px 10px;color:var(--ink-soft);}
+    .dk-hint-ic{width:74px;height:74px;border-radius:50%;background:var(--surface-soft);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+    .dk-hint h3{font-size:20px;color:var(--ink);margin-bottom:6px;}
+    .dk-hint p{font-size:13.5px;line-height:1.5;margin-bottom:18px;}
+    .dk-hint-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+    .dk-results-head{font-size:13.5px;color:var(--ink-soft);display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+    .dk-link{background:none;border:0;color:var(--primary-deep);font-weight:700;cursor:pointer;margin-left:auto;font-size:13px;}
+    .dk-results,.catalog-grid{padding:0;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));}
+    .dk-cart .sale-head{display:flex;align-items:center;justify-content:space-between;}
+    .dk-hide{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;color:var(--ink-soft);background:var(--surface-soft);border:0;border-radius:var(--radius-sm);padding:8px 12px;cursor:pointer;}
+    .dk-hide:hover{color:var(--primary-deep);}
+    .dk-meta{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 10px;}
+    .dk-empty{display:flex;flex-direction:column;align-items:stretch;text-align:center;padding:40px 22px;color:var(--ink-soft);}
+    .dk-empty svg{align-self:center;margin-bottom:10px;opacity:.55;}
+    .dk-empty h4{font-size:17px;color:var(--ink);margin-bottom:4px;}
+    .dk-empty p{font-size:13px;margin-bottom:18px;}
+    .cart-fab{position:fixed;right:20px;bottom:20px;z-index:40;display:inline-flex;align-items:center;gap:10px;padding:14px 20px;border-radius:999px;background:var(--primary-deep);color:#fff;font-weight:700;font-size:14px;border:0;cursor:pointer;box-shadow:0 12px 30px -10px rgba(43,22,32,.5);}
+    .cart-fab-n{background:#fff;color:var(--primary-deep);border-radius:999px;min-width:24px;height:24px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;font-size:12.5px;}
+    .catalog-modal{max-width:1040px;width:92vw;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;padding:20px 22px;border-radius:var(--radius-lg);}
+    .catalog-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+    .catalog-head h3{margin:0;}
+    .catalog-grid{flex:1;min-height:0;overflow-y:auto;align-content:start;}
+    .catalog-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;margin-top:10px;border-top:1px solid var(--border);font-size:14px;}
+  }
 </style>
 </head>
 <body>
@@ -1212,6 +1260,7 @@ function addToCart(id){
   const wasEmpty = cartCount()===0; // primer producto de esta venta: se abre solo para que se note
   state.cart[id]=(state.cart[id]||0)+1;
   if(wasEmpty) state.cartCollapsed=false;
+  state.cartPanelOpen=true;
   trackFrequent(id); savePosCart(); render();
 }
 function pickVariant(variantId){
@@ -1223,6 +1272,7 @@ function pickVariant(variantId){
   state.cart[key] = (state.cart[key]||0)+1;
   state.variantPickerProduct = null;
   if(wasEmpty) state.cartCollapsed = false;
+  state.cartPanelOpen=true;
   trackFrequent(p.id);
   savePosCart(); render();
 }
@@ -1810,6 +1860,158 @@ function renderCenterSelect(){
 }
 
 const FREQUENT_CAT = '__frecuentes__';
+
+function posProdCard(p){
+  const hasVariants = p.variantGroups && p.variantGroups.length>0;
+  const hasPromo = effectivePrice(p)<p.price;
+  const stock = hasVariants ? null : centerStock(p, state.activeCenter.id);
+  const outOfStock = !hasVariants && stock<=0;
+  return `
+  <div class="prod-card ${outOfStock?'out-of-stock':''}" ${outOfStock?'':`onclick="addToCart('${p.id}')"`}>
+    ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
+    <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
+    <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(effectivePrice(p))}`:money(p.price)}</div>
+    <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
+  </div>`;
+}
+function renderProdGrid(list){
+  if(state.prodGridLimit==null) state.prodGridLimit=PROD_GRID_PAGE_SIZE;
+  const visible = list.slice(0, state.prodGridLimit);
+  const remaining = list.length - visible.length;
+  return visible.map(posProdCard).join('') + (remaining>0 ? `<button class="btn-ver-mas-pos" onclick="state.prodGridLimit+=PROD_GRID_PAGE_SIZE;render()">Ver más (${remaining} más)</button>` : '');
+}
+function renderSaleItems(entries, emptyHtml){
+  return entries.length===0 ? emptyHtml :
+    entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price=itemPrice(p,v); return `
+      <div class="sale-item">
+        <div class="name">${p.name}${v?` <span style="color:var(--ink-soft);">(${variantLabel(v)})</span>`:''}</div>
+        <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',-1)">−</button>
+        <div>${qty}</div>
+        <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',1)">+</button>
+        <div style="width:70px;text-align:right;font-weight:600;white-space:nowrap;flex-shrink:0;">${money(price*qty)}</div>
+      </div>`;}).join('');
+}
+function renderSaleFoot(entries){
+  return `
+      <div class="sale-foot" onclick="event.stopPropagation();">
+        ${state.manualDiscount ? `
+          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:2px;"><span>Subtotal</span><span>${money(cartTotal())}</span></div>
+          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
+        ` : ''}
+        <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
+        <div class="pay-row pay-methods">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
+        ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
+        <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
+      </div>`;
+}
+
+/* ---- ESCRITORIO / TABLET (≥900px): pantalla de venta "buscar primero" ----
+   El catálogo no se muestra de entrada: se busca/escanea, o se abre el catálogo en una ventana.
+   El panel "Venta actual" se puede ocultar y volver a abrir. En celular se conserva el diseño original. */
+function setCartPanel(open){ state.cartPanelOpen = !!open; render(); }
+function openCatalog(cat){
+  if(cat) state.activeCat = cat;
+  state.catalogOpen = true; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render();
+  const i = document.getElementById('cat-search-input'); if(i) i.focus();
+}
+function closeCatalog(){ state.catalogOpen = false; state.catSearch = ''; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render(); }
+function onCatSearchInput(v){
+  state.catSearch = v; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render();
+  const i = document.getElementById('cat-search-input'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+function posSearchMatches(q){
+  q = (q||'').trim().toLowerCase(); if(!q) return [];
+  return state.products.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+}
+function renderCatalogModal(){
+  const cats = ["Todos", ...state.categories];
+  const frequentIds = getFrequentProductIds();
+  let list;
+  if(state.activeCat===FREQUENT_CAT){
+    const byId = {}; state.products.forEach(p=>byId[p.id]=p);
+    list = frequentIds.map(id=>byId[id]).filter(Boolean);
+  } else list = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
+  const q = (state.catSearch||'').trim().toLowerCase();
+  if(q) list = list.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  return `
+  <div class="modal-overlay" onclick="closeCatalog()">
+    <div class="modal catalog-modal" onclick="event.stopPropagation()">
+      <div class="catalog-head">
+        <h3>Agregar productos</h3>
+        <button class="icon-btn" aria-label="Cerrar" onclick="closeCatalog()">${icon('x',18)}</button>
+      </div>
+      <div class="search-row">${icon('search',17)}<input id="cat-search-input" placeholder="Filtrar el catálogo…" value="${(state.catSearch||'').replace(/"/g,'&quot;')}" oninput="onCatSearchInput(this.value)"></div>
+      <div class="cats" style="margin:10px 0 12px;">
+        ${frequentIds.length ? `<button class="cat-chip ${state.activeCat===FREQUENT_CAT?'active':''}" onclick="state.activeCat='${FREQUENT_CAT}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${icon('star',13)} Frecuentes</button>` : ''}
+        ${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${c}</button>`).join('')}
+      </div>
+      <div class="prod-grid catalog-grid">${list.length ? renderProdGrid(list) : `<div class="empty-cart" style="grid-column:1/-1;">No hay productos con ese filtro.</div>`}</div>
+      <div class="catalog-foot">
+        <span>${cartCount()} en la venta · <strong>${money(saleTotal())}</strong></span>
+        <button class="btn-primary" style="width:auto;margin:0;padding:12px 26px;" onclick="closeCatalog()">Listo</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderDeskMain(){
+  const res = posSearchMatches(state.search);
+  const q = state.search.trim();
+  const tile = (ic,label,sub,on,act,active)=>`<button class="dk-tile ${active?'active':''}" onclick="${act}"><span class="dk-ic">${icon(ic,20)}</span><span class="dk-tx"><b>${label}</b><small>${sub}</small></span></button>`;
+  const disc = state.manualDiscount ? (state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))) : 'Cupón o monto';
+  return `
+  <div class="dk-main">
+    <div class="dk-search">
+      <div class="search-row">${icon('search',17)}<input id="pos-search-input" placeholder="Buscar producto o escanear código de barras…" value="${state.search.replace(/"/g,'&quot;')}" oninput="onPosSearchInput(this.value)" onkeydown="handlePosSearchKeydown(event)" autocomplete="off"><button class="icon-btn scan-btn" title="Escanear con la cámara" onclick="openBarcodeScanner()">${icon('camera',18)}</button></div>
+      <button class="dk-catbtn" onclick="openCatalog()">${icon('layers',17)} Catálogo</button>
+    </div>
+    <div class="dk-tiles">
+      ${tile('user','Cliente',state.activeCustomer?state.activeCustomer.name:'Agregar o buscar',0,'openCustomerPicker()',!!state.activeCustomer)}
+      ${tile('percent','Descuento',disc,0,'openDiscountModal()',!!state.manualDiscount)}
+      ${tile('file-text','Notas',state.saleNotes?'Nota agregada':'Agregar nota',0,'openNotesModal()',!!state.saleNotes)}
+      ${tile('star','Frecuentes','Los más vendidos',0,`openCatalog('${FREQUENT_CAT}')`,false)}
+      ${tile('refresh-cw','Cambio','Cambio de producto',0,'openExchangeModal()',false)}
+      ${tile('map-pin','Almacén','Ver existencias',0,'openWarehouseView()',false)}
+    </div>
+    ${q ? `
+      <div class="dk-results-head"><b>${res.length} resultado${res.length===1?'':'s'}</b> para “${q.replace(/</g,'&lt;')}” <button class="dk-link" onclick="state.search='';render()">Limpiar</button></div>
+      <div class="prod-grid dk-results">${res.length ? renderProdGrid(res) : `<div class="empty-cart" style="grid-column:1/-1;">Ningún producto coincide. Prueba con otra palabra o abre el catálogo.</div>`}</div>
+    ` : `
+      <div class="dk-hint">
+        <div class="dk-hint-ic">${icon('search',34)}</div>
+        <h3>Empieza una venta</h3>
+        <p>Escribe el nombre, escanea el código de barras o abre el catálogo para agregar productos al carrito.</p>
+        <div class="dk-hint-btns">
+          <button class="btn-primary" style="width:auto;margin:0;padding:12px 22px;" onclick="openCatalog()">${icon('layers',16)} Abrir catálogo</button>
+          <button class="dk-ghost" onclick="openBarcodeScanner()">${icon('camera',16)} Escanear</button>
+        </div>
+      </div>`}
+  </div>`;
+}
+function renderDeskCart(entries){
+  const open = state.cartPanelOpen!==false;
+  const n = cartCount();
+  const fab = `<button class="cart-fab" onclick="setCartPanel(true)" aria-label="Abrir venta actual">${icon('receipt',18)}<span>Venta actual</span>${n?`<span class="cart-fab-n">${n}</span><b>${money(saleTotal())}</b>`:''}</button>`;
+  if(!open) return fab;
+  const empty = `<div class="dk-empty">${icon('receipt',40)}<h4>Carrito vacío</h4><p>Agrega productos para empezar la venta.</p>
+    <button class="btn-primary" style="margin:0 0 8px;" onclick="openCatalog()">${icon('layers',16)} Agregar productos</button>
+    <button class="dk-ghost" style="width:100%;justify-content:center;" onclick="openBarcodeScanner()">${icon('camera',16)} Escanear productos</button></div>`;
+  const meta = [
+    state.activeCustomer ? `<button class="cat-chip active" onclick="openCustomerPicker()">${icon('user')} ${state.activeCustomer.name}</button>`:'',
+    state.manualDiscount ? `<button class="cat-chip active" onclick="openDiscountModal()">${icon('percent')} ${state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))}</button>`:'',
+    state.saleNotes ? `<button class="cat-chip active" onclick="openNotesModal()">${icon('file-text')} Notas ${icon('check',12)}</button>`:''
+  ].join('');
+  return `
+    <div class="sale-panel dk-cart">
+      <div class="sale-head">
+        <h3>Venta actual (${n})</h3>
+        <button class="dk-hide" onclick="setCartPanel(false)" aria-label="Ocultar venta actual" title="Ocultar">Ocultar ${icon('chevron-right',15)}</button>
+      </div>
+      ${meta ? `<div class="dk-meta">${meta}</div>` : ''}
+      <div class="sale-items">${renderSaleItems(entries, empty)}</div>
+      ${renderSaleFoot(entries)}
+    </div>`;
+}
+
 function renderPOS(){
   const cats = ["Todos", ...state.categories];
   const frequentIds = getFrequentProductIds();
@@ -1821,10 +2023,11 @@ function renderPOS(){
     filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
   }
   if(state.search.trim()) filtered = filtered.filter(p=>p.name.toLowerCase().includes(state.search.trim().toLowerCase()));
-  const cartCol = state.cartCollapsed && !posDesktop();
+  const desk = posDesktop();
+  const cartCol = state.cartCollapsed && !desk;
   const entries = Object.entries(state.cart);
   return `
-  <div class="app">
+  <div class="app ${desk?'dk':''} ${desk&&state.cartPanelOpen===false?'dk-closed':''}">
     ${state.posOffline ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;margin-bottom:10px;">${icon('alert-triangle',14)} Sin conexión — puedes seguir vendiendo, las ventas se guardan en este dispositivo y se suben solas cuando regrese el internet.</div>`
       : state.offlineQueueCount>0 ? `<div class="note-box" style="background:#EAF3D8;color:#3d5c1a;margin-bottom:10px;">${icon('history',14)} Sincronizando ${state.offlineQueueCount} venta(s) pendiente(s) de cuando no había internet…</div>` : ''}
     <div class="top">
@@ -1853,7 +2056,7 @@ function renderPOS(){
       ${icon('alert-triangle',15)} Esta caja se abrió el ${new Date(state.activeCashRegister.openedAt).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} y sigue abierta — ¿se te olvidó cerrarla la última vez?
       <button onclick="state.cashPanelOpen=true;render()">Ver caja</button>
     </div>` : ''}
-    <div class="pos-body">
+    ${desk ? renderDeskMain() : `<div class="pos-body">
       <div class="toolbar">
         <div class="search-row">${icon('search',17)}<input id="pos-search-input" placeholder="Buscar o escanear código..." value="${state.search}" oninput="onPosSearchInput(this.value)" onkeydown="handlePosSearchKeydown(event)"><button class="icon-btn scan-btn" title="Escanear con la cámara" onclick="openBarcodeScanner()">${icon('camera',18)}</button></div>
         <div class="cats">
@@ -1862,26 +2065,10 @@ function renderPOS(){
         </div>
       </div>
       <div class="prod-grid">
-        ${(()=>{ if(state.prodGridLimit==null) state.prodGridLimit=PROD_GRID_PAGE_SIZE;
-          const visible = filtered.slice(0, state.prodGridLimit);
-          const remaining = filtered.length - visible.length;
-          return visible.map(p=>{
-          const hasVariants = p.variantGroups && p.variantGroups.length>0;
-          const hasPromo = effectivePrice(p)<p.price;
-          const stock = hasVariants ? null : centerStock(p, state.activeCenter.id);
-          const outOfStock = !hasVariants && stock<=0;
-          return `
-          <div class="prod-card ${outOfStock?'out-of-stock':''}" ${outOfStock?'':`onclick="addToCart('${p.id}')"`}>
-            ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
-            <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
-            <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(effectivePrice(p))}`:money(p.price)}</div>
-            <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
-          </div>`;
-        }).join('') + (remaining>0 ? `<button class="btn-ver-mas-pos" onclick="state.prodGridLimit+=PROD_GRID_PAGE_SIZE;render()">Ver más (${remaining} más)</button>` : '');
-        })()}
+        ${renderProdGrid(filtered)}
       </div>
-    </div>
-    <div class="sale-panel ${cartCol?'collapsed':''}">
+    </div>`}
+    ${desk ? renderDeskCart(entries) : `<div class="sale-panel ${cartCol?'collapsed':''}">
       <div class="sale-head" onclick="if(!posDesktop()){state.cartCollapsed=!state.cartCollapsed;render()}" style="cursor:pointer;">
         <h3>Venta actual (${cartCount()})</h3>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -1896,29 +2083,13 @@ function renderPOS(){
         <button class="cat-chip ${state.saleNotes?'active':''}" onclick="event.stopPropagation();openNotesModal()">${icon('file-text')} ${state.saleNotes?'Notas '+icon('check',12):'Notas'}</button>
       </div>
       <div class="sale-items">
-        ${entries.length===0 ? `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>` :
-          entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return ''; const price=itemPrice(p,v); return `
-            <div class="sale-item">
-              <div class="name">${p.name}${v?` <span style="color:var(--ink-soft);">(${variantLabel(v)})</span>`:''}</div>
-              <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',-1)">−</button>
-              <div>${qty}</div>
-              <button class="qty-btn" onclick="event.stopPropagation();changeQty('${key}',1)">+</button>
-              <div style="width:70px;text-align:right;font-weight:600;white-space:nowrap;flex-shrink:0;">${money(price*qty)}</div>
-            </div>`;}).join('')}
+        ${renderSaleItems(entries, `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>`)}
       </div>
-      <div class="sale-foot" onclick="event.stopPropagation();">
-        ${state.manualDiscount ? `
-          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:2px;"><span>Subtotal</span><span>${money(cartTotal())}</span></div>
-          <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
-        ` : ''}
-        <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
-        <div class="pay-row pay-methods">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
-        ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
-        <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
-      </div>
+      ${renderSaleFoot(entries)}
       ` : ''}
-    </div>
+    </div>`}
   </div>
+  ${desk && state.catalogOpen ? renderCatalogModal() : ''}
   ${state.variantPickerProduct ? renderVariantPickerModal() : ''}`;
 }
 
@@ -2127,9 +2298,10 @@ function navLayers(){
   if(s.movementModalOpen) L.push(()=>{ s.movementModalOpen=false; render(); });
   if(s.cashPanelOpen) L.push(()=>{ s.cashPanelOpen=false; render(); });
   if(s.variantPickerProduct) L.push(()=>{ s.variantPickerProduct=null; render(); });
+  if(s.catalogOpen && posDesktop()) L.push(()=>closeCatalog());
   if(s.closingOpen) L.push(()=>{ s.closingOpen=false; render(); });
   if(s.saleDone) L.push(()=>newSale());
-  else if(!s.closingOpen && s.cartCollapsed===false) L.push(()=>{ s.cartCollapsed=true; render(); });
+  else if(!s.closingOpen && s.cartCollapsed===false && !posDesktop()) L.push(()=>{ s.cartCollapsed=true; render(); });
   return L;
 }
 
