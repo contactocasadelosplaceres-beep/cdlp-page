@@ -1585,6 +1585,26 @@ async function submitOrder(formData){
       state.appliedCoupon = null; state.submittingOrder=false; render(); return;
     }
   }
+  // Existencias frescas: si otra clienta (o el POS) se llevó piezas mientras esta clienta tenía el
+  // carrito abierto, se ajusta el carrito y se avisa ANTES de enviar el pedido.
+  try{
+    const fresh = {}; 
+    await Promise.all([...new Set(Object.keys(state.cart).map(k=>parseCartKey(k).p&&parseCartKey(k).p.id).filter(Boolean))].map(async id=>{
+      const d = await db.collection('products').doc(id).get(); if(d.exists) fresh[id] = d.data();
+    }));
+    const adjusted = [];
+    Object.entries(state.cart).forEach(([key,qty])=>{
+      const {p,v} = parseCartKey(key); if(!p || !fresh[p.id]) return;
+      const fp = fresh[p.id];
+      const avail = v ? ((fp.variants||[]).find(x=>x.id===v.id)||{stock:0}).stock||0 : (fp.stock||0);
+      if(avail < qty){ adjusted.push(p.name); if(avail<=0) delete state.cart[key]; else state.cart[key]=avail; }
+      const live = state.products.find(x=>x.id===p.id); if(live){ live.stock = fp.stock||0; if(v){ const lv=(live.variants||[]).find(x=>x.id===v.id); if(lv) lv.stock = ((fp.variants||[]).find(x=>x.id===v.id)||{}).stock||0; } }
+    });
+    if(adjusted.length){
+      saveCart(); state.submittingOrder=false; state.checkoutOpen=!!Object.keys(state.cart).length; state.cartOpen=!state.checkoutOpen&&!!Object.keys(state.cart).length;
+      showToast(`Se agotaron piezas de: ${adjusted.slice(0,2).join(', ')}${adjusted.length>2?'…':''}. Revisamos tu carrito, confirma de nuevo.`); render(); return;
+    }
+  }catch(e){ console.error('No se pudo verificar existencias', e); }
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
     let price = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p);

@@ -1090,6 +1090,7 @@ async function loadData(attempt){
   // componentes cada vez que se abre el panel, por si algo lo dejó desactualizado.
   refreshAllKitStocks();
   state.loaded = true; render();
+  reconcileOnlineStock();
 }
 // "Más vendidos" automático: analiza lo vendido de verdad (tienda + POS, sin lo cancelado) en
 // los últimos 30 días y guarda el resultado en la configuración pública de la tienda (así
@@ -3163,13 +3164,15 @@ async function adjustStockForSale(sale, sign, opts){
    Opcional (Configuración → Datos operativos). Al pasar un pedido de la tienda a "En camino" o
    "Entregado" se descuenta del centro principal; si vuelve atrás o se cancela, se devuelve.
    "stockDeducted" evita descontar dos veces el mismo pedido. */
-const ONLINE_DEDUCT_STATUSES = ['En camino','Entregado'];
+const ONLINE_DEDUCT_OFF_STATUSES = ['Cancelado'];
+function autoDeductOnlineOn(){ return state.settings.autoDeductOnlineStock !== false; }
 function defaultCenterId(){ return (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id || null; }
+let _stockReconciling = false;
 async function syncOnlineOrderStock(o, newStatus){
   if(!o || o.source==='pos') return;
-  const should = ONLINE_DEDUCT_STATUSES.includes(newStatus);
+  const should = !ONLINE_DEDUCT_OFF_STATUSES.includes(newStatus);
   try{
-    if(should && !o.stockDeducted && state.settings.autoDeductOnlineStock){
+    if(should && !o.stockDeducted && autoDeductOnlineOn()){
       const cid = defaultCenterId();
       const r = await adjustStockForSale({...o, centerId:cid}, -1, {kind:'tienda'});
       if(r && r.ok===false) return;
@@ -3185,6 +3188,48 @@ async function syncOnlineOrderStock(o, newStatus){
       showToast('Inventario devuelto');
     }
   }catch(e){ console.error(e); showToast('No se pudo ajustar el inventario del pedido'); }
+}
+/* Descuento al ENTRAR el pedido: la tienda (clientes) no puede escribir en productos, así que el
+   admin descuenta cada pedido nuevo la próxima vez que carga datos (al abrir el panel y cada 45 s
+   mientras está abierto). Solo pedidos posteriores a "autoDeductOnlineSince" (fecha en que se
+   activó), para no descontar dos veces lo que Ale ya ajustó a mano. */
+async function reconcileOnlineStock(){
+  if(_stockReconciling || !autoDeductOnlineOn() || !state.centers.length) return;
+  if(!state.settings.autoDeductOnlineSince){
+    state.settings.autoDeductOnlineSince = new Date().toISOString();
+    try{ await saveSettings(); }catch(e){ console.error(e); }
+    return;
+  }
+  const since = new Date(state.settings.autoDeductOnlineSince).getTime();
+  const pending = state.orders.filter(o=>o.source!=='pos' && !o.stockDeducted && !o.stockSkipped && o.status!=='Cancelado' && new Date(o.date).getTime()>=since);
+  if(!pending.length) return;
+  _stockReconciling = true;
+  let done = 0; const shortAll = [];
+  try{
+    for(const o of pending){
+      const cid = defaultCenterId();
+      // se reclama el pedido primero (transacción) para que dos pantallas abiertas no lo descuenten dos veces
+      const ref = db.collection('orders').doc(o.id);
+      let claimed = false;
+      try{
+        claimed = await db.runTransaction(async tx=>{
+          const d = await tx.get(ref);
+          if(!d.exists || (d.data()||{}).stockDeducted) return false;
+          tx.update(ref,{stockDeducted:true, stockCenterId:cid||null}); return true;
+        });
+      }catch(e){ console.error(e); continue; }
+      if(!claimed){ o.stockDeducted = true; continue; }
+      const r = await adjustStockForSale({...o, centerId:cid}, -1, {kind:'tienda'});
+      if(r && r.ok===false){ try{ await ref.update({stockDeducted:false}); }catch(e){} continue; }
+      o.stockDeducted = true; o.stockCenterId = cid; done++;
+      ((r&&r.short)||[]).forEach(n=>shortAll.push(n));
+    }
+  } finally { _stockReconciling = false; }
+  if(done){
+    const uniq=[...new Set(shortAll)];
+    showToast(uniq.length ? `Inventario descontado de ${done} pedido${done>1?'s':''}. Se quedó en 0: ${uniq.slice(0,2).join(', ')}${uniq.length>2?'…':''}` : `Inventario descontado de ${done} pedido${done>1?'s':''} nuevo${done>1?'s':''}`);
+    render();
+  }
 }
 
 /* ============== PAGO DEL PEDIDO (tienda) ==============
@@ -11648,13 +11693,13 @@ function renderOperativoSubpanel(){
       <input id="set-fraud-max" type="number" inputmode="numeric" min="0" max="20" step="1" value="${s.fraudMaxOrdersPerDay==null?3:s.fraudMaxOrdersPerDay}" onchange="state.settings.fraudMaxOrdersPerDay=Math.max(0,Math.min(20,parseInt(this.value,10)||0));saveSettings();showToast('Límite guardado');render()">
     </div>
   `})}
-  ${pmSection('op_stock','Inventario de pedidos de la tienda',{icon:'package', collapsible:true, open:false, badge:s.autoDeductOnlineStock?'Automático':'A mano', hint:'Descontar el stock solo al enviar o entregar', body:`
-    <div class="panel-sub">Si lo activas, cuando un pedido de la tienda pasa a <strong>En camino</strong> o <strong>Entregado</strong> el inventario se descuenta solo del centro principal (una sola vez por pedido). Si el pedido se cancela o regresa a un estado anterior, se devuelve. Los pedidos que ya estén en camino o entregados antes de activarlo no se tocan.</div>
+  ${pmSection('op_stock','Inventario de pedidos de la tienda',{icon:'package', collapsible:true, open:false, badge:autoDeductOnlineOn()?'Automático':'A mano', hint:'El stock baja solo cuando entra un pedido', body:`
+    <div class="panel-sub">Cada pedido de la tienda descuenta su inventario del centro principal <strong>en cuanto entra</strong> (una sola vez por pedido), igual que una venta del Punto de Venta. Si el pedido se cancela o se marca como no recibido, las piezas regresan al inventario. Se aplica al abrir el panel y cada 45 segundos mientras está abierto; los pedidos anteriores a la fecha de activación no se tocan.</div>
     <label class="checkbox-row">
-      <input type="checkbox" ${s.autoDeductOnlineStock?'checked':''} onchange="state.settings.autoDeductOnlineStock=this.checked;saveSettings();render()">
+      <input type="checkbox" ${autoDeductOnlineOn()?'checked':''} onchange="state.settings.autoDeductOnlineStock=this.checked;if(this.checked&&!state.settings.autoDeductOnlineSince)state.settings.autoDeductOnlineSince=new Date().toISOString();saveSettings();render()">
       <span>Descontar inventario automáticamente</span>
     </label>
-    <div class="note-box" style="margin-top:8px;background:#FFF6E0;color:#8a6300;">${icon('alert-triangle',14)} Actívalo solo si ya no ajustas el stock a mano al preparar pedidos; si no, se descontaría dos veces.</div>
+    ${autoDeductOnlineOn()?`<div class="row-sub" style="margin-top:6px;">Activo desde ${state.settings.autoDeductOnlineSince?new Date(state.settings.autoDeductOnlineSince).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}):'hoy'}. Ya no ajustes a mano el stock de los pedidos nuevos de la tienda.</div>`:`<div class="note-box" style="margin-top:8px;background:#FFF6E0;color:#8a6300;">${icon('alert-triangle',14)} Apagado: tendrás que ajustar el stock a mano en cada pedido.</div>`}
   `})}
   ${pmSection('op_kiosko','Modo kiosko / vitrina',{icon:'grid', collapsible:true, open:false, badge:'', hint:'Catálogo sin compras para una tablet del mostrador', body:`
     <div class="panel-sub">Para una tablet en el mostrador de la tienda física: muestra el catálogo para que la clienta lo hojee (fotos, precios, existencias), pero sin botones de comprar ni carrito — cualquier compra la completa el personal desde el Punto de Venta. Abre el enlace de abajo una sola vez en esa tablet; queda activado en ese dispositivo aunque se apague o se recargue la página.</div>
