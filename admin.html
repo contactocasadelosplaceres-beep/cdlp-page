@@ -570,6 +570,7 @@ const DEFAULT_SECTIONS = [
 const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
+  announceEnabled:true, announceText:"Atendemos {horario}", announceLink:"", announceColor:"navy",
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
@@ -1052,6 +1053,7 @@ let _settingsAuditBaseline = null;
 const SETTINGS_FIELD_LABELS = {
   duplicatesIgnored:"Productos marcados como no duplicados",
   storeName:'Nombre de la tienda', whatsapp:'WhatsApp de la tienda', schedule:'Horario',
+  announceEnabled:'Barra de anuncio visible', announceText:'Texto de la barra de anuncio', announceLink:'Enlace de la barra de anuncio', announceColor:'Color de la barra de anuncio',
   heroTitle:'Título principal', heroSubtitle:'Subtítulo principal', categories:'Categorías',
   hiddenCategories:'Categorías ocultas', needs:'Necesidades/etiquetas', sections:'Secciones visibles',
   headerSubtitle:'Subtítulo del encabezado', showHeaderSubtitle:'Mostrar subtítulo del encabezado',
@@ -1364,6 +1366,7 @@ function icon(name, size){
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
     printer:'<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 17v4h12v-4"/>',
     'alert-triangle':'<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     bell:'<path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
     package:'<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
     palette:'<circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 1 0 0 20c1.1 0 1.8-1 1.3-2-.3-.6-.1-1.3.4-1.7.6-.5 1.5-.3 2.1.1.7.5 1.7.4 2.1-.3A10 10 0 0 0 12 2Z"/>',
@@ -9083,6 +9086,7 @@ const DESIGN_SUBPANEL_GROUPS = [
     {key:"appearance", icon:icon('palette'), label:"Colores y tipografía"},
   ]},
   { title: "Contenido de tu página de inicio", items: [
+    {key:"announce", icon:icon('bell'), label:"Barra de anuncio (horario y avisos)"},
     {key:"header", icon:icon('arrow-up'), label:"Encabezado"},
     {key:"hero", icon:icon('message-circle'), label:"Mensaje de bienvenida"},
     {key:"categories", icon:icon('folder'), label:"Categorías principales"},
@@ -9164,9 +9168,70 @@ function renderDesignSubpanel(key){
   const map = {
     brand: renderBrandSubpanel, appearance: renderAppearanceSubpanel, hero: renderHeroSubpanel, header: renderHeaderSubpanel,
     categories: renderCategoriesSubpanel, promo: renderPromoSubpanel, featured: renderFeaturedSubpanel,
-    testimonials: renderTestimonialsSubpanel, footer: renderFooterSubpanel, css: renderCssSubpanel, faq: renderFaqSubpanel,
+    testimonials: renderTestimonialsSubpanel, footer: renderFooterSubpanel, announce: renderAnnounceSubpanel, css: renderCssSubpanel, faq: renderFaqSubpanel,
   };
   return back + (map[key] ? map[key]() : '');
+}
+
+
+/* ============== BARRA DE ANUNCIO ==============
+   Franja arriba de la tienda. Por defecto muestra el horario ("Atendemos {horario}"); el texto,
+   el color y el enlace se editan aquí. "{horario}" se reemplaza por el horario de Configuración. */
+const ANNOUNCE_PRESETS = [
+  'Atendemos {horario}',
+  'Envío discreto a domicilio · Pago contra entrega',
+  'Cerramos el __ de ____ por descanso. ¡Gracias por tu paciencia!',
+  'Envío gratis en pedidos mayores a $___ esta semana',
+];
+function announcePreviewHtml(){
+  const s = state.settings;
+  const txt = String(s.announceText||'').replace(/\{horario\}/gi, s.schedule||'').replace(/\s+/g,' ').trim();
+  const safe = txt.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const bg = s.announceColor==='rose' ? '#BC355C' : (s.announceColor==='soft' ? '#F3E3E9' : '#0A4A5B');
+  const fg = s.announceColor==='soft' ? '#5A1F3A' : '#fff';
+  return txt ? `<div style="display:flex;align-items:center;justify-content:center;gap:7px;padding:8px 14px;border-radius:8px;background:${bg};color:${fg};font-size:12.5px;font-weight:600;text-align:center;">${icon('clock',14)}<span>${safe}</span></div>`
+             : `<div class="note-box">Sin texto: la barra no se mostrará.</div>`;
+}
+function renderAnnounceSubpanel(){
+  const s = state.settings;
+  const colors = [['navy','Azul marino'],['rose','Rosa'],['soft','Claro']];
+  return `
+  <div class="panel">
+    <div class="panel-title">Barra de anuncio</div>
+    <div class="panel-sub">Una franja delgada arriba de toda la tienda. Úsala para tu horario, avisos de cierre, promociones o lo que quieras. Los clientes pueden cerrarla con la X, y se esconde sola al bajar por la página.</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.announceEnabled!==false?'checked':''} onchange="state.settings.announceEnabled=this.checked;render()">
+      <span>${s.announceEnabled!==false ? 'Barra visible en la tienda' : 'Barra oculta'}</span>
+    </label>
+    <div class="form-field" style="margin-top:10px;"><label>Texto</label>
+      <input id="ann-text" maxlength="140" value="${(s.announceText||'').replace(/"/g,'&quot;')}" oninput="state.settings.announceText=this.value;document.getElementById('ann-preview').innerHTML=announcePreviewHtml()" placeholder="Atendemos {horario}">
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Escribe <b>{horario}</b> para insertar tu horario actual (“${(s.schedule||'').replace(/</g,'&lt;')}”); se cambia en Configuración → Datos operativos.</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${ANNOUNCE_PRESETS.map((p,i)=>`<button class="btn-tertiary" onclick="state.settings.announceText=ANNOUNCE_PRESETS[${i}];render()">${p.length>38?p.slice(0,36)+'…':p}</button>`).join('')}
+    </div>
+    <div class="form-field"><label>Color</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${colors.map(c=>`<button class="seg-chip ${(s.announceColor||'navy')===c[0]?'active':''}" onclick="state.settings.announceColor='${c[0]}';render()">${c[1]}</button>`).join('')}
+      </div>
+    </div>
+    <div class="form-field"><label>Enlace al tocar el texto (opcional)</label>
+      <input id="ann-link" value="${(s.announceLink||'').replace(/"/g,'&quot;')}" oninput="state.settings.announceLink=this.value" placeholder="https://… o escribe WHATSAPP">
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Déjalo vacío para que solo sea un aviso. Con <b>WHATSAPP</b> abre un chat con tu número.</div>
+    </div>
+    <div class="form-field"><label>Vista previa</label><div id="ann-preview">${announcePreviewHtml()}</div></div>
+    <button class="btn-primary" onclick="saveAnnounceSettings()">Guardar</button>
+  </div>`;
+}
+function saveAnnounceSettings(){
+  const link = (document.getElementById('ann-link').value||'').trim();
+  if(link && !/^https?:\/\//i.test(link) && !/^whatsapp$/i.test(link)){ showToast('El enlace debe empezar con https:// o ser la palabra WHATSAPP'); return; }
+  saveSettingsForm({
+    announceEnabled: state.settings.announceEnabled!==false,
+    announceText: (document.getElementById('ann-text').value||'').trim(),
+    announceLink: link,
+    announceColor: state.settings.announceColor || 'navy',
+  });
 }
 
 function renderBrandSubpanel(){

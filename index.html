@@ -423,13 +423,17 @@
   .noresults .hero-btn-primary{width:100%;text-decoration:none;gap:8px;}
   .nr-sub{margin:24px 0 10px;font-size:13px;font-weight:600;color:var(--ink-soft);}
   .nr-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
-  /* ===== Botón flotante de WhatsApp ===== */
-  .wa-fab{position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:34;width:52px;height:52px;border-radius:50%;background:var(--primary-deep);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 22px -8px rgba(10,74,91,.6);text-decoration:none;transition:transform .15s ease;}
-  .wa-fab:active{transform:scale(.94);}
-  .wa-fab.wa-cart{bottom:calc(76px + env(safe-area-inset-bottom));}
-  .wa-fab.wa-cmp{bottom:calc(88px + env(safe-area-inset-bottom));}
-  .wa-fab.wa-cart.wa-cmp{bottom:calc(144px + env(safe-area-inset-bottom));}
-  @media(min-width:640px){.wa-fab.wa-cart{bottom:calc(20px + env(safe-area-inset-bottom));}.wa-fab.wa-cart.wa-cmp{bottom:calc(88px + env(safe-area-inset-bottom));}}
+
+  /* ===== Barra de anuncio superior (editable en Diseño → Barra de anuncio) ===== */
+  .announce-bar{display:flex;align-items:center;justify-content:center;position:relative;min-height:32px;padding:6px 40px 6px 14px;background:#0A4A5B;color:#fff;font-size:12.5px;font-weight:600;line-height:1.3;text-align:center;}
+  .announce-bar.rose{background:var(--rose);}
+  .announce-bar.soft{background:#F3E3E9;color:#5A1F3A;}
+  .announce-txt{display:inline-flex;align-items:center;justify-content:center;gap:7px;color:inherit;text-decoration:none;}
+  .announce-txt svg{flex:none;}
+  .announce-txt span{text-wrap:balance;}
+  a.announce-txt{text-decoration:underline;text-underline-offset:2px;}
+  .announce-x{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:inherit;opacity:.85;background:none;border:0;cursor:pointer;}
+  html.search-collapsed .announce-bar{display:none;}
 </style>
 </head>
 <body>
@@ -528,6 +532,7 @@ const DEFAULT_SECTIONS = [
 const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
+  announceEnabled:true, announceText:"Atendemos {horario}", announceLink:"", announceColor:"navy",
   heroTitle:"Descubre nuevas formas de disfrutar.",
   heroSubtitle:"Explora nuestro catálogo, recibe tu pedido en la comodidad de tu casa y compra con total discreción.",
   categories:[...DEFAULT_CATEGORIES],
@@ -871,6 +876,7 @@ function icon(name, size){
   size = size || 16;
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
     sliders:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
     'credit-card':'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>',
@@ -1799,6 +1805,34 @@ function productImageHtml(p){
 }
 
 /* ============== HEADER ============== */
+
+/* ============== BARRA DE ANUNCIO ==============
+   Franja delgada arriba de todo. El texto lo escribe Ale en Diseño → Barra de anuncio; "{horario}"
+   se reemplaza por el horario de Configuración. Se puede cerrar con la X (queda cerrada durante
+   esa visita) y se esconde sola al bajar, igual que el buscador, para no quitar espacio. */
+const ANNOUNCE_CLOSED_KEY = 'cdlp_announce_closed';
+function announceText(){
+  const s = state.settings;
+  return String(s.announceText||'').replace(/\{horario\}/gi, s.schedule||'').replace(/\s+/g,' ').trim();
+}
+function dismissAnnounceBar(){
+  try{ sessionStorage.setItem(ANNOUNCE_CLOSED_KEY, announceText()); }catch(e){}
+  render();
+}
+function renderAnnounceBar(){
+  const s = state.settings;
+  if(s.announceEnabled===false || isKioskMode()) return '';
+  const txt = announceText(); if(!txt) return '';
+  try{ if(sessionStorage.getItem(ANNOUNCE_CLOSED_KEY)===txt) return ''; }catch(e){}
+  const color = ['rose','soft'].includes(s.announceColor) ? s.announceColor : '';
+  const safe = txt.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const link = String(s.announceLink||'').trim();
+  const inner = `${icon('clock',14)}<span>${safe}</span>`;
+  let body = `<span class="announce-txt">${inner}</span>`;
+  if(/^https?:\/\//i.test(link)) body = `<a class="announce-txt" href="${link.replace(/"/g,'&quot;')}" target="_blank" rel="noopener">${inner}</a>`;
+  else if(/^whatsapp$/i.test(link) && s.whatsapp) body = `<a class="announce-txt" href="${waLink('Hola, vi su aviso en la tienda.')}" target="_blank" rel="noopener">${inner}</a>`;
+  return `<div class="announce-bar ${color}" role="note">${body}<button class="announce-x" onclick="dismissAnnounceBar()" aria-label="Cerrar aviso">${icon('x',14)}</button></div>`;
+}
 function renderHeader(){
   const cats = visibleCategories();
   return `
@@ -2608,7 +2642,7 @@ function renderStore(){
   const showCompareBar = !isKioskMode() && state.compareIds.length>=2 && !state.compareOpen;
   return `
   <div class="app">
-    <div class="topbar">${renderHeader()}</div>
+    <div class="topbar">${renderAnnounceBar()}${renderHeader()}</div>
     <div class="topbar-spacer" id="topbar-spacer"></div>
     ${state.settings.storePaused ? `<div class="note-box" style="margin:14px 20px 0;background:#F6DDE3;color:#7A2E45;font-weight:600;">${icon('alert-triangle',15)} ${state.settings.storePausedMessage || 'La tienda está en pausa temporalmente y no podemos tomar pedidos.'}</div>` : ''}
     ${state.loadError ? `<div class="load-error-box"><strong>No pudimos cargar el catálogo</strong><span>Parece que la conexión está lenta o se cortó.</span><button onclick="state.loadError=false;state.loaded=false;render();loadData()">Reintentar</button></div>` : ''}
@@ -2617,7 +2651,6 @@ function renderStore(){
     <div class="mobile-cart-spacer ${showBar||showCompareBar?'show':''}"></div>
   </div>
   ${showCompareBar ? `<div style="position:fixed;left:0;right:0;bottom:${showBar?'56px':'0'};z-index:39;">${renderCompareBar()}</div>` : ''}
-  ${(!isKioskMode() && state.settings.whatsapp) ? `<a class="wa-fab ${showBar?'wa-cart':''} ${showCompareBar?'wa-cmp':''}" href="${waLink('Hola, tengo una duda sobre un producto.')}" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp">${icon('whatsapp',26)}</a>` : ''}
   <div class="mobile-cart-bar ${showBar?'show':''}">
     <div class="mobile-cart-bar-info">
       <span class="mobile-cart-bar-count">${cartCount()} artículo${cartCount()===1?'':'s'}</span>
