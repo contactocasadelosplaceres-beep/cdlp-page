@@ -3208,7 +3208,8 @@ async function reconcileOnlineStock(){
     return;
   }
   const since = new Date(state.settings.autoDeductOnlineSince).getTime();
-  const pending = state.orders.filter(o=>o.source!=='pos' && !o.stockDeducted && !o.stockSkipped && o.status!=='Cancelado' && new Date(o.date).getTime()>=since);
+  const pending = state.orders.filter(o=>o.source!=='pos' && !o.stockDeducted && !o.stockSkipped && o.status!=='Cancelado' && new Date(o.date).getTime()>=since && Date.now()-new Date(o.date).getTime()>120000);
+  // los pedidos de menos de 2 min se dejan al servidor (Cloud Function) si está instalada; si no, este respaldo los toma después
   if(!pending.length) return;
   _stockReconciling = true;
   let done = 0; const shortAll = [];
@@ -11701,7 +11702,7 @@ function renderOperativoSubpanel(){
     </div>
   `})}
   ${pmSection('op_stock','Inventario de pedidos de la tienda',{icon:'package', collapsible:true, open:false, badge:autoDeductOnlineOn()?'Automático':'A mano', hint:'El stock baja solo cuando entra un pedido', body:`
-    <div class="panel-sub">Cada pedido de la tienda descuenta su inventario del centro principal <strong>en cuanto entra</strong> (una sola vez por pedido), igual que una venta del Punto de Venta. Si el pedido se cancela o se marca como no recibido, las piezas regresan al inventario. Se aplica al abrir el panel y cada 45 segundos mientras está abierto; los pedidos anteriores a la fecha de activación no se tocan.</div>
+    <div class="panel-sub">Cada pedido de la tienda descuenta su inventario del centro principal en cuanto entra (una sola vez por pedido), igual que una venta del Punto de Venta, que descuenta al cobrar. Si el pedido se cancela, se marca como no recibido o se elimina, las piezas regresan al inventario. Con la función del servidor instalada (carpeta <strong>functions</strong>) el descuento es inmediato aunque este panel esté cerrado; sin ella, el panel lo hace al abrirse y cada 45 segundos mientras está abierto.</div>
     <label class="checkbox-row">
       <input type="checkbox" ${autoDeductOnlineOn()?'checked':''} onchange="state.settings.autoDeductOnlineStock=this.checked;if(this.checked&&!state.settings.autoDeductOnlineSince)state.settings.autoDeductOnlineSince=new Date().toISOString();saveSettings();render()">
       <span>Descontar inventario automáticamente</span>
