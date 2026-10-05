@@ -722,6 +722,7 @@ async function loadData(attempt){
   state.loaded = true;
   captureWholesaleCodeFromURL();
   captureKioskModeFromURL();
+  captureCampaignFromURL();
   render();
   const cssTag = document.getElementById('custom-css-injected');
   if(cssTag) cssTag.textContent = state.settings.customCss || '';
@@ -825,8 +826,37 @@ async function loadFullCatalogWithRetry(attempt){
     }
   }
 }
+/* ============== CAMPAÑAS (?ref=nombre) ==============
+   Un enlace como .../index.html?ref=instagram-bio marca de dónde llegó la persona. La visita se
+   guarda con esa campaña, y si compra dentro de 30 días (aunque vuelva otro día), el pedido
+   también queda marcado — así el admin ve visitas, pedidos y ventas por campaña (Estadísticas →
+   Campañas). Se limpia de la URL para que, si la persona comparte el enlace, no arrastre la marca. */
+const CAMPAIGN_KEY = 'cdlp_campaign', CAMPAIGN_SESSION_KEY = 'cdlp_campaign_session', CAMPAIGN_DAYS = 30;
+function campaignSlug(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+}
+function captureCampaignFromURL(){
+  const params = new URLSearchParams(location.search);
+  const raw = params.get('ref') != null ? params.get('ref') : params.get('utm_campaign');
+  if(raw==null) return;
+  const slug = campaignSlug(raw);
+  if(slug){
+    try{ localStorage.setItem(CAMPAIGN_KEY, JSON.stringify({c:slug, t:Date.now()})); }catch(e){}
+    try{ sessionStorage.setItem(CAMPAIGN_SESSION_KEY, slug); }catch(e){}
+  }
+  const url = new URL(location.href); url.searchParams.delete('ref'); url.searchParams.delete('utm_campaign');
+  history.replaceState(history.state, '', url.toString());
+}
+function sessionCampaign(){ try{ return sessionStorage.getItem(CAMPAIGN_SESSION_KEY) || ''; }catch(e){ return ''; } }
+function activeCampaign(){
+  try{
+    const o = JSON.parse(localStorage.getItem(CAMPAIGN_KEY)||'null');
+    if(o && o.c && Date.now()-o.t < CAMPAIGN_DAYS*86400000) return o.c;
+  }catch(e){}
+  return '';
+}
 function trackVisit(){
-  try{ db.collection('visits').add({date: new Date().toISOString(), source: trafficSourceBucket()}); }catch(e){ /* silencioso */ }
+  try{ const camp = sessionCampaign(); db.collection('visits').add(Object.assign({date: new Date().toISOString(), source: trafficSourceBucket()}, camp?{campaign:camp}:{})); }catch(e){ /* silencioso */ }
 }
 /* ============== ANALÍTICA: eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout) ==============
    Se guardan en una colección aparte ('analyticsEvents') en vez de 'visits' para no
@@ -1477,6 +1507,7 @@ async function submitOrder(formData){
   const orderNumber = await getNextOrderNumber();
   const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
   const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
+  const orderCampaign = activeCampaign(); if(orderCampaign) order.campaign = orderCampaign;
   try{ await db.collection('orders').add(order); }
   catch(e){ console.error(e); showToast('No se pudo enviar el pedido, intenta de nuevo'); state.submittingOrder=false; render(); return; }
   trackEvent('purchase', {orderTotal: order.total});

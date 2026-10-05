@@ -487,6 +487,29 @@
   .font-option-row{display:flex;align-items:center;justify-content:space-between;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;transition:border-color .15s ease;}
   .font-option-row:hover{border-color:var(--primary);}
   .font-option-row.active{border-color:var(--primary);background:var(--surface-soft);}
+  /* Descripciones con IA */
+  .ai-desc-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+  .ai-desc-bar select{flex:1 1 150px;min-width:0;width:auto;padding:9px 10px;font-size:12.5px;}
+  .ai-desc-bar .btn-tertiary{flex:0 0 auto;}
+  .ai-desc-err{margin-top:8px;font-size:12.5px;color:var(--red,#b3261e);background:rgba(179,38,30,.08);padding:8px 10px;border-radius:8px;overflow-wrap:anywhere;}
+  .ai-desc-preview{margin-top:10px;padding:12px;border-radius:10px;border:1.5px solid var(--primary);background:var(--surface-soft);}
+  .ai-desc-text{font-size:13.5px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap;}
+  .ai-desc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .ai-desc-actions .btn-primary{width:auto;padding:9px 14px;font-size:13px;}
+
+  /* Campañas */
+  .camp-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
+  .camp-chips button{padding:6px 10px;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;color:var(--ink);}
+  .camp-link-out{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .camp-link-out input{flex:1 1 200px;min-width:0;font-size:12.5px;}
+  .camp-list{display:flex;flex-direction:column;gap:10px;}
+  .camp-card{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--surface);}
+  .camp-name{font-weight:700;font-size:14px;overflow-wrap:anywhere;margin-bottom:8px;}
+  .camp-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px 10px;}
+  .camp-metrics div{min-width:0;}
+  .camp-metrics span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:700;}
+  .camp-metrics strong{font-size:14px;overflow-wrap:anywhere;}
+  .order-camp-tag{display:inline-block;margin-top:3px;font-size:11px;font-weight:700;color:var(--primary-deep);background:var(--surface-soft);padding:2px 8px;border-radius:999px;overflow-wrap:anywhere;}
 </style>
 </head>
 <body>
@@ -3042,6 +3065,120 @@ async function sendAiTestMessage(){
   state.aiSending=false; render();
 }
 
+/* ============== DESCRIPCIONES CON IA (ficha de producto) ==============
+   Usa la misma clave de "Configuración → Asistente IA". La IA solo PROPONE un texto: se muestra
+   en una vista previa y nada cambia hasta que la persona pulsa "Usar este texto". Solo se le
+   manda nombre, categorías, para quién es y variantes — nunca costos, precios ni datos de clientes. */
+const AI_DESC_TONES = [
+  {key:'calido',   label:'Cálido y sugerente', hint:'Tono cálido, elegante y sugerente, sin ser explícito.'},
+  {key:'directo',  label:'Claro y directo',    hint:'Tono claro, directo e informativo: qué es y para qué sirve.'},
+  {key:'divertido',label:'Divertido y ligero', hint:'Tono divertido, cómplice y ligero, sin groserías.'},
+];
+async function callAI(system, userText, maxTokens){
+  const a = state.aiSettings;
+  if(!a.apiKey) throw new Error('Primero guarda tu API key en Configuración → Asistente IA.');
+  if(a.provider==='anthropic'){
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'x-api-key': a.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({ model: a.model || 'claude-sonnet-5', max_tokens: maxTokens||500, system, messages:[{role:'user', content:userText}] }),
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    return (data.content||[]).map(b=>b.text||'').join('\n').trim();
+  }
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method:'POST',
+    headers:{ 'content-type':'application/json', 'Authorization':'Bearer '+a.apiKey },
+    body: JSON.stringify({ model: a.model || 'gpt-4o-mini', max_tokens: maxTokens||500, messages:[{role:'system', content:system},{role:'user', content:userText}] }),
+  });
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message);
+  return String(data.choices[0].message.content||'').trim();
+}
+function aiDescState(){
+  const p = state.productModal; const key = p ? (p.id||'nuevo') : '';
+  if(!state.aiDesc || state.aiDesc.key!==key) state.aiDesc = {key, tone:'calido', loading:false, result:'', error:''};
+  return state.aiDesc;
+}
+function aiDescBoxHtml(){
+  if(!state.productModal) return '';
+  const st = aiDescState();
+  const hasDesc = !!(state.productModal.desc||'').trim();
+  const btnLabel = hasDesc ? 'Mejorar con IA' : 'Redactar con IA';
+  const noKey = !state.aiSettings.apiKey;
+  return `
+    <div class="ai-desc-bar">
+      <select aria-label="Tono de la descripción" onchange="aiDescState().tone=this.value">
+        ${AI_DESC_TONES.map(t=>`<option value="${t.key}" ${st.tone===t.key?'selected':''}>${t.label}</option>`).join('')}
+      </select>
+      <button type="button" class="btn-tertiary" onclick="aiDescGenerate()" ${st.loading?'disabled':''}>${icon('star',13)} ${st.loading?'Escribiendo…':btnLabel}</button>
+    </div>
+    ${noKey ? `<div class="row-sub" style="margin-top:6px;">Para usar esto conecta tu clave en Configuración → Asistente IA.</div>` : ''}
+    ${st.error ? `<div class="ai-desc-err">${escDescHtml(st.error)}</div>` : ''}
+    ${st.result ? `
+      <div class="ai-desc-preview">
+        <div class="row-sub" style="font-weight:700;color:var(--primary-deep);margin-bottom:4px;">Propuesta de la IA — revísala antes de usarla</div>
+        <div class="ai-desc-text">${escDescHtml(st.result)}</div>
+        <div class="ai-desc-actions">
+          <button type="button" class="btn-primary" onclick="aiDescUse()">Usar este texto</button>
+          <button type="button" class="btn-tertiary" onclick="aiDescGenerate()" ${st.loading?'disabled':''}>Otra versión</button>
+          <button type="button" class="btn-tertiary" onclick="aiDescDiscard()">Descartar</button>
+        </div>
+      </div>` : ''}`;
+}
+function paintAiDescBox(){
+  const el = document.getElementById('ai-desc-box');
+  if(el) el.innerHTML = aiDescBoxHtml();
+}
+async function aiDescGenerate(){
+  const p = state.productModal; if(!p) return;
+  const st = aiDescState();
+  if(st.loading) return;
+  const name = (p.name||'').trim();
+  if(!name){ st.error='Escribe primero el nombre del producto.'; paintAiDescBox(); return; }
+  const tone = AI_DESC_TONES.find(t=>t.key===st.tone) || AI_DESC_TONES[0];
+  const needLabels = (p.needs||[]).map(k=>{ const n=(state.settings.needs||DEFAULT_NEEDS).find(x=>x.key===k); return n?n.label:''; }).filter(Boolean);
+  const variants = (p.variants||[]).map(v=>{ try{ return variantLabel(v); }catch(e){ return ''; } }).filter(Boolean);
+  const current = (p.desc||'').trim();
+  const system = `Eres redactor de fichas de producto de "${state.settings.storeName||'una tienda'}", una tienda en línea de bienestar íntimo para adultos en México.
+Reglas:
+- Español de México, trato de "tú", ${tone.hint}
+- Entre 35 y 70 palabras, en un solo párrafo, sin viñetas, sin emojis y sin comillas.
+- Elegante y respetuoso: nada explícito, vulgar ni gráfico.
+- No prometas resultados médicos, curas ni garantías.
+- No inventes medidas, materiales, potencia, baterías ni funciones que no aparezcan en los datos; si no los sabes, habla de forma general.
+- Responde SOLO con el texto de la descripción.`;
+  const user = [
+    `Producto: ${name}`,
+    prodCats(p).length ? `Categorías: ${prodCats(p).join(', ')}` : '',
+    needLabels.length ? `Pensado para: ${needLabels.join(', ')}` : '',
+    variants.length ? `Variantes: ${variants.join(', ')}` : '',
+    current ? `Descripción actual (mejórala conservando los datos que da):\n${current}` : 'No tiene descripción todavía: escríbela desde cero.',
+  ].filter(Boolean).join('\n');
+  st.loading = true; st.error = ''; paintAiDescBox();
+  try{
+    let out = await callAI(system, user, 400);
+    out = out.replace(/^["“”\s]+|["“”\s]+$/g,'');
+    if(!out) throw new Error('La IA no devolvió texto, intenta de nuevo.');
+    st.result = out;
+  }catch(e){
+    console.error(e);
+    st.error = 'No se pudo generar: ' + (e.message||'error desconocido');
+  }
+  st.loading = false; paintAiDescBox();
+}
+function aiDescUse(){
+  const st = aiDescState(); const p = state.productModal;
+  if(!p || !st.result) return;
+  p.desc = st.result;
+  const ta = document.getElementById('pf-desc'); if(ta) ta.value = st.result;
+  st.result = ''; st.error = '';
+  paintAiDescBox();
+  showToast('Descripción aplicada — recuerda guardar el producto');
+}
+function aiDescDiscard(){ const st = aiDescState(); st.result=''; st.error=''; paintAiDescBox(); }
+
 /* ============== IMÁGENES + RECORTE ============== */
 const CROP_SIZE = 280, CROP_OUT = 700;
 let cropCtx = null;
@@ -4277,6 +4414,7 @@ const STATS_SUBTAB_GROUPS = [
   ]},
   {label:'Clientes y tráfico', items:[
     {key:'trafico', label:'Fuentes de tráfico'},
+    {key:'campanas', label:'Campañas'},
     {key:'visitas', label:'Visitas'},
     {key:'mejorhoraredes', label:'Mejor hora para redes'},
   ]},
@@ -4305,6 +4443,7 @@ function renderEstadisticas(){
     ${sub==='pagos' ? renderStatsPagos() : ''}
     ${sub==='productos' ? renderStatsProductos() : ''}
     ${sub==='trafico' ? renderStatsTrafico() : ''}
+    ${sub==='campanas' ? renderStatsCampanas() : ''}
     ${sub==='tiemporeal' ? renderStatsTiempoReal() : ''}
     ${sub==='visitas' ? renderStatsVisitas() : ''}
     ${sub==='margen' ? renderStatsMargen() : ''}
@@ -4779,6 +4918,121 @@ function renderStatsTrafico(){
         t.rows.map(r=>`<div class="hbar-row"><div class="hbar-label">${r.label}</div><div class="hbar-track"><div class="hbar-fill" style="width:${(r.value/max*100)}%;background:var(--teal)"></div></div><div class="hbar-val">${r.value}</div></div>`).join('')}
     </div>
     ${t.sinDato>0 ? `<div class="note-box">${t.sinDato} visita(s) sin fuente registrada (de antes de esta actualización, o su navegador no compartió el origen).</div>` : ''}
+  `;
+}
+/* ============== ESTADÍSTICAS: CAMPAÑAS (?ref=) ==============
+   Cada enlace con ?ref=nombre (ver index.html → captureCampaignFromURL) marca las visitas y los
+   pedidos de la tienda en línea. Aquí se arman los enlaces y se comparan campañas. */
+const CAMP_PERIODS = [{key:7,label:'7 días'},{key:30,label:'30 días'},{key:90,label:'90 días'},{key:0,label:'Todo'}];
+const CAMP_PRESETS = ['instagram-bio','instagram-historias','facebook','tiktok','whatsapp-estados','volante','qr-mostrador','influencer'];
+function campaignSlug(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+}
+function storeIndexUrl(){ return `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html`; }
+function buildCampaignLink(name, destCat, prodName){
+  const slug = campaignSlug(name);
+  if(!slug) return '';
+  let q = 'ref=' + slug;
+  const pn = (prodName||'').trim().toLowerCase();
+  const prod = pn ? state.products.find(p=>(p.name||'').trim().toLowerCase()===pn) : null;
+  if(prod) q += '&producto=' + encodeURIComponent(prod.id);
+  else if(destCat) q += '&categoria=' + encodeURIComponent(destCat);
+  return storeIndexUrl() + '?' + q;
+}
+function updateCampLink(){
+  const g = id=>document.getElementById(id);
+  const out = g('camp-link'); if(!out) return;
+  const link = buildCampaignLink(g('camp-name').value, g('camp-cat').value, g('camp-prod').value);
+  out.value = link;
+  const note = g('camp-slug-note');
+  if(note){
+    const slug = campaignSlug(g('camp-name').value);
+    note.textContent = slug ? `Se registrará como: ${slug}` : 'Escribe un nombre para generar el enlace.';
+  }
+}
+function pickCampPreset(name){
+  const el = document.getElementById('camp-name'); if(!el) return;
+  el.value = name; updateCampLink();
+}
+function copyCampLink(){
+  const out = document.getElementById('camp-link');
+  if(!out || !out.value){ showToast('Escribe primero el nombre de la campaña'); return; }
+  try{
+    navigator.clipboard.writeText(out.value).then(()=>showToast('Enlace copiado — úsalo en esa campaña')).catch(()=>{ out.select(); showToast('Selecciona y copia el enlace'); });
+  }catch(e){ out.select(); showToast('Selecciona y copia el enlace'); }
+}
+function computeCampaigns(){
+  const days = state.campPeriod==null ? 30 : state.campPeriod;
+  const since = days>0 ? Date.now()-days*86400000 : 0;
+  const inRange = d=>{ const t=new Date(d).getTime(); return !isNaN(t) && t>=since; };
+  const map = {};
+  const row = k=> map[k] || (map[k]={name:k, visits:0, orders:0, revenue:0});
+  (state.visits||[]).forEach(v=>{ if(v.campaign && inRange(v.date)) row(v.campaign).visits++; });
+  let tiendaOrders = 0, tiendaRevenue = 0;
+  state.orders.forEach(o=>{
+    if(o.source!=='tienda' || o.status==='Cancelado' || !inRange(o.date)) return;
+    tiendaOrders++; tiendaRevenue += o.total||0;
+    if(o.campaign){ const r=row(o.campaign); r.orders++; r.revenue += o.total||0; }
+  });
+  const rows = Object.values(map).map(r=>({...r,
+    conv: r.visits>0 ? Math.min(100, Math.round(r.orders/r.visits*1000)/10) : null,
+    ticket: r.orders>0 ? r.revenue/r.orders : 0,
+  })).sort((a,b)=> b.revenue-a.revenue || b.visits-a.visits);
+  const campOrders = rows.reduce((s,r)=>s+r.orders,0), campRevenue = rows.reduce((s,r)=>s+r.revenue,0);
+  const campVisits = rows.reduce((s,r)=>s+r.visits,0);
+  return {rows, tiendaOrders, tiendaRevenue, campOrders, campRevenue, campVisits,
+    sharePct: tiendaOrders>0 ? Math.round(campOrders/tiendaOrders*100) : 0};
+}
+function renderStatsCampanas(){
+  const c = computeCampaigns();
+  const per = state.campPeriod==null ? 30 : state.campPeriod;
+  const cats = (state.settings.categories||[]);
+  return `
+    <div class="panel">
+      <div class="panel-title">Crear enlace de campaña</div>
+      <div class="panel-sub">Ponle nombre a donde vas a compartir el enlace (tu bio de Instagram, un volante, un QR…). Cada persona que entre por él y compre queda contada en esa campaña.</div>
+      <div class="form-field"><label>Nombre de la campaña</label>
+        <input id="camp-name" placeholder="ej. instagram-bio" maxlength="60" oninput="updateCampLink()">
+        <div class="camp-chips">${CAMP_PRESETS.map(n=>`<button type="button" onclick="pickCampPreset('${n}')">${n}</button>`).join('')}</div>
+        <div class="row-sub" id="camp-slug-note" style="margin-top:6px;">Escribe un nombre para generar el enlace.</div>
+      </div>
+      <div class="form-field"><label>¿A dónde llevará? (opcional)</label>
+        <select id="camp-cat" onchange="updateCampLink()">
+          <option value="">Inicio de la tienda</option>
+          ${cats.map(ct=>`<option value="${escDescHtml(ct)}">Categoría: ${escDescHtml(ct)}</option>`).join('')}
+        </select>
+        <input id="camp-prod" list="camp-prod-list" placeholder="…o escribe el nombre de un producto" style="margin-top:8px;" oninput="updateCampLink()">
+        <datalist id="camp-prod-list">${state.products.slice(0,400).map(p=>`<option value="${escDescHtml(p.name)}"></option>`).join('')}</datalist>
+      </div>
+      <div class="camp-link-out">
+        <input id="camp-link" readonly placeholder="Aquí aparecerá tu enlace" onfocus="this.select()">
+        <button class="btn-primary" style="width:auto;padding:10px 16px;" onclick="copyCampLink()">Copiar enlace</button>
+      </div>
+    </div>
+
+    <div class="status-filter">${CAMP_PERIODS.map(p=>`<button class="${per===p.key?'active':''}" onclick="state.campPeriod=${p.key};render()">${p.label}</button>`).join('')}</div>
+    <div class="stat-grid">
+      <div class="stat-card primary"><div class="stat-label">Ventas por campañas</div><div class="stat-value">${money(c.campRevenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Pedidos por campañas</div><div class="stat-value">${c.campOrders}</div></div>
+      <div class="stat-card"><div class="stat-label">% de pedidos de la tienda con campaña</div><div class="stat-value">${c.sharePct}%</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Rendimiento por campaña</div>
+      <div class="panel-sub">Ordenadas por ventas. Los pedidos cancelados no cuentan.</div>
+      ${c.rows.length===0 ? `<div class="empty-state">Todavía no hay datos. Crea un enlace arriba, compártelo y aquí aparecerán las visitas y ventas de cada campaña.</div>` : `
+      <div class="camp-list">${c.rows.map(r=>`
+        <div class="camp-card">
+          <div class="camp-name">${escDescHtml(r.name)}</div>
+          <div class="camp-metrics">
+            <div><span>Visitas</span><strong>${r.visits}</strong></div>
+            <div><span>Pedidos</span><strong>${r.orders}</strong></div>
+            <div><span>Ventas</span><strong>${money(r.revenue)}</strong></div>
+            <div><span>Conversión</span><strong>${r.conv==null?'—':r.conv+'%'}</strong></div>
+            <div><span>Ticket</span><strong>${r.orders?money(r.ticket):'—'}</strong></div>
+          </div>
+        </div>`).join('')}</div>`}
+    </div>
+    <div class="note-box">Una visita cuenta para la campaña por la que entró en esa sesión. Un pedido cuenta para la última campaña por la que la persona entró en los últimos 30 días, aunque haya comprado otro día. Solo cuenta pedidos hechos en la tienda en línea (no ventas del punto de venta). Los datos empiezan a llenarse desde que compartas enlaces con <strong>?ref=</strong>.</div>
   `;
 }
 function renderStatsTiempoReal(){
@@ -5599,6 +5853,7 @@ function renderOrderRow(o){
           return mismatch ? `<span title="Ya tienes registrada a ${escDescHtml(matched.name)} con este teléfono">${icon('alert-triangle',13)}</span>` : '';
         })()}</div>
         <div class="order-source-tag">${isPos?`${icon('receipt')} Punto de venta · ${escDescHtml(o.cashierName||'')}`:icon('bag')+' Tienda en línea'}</div>
+        ${(!isPos && o.campaign)?`<div class="order-camp-tag">Campaña: ${escDescHtml(o.campaign)}</div>`:''}
         ${shipSub ? `<div class="order-ship-sub" title="${escDescHtml(shipSub)}">${icon('map-pin',11)} ${escDescHtml(shipSub)}</div>` : ''}
       </td>
       <td class="c-total">
@@ -10639,7 +10894,8 @@ function renderProductModal(){
       </div>`}
 
       <div class="form-section-label">Descripción y categorización</div>
-      <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea></div>
+      <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc" oninput="state.productModal.desc=this.value;paintAiDescLabel()">${p.desc||''}</textarea>
+        <div id="ai-desc-box">${aiDescBoxHtml()}</div></div>
 
       <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
         <button type="button" class="btn-tertiary" style="margin-bottom:8px;" onclick="applySuggestedNeeds()">${icon('star',13)} Sugerir según nombre y categoría</button>
