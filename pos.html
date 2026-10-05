@@ -160,7 +160,13 @@
   .empty-cart{padding:30px;text-align:center;color:var(--ink-soft);font-size:13px;}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary-deep);color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  /* AVISOS APILADOS: varios avisos a la vez, sin taparse entre sí ni con "Deshacer" */
+  .toast-stack{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:calc(100% - 32px);max-width:480px;z-index:90;pointer-events:none;}
+  .toast-stack .toast{position:static;transform:none;opacity:0;max-width:100%;text-align:center;overflow-wrap:anywhere;line-height:1.3;animation:toastIn .22s ease forwards;}
+  .toast-stack .toast.show{opacity:1;transform:none;}
+  .toast-stack .toast.out{animation:toastOut .22s ease forwards;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(6px)}}
   .receipt-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(1000px 560px at 50% -10%, rgba(122,183,26,0.12), transparent 60%),var(--bg);}
   .receipt-card{background:var(--surface);border-radius:var(--radius-lg);padding:32px 26px;max-width:340px;text-align:center;box-shadow:var(--shadow-lg);}
   .receipt-card .mark{width:56px;height:56px;border-radius:50%;background:var(--green);color:#2B1620;display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 14px;box-shadow:0 10px 22px -10px rgba(122,183,26,0.55);}
@@ -287,7 +293,7 @@ let state = {
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, lastPayments:[], sending:false, variantPickerProduct:null,
   // Apertura/cierre de caja: la caja pertenece a la combinación cajero + centro.
   activeCashRegister:null, cashRegisterChecked:false, cashRegisterLoading:false,
-  openingAmountInput:"", openingError:"", openingSubmitting:false,
+  openingAmountInput:"", openingError:"", openingSubmitting:false, openingDenomMode:false, openingDenoms:{},
   cashPanelOpen:false, movementModalOpen:false, movementType:"retiro", movementAmount:"", movementNote:"", movementError:"",
   closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"", closingDenomMode:false, closingDenoms:{},
   // Cliente, ajuste por envío y notas de la venta actual.
@@ -699,10 +705,21 @@ function renderSalesListModal(){
 // de golpe (lento en tablets y hace scroll interminable), se muestran de a poco con
 // un botón "Ver más". Se reinicia cada que cambia la búsqueda o la categoría activa.
 const PROD_GRID_PAGE_SIZE = 24;
+function toastStack(){
+  let s=document.getElementById('toast-stack');
+  if(!s){ s=document.createElement('div'); s.id='toast-stack'; s.className='toast-stack'; s.setAttribute('role','status'); s.setAttribute('aria-live','polite'); document.body.appendChild(s); }
+  return s;
+}
 function showToast(msg){
-  const t=document.getElementById('toast'); if(!t) return;
-  t.textContent=msg; t.classList.add('show');
-  clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+  const s=toastStack(); msg=String(msg==null?'':msg);
+  // el mismo aviso repetido no se duplica: solo reinicia su tiempo
+  let t=[...s.querySelectorAll('.toast')].find(x=>x.textContent===msg && !x.classList.contains('out'));
+  if(!t){
+    t=document.createElement('div'); t.className='toast show'; t.textContent=msg;
+    s.insertBefore(t, s.querySelector('.undo-bar')||null);   // el aviso "Deshacer" queda siempre al final (abajo)
+    const all=[...s.querySelectorAll('.toast')]; if(all.length>5) all[0].remove();
+  }
+  clearTimeout(t._t); t._t=setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),230); }, 2600);
 }
 
 auth.onAuthStateChanged(user=>{
@@ -832,8 +849,9 @@ async function loadCashRegister(){
 }
 async function openCashRegister(){
   if(state.openingSubmitting) return;
-  const amount = Number(state.openingAmountInput);
-  if(state.openingAmountInput.trim()==='' || isNaN(amount) || amount<0){ state.openingError='Ingresa un monto válido'; render(); return; }
+  const amount = state.openingDenomMode ? denomTotal('o') : Number(state.openingAmountInput);
+  if(!state.openingDenomMode && (state.openingAmountInput.trim()==='' || isNaN(amount) || amount<0)){ state.openingError='Ingresa un monto válido'; render(); return; }
+  if(state.openingDenomMode && !(state.openingDenoms && Object.values(state.openingDenoms).some(n=>n>0)) ){ state.openingError='Cuenta al menos un billete o moneda, o escribe el total directo'; render(); return; }
   state.openingSubmitting = true; state.openingError=''; render();
   const payload = {
     cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
@@ -841,10 +859,14 @@ async function openCashRegister(){
     openedAt: new Date().toISOString(), openingAmount: amount,
     status: 'abierta', movements: [],
   };
+  if(state.openingDenomMode){
+    const bd = {}; CASH_DENOMS.forEach(x=>{ const n=(state.openingDenoms||{})[x.k]||0; if(n>0) bd[x.k]=n; });
+    if(Object.keys(bd).length) payload.openingBreakdown = bd;
+  }
   try{
     const ref = await db.collection('cashRegisters').add(payload);
     state.activeCashRegister = {id:ref.id, ...payload};
-    state.openingAmountInput='';
+    state.openingAmountInput=''; state.openingDenomMode=false; state.openingDenoms={};
     showToast('Caja abierta');
   }catch(e){ console.error(e); showToast('No se pudo abrir la caja'); }
   state.openingSubmitting = false; render();
@@ -853,9 +875,10 @@ function renderCashOpenScreen(){
   return `<div class="select-screen"><div class="card">
     <h2>Abrir caja</h2>
     <p>${state.activeCashier.name} · ${state.activeCenter.name}<br>Registra el fondo inicial en efectivo con el que empiezas el turno.</p>
-    <div class="form-field"><label>Fondo inicial (efectivo)</label>
+    <button type="button" class="denom-toggle" onclick="toggleOpenDenomMode()">${state.openingDenomMode?'Escribir el total directo':'Contar por billetes y monedas'}</button>
+    ${state.openingDenomMode ? renderDenomBox('o') : `<div class="form-field"><label>Fondo inicial (efectivo)</label>
       <input class="field-input" type="number" inputmode="decimal" placeholder="Ej. 500" value="${state.openingAmountInput}" oninput="state.openingAmountInput=this.value" onkeydown="if(event.key==='Enter')openCashRegister()">
-    </div>
+    </div>`}
     <div class="err">${state.openingError||''}</div>
     <button class="btn-primary" ${state.openingSubmitting?'disabled style="opacity:.5"':''} onclick="openCashRegister()">${state.openingSubmitting?'Abriendo…':'Abrir caja'}</button>
     <button class="btn-secondary" onclick="changeCashier()">Cambiar cajero</button>
@@ -938,8 +961,9 @@ const CASH_DENOMS = [
   {k:'m1', v:1, label:'$1', group:'Monedas'}, {k:'m050', v:0.5, label:'50¢', group:'Monedas'},
 ];
 function moneyCompact(n){ return moneyExact(n).replace(' MXN',''); }
-function denomTotal(){
-  const d = state.closingDenoms||{};
+function DN(ctx){ return ctx==='o' ? {obj:(state.openingDenoms||(state.openingDenoms={})), pre:'dno-'} : {obj:(state.closingDenoms||(state.closingDenoms={})), pre:'dn-'}; }
+function denomTotal(ctx){
+  const d = DN(ctx).obj;
   return Math.round(CASH_DENOMS.reduce((s,x)=>s+(d[x.k]||0)*x.v,0)*100)/100;
 }
 function closeDiffHtml(){
@@ -958,25 +982,36 @@ function refreshCloseTotals(){
   }
   const dv = document.getElementById('close-diff'); if(dv) dv.innerHTML = closeDiffHtml();
 }
-function setDenom(k, val){
-  const n = Math.max(0, Math.min(99999, parseInt(val,10)||0));
-  if(!state.closingDenoms) state.closingDenoms = {};
-  state.closingDenoms[k] = n;
-  const inp = document.getElementById('dn-in-'+k); if(inp && String(inp.value)!==String(n) && document.activeElement!==inp) inp.value = n;
-  refreshCloseTotals();
+function refreshOpenTotals(){
+  const t = denomTotal('o');
+  state.openingAmountInput = t>0 ? String(t) : '';
+  CASH_DENOMS.forEach(x=>{ const el=document.getElementById('dno-sub-'+x.k); if(el) el.textContent = moneyCompact((state.openingDenoms[x.k]||0)*x.v); });
+  const tt = document.getElementById('dno-total'); if(tt) tt.textContent = moneyExact(t);
 }
-function stepDenom(k, delta){
-  const cur = (state.closingDenoms&&state.closingDenoms[k])||0;
-  setDenom(k, cur+delta);
-  const inp = document.getElementById('dn-in-'+k); if(inp) inp.value = (state.closingDenoms[k]||0);
+function setDenom(k, val, ctx){
+  const n = Math.max(0, Math.min(99999, parseInt(val,10)||0));
+  const {obj,pre} = DN(ctx);
+  obj[k] = n;
+  const inp = document.getElementById(pre+'in-'+k); if(inp && String(inp.value)!==String(n) && document.activeElement!==inp) inp.value = n;
+  if(ctx==='o') refreshOpenTotals(); else refreshCloseTotals();
+}
+function stepDenom(k, delta, ctx){
+  const {obj,pre} = DN(ctx);
+  setDenom(k, (obj[k]||0)+delta, ctx);
+  const inp = document.getElementById(pre+'in-'+k); if(inp) inp.value = (obj[k]||0);
 }
 function toggleDenomMode(){
   state.closingDenomMode = !state.closingDenomMode;
   if(state.closingDenomMode){ const t=denomTotal(); state.closingCountedCash = t>0 ? String(t) : ''; }
   render();
 }
-function renderDenomBox(){
-  const d = state.closingDenoms||{};
+function toggleOpenDenomMode(){
+  state.openingDenomMode = !state.openingDenomMode;
+  if(state.openingDenomMode){ const t=denomTotal('o'); state.openingAmountInput = t>0 ? String(t) : ''; }
+  render();
+}
+function renderDenomBox(ctx){
+  const {obj:d,pre} = DN(ctx); const cx = ctx==='o' ? ",'o'" : '';
   let lastGroup = '';
   const rows = CASH_DENOMS.map(x=>{
     const head = x.group!==lastGroup ? `<div class="denom-group">${x.group}</div>` : '';
@@ -985,14 +1020,14 @@ function renderDenomBox(){
     return `${head}<div class="denom-row">
       <div class="denom-label">${x.label}</div>
       <div class="denom-step">
-        <button type="button" aria-label="Quitar uno de ${x.group==='Billetes'?'billete':'moneda'} de ${x.label}" onclick="stepDenom('${x.k}',-1)">−</button>
-        <input id="dn-in-${x.k}" type="number" inputmode="numeric" min="0" step="1" value="${n||''}" placeholder="0" aria-label="Cantidad de ${x.group==='Billetes'?'billetes':'monedas'} de ${x.label}" oninput="setDenom('${x.k}',this.value)">
-        <button type="button" aria-label="Agregar uno de ${x.group==='Billetes'?'billete':'moneda'} de ${x.label}" onclick="stepDenom('${x.k}',1)">+</button>
+        <button type="button" aria-label="Quitar uno de ${x.group==='Billetes'?'billete':'moneda'} de ${x.label}" onclick="stepDenom('${x.k}',-1${cx})">−</button>
+        <input id="${pre}in-${x.k}" type="number" inputmode="numeric" min="0" step="1" value="${n||''}" placeholder="0" aria-label="Cantidad de ${x.group==='Billetes'?'billetes':'monedas'} de ${x.label}" oninput="setDenom('${x.k}',this.value${cx})">
+        <button type="button" aria-label="Agregar uno de ${x.group==='Billetes'?'billete':'moneda'} de ${x.label}" onclick="stepDenom('${x.k}',1${cx})">+</button>
       </div>
-      <div class="denom-sub" id="dn-sub-${x.k}">${moneyCompact(n*x.v)}</div>
+      <div class="denom-sub" id="${pre}sub-${x.k}">${moneyCompact(n*x.v)}</div>
     </div>`;
   }).join('');
-  return `<div class="denom-box">${rows}<div class="denom-total"><span>Total</span><span id="dn-total">${moneyExact(denomTotal())}</span></div></div>`;
+  return `<div class="denom-box">${rows}<div class="denom-total"><span>Total</span><span id="${pre}total">${moneyExact(denomTotal(ctx))}</span></div></div>`;
 }
 async function openCashClose(){
   state.closingLoading = true; render();
@@ -2035,7 +2070,7 @@ function render(){
     if(state.warehouseOpen) html += renderWarehouseModal();
     root.innerHTML = html;
   }
-  if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  toastStack();
   restoreFocusState(root, focusInfo);
   restoreScrollPositions(root, scrollPositions);
   try{ fitFloatingMenus(); }catch(e){}

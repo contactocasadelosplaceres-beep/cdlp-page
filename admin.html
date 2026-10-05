@@ -426,7 +426,13 @@
   .status-filter button{flex-shrink:0;padding:8px 14px;min-height:36px;border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--ink-soft);font-size:12px;font-weight:700;transition:all .15s ease;}
   .status-filter button.active{background:var(--primary);color:#fff;box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#5C1F49;color:#fff;padding:11px 18px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s ease, transform .25s ease;box-shadow:var(--shadow-md);}
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  /* AVISOS APILADOS: varios avisos a la vez, sin taparse entre sí ni con "Deshacer" */
+  .toast-stack{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:calc(100% - 32px);max-width:480px;z-index:90;pointer-events:none;}
+  .toast-stack .toast{position:static;transform:none;opacity:0;max-width:100%;text-align:center;overflow-wrap:anywhere;line-height:1.3;animation:toastIn .22s ease forwards;}
+  .toast-stack .toast.show{opacity:1;transform:none;}
+  .toast-stack .toast.out{animation:toastOut .22s ease forwards;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(6px)}}
   .empty-state{padding:40px 20px;text-align:center;color:var(--ink-soft);}
   .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
   .cat-manage-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-soft);color:var(--primary-deep);padding:6px 8px 6px 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:600;margin:0 6px 8px 0;transition:box-shadow .15s ease;}
@@ -568,6 +574,8 @@
   /* ---- Aviso "Deshacer" (aparece unos segundos tras archivar, cancelar, eliminar o ajustar) ---- */
   .undo-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);min-width:min(280px,calc(100% - 32px));background:#5C1F49;color:#fff;padding:8px 8px 8px 16px;border-radius:var(--radius-pill);font-size:13px;font-weight:600;z-index:85;opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;box-shadow:var(--shadow-md);}
   .undo-bar.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(-6px);}
+  .toast-stack .undo-bar{position:static;transform:none;display:none;opacity:1;max-width:100%;width:100%;}
+  .toast-stack .undo-bar.show{display:flex;transform:none;animation:toastIn .22s ease;}
   .undo-bar .undo-msg{flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.3;}
   .undo-bar button{flex:0 0 auto;width:auto;min-height:36px;padding:0 16px;border:none;border-radius:var(--radius-pill);background:#fff;color:#5C1F49;font-weight:800;font-size:13px;cursor:pointer;}
   /* ---- Qué hacer hoy + señales de riesgo en pedidos ---- */
@@ -2245,10 +2253,21 @@ function printOrderReceipt(id){
   win.focus();
 }
 function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function toastStack(){
+  let s=document.getElementById('toast-stack');
+  if(!s){ s=document.createElement('div'); s.id='toast-stack'; s.className='toast-stack'; s.setAttribute('role','status'); s.setAttribute('aria-live','polite'); document.body.appendChild(s); }
+  return s;
+}
 function showToast(msg){
-  const t=document.getElementById('toast'); if(!t) return;
-  t.textContent=msg; t.classList.add('show');
-  clearTimeout(window._toastTimer); window._toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+  const s=toastStack(); msg=String(msg==null?'':msg);
+  // el mismo aviso repetido no se duplica: solo reinicia su tiempo
+  let t=[...s.querySelectorAll('.toast')].find(x=>x.textContent===msg && !x.classList.contains('out'));
+  if(!t){
+    t=document.createElement('div'); t.className='toast show'; t.textContent=msg;
+    s.insertBefore(t, s.querySelector('.undo-bar')||null);   // el aviso "Deshacer" queda siempre al final (abajo)
+    const all=[...s.querySelectorAll('.toast')]; if(all.length>5) all[0].remove();
+  }
+  clearTimeout(t._t); t._t=setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),230); }, 2600);
 }
 
 /* ---- Aviso "Deshacer": reemplaza al toast en acciones que se pueden revertir. ----
@@ -2260,7 +2279,7 @@ function showUndo(msg, fn, ms, label){
     bar = document.createElement('div'); bar.id='undo-bar'; bar.className='undo-bar';
     bar.setAttribute('role','status'); bar.setAttribute('aria-live','polite');
     bar.innerHTML = '<span class="undo-msg"></span><button type="button" onclick="runUndo()">Deshacer</button>';
-    document.body.appendChild(bar);
+    toastStack().appendChild(bar);
   }
   bar.querySelector('.undo-msg').textContent = msg;
   bar.querySelector('button').textContent = label || 'Deshacer';
@@ -9776,6 +9795,7 @@ function renderCajaDetailModal(){
       <div class="panel-sub" style="margin:-8px 0 14px;">Apertura: ${new Date(r.openedAt).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
       <div class="order-detail" style="margin-bottom:14px;">
         <div><span>Fondo inicial</span><span>${money(r.openingAmount||0)}</span></div>
+        ${r.openingBreakdown ? `<div style="display:block;font-size:12px;color:var(--ink-soft);line-height:1.6;">Conteo inicial: ${Object.entries(r.openingBreakdown).map(([k,n])=>{ const lab={b1000:'billete $1,000',b500:'billete $500',b200:'billete $200',b100:'billete $100',b50:'billete $50',b20:'billete $20',m20:'moneda $20',m10:'moneda $10',m5:'moneda $5',m2:'moneda $2',m1:'moneda $1',m050:'moneda 50¢'}[k]||k; return `${n} × ${lab}`; }).join(' · ')}</div>` : ''}
         ${r.status==='cerrada' ? `
           ${Object.keys(r.salesByPayment||{}).map(m=>`<div><span>Ventas en ${m}</span><span>${money(r.salesByPayment[m])}</span></div>`).join('')}
           <div><span>Total de ventas</span><span>${money(r.totalSales||0)}</span></div>
@@ -12488,7 +12508,7 @@ function render(){
   root.innerHTML = renderAdmin();
   if(state.productModal && document.getElementById('pf-barcode-svg')){ drawProductBarcode(); }
   if(state.postModalProductId && document.getElementById('post-canvas')){ drawPostCanvas(); }
-  if(!document.getElementById('toast')){ const t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  toastStack();
   const pinField = document.getElementById('pin-field'); if(pinField && !focusInfo) pinField.focus();
   const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
   restoreFocusState(root, focusInfo);
