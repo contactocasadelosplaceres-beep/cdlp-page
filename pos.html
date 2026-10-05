@@ -1906,6 +1906,64 @@ function render(){
   try{ fitFloatingMenus(); }catch(e){}
 }
 render();
+
+
+/* ============== BOTÓN "ATRÁS" ==============
+   El botón atrás del teléfono/navegador sacaba de la aplicación porque todo ocurre en una sola
+   página. Aquí cada "pantalla" abierta (cajón, ventana, sub-panel…) cuenta como un paso del
+   historial: al abrirla se agrega una entrada y al presionar atrás se cierra la de encima, en vez
+   de salir. navLayers() lista (de arriba hacia abajo) lo que está abierto y cómo cerrarlo; no toca
+   ninguna lógica de la página, solo lee su estado y reutiliza las mismas funciones de cierre. */
+const NAV = {depth:0, ignore:0, busy:false};
+try{ if(history.state && history.state.cdlpNav) history.replaceState(null,''); }catch(e){}
+function navSync(){
+  if(NAV.busy || NAV.ignore>0) return;
+  let n = 0; try{ n = navLayers().length; }catch(e){}
+  if(n > NAV.depth){
+    while(NAV.depth < n){ NAV.depth++; try{ history.pushState({cdlpNav:NAV.depth}, ''); }catch(e){} }
+  } else if(n < NAV.depth){
+    const d = NAV.depth - n; NAV.depth = n; NAV.ignore++;
+    setTimeout(()=>{ if(NAV.ignore>0){ NAV.ignore=0; navSync(); } }, 900);
+    try{ history.go(-d); }catch(e){ NAV.ignore=0; }
+  }
+}
+window.addEventListener('popstate', (e)=>{
+  if(NAV.ignore>0){ NAV.ignore--; if(NAV.ignore===0) navSync(); return; }
+  const target = (e.state && e.state.cdlpNav) || 0;
+  let n = 0; try{ n = navLayers().length; }catch(_){}
+  NAV.busy = true;
+  try{
+    for(let i = n - target; i > 0; i--){
+      const cur = navLayers(); if(!cur.length) break;
+      try{ cur[0](); }catch(_){}
+    }
+  } finally { NAV.busy = false; }
+  NAV.depth = target;
+  navSync();
+});
+
+function navLayers(){
+  const s = state, L = [];
+  if(!s.user || !s.loaded || !s.activeCashier || !s.pinConfirmed || !s.activeCenter || !s.activeCashRegister) return L;
+  if(s.posMoreMenuOpen) L.push(()=>{ s.posMoreMenuOpen=false; render(); });
+  if(s.checkoutReminderOpen) L.push(()=>closeCheckoutReminder(false));
+  if(s.warehouseOpen) L.push(()=>closeWarehouseView());
+  if(s.exchangeModalOpen) L.push(()=>closeExchangeModal());
+  if(s.salesListOpen) L.push(()=>closeSalesList());
+  if(s.barcodeScannerOpen) L.push(()=>closeBarcodeScanner());
+  if(s.notesModalOpen) L.push(()=>{ s.notesModalOpen=false; render(); });
+  if(s.discountModalOpen) L.push(()=>{ s.discountModalOpen=false; render(); });
+  if(s.customerPickerOpen) L.push(()=>{ s.customerPickerOpen=false; render(); });
+  if(s.movementModalOpen) L.push(()=>{ s.movementModalOpen=false; render(); });
+  if(s.cashPanelOpen) L.push(()=>{ s.cashPanelOpen=false; render(); });
+  if(s.variantPickerProduct) L.push(()=>{ s.variantPickerProduct=null; render(); });
+  if(s.closingOpen) L.push(()=>{ s.closingOpen=false; render(); });
+  if(s.saleDone) L.push(()=>newSale());
+  else if(!s.closingOpen && s.cartCollapsed===false) L.push(()=>{ s.cartCollapsed=true; render(); });
+  return L;
+}
+
+{ const _renderBase = render; render = function(){ _renderBase(); navSync(); }; }
 </script>
 </body>
 </html>

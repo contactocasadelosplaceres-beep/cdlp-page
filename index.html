@@ -654,7 +654,7 @@ async function openProductFromURL(){
   const catParam = params.get('categoria');
   if(catParam){
     const url = new URL(location.href); url.searchParams.delete('categoria');
-    history.replaceState({}, '', url.toString());
+    history.replaceState(history.state, '', url.toString());
     const match = visibleCategories().find(c=>c.toLowerCase()===catParam.toLowerCase());
     if(match) goToCatalog(match);
     else showToast('Esa categoría ya no está disponible');
@@ -671,7 +671,7 @@ async function openProductFromURL(){
     }catch(e){ console.error('No se pudo cargar el producto del enlace directo', e); }
   }
   const url = new URL(location.href); url.searchParams.delete('producto');
-  history.replaceState({}, '', url.toString());
+  history.replaceState(history.state, '', url.toString());
   if(p && !p.hidden){ openProductDetail(p.id); }
   else { showToast('Ese producto ya no está disponible'); }
 }
@@ -873,7 +873,7 @@ function captureWholesaleCodeFromURL(){
       showToast(`Modo mayoreo activado: ${tier.name}`);
     }
     const url = new URL(location.href); url.searchParams.delete('mayoreo');
-    history.replaceState({}, '', url.toString());
+    history.replaceState(history.state, '', url.toString());
   }
 }
 function activeWholesaleTier(){
@@ -899,7 +899,7 @@ function captureKioskModeFromURL(){
     else localStorage.setItem(KIOSK_KEY,'1');
   }catch(e){}
   const url = new URL(location.href); url.searchParams.delete('vitrina');
-  history.replaceState({}, '', url.toString());
+  history.replaceState(history.state, '', url.toString());
 }
 function isKioskMode(){
   try{ return localStorage.getItem(KIOSK_KEY)==='1'; }catch(e){ return false; }
@@ -2729,6 +2729,61 @@ function autoScrollTick(ts){
 requestAnimationFrame(autoScrollTick);
 
 loadData();
+
+
+/* ============== BOTÓN "ATRÁS" ==============
+   El botón atrás del teléfono/navegador sacaba de la aplicación porque todo ocurre en una sola
+   página. Aquí cada "pantalla" abierta (cajón, ventana, sub-panel…) cuenta como un paso del
+   historial: al abrirla se agrega una entrada y al presionar atrás se cierra la de encima, en vez
+   de salir. navLayers() lista (de arriba hacia abajo) lo que está abierto y cómo cerrarlo; no toca
+   ninguna lógica de la página, solo lee su estado y reutiliza las mismas funciones de cierre. */
+const NAV = {depth:0, ignore:0, busy:false};
+try{ if(history.state && history.state.cdlpNav) history.replaceState(null,''); }catch(e){}
+function navSync(){
+  if(NAV.busy || NAV.ignore>0) return;
+  let n = 0; try{ n = navLayers().length; }catch(e){}
+  if(n > NAV.depth){
+    while(NAV.depth < n){ NAV.depth++; try{ history.pushState({cdlpNav:NAV.depth}, ''); }catch(e){} }
+  } else if(n < NAV.depth){
+    const d = NAV.depth - n; NAV.depth = n; NAV.ignore++;
+    setTimeout(()=>{ if(NAV.ignore>0){ NAV.ignore=0; navSync(); } }, 900);
+    try{ history.go(-d); }catch(e){ NAV.ignore=0; }
+  }
+}
+window.addEventListener('popstate', (e)=>{
+  if(NAV.ignore>0){ NAV.ignore--; if(NAV.ignore===0) navSync(); return; }
+  const target = (e.state && e.state.cdlpNav) || 0;
+  let n = 0; try{ n = navLayers().length; }catch(_){}
+  NAV.busy = true;
+  try{
+    for(let i = n - target; i > 0; i--){
+      const cur = navLayers(); if(!cur.length) break;
+      try{ cur[0](); }catch(_){}
+    }
+  } finally { NAV.busy = false; }
+  NAV.depth = target;
+  navSync();
+});
+
+function navLayers(){
+  const s = state, L = [];
+  if(s.cartAbandonSurveyOpen) L.push(()=>{ s.cartAbandonSurveyOpen=false; render(); });
+  if(s.checkoutReminderOpen) L.push(()=>{ s.checkoutReminderOpen=false; render(); });
+  if(s.privacyPolicyOpen) L.push(()=>{ s.privacyPolicyOpen=false; render(); });
+  if(s.priceFilterOpen) L.push(()=>{ s.priceFilterOpen=false; render(); });
+  if(s.compareOpen) L.push(()=>{ s.compareOpen=false; render(); });
+  if(s.wishlistOpen) L.push(()=>{ s.wishlistOpen=false; render(); });
+  if(s.messageDrawerOpen) L.push(()=>closeMessageDrawer());
+  if(s.profileOpen) L.push(()=>closeProfile());
+  if(s.checkoutOpen) L.push(()=>{ s.checkoutOpen=false; render(); });
+  if(s.cartOpen) L.push(()=>{ s.cartOpen=false; render(); });
+  if(s.detailProductId) L.push(()=>{ s.detailProductId=null; render(); });
+  if(s.orderPlaced) L.push(()=>{ s.orderPlaced=false; render(); });
+  if(s.loaded && (s.activeCat!=='Todos' || s.activeNeed || s.activeBestSellers)) L.push(()=>{ s.activeCat='Todos'; s.activeNeed=null; s.activeBestSellers=false; s.gridRenderLimit=20; render(); });
+  return L;
+}
+
+{ const _renderBase = render; render = function(){ _renderBase(); navSync(); }; }
 </script>
 </body>
 </html>
