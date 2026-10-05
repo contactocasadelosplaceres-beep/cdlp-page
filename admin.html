@@ -861,7 +861,7 @@ let state = {
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   couponModal:null, couponProductSearch:"", couponUsage:[],
   promoModal:null, promoProductSearch:"", promoProductSearch2:"",
-  auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"",
+  auditCenter:"", auditSearch:"", auditCategory:"Todas", auditListLimit:20, auditCounts:{}, auditNotes:"", auditSub:"contar", auditSnap:{}, auditBlind:true, auditReview:false, auditStartedAt:null, auditPlan:null, auditPlanOnly:false, auditReasons:{}, auditRecounts:{}, auditLast:null, auditResumed:false, auditScannerOpen:false, auditScannerLoading:false, auditTrackFilter:"abiertas", auditResolveOpen:null, auditResolveNote:"",
   transferFrom:"", transferTo:"", transferProductSearch:"", transferCart:{}, transferNotes:"",
   cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
   orderDiscountEditing:false, orderDiscountType:"fixed", orderDiscountValueInput:"", orderDiscountCouponInput:"", orderDiscountReasonInput:"",
@@ -1097,6 +1097,7 @@ async function loadData(attempt){
   // Red de seguridad para kits: recalcula su stock contra las existencias reales de sus
   // componentes cada vez que se abre el panel, por si algo lo dejó desactualizado.
   refreshAllKitStocks();
+  auditRestoreDraft();
   state.loaded = true; render();
 }
 // "Más vendidos" automático: analiza lo vendido de verdad (tienda + POS, sin lo cancelado) en
@@ -4263,6 +4264,7 @@ function renderAdmin(){
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.catManageOpen ? renderOrganizeModal('cat') : ''}
   ${state.bulkTagModal ? renderBulkTagModal() : ''}
+  ${state.auditScannerOpen ? renderAuditScannerModal() : ''}
   ${state.trashOpen ? renderTrashModal() : ''}
   ${state.promoListOpen ? renderPromoListModal() : ''}
   ${state.duplicatesOpen ? renderDuplicatesModal() : ''}
@@ -5030,6 +5032,9 @@ function computeTodayTasks(){
   if(mcl) t.push({tone:'info', n:mcl.pending, text: mcl.pending ? `${mcl.pending===1?'pendiente':'pendientes'} para cerrar ${monthLabelOf(mcl.key)}` : `todo listo para cerrar ${monthLabelOf(mcl.key)}`, go:"state.adminTab='estadísticas';state.statsSubview='cierre';state.closeMonth='"+mcl.key+"';render()"});
   const liqN = computeLiquidation().rows.filter(r=>!r.onPromo && !r.sellsOut && r.days<=15).length;
   if(liqN) t.push({tone:'ambar', n:liqN, text:`producto${liqN===1?'':'s'} caduca${liqN===1?'':'n'} en 15 días o menos y no alcanza${liqN===1?'':'n'} a venderse — ponlo${liqN===1?'':'s'} en oferta`, go:"state.adminTab='estadísticas';state.statsSubview='productos';render();var e=document.getElementById('liq-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
+  if(auditHasDraft()) t.push({tone:'ambar', n:Object.keys(state.auditCounts).length, text:'producto'+(Object.keys(state.auditCounts).length===1?'':'s')+' contado'+(Object.keys(state.auditCounts).length===1?'':'s')+' en un conteo sin terminar — retómalo y finalízalo', go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='contar';render()"});
+  else { const dc = defaultCenterId(); if(dc){ const cp = computeCountPlan(dc); if(cp.todayLeft>0 && cp.dueCount>0) t.push({tone: cp.overdueA?'ambar':'info', n:Math.min(cp.todayLeft, cp.dueCount), text:`producto${Math.min(cp.todayLeft,cp.dueCount)===1?'':'s'} te toca contar hoy (conteo cíclico)`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='calendario';render()"}); } }
+  { const oa = computeAuditStats().open; if(oa) t.push({tone:'ambar', n:oa, text:`diferencia${oa===1?'':'s'} de inventario sin resolver`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='seguimiento';render()"}); }
   const m = computeMetrics();
   if(m.lowStock.length) t.push({tone:'ambar', n:m.lowStock.length, text:`producto${m.lowStock.length===1?'':'s'} con poco stock o agotado${m.lowStock.length===1?'':'s'}`, go:"var e=document.getElementById('resumen-reabasto');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   if(m.expiringOrExpired) t.push({tone:'ambar', n:m.expiringOrExpired, text:`producto${m.expiringOrExpired===1?'':'s'} por caducar o caducado${m.expiringOrExpired===1?'':'s'}`, go:"state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"});
@@ -10338,55 +10343,558 @@ function renderInventarioPorCentro(){
   `;
 }
 
-/* ============== AUDITORÍAS DE INVENTARIO ============== */
+/* ============== AUDITORÍAS DE INVENTARIO ==============
+   Conteo que NO se pierde al recargar (borrador en este navegador hasta que se finaliza), captura escribiendo
+   o escaneando (pistola o cámara), conteo ciego opcional, ajuste por diferencia (no pisa ventas hechas durante
+   el conteo), seguimiento de diferencias con motivo y recuento, y calendario de conteo cíclico (A/B/C). */
+const AUDIT_DRAFT_KEY = 'cdlp_audit_draft_v1';
+const AUDIT_REASONS = [['investigar','Por investigar'],['error_conteo','Error de conteo'],['venta_sin_registrar','Venta sin registrar'],['merma','Merma o dañado'],['extravio','Extravío o robo'],['devolucion','Devolución sin registrar'],['proveedor','Error al recibir del proveedor'],['otro','Otro']];
+const AUDIT_INTERVAL_DAYS = {A:30, B:60, C:90};
+function auditReasonLabel(k){ const r = AUDIT_REASONS.find(x=>x[0]===k); return r ? r[1] : 'Por investigar'; }
+function auditRecountUnits(){ const n = Number(state.settings.auditRecountUnits); return n>0 ? n : 2; }
+function auditRecountMoney(){ const n = Number(state.settings.auditRecountMoney); return n>0 ? n : 300; }
+function auditDailyBatch(){ const n = Math.floor(Number(state.settings.auditDailyBatch)); return n>0 ? n : 25; }
+function auditProdCost(p){ return Number(p && p.cost) || 0; }
+
+/* ---- Borrador (se guarda en este navegador; se borra al finalizar o descartar) ---- */
+function auditSaveDraft(){
+  try{
+    const n = Object.keys(state.auditCounts||{}).length;
+    if(!state.auditCenter || (!n && !state.auditPlan)){ localStorage.removeItem(AUDIT_DRAFT_KEY); return; }
+    localStorage.setItem(AUDIT_DRAFT_KEY, JSON.stringify({v:1, center:state.auditCenter, counts:state.auditCounts, snap:state.auditSnap, blind:state.auditBlind, review:state.auditReview, notes:state.auditNotes, startedAt:state.auditStartedAt, category:state.auditCategory, plan:state.auditPlan, planOnly:state.auditPlanOnly, reasons:state.auditReasons, recounts:state.auditRecounts}));
+  }catch(e){}
+}
+function auditClearDraft(){ try{ localStorage.removeItem(AUDIT_DRAFT_KEY); }catch(e){} }
+let _auditDraftRestored = false;
+function auditRestoreDraft(){
+  if(_auditDraftRestored) return; _auditDraftRestored = true;
+  try{
+    const raw = localStorage.getItem(AUDIT_DRAFT_KEY); if(!raw) return;
+    const d = JSON.parse(raw);
+    if(!d || !d.center || !state.centers.some(c=>c.id===d.center)) return;
+    state.auditCenter = d.center; state.auditCounts = d.counts||{}; state.auditSnap = d.snap||{};
+    state.auditBlind = d.blind!==false; state.auditReview = !!d.review; state.auditNotes = d.notes||'';
+    state.auditStartedAt = d.startedAt||null; state.auditCategory = d.category||'Todas';
+    state.auditPlan = d.plan||null; state.auditPlanOnly = !!d.planOnly; state.auditReasons = d.reasons||{}; state.auditRecounts = d.recounts||{};
+    state.auditResumed = Object.keys(state.auditCounts).length>0 || !!state.auditPlan;
+  }catch(e){ console.error('No se pudo recuperar el conteo en curso', e); }
+}
+function auditHasDraft(){ return !!state.auditCenter && (Object.keys(state.auditCounts||{}).length>0 || !!state.auditPlan); }
+function auditResetState(){
+  state.auditCounts = {}; state.auditSnap = {}; state.auditNotes = ''; state.auditSearch = ''; state.auditReview = false; state.auditStartedAt = null;
+  state.auditPlan = null; state.auditPlanOnly = false; state.auditReasons = {}; state.auditRecounts = {}; state.auditLast = null; state.auditResumed = false;
+}
+function discardAuditDraft(){
+  if(!confirm('¿Descartar el conteo en curso? Se borrarán las cantidades que llevas contadas.')) return;
+  auditResetState(); auditClearDraft(); showToast('Conteo descartado'); render();
+}
+function auditChooseCenter(id){
+  if(auditHasDraft() && id!==state.auditCenter && !confirm('Si cambias de centro se descarta el conteo en curso. ¿Continuar?')){ render(); return; }
+  if(id!==state.auditCenter) auditResetState();
+  state.auditCenter = id; state.auditListLimit = 20; auditSaveDraft(); render();
+}
+function auditEnsureStart(){ if(!state.auditStartedAt) state.auditStartedAt = new Date().toISOString(); }
+function auditEnsureSnap(p){ if(state.auditSnap[p.id]===undefined) state.auditSnap[p.id] = centerStock(p, state.auditCenter); }
+
+/* ---- Captura: escribir cantidad, +/- y escanear ---- */
 function setAuditCount(pid, value){
-  const v = value.trim();
-  if(v===''){ delete state.auditCounts[pid]; }
-  else{ state.auditCounts[pid] = Math.max(0, Number(v)||0); }
+  const p = state.products.find(x=>x.id===pid); if(!p) return;
+  const v = String(value==null?'':value).trim();
+  auditEnsureStart(); auditEnsureSnap(p);
+  if(v===''){ delete state.auditCounts[pid]; delete state.auditRecounts[pid]; }
+  else{ state.auditCounts[pid] = Math.max(0, Math.floor(Number(v)||0)); }
+  auditSaveDraft();
+}
+function auditStep(pid, delta){
+  const p = state.products.find(x=>x.id===pid); if(!p) return;
+  auditEnsureStart(); auditEnsureSnap(p);
+  state.auditCounts[pid] = Math.max(0, (state.auditCounts[pid]||0) + delta);
+  auditSaveDraft(); render();
+}
+function auditFindByCode(code){
+  const c = String(code||'').trim().toLowerCase(); if(!c) return null;
+  return state.products.find(p=>!p.isKit && p.sku && String(p.sku).trim().toLowerCase()===c)
+      || state.products.find(p=>!p.isKit && p.id===code.trim())
+      || null;
+}
+function auditScan(code, fromCamera){
+  const p = auditFindByCode(code);
+  if(!p){ showToast(`Código "${String(code).trim()}" no coincide con ningún producto`); return null; }
+  if(!state.auditCenter){ showToast('Primero elige el centro que estás contando'); return null; }
+  auditEnsureStart(); auditEnsureSnap(p);
+  state.auditCounts[p.id] = (state.auditCounts[p.id]||0) + 1;
+  state.auditLast = {pid:p.id, name:p.name, n:state.auditCounts[p.id]};
+  auditSaveDraft();
+  if(fromCamera){
+    const el = document.getElementById('audit-scan-status');
+    if(el) el.innerHTML = `<strong>${escapeHtmlAudit(p.name)}</strong><br>Contados: ${state.auditCounts[p.id]}`;
+    try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
+  } else { render(); }
+  return p;
+}
+function escapeHtmlAudit(s){ return String(s==null?'':s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function auditSearchEnter(v){
+  const p = auditFindByCode(v);
+  if(p){ state.auditSearch=''; auditScan(v,false); setTimeout(()=>{ const i=document.getElementById('audit-search-input'); if(i) i.focus(); },0); return; }
+  state.auditSearch = v; state.auditListLimit = 20; render();
+  const i = document.getElementById('audit-search-input'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+function onAuditSearchInput(v){
+  state.auditSearch = v; state.auditListLimit = 20; render();
+  const i = document.getElementById('audit-search-input');
+  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+
+/* ---- Lector de cámara (misma librería que el POS) ---- */
+let _auditQrLib = null, _auditScanner = null, _auditLastScan = {code:'', t:0}, _auditScannerBusy = false;
+function auditLoadQrLib(){
+  if(typeof Html5Qrcode!=='undefined') return Promise.resolve();
+  if(_auditQrLib) return _auditQrLib;
+  _auditQrLib = new Promise((resolve,reject)=>{
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload = ()=>resolve(); s.onerror = ()=>{ _auditQrLib=null; reject(new Error('lib')); };
+    document.head.appendChild(s);
+  });
+  return _auditQrLib;
+}
+function openAuditScanner(){
+  if(!state.auditCenter){ showToast('Primero elige el centro que estás contando'); return; }
+  state.auditScannerOpen = true; state.auditScannerLoading = true; render();
+  auditLoadQrLib().then(()=>{ state.auditScannerLoading=false; if(!state.auditScannerOpen) return; render(); auditStartCamera(); })
+    .catch(()=>{ state.auditScannerLoading=false; showToast('No se pudo cargar el lector de cámara — revisa tu conexión'); closeAuditScanner(); });
+}
+function auditStartCamera(){
+  if(_auditScannerBusy || !state.auditScannerOpen || typeof Html5Qrcode==='undefined') return;
+  const view = document.getElementById('audit-scanner-view'); if(!view) return;
+  _auditScannerBusy = true;
+  setTimeout(()=>{
+    try{
+      _auditScanner = new Html5Qrcode('audit-scanner-view');
+      _auditScanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:260,height:140}}, (txt)=>{
+        const now = Date.now();
+        if(txt===_auditLastScan.code && now-_auditLastScan.t<2000) return;   // el mismo código no cuenta dos veces seguidas
+        _auditLastScan = {code:txt, t:now};
+        auditScan(txt, true);
+      }, ()=>{}).catch(()=>{ showToast('No se pudo abrir la cámara — revisa el permiso de este sitio'); _auditScannerBusy=false; closeAuditScanner(); });
+    }catch(e){ _auditScannerBusy=false; }
+  }, 80);
+}
+function auditScannerEnsure(){
+  // render() reconstruye la pantalla: si la cámara estaba abierta se vuelve a conectar al nuevo contenedor
+  if(!state.auditScannerOpen || state.auditScannerLoading) return;
+  const view = document.getElementById('audit-scanner-view');
+  if(view && !view.querySelector('video')){ _auditScannerBusy=false; _auditScanner=null; auditStartCamera(); }
+}
+function closeAuditScanner(){
+  state.auditScannerOpen = false; state.auditScannerLoading = false; _auditScannerBusy = false;
+  const sc = _auditScanner; _auditScanner = null;
+  if(sc){ try{ sc.stop().then(()=>sc.clear()).catch(()=>{}); }catch(e){} }
+  render();
+}
+function renderAuditScannerModal(){
+  return `<div class="modal-overlay"><div class="modal" style="max-width:400px;text-align:center;">
+    <h3>Escanear para contar</h3>
+    <div class="panel-sub">${state.auditScannerLoading ? 'Cargando el lector…' : 'Cada código que escanees suma 1 pieza al producto. Puedes seguir escaneando sin cerrar.'}</div>
+    <div id="audit-scanner-view" style="margin:12px 0;border-radius:12px;overflow:hidden;min-height:${state.auditScannerLoading?'120px':'0'};"></div>
+    <div id="audit-scan-status" class="note-box" style="text-align:center;">${state.auditLast?`<strong>${escapeHtmlAudit(state.auditLast.name)}</strong><br>Contados: ${state.auditCounts[state.auditLast.pid]||0}`:'Apunta al código de barras del producto.'}</div>
+    <button class="btn-primary" style="width:100%;margin-top:10px;" onclick="closeAuditScanner()">Listo</button>
+  </div></div>`;
+}
+{ const _r0 = render; render = function(){ _r0(); auditScannerEnsure(); }; }
+
+/* ---- Diferencias y cierre ---- */
+function auditCountedFinal(pid){
+  const rc = state.auditRecounts[pid];
+  return (rc!==undefined && rc!=='' && !isNaN(Number(rc))) ? Math.max(0, Math.floor(Number(rc))) : state.auditCounts[pid];
 }
 function auditDiffRows(){
   if(!state.auditCenter) return [];
-  return Object.entries(state.auditCounts).map(([pid,counted])=>{
-    const p = state.products.find(x=>x.id===pid);
-    if(!p) return null;
-    const system = centerStock(p, state.auditCenter);
-    return {pid, name:p.name, system, counted, diff: counted - system};
+  return Object.keys(state.auditCounts).map(pid=>{
+    const p = state.products.find(x=>x.id===pid); if(!p) return null;
+    const system = state.auditSnap[pid]!==undefined ? state.auditSnap[pid] : centerStock(p, state.auditCenter);
+    const first = state.auditCounts[pid], counted = auditCountedFinal(pid);
+    const cost = auditProdCost(p), diff = counted - system;
+    const big = Math.abs(first - system) >= auditRecountUnits() || Math.abs((first - system)*cost) >= auditRecountMoney();
+    return {pid, name:p.name, sku:p.sku||'', system, first, counted, diff, cost, value: Math.round(diff*cost*100)/100, big, recounted: counted!==first, p};
   }).filter(Boolean);
 }
 async function commitAudit(applyAdjustment){
   if(!state.auditCenter){ showToast('Elige el centro que estás auditando'); return; }
   const rows = auditDiffRows();
   if(rows.length===0){ showToast('Cuenta al menos un producto antes de guardar'); return; }
+  const pendingRecount = rows.filter(r=>r.big && r.diff!==0 && !r.recounted).length;
+  if(pendingRecount && !confirm(`${pendingRecount} diferencia${pendingRecount===1?'':'s'} grande${pendingRecount===1?'':'s'} no se ${pendingRecount===1?'ha':'han'} vuelto a contar. ¿Guardar así de todos modos?`)) return;
   const center = state.centers.find(c=>c.id===state.auditCenter);
+  const items = rows.map(r=>{
+    const it = {productId:r.pid, name:r.name, systemQty:r.system, countedQty:r.counted, diff:r.diff, unitCost:r.cost, valueDiff:r.value};
+    if(r.recounted) it.firstCount = r.first;
+    if(r.diff!==0){ it.reason = state.auditReasons[r.pid] || 'investigar'; it.status = 'abierta'; } else { it.status = 'ok'; }
+    return it;
+  });
   const auditDoc = {
-    date: new Date().toISOString(), centerId: state.auditCenter, centerName: center.name,
-    items: rows.map(r=>({productId:r.pid, name:r.name, systemQty:r.system, countedQty:r.counted, diff:r.diff})),
-    notes: state.auditNotes.trim(), applied: applyAdjustment,
+    date: new Date().toISOString(), startedAt: state.auditStartedAt||null, centerId: state.auditCenter, centerName: center?center.name:'',
+    items, notes: (state.auditNotes||'').trim(), applied: !!applyAdjustment, blind: !!state.auditBlind, method:'v2',
   };
   try{
     const ref = db.collection('audits').doc();
+    const touched = [], moves = [];
     if(applyAdjustment){
       const batch = db.batch();
       rows.forEach(r=>{
-        const p = state.products.find(x=>x.id===r.pid);
-        if(!p) return;
+        const p = state.products.find(x=>x.id===r.pid); if(!p) return;
         if(!p.stockByCenter) p.stockByCenter = {};
-        const before = p.stockByCenter[state.auditCenter]||0;
-        p.stockByCenter[state.auditCenter] = r.counted;
-        p.stock = totalStock(p);
-        if(r.counted !== before) logStockMovement(r.pid, 'auditoria', r.counted-before, `Auditoría en ${center.name}`, state.auditCenter);
+        const current = p.stockByCenter[state.auditCenter]||0;
+        // Se conserva lo vendido/recibido mientras se contaba: nuevo = contado + (existencia actual - existencia al empezar a contar)
+        const next = Math.max(0, r.counted + (current - r.system));
+        p.stockByCenter[state.auditCenter] = next; p.stock = totalStock(p);
+        if(next!==current) moves.push([r.pid, next-current]);
+        touched.push(r.pid);
         batch.update(db.collection('products').doc(r.pid), {stockByCenter:p.stockByCenter, stock:p.stock});
       });
       batch.set(ref, auditDoc);
       await batch.commit();
+      moves.forEach(([pid,d])=>logStockMovement(pid,'auditoria',d,`Auditoría en ${auditDoc.centerName}`,state.auditCenter));
+      if(touched.length) recomputeKitStocksFor(touched);
     }else{
       await ref.set(auditDoc);
     }
     state.audits.unshift({id:ref.id, ...auditDoc});
-    state.auditCounts = {}; state.auditNotes=''; state.auditSearch='';
+    auditResetState(); auditClearDraft();
     showToast(applyAdjustment ? 'Auditoría guardada y inventario ajustado' : 'Auditoría guardada'); render();
   }catch(e){ console.error(e); showToast('No se pudo guardar la auditoría'); }
 }
+
+/* ---- Seguimiento de diferencias ---- */
+function auditTrackedItems(){
+  const out = [];
+  (state.audits||[]).forEach(a=>{ (a.items||[]).forEach((it,idx)=>{ if(it.diff && (it.status==='abierta'||it.status==='resuelta')) out.push({a, it, idx, key:a.id+':'+idx}); }); });
+  return out.sort((x,y)=>new Date(y.a.date)-new Date(x.a.date));
+}
+async function auditUpdateItem(auditId, idx, patch){
+  const a = state.audits.find(x=>x.id===auditId); if(!a) return;
+  const items = (a.items||[]).map((it,i)=> i===idx ? {...it, ...patch} : it);
+  try{ await db.collection('audits').doc(auditId).update({items}); a.items = items; render(); }
+  catch(e){ console.error(e); showToast('No se pudo guardar el cambio'); }
+}
+function auditSetReason(auditId, idx, reason){ auditUpdateItem(auditId, idx, {reason}); }
+function auditResolve(auditId, idx){
+  const note = (state.auditResolveNote||'').trim();
+  state.auditResolveOpen = null; state.auditResolveNote = '';
+  auditUpdateItem(auditId, idx, {status:'resuelta', resolvedAt:new Date().toISOString(), resolutionNote:note});
+}
+function auditReopen(auditId, idx){ auditUpdateItem(auditId, idx, {status:'abierta', resolvedAt:null, resolutionNote:''}); }
+function computeAuditStats(){
+  const monthKey = new Date().toISOString().slice(0,7), since90 = Date.now()-90*86400000;
+  let falt=0, sobr=0, items90=0, ok90=0, open=0, openVal=0;
+  (state.audits||[]).forEach(a=>{
+    const t = new Date(a.date).getTime();
+    (a.items||[]).forEach(it=>{
+      if(t>=since90){ items90++; if(!it.diff) ok90++; }
+      if(String(a.date).slice(0,7)===monthKey && it.diff){ const v=(it.valueDiff!=null?it.valueDiff:0); if(v<0) falt+=-v; else sobr+=v; }
+      if(it.diff && it.status==='abierta'){ open++; openVal += Math.abs(it.valueDiff||0); }
+    });
+  });
+  return {falt, sobr, exact: items90 ? Math.round(ok90*100/items90) : null, open, openVal, items90};
+}
+
+/* ---- Calendario de conteo cíclico (A cada 30 días, B 60, C 90) ---- */
+function computeCountPlan(centerId){
+  const since = Date.now()-90*86400000, sales = {};
+  (state.orders||[]).forEach(o=>{
+    if(o.status==='Cancelado' || new Date(o.date).getTime()<since) return;
+    (o.items||[]).forEach(it=>{ if(it.id && it.price>0) sales[it.id] = (sales[it.id]||0) + it.price*(it.qty||1); });
+  });
+  const last = {}, diffRecent = {};
+  (state.audits||[]).filter(a=>a.centerId===centerId).sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(a=>{
+    (a.items||[]).forEach(it=>{ last[it.productId] = new Date(a.date).getTime(); if(it.diff) diffRecent[it.productId] = new Date(a.date).getTime(); });
+  });
+  const elig = state.products.filter(p=>!p.isKit && (centerStock(p,centerId)>0 || sales[p.id]>0 || last[p.id]));
+  elig.sort((a,b)=>(sales[b.id]||0)-(sales[a.id]||0));
+  const totalSales = elig.reduce((s,p)=>s+(sales[p.id]||0),0);
+  let cum = 0; const now = Date.now(), rows = [];
+  elig.forEach(p=>{
+    const v = sales[p.id]||0; const before = totalSales ? cum/totalSales : 1; cum += v;
+    const cls = !totalSales ? 'C' : (before<0.8 ? 'A' : before<0.95 ? 'B' : 'C');
+    let interval = AUDIT_INTERVAL_DAYS[cls];
+    const hadDiff = diffRecent[p.id] && (now-diffRecent[p.id]) < 120*86400000;
+    if(hadDiff) interval = Math.min(interval, 30);
+    const lastT = last[p.id]; const days = lastT ? Math.floor((now-lastT)/86400000) : null;
+    const due = lastT==null || days>=interval;
+    rows.push({p, cls, interval, days, due, hadDiff:!!hadDiff, value:v, overdue: lastT==null ? 9999 : days-interval});
+  });
+  const clsRank = {A:0,B:1,C:2};
+  const dueRows = rows.filter(r=>r.due).sort((a,b)=> (clsRank[a.cls]-clsRank[b.cls]) || (b.hadDiff-a.hadDiff) || (b.overdue-a.overdue) || (b.value-a.value));
+  const startToday = new Date(); startToday.setHours(0,0,0,0);
+  const countedToday = new Set(); (state.audits||[]).filter(a=>a.centerId===centerId && new Date(a.date)>=startToday).forEach(a=>(a.items||[]).forEach(it=>countedToday.add(it.productId)));
+  const batch = auditDailyBatch();
+  const todayLeft = Math.max(0, batch - countedToday.size);
+  const lastAudit = (state.audits||[]).filter(a=>a.centerId===centerId).map(a=>a.date).sort().pop() || null;
+  return {rows, dueRows, dueCount:dueRows.length, never:rows.filter(r=>r.days==null).length, eligible:rows.length, batch, todayLeft, countedToday:countedToday.size,
+    todayList: dueRows.slice(0, todayLeft), upcoming:(()=>{ const out=[]; let i=todayLeft; for(let d=1; d<=6 && i<dueRows.length; d++){ out.push({d, list:dueRows.slice(i,i+batch)}); i+=batch; } return out; })(),
+    aCount: rows.filter(r=>r.cls==='A').length, overdueA: dueRows.filter(r=>r.cls==='A').length, lastAudit};
+}
+function auditStartPlan(){
+  const cid = state.auditCenter || (typeof defaultCenterId==='function' ? defaultCenterId() : '');
+  if(!cid){ showToast('Elige un centro'); return; }
+  if(auditHasDraft() && !confirm('Ya tienes un conteo en curso. Si empiezas la tanda de hoy se descarta. ¿Continuar?')) return;
+  const cp = computeCountPlan(cid);
+  if(!cp.todayList.length){ showToast('Hoy ya no hay productos por contar'); return; }
+  auditResetState(); state.auditCenter = cid; state.auditPlan = cp.todayList.map(r=>r.p.id); state.auditPlanOnly = true;
+  state.auditStartedAt = new Date().toISOString(); state.auditSub = 'contar'; state.auditBlind = true;
+  auditSaveDraft(); render();
+}
+function setAuditSub(s){ state.auditSub = s; render(); }
+function saveAuditSetting(key, val, min, max){ const n=Math.max(min,Math.min(max,Math.floor(Number(val)||0))); state.settings[key]=n; saveSettings(); render(); }
+
+/* ---- Pantalla ---- */
+function auditStatCards(){
+  const st = computeAuditStats();
+  return `<div class="stat-grid" style="margin-bottom:12px;">
+    <div class="stat-card ${st.open?'':'primary'}"><div class="stat-label">Diferencias abiertas</div><div class="stat-value">${st.open}</div><div class="stat-delta">${st.open?money(st.openVal)+' en juego':'todo resuelto'}</div></div>
+    <div class="stat-card"><div class="stat-label">Faltante del mes</div><div class="stat-value">${money(st.falt)}</div></div>
+    <div class="stat-card"><div class="stat-label">Sobrante del mes</div><div class="stat-value">${money(st.sobr)}</div></div>
+    <div class="stat-card"><div class="stat-label">Exactitud (90 días)</div><div class="stat-value">${st.exact==null?'—':st.exact+'%'}</div>${st.exact==null?'':`<div class="stat-delta">${st.items90} conteos</div>`}</div>
+  </div>`;
+}
+function renderAuditorias(){
+  const sub = state.auditSub || 'contar';
+  const openN = computeAuditStats().open;
+  const tabs = [['contar','Contar'],['calendario','Calendario'],['seguimiento','Seguimiento'+(openN?` <span class="tab-badge">${openN}</span>`:'')],['historial','Historial']];
+  return `
+    <div class="admin-tabs" style="padding:0 0 12px;border-bottom:none;">
+      ${tabs.map(([k,l])=>`<button class="admin-tab ${sub===k?'active':''}" onclick="setAuditSub('${k}')">${l}</button>`).join('')}
+    </div>
+    ${sub==='contar' ? renderAuditContar() : sub==='calendario' ? renderAuditCalendario() : sub==='seguimiento' ? renderAuditSeguimiento() : renderAuditHistorial()}
+  `;
+}
+function auditScopeProducts(){
+  let list = state.products.filter(p=>!p.isKit);
+  if(state.auditPlan && state.auditPlanOnly){ const set = new Set(state.auditPlan); list = list.filter(p=>set.has(p.id)); }
+  if(state.auditCategory && state.auditCategory!=='Todas') list = list.filter(p=>(p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(state.auditCategory));
+  const q = (state.auditSearch||'').trim().toLowerCase();
+  if(q) list = list.filter(p=>(p.name||'').toLowerCase().includes(q) || String(p.sku||'').toLowerCase().includes(q));
+  return list.sort((a,b)=> String(a.location||'~').localeCompare(String(b.location||'~'),'es') || String(a.name||'').localeCompare(String(b.name||''),'es'));
+}
+function renderAuditContar(){
+  const rows = auditDiffRows();
+  const showSys = !state.auditBlind || state.auditReview;
+  const scoped = state.auditCenter ? auditScopeProducts() : [];
+  const candidates = scoped.slice(0, state.auditListLimit);
+  const hasMore = scoped.length > candidates.length;
+  const planN = state.auditPlan ? state.auditPlan.length : 0;
+  const countedPlan = state.auditPlan ? state.auditPlan.filter(id=>state.auditCounts[id]!==undefined).length : 0;
+  const draftBanner = auditHasDraft() ? `
+    <div class="note-box" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
+      <div>${state.auditResumed?'<strong>Retomaste tu conteo en curso.</strong> ':'<strong>Conteo en curso.</strong> '}Se guarda solo en este navegador: si recargas no se pierde, hasta que lo finalices.<br>${rows.length} producto${rows.length===1?'':'s'} contado${rows.length===1?'':'s'}${planN?` · tanda de hoy: ${countedPlan}/${planN}`:''}${state.auditStartedAt?` · desde ${new Date(state.auditStartedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}</div>
+      <button class="btn-outline" onclick="discardAuditDraft()">Descartar conteo</button>
+    </div>` : '';
+  if(state.auditReview && rows.length) return renderAuditReview(rows, draftBanner);
+  return `
+    <div class="panel">
+      <div class="panel-title">Contar inventario</div>
+      ${draftBanner || `<div class="note-box">Cuenta lo que hay físicamente: <strong>escribe la cantidad</strong>, usa <strong>+ / −</strong> o <strong>escanea</strong> el código (cada escaneo suma 1). Puedes mezclar las tres formas. No necesitas contar todo el catálogo.</div>`}
+      <div class="form-field"><label>Centro a contar</label>
+        <select onchange="auditChooseCenter(this.value)">
+          <option value="">Selecciona...</option>
+          ${state.centers.filter(c=>c.active).map(c=>`<option value="${c.id}" ${state.auditCenter===c.id?'selected':''}>${c.name}</option>`).join('')}
+        </select>
+      </div>
+      ${state.auditCenter ? `
+        <label class="checkbox-row" style="margin-bottom:10px;">
+          <input type="checkbox" ${state.auditBlind?'checked':''} onchange="state.auditBlind=this.checked;auditSaveDraft();render()">
+          <span>Conteo ciego: ocultar lo que dice el sistema mientras cuento (más confiable)</span>
+        </label>
+        <div class="two-col" style="align-items:end;">
+          <div class="form-field"><label>Escanear código o buscar por nombre</label>
+            <input id="audit-search-input" placeholder="Escanea con la pistola o escribe… (Enter)" value="${escapeHtmlAudit(state.auditSearch)}" oninput="onAuditSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();auditSearchEnter(this.value)}">
+          </div>
+          <div class="form-field" style="display:flex;gap:8px;align-items:end;">
+            <div style="flex:1;min-width:0;"><label>Categoría</label>
+              <select onchange="state.auditCategory=this.value;state.auditListLimit=20;auditSaveDraft();render()">
+                <option ${state.auditCategory==='Todas'?'selected':''}>Todas</option>
+                ${state.settings.categories.map(c=>`<option ${state.auditCategory===c?'selected':''}>${c}</option>`).join('')}
+              </select></div>
+            <button class="btn-primary" style="width:auto;white-space:nowrap;" onclick="openAuditScanner()">Cámara</button>
+          </div>
+        </div>
+        ${state.auditLast ? `<div class="note-box" style="background:var(--surface-soft);">Último escaneado: <strong>${escapeHtmlAudit(state.auditLast.name)}</strong> · contados ${state.auditCounts[state.auditLast.pid]||0}</div>` : ''}
+        ${state.auditPlan ? `<div class="row-sub" style="margin:0 0 8px;">${state.auditPlanOnly?`Mostrando tu tanda de hoy (${planN} productos, ordenados por ubicación).`:'Mostrando todo el catálogo.'} <a href="#" onclick="event.preventDefault();state.auditPlanOnly=!state.auditPlanOnly;state.auditListLimit=20;auditSaveDraft();render()" style="color:var(--primary);font-weight:700;">${state.auditPlanOnly?'Ver todo el catálogo':'Ver solo mi tanda'}</a></div>` : ''}
+        ${candidates.length>0 ? `
+          <div style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+            ${candidates.map(p=>{ const n = state.auditCounts[p.id]; return `
+              <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;flex-wrap:wrap;row-gap:8px;${n!==undefined?'background:var(--surface-soft);':''}">
+                ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+                <div class="row-main"><div class="row-title">${escapeHtmlAudit(p.name)}</div><div class="row-sub">${escapeHtmlAudit(p.sku||'sin código')}${p.location?` · ${escapeHtmlAudit(p.location)}`:''}${showSys?` · Sistema dice: ${state.auditSnap[p.id]!==undefined?state.auditSnap[p.id]:centerStock(p,state.auditCenter)}`:''}</div></div>
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                  <button class="icon-btn" aria-label="Quitar uno" onclick="auditStep('${p.id}',-1)">−</button>
+                  <input id="audit-count-${p.id}" type="number" inputmode="numeric" min="0" placeholder="Conteo" style="width:76px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${n??''}" onchange="setAuditCount('${p.id}', this.value);render()">
+                  <button class="icon-btn" aria-label="Agregar uno" onclick="auditStep('${p.id}',1)">+</button>
+                </div>
+              </div>`; }).join('')}
+          </div>
+          ${hasMore ? `<div style="text-align:center;margin-bottom:14px;"><button class="btn-outline" onclick="state.auditListLimit+=20;render()">Ver más productos</button></div>` : ''}
+        ` : `<div class="empty-state" style="margin-bottom:14px;">No hay productos que coincidan con este filtro.</div>`}
+        ${rows.length>0 ? `
+          <div class="panel-title" style="margin-bottom:10px;">Productos contados (${rows.length})${showSys?` ${rows.filter(r=>r.diff!==0).length>0?`· <span style="color:var(--rose);">${rows.filter(r=>r.diff!==0).length} con diferencia</span>`:'· sin diferencias'}`:''}</div>
+          ${rows.slice().reverse().slice(0,12).map(r=>`
+            <div class="hbar-row" style="align-items:center;flex-wrap:wrap;row-gap:4px;">
+              <div class="hbar-label" style="width:auto;flex:1;min-width:0;overflow-wrap:anywhere;">${escapeHtmlAudit(r.name)}</div>
+              <div style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">${showSys?`Sistema: ${r.system} · `:''}Contado: ${r.first}</div>
+              ${showSys?`<div class="hbar-val" style="color:${r.diff===0?'var(--green)':'var(--rose)'};font-weight:800;">${r.diff>0?'+':''}${r.diff}</div>`:''}
+            </div>`).join('')}
+          ${rows.length>12?`<div class="row-sub">…y ${rows.length-12} más</div>`:''}
+          <div class="modal-actions" style="margin-top:12px;">
+            <button class="btn-primary" onclick="state.auditReview=true;auditSaveDraft();render();window.scrollTo({top:0})">Terminar y revisar diferencias</button>
+          </div>
+        ` : `<div class="empty-state">Escanea o busca productos arriba y anota su conteo físico.</div>`}
+      ` : ''}
+    </div>`;
+}
+function renderAuditReview(rows, draftBanner){
+  const diffs = rows.filter(r=>r.diff!==0).sort((a,b)=>Math.abs(b.value)-Math.abs(a.value) || Math.abs(b.diff)-Math.abs(a.diff));
+  const zero = rows.length - diffs.length;
+  const tFalt = diffs.filter(r=>r.value<0).reduce((s,r)=>s-r.value,0), tSobr = diffs.filter(r=>r.value>0).reduce((s,r)=>s+r.value,0);
+  const bigPending = diffs.filter(r=>r.big && !r.recounted).length;
+  return `
+    <div class="panel">
+      <div class="panel-title">Revisar diferencias</div>
+      ${draftBanner}
+      <div class="stat-grid" style="margin-bottom:10px;">
+        <div class="stat-card"><div class="stat-label">Contados</div><div class="stat-value">${rows.length}</div><div class="stat-delta">${zero} sin diferencia</div></div>
+        <div class="stat-card"><div class="stat-label">Faltante</div><div class="stat-value">${money(tFalt)}</div></div>
+        <div class="stat-card"><div class="stat-label">Sobrante</div><div class="stat-value">${money(tSobr)}</div></div>
+      </div>
+      <div class="note-box">Las diferencias de <strong>${auditRecountUnits()} piezas o más</strong>, o de <strong>${money(auditRecountMoney())} o más</strong>, piden un <strong>recuento</strong> antes de ajustar. <span class="row-sub">Cambiar límites:</span>
+        <input type="number" min="1" style="width:56px;padding:4px;border:1px solid var(--border);border-radius:6px;" value="${auditRecountUnits()}" onchange="saveAuditSetting('auditRecountUnits',this.value,1,999)"> piezas ·
+        $<input type="number" min="1" style="width:70px;padding:4px;border:1px solid var(--border);border-radius:6px;" value="${auditRecountMoney()}" onchange="saveAuditSetting('auditRecountMoney',this.value,1,99999)"></div>
+      ${diffs.length===0 ? `<div class="empty-state">Todo cuadra con el sistema. 🎉</div>` : diffs.map(r=>`
+        <div class="list-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+            <div class="row-main"><div class="row-title">${escapeHtmlAudit(r.name)}</div><div class="row-sub">Sistema ${r.system} · Contado ${r.first}${r.recounted?` · Recuento ${r.counted}`:''}${r.cost?` · ${money(Math.abs(r.value))} a costo`:''}</div></div>
+            <span class="status-badge" style="background:${r.diff<0?'var(--rose)':'var(--amber)'};">${r.diff>0?'+':''}${r.diff}</span>
+          </div>
+          <div class="two-col" style="align-items:end;">
+            <div class="form-field" style="margin:0;"><label>Motivo probable</label>
+              <select onchange="state.auditReasons['${r.pid}']=this.value;auditSaveDraft()">
+                ${AUDIT_REASONS.map(([k,l])=>`<option value="${k}" ${(state.auditReasons[r.pid]||'investigar')===k?'selected':''}>${l}</option>`).join('')}
+              </select></div>
+            ${r.big ? `<div class="form-field" style="margin:0;"><label>${r.recounted?'Recuento ✓':'Recuento (diferencia grande)'}</label>
+              <input type="number" min="0" inputmode="numeric" placeholder="Vuelve a contar" value="${state.auditRecounts[r.pid]??''}" onchange="state.auditRecounts['${r.pid}']=this.value;auditSaveDraft();render()"></div>` : '<div></div>'}
+          </div>
+        </div>`).join('')}
+      <div class="form-field" style="margin-top:12px;"><label>Notas (opcional)</label><input value="${escapeHtmlAudit(state.auditNotes)}" oninput="state.auditNotes=this.value;auditSaveDraft()" placeholder="Turno, responsable, motivo de la auditoría..."></div>
+      ${bigPending?`<div class="note-box" style="background:#FFF6E0;color:#8a6300;">${bigPending} diferencia${bigPending===1?'':'s'} grande${bigPending===1?'':'s'} sin recuento.</div>`:''}
+      <div class="modal-actions" style="margin-top:6px;flex-wrap:wrap;">
+        <button class="btn-cancel" onclick="state.auditReview=false;auditSaveDraft();render()">Volver a contar</button>
+        <button class="btn-cancel" onclick="commitAudit(false)">Guardar solo como registro</button>
+        <button class="btn-primary" onclick="if(confirm('Esto ajusta el inventario del sistema a lo contado (sin borrar las ventas hechas mientras contabas). ¿Continuar?'))commitAudit(true)">Guardar y ajustar inventario</button>
+      </div>
+    </div>`;
+}
+function renderAuditCalendario(){
+  const cid = state.auditCenter || (typeof defaultCenterId==='function' ? defaultCenterId() : '');
+  const center = state.centers.find(c=>c.id===cid);
+  const cp = cid ? computeCountPlan(cid) : null;
+  const dayLabel = d=>{ if(d===0) return 'Hoy'; if(d===1) return 'Mañana'; const dt=new Date(Date.now()+d*86400000); return dt.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'short'}); };
+  const clsTag = c=>`<span class="status-badge" style="background:${c==='A'?'var(--rose)':c==='B'?'var(--amber)':'var(--navy)'};">${c}</span>`;
+  return `
+    <div class="panel">
+      <div class="panel-title">Calendario de conteo</div>
+      <div class="note-box">Para que todo el inventario se revise sin hacerlo de golpe: los productos que más venden (<strong>A</strong>) se cuentan cada <strong>30 días</strong>, los intermedios (<strong>B</strong>) cada <strong>60</strong> y el resto (<strong>C</strong>) cada <strong>90</strong>. Los que ya salieron con diferencia vuelven a tocar cada 30 días. Cada día te toca una tanda.</div>
+      <div class="two-col" style="align-items:end;">
+        <div class="form-field"><label>Centro</label>
+          <select onchange="auditChooseCenter(this.value)">
+            ${state.centers.filter(c=>c.active).map(c=>`<option value="${c.id}" ${cid===c.id?'selected':''}>${c.name}</option>`).join('')}
+          </select></div>
+        <div class="form-field"><label>Productos por tanda (por día)</label>
+          <input type="number" min="5" max="200" value="${auditDailyBatch()}" onchange="saveAuditSetting('auditDailyBatch',this.value,5,200)"></div>
+      </div>
+      ${!cp ? '<div class="empty-state">Aún no hay centros activos.</div>' : `
+      <div class="stat-grid" style="margin-bottom:12px;">
+        <div class="stat-card ${cp.dueCount?'':'primary'}"><div class="stat-label">Por contar</div><div class="stat-value">${cp.dueCount}</div><div class="stat-delta">de ${cp.eligible} productos</div></div>
+        <div class="stat-card"><div class="stat-label">Nunca contados</div><div class="stat-value">${cp.never}</div></div>
+        <div class="stat-card"><div class="stat-label">Al día</div><div class="stat-value">${cp.eligible?Math.round((cp.eligible-cp.dueCount)*100/cp.eligible):100}%</div></div>
+        <div class="stat-card"><div class="stat-label">Último conteo</div><div class="stat-value" style="font-size:18px;">${cp.lastAudit?new Date(cp.lastAudit).toLocaleDateString('es-MX',{day:'numeric',month:'short'}):'—'}</div></div>
+      </div>
+      <div class="panel" style="background:var(--surface-soft);">
+        <div class="panel-title">Tanda de hoy${center?` · ${center.name}`:''}</div>
+        ${cp.todayList.length ? `
+          <div class="panel-sub">${cp.todayList.length} producto${cp.todayList.length===1?'':'s'} (${cp.todayList.filter(r=>r.cls==='A').length} de clase A${cp.countedToday?` · ya contaste ${cp.countedToday} hoy`:''}). Vienen ordenados por ubicación al contar.</div>
+          <div style="max-height:220px;overflow-y:auto;margin-bottom:10px;">
+            ${cp.todayList.slice(0,40).map(r=>`<div class="hbar-row" style="align-items:center;"><div class="hbar-label" style="width:auto;flex:1;min-width:0;overflow-wrap:anywhere;">${escapeHtmlAudit(r.p.name)}</div><div class="row-sub" style="white-space:nowrap;">${r.days==null?'nunca contado':`hace ${r.days} días`}${r.hadDiff?' · tuvo diferencia':''}</div>${clsTag(r.cls)}</div>`).join('')}
+            ${cp.todayList.length>40?`<div class="row-sub">…y ${cp.todayList.length-40} más</div>`:''}
+          </div>
+          <button class="btn-primary" onclick="auditStartPlan()">Empezar tanda de hoy</button>`
+        : `<div class="empty-state" style="padding:14px;">${cp.dueCount ? 'Ya cubriste la tanda de hoy. 👏' : 'Todo está al día según el calendario. 👏'}</div>`}
+      </div>
+      ${cp.upcoming.length ? `<div class="panel-title" style="margin:14px 0 8px;">Próximos días</div>
+        ${cp.upcoming.map(u=>`<div class="list-row"><div class="row-main"><div class="row-title" style="text-transform:capitalize;">${dayLabel(u.d)}</div><div class="row-sub">${u.list.length} productos · ${u.list.filter(r=>r.cls==='A').length} clase A · ${u.list.filter(r=>r.cls==='B').length} B · ${u.list.filter(r=>r.cls==='C').length} C</div></div></div>`).join('')}
+        ${cp.dueCount>cp.todayLeft+cp.upcoming.reduce((s,u)=>s+u.list.length,0)?`<div class="row-sub">…y más productos en los días siguientes.</div>`:''}` : ''}
+      `}
+    </div>`;
+}
+function renderAuditSeguimiento(){
+  const f = state.auditTrackFilter || 'abiertas';
+  const all = auditTrackedItems();
+  const list = all.filter(x=> f==='todas' ? true : f==='resueltas' ? x.it.status==='resuelta' : x.it.status==='abierta');
+  const fbtn = (k,l)=>`<button class="${f===k?'btn-primary':'btn-outline'}" style="width:auto;padding:6px 16px;min-height:36px;" onclick="state.auditTrackFilter='${k}';render()">${l}</button>`;
+  return `
+    ${auditStatCards()}
+    <div class="panel">
+      <div class="panel-title">Seguimiento de diferencias</div>
+      <div class="panel-sub">Cada diferencia de una auditoría queda abierta hasta que averigües qué pasó. Ponle un motivo y márcala como resuelta.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${fbtn('abiertas','Abiertas')}${fbtn('resueltas','Resueltas')}${fbtn('todas','Todas')}</div>
+      ${list.length===0 ? `<div class="empty-state">${all.length===0?'Aún no hay diferencias registradas con el nuevo conteo.':'No hay diferencias en esta lista.'}</div>` : list.map(x=>{
+        const it = x.it, a = x.a, open = it.status==='abierta', key = x.key;
+        return `<div class="list-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+            <div class="row-main"><div class="row-title">${escapeHtmlAudit(it.name)}</div>
+              <div class="row-sub">${new Date(a.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${escapeHtmlAudit(a.centerName||'')} · Sistema ${it.systemQty} · Contado ${it.countedQty}${it.firstCount!=null?` (1er conteo ${it.firstCount})`:''}${it.valueDiff?` · ${money(Math.abs(it.valueDiff))} a costo`:''}</div></div>
+            <span class="status-badge" style="background:${it.diff<0?'var(--rose)':'var(--amber)'};">${it.diff>0?'+':''}${it.diff}</span>
+          </div>
+          ${open ? `
+            <div class="form-field" style="margin:0;"><label>Motivo</label>
+              <select onchange="auditSetReason('${a.id}',${x.idx},this.value)">${AUDIT_REASONS.map(([k,l])=>`<option value="${k}" ${(it.reason||'investigar')===k?'selected':''}>${l}</option>`).join('')}</select></div>
+            ${state.auditResolveOpen===key ? `
+              <div class="two-col" style="align-items:end;"><div class="form-field" style="margin:0;"><label>¿Qué encontraste? (opcional)</label><input value="${escapeHtmlAudit(state.auditResolveNote||'')}" oninput="state.auditResolveNote=this.value" placeholder="Ej. venta sin registrar del sábado"></div>
+              <div style="display:flex;gap:8px;"><button class="btn-primary" onclick="auditResolve('${a.id}',${x.idx})">Resolver</button><button class="btn-cancel" onclick="state.auditResolveOpen=null;render()">Cancelar</button></div></div>`
+            : `<div><button class="btn-outline" onclick="state.auditResolveOpen='${key}';state.auditResolveNote='';render()">Marcar como resuelta</button></div>`}`
+          : `<div class="row-sub">Resuelta${it.resolvedAt?` el ${new Date(it.resolvedAt).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}`:''} · ${auditReasonLabel(it.reason)}${it.resolutionNote?` · ${escapeHtmlAudit(it.resolutionNote)}`:''} · <a href="#" onclick="event.preventDefault();auditReopen('${a.id}',${x.idx})" style="color:var(--primary);font-weight:700;">Reabrir</a></div>`}
+        </div>`; }).join('')}
+    </div>
+    ${(()=>{ const recurring = computeRecurringAuditDiffs(); return recurring.length===0 ? '' : `
+    <div class="panel">
+      <div class="panel-title">Productos con diferencia repetida</div>
+      <div class="panel-sub">Salieron con faltante o sobrante en más de una auditoría — una vez puede ser un error de conteo, repetido vale la pena revisarlo de cerca.</div>
+      ${recurring.map(r=>`
+        <div class="list-row" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><div class="row-title">${escapeHtmlAudit(r.name)}</div><span class="status-badge" style="background:var(--rose);">${r.occurrences.length} veces</span></div>
+          <div class="order-detail" style="margin-top:6px;">${r.occurrences.map(o=>`<div><span>${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${escapeHtmlAudit(o.centerName)}</span><span style="color:var(--rose);">${o.diff>0?'+':''}${o.diff}</span></div>`).join('')}</div>
+        </div>`).join('')}
+    </div>`; })()}`;
+}
+function renderAuditHistorial(){
+  return `
+    <div class="panel">
+      <div class="panel-title">Historial de auditorías</div>
+      ${state.audits.length===0 ? `<div class="empty-state">Aún no se ha hecho ninguna auditoría.</div>` :
+        state.audits.map(a=>{
+          const diffCount = (a.items||[]).filter(it=>it.diff!==0).length;
+          return `
+          <div class="list-row" style="flex-direction:column;align-items:stretch;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div class="row-title">${escapeHtmlAudit(a.centerName)}</div>
+              <span class="status-badge" style="background:${a.applied?'var(--green)':'var(--navy)'};">${a.applied?'Inventario ajustado':'Solo registro'}</span>
+            </div>
+            <div class="row-sub">${new Date(a.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${(a.items||[]).length} productos contados · ${diffCount>0?`${diffCount} con diferencia`:'sin diferencias'}${a.notes?` · ${escapeHtmlAudit(a.notes)}`:''}</div>
+            <div class="order-detail" style="margin-top:8px;">
+              ${(a.items||[]).map(it=>`<div><span>${escapeHtmlAudit(it.name)}</span><span style="color:${it.diff===0?'var(--ink-soft)':'var(--rose)'};">Sistema ${it.systemQty} · Contado ${it.countedQty} (${it.diff>0?'+':''}${it.diff})${it.reason&&it.diff?` · ${auditReasonLabel(it.reason)}`:''}</span></div>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+    </div>`;
+}
+
 // Cruza el historial de auditorías para detectar productos que salen con diferencia
 // (faltante o sobrante) en más de una auditoría — una sola vez puede ser un error de conteo,
 // pero repetido puede ser un patrón real (robo hormiga, mal registrado en el sistema, etc.).
@@ -10403,110 +10911,6 @@ function computeRecurringAuditDiffs(){
     .filter(([id,d])=>d.occurrences.length>=2)
     .map(([id,d])=>({productId:id, name:d.name, occurrences: d.occurrences.sort((a,b)=>new Date(b.date)-new Date(a.date))}))
     .sort((a,b)=>b.occurrences.length-a.occurrences.length);
-}
-function renderAuditorias(){
-  const q = (state.auditSearch||'').trim().toLowerCase();
-  let auditFiltered = state.auditCenter ? state.products : [];
-  if(state.auditCategory && state.auditCategory!=='Todas') auditFiltered = auditFiltered.filter(p=>(p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(state.auditCategory));
-  if(q) auditFiltered = auditFiltered.filter(p=>(p.name||'').toLowerCase().includes(q));
-  const candidates = auditFiltered.slice(0, state.auditListLimit);
-  const hasMoreCandidates = auditFiltered.length > candidates.length;
-  const rows = auditDiffRows();
-  const totalDiffs = rows.filter(r=>r.diff!==0).length;
-  return `
-    <div class="panel">
-      <div class="panel-title">Nueva auditoría de inventario</div>
-      <div class="note-box">Cuenta físicamente los productos que quieras revisar en un centro y anota lo que encontraste. No necesitas contar todo el catálogo — puedes hacer auditorías parciales (por categoría, por sospecha de faltante, etc.). Al final decides si ajustas el inventario del sistema a lo contado, o solo dejas el registro para revisarlo después.</div>
-      <div class="form-field"><label>Centro a auditar</label>
-        <select onchange="state.auditCenter=this.value;state.auditCounts={};state.auditListLimit=20;render()">
-          <option value="">Selecciona...</option>
-          ${state.centers.filter(c=>c.active).map(c=>`<option value="${c.id}" ${state.auditCenter===c.id?'selected':''}>${c.name}</option>`).join('')}
-        </select>
-      </div>
-      ${state.auditCenter ? `
-        <div class="two-col" style="align-items:end;">
-          <div class="form-field"><label>Buscar producto para contar</label>
-            <input id="audit-search-input" placeholder="Nombre del producto..." value="${state.auditSearch}" oninput="onAuditSearchInput(this.value)">
-          </div>
-          <div class="form-field"><label>Categoría</label>
-            <select onchange="state.auditCategory=this.value;state.auditListLimit=20;render()">
-              <option ${state.auditCategory==='Todas'?'selected':''}>Todas</option>
-              ${state.settings.categories.map(c=>`<option ${state.auditCategory===c?'selected':''}>${c}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        ${candidates.length>0 ? `
-          <div style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
-            ${candidates.map(p=>`
-              <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;flex-wrap:wrap;row-gap:8px;">
-                ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-                <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · Sistema dice: ${centerStock(p,state.auditCenter)}</div></div>
-                <button class="icon-btn" title="Editar este producto" style="flex-shrink:0;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit',16)}</button>
-                <input id="audit-count-${p.id}" type="number" min="0" placeholder="Conteo" style="width:80px;flex-shrink:0;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${state.auditCounts[p.id]??''}" onchange="setAuditCount('${p.id}', this.value);render()">
-              </div>
-            `).join('')}
-          </div>
-          ${hasMoreCandidates ? `<div style="text-align:center;margin-bottom:14px;"><button class="btn-outline" onclick="state.auditListLimit+=20;render()">Ver más productos</button></div>` : ''}
-        ` : `<div class="empty-state" style="margin-bottom:14px;">No hay productos que coincidan con este filtro.</div>`}
-        ${rows.length>0 ? `
-          <div class="panel-title" style="margin-bottom:10px;">Productos contados (${rows.length}) ${totalDiffs>0?`· <span style="color:var(--rose);">${totalDiffs} con diferencia</span>`:'· sin diferencias'}</div>
-          ${rows.map(r=>`
-            <div class="hbar-row" style="align-items:center;flex-wrap:wrap;row-gap:4px;">
-              <div class="hbar-label" style="width:auto;flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;">${r.name}</div>
-              <div style="font-size:12px;color:var(--ink-soft);white-space:nowrap;flex-shrink:0;">Sistema: ${r.system} · Contado: ${r.counted}</div>
-              <div class="hbar-val" style="color:${r.diff===0?'var(--green)':'var(--rose)'};font-weight:800;flex-shrink:0;">${r.diff>0?'+':''}${r.diff}</div>
-            </div>
-          `).join('')}
-          <div class="form-field" style="margin-top:12px;"><label>Notas (opcional)</label><input value="${state.auditNotes}" oninput="state.auditNotes=this.value" placeholder="Turno, responsable, motivo de la auditoría..."></div>
-          <div class="modal-actions" style="margin-top:6px;">
-            <button class="btn-cancel" onclick="commitAudit(false)">Guardar solo como registro</button>
-            <button class="btn-primary" onclick="if(confirm('Esto va a cambiar el inventario del sistema para que coincida con lo contado. ¿Continuar?'))commitAudit(true)">Guardar y ajustar inventario</button>
-          </div>
-        ` : `<div class="empty-state">Busca productos arriba y anota su conteo físico.</div>`}
-      ` : ''}
-    </div>
-    <div class="panel">
-      <div class="panel-title">Historial de auditorías</div>
-      ${state.audits.length===0 ? `<div class="empty-state">Aún no se ha hecho ninguna auditoría.</div>` :
-        state.audits.map(a=>{
-          const diffCount = (a.items||[]).filter(it=>it.diff!==0).length;
-          return `
-          <div class="list-row" style="flex-direction:column;align-items:stretch;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div class="row-title">${a.centerName}</div>
-              <span class="status-badge" style="background:${a.applied?'var(--green)':'var(--navy)'};">${a.applied?'Inventario ajustado':'Solo registro'}</span>
-            </div>
-            <div class="row-sub">${new Date(a.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${(a.items||[]).length} productos contados · ${diffCount>0?`${diffCount} con diferencia`:'sin diferencias'}${a.notes?` · ${a.notes}`:''}</div>
-            <div class="order-detail" style="margin-top:8px;">
-              ${(a.items||[]).map(it=>`<div><span>${it.name}</span><span style="color:${it.diff===0?'var(--ink-soft)':'var(--rose)'};">Sistema ${it.systemQty} · Contado ${it.countedQty} (${it.diff>0?'+':''}${it.diff})</span></div>`).join('')}
-            </div>
-          </div>`;
-        }).join('')}
-    </div>
-    ${(()=>{ const recurring = computeRecurringAuditDiffs(); return recurring.length===0 ? '' : `
-    <div class="panel">
-      <div class="panel-title">Productos con diferencia repetida</div>
-      <div class="panel-sub">Salieron con faltante o sobrante en más de una auditoría — una vez puede ser un error de conteo, repetido vale la pena revisarlo de cerca.</div>
-      ${recurring.map(r=>`
-        <div class="list-row" style="flex-direction:column;align-items:stretch;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div class="row-title">${r.name}</div>
-            <span class="status-badge" style="background:var(--rose);">${r.occurrences.length} veces</span>
-          </div>
-          <div class="order-detail" style="margin-top:6px;">
-            ${r.occurrences.map(o=>`<div><span>${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${o.centerName}</span><span style="color:var(--rose);">${o.diff>0?'+':''}${o.diff}</span></div>`).join('')}
-          </div>
-        </div>
-      `).join('')}
-    </div>`; })()}
-  `;
-}
-function onAuditSearchInput(v){
-  state.auditSearch = v;
-  state.auditListLimit = 20;
-  render();
-  const i = document.getElementById('audit-search-input');
-  if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 
 function renderAsistenteIA(){
@@ -12557,7 +12961,7 @@ const NAV_ADMIN_MODALS = [
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],
   ['productHistoryOpen', ()=>closeProductHistory()], ['needsManageOpen', false], ['catManageOpen', false],
-  ['bulkTagModal', null], ['trashOpen', false], ['promoListOpen', false], ['duplicatesOpen', false],
+  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['duplicatesOpen', false],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
   ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],
