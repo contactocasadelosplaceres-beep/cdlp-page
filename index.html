@@ -449,6 +449,10 @@
   /* ===== Tarjetas chicas (relacionados, carrito vacío, quiz) ===== */
   .rel-block{margin-top:22px;}
   .rel-title{font-family:var(--font-heading);font-size:17px;margin:0 0 10px;color:var(--ink);}
+  .flash-block{margin:16px 20px 0;padding:14px 14px 8px;border-radius:16px;border:1.5px solid var(--rose);background:#fff;}
+  .flash-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .flash-title{font-weight:800;color:var(--rose);font-size:15px;line-height:1.25;min-width:0;overflow-wrap:anywhere;}
+  .flash-timer{font-size:12.5px;font-weight:700;color:#fff;background:var(--rose);padding:4px 10px;border-radius:999px;white-space:nowrap;}
   .rel-row{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin:0 -2px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}
   .rel-row .rel-card{flex:0 0 140px;scroll-snap-align:start;}
   .rel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
@@ -990,7 +994,24 @@ function icon(name, size){
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
 }
 
-function effectivePrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price; }
+/* ============== OFERTAS RELÁMPAGO ==============
+   settings.flashSales [{id,name,percent,start,end,productIds,categories,active}], fechas locales
+   "YYYY-MM-DDTHH:MM". Mientras una esté en curso rebaja el precio de sus productos; al terminar, el
+   precio normal vuelve solo (no se modifica ningún producto). */
+function flashLive(){ return (state.settings.flashSales||[]).filter(f=>f.active!==false && f.start && f.end && new Date(f.end).getTime()>Date.now()); }
+function flashSalesActive(){ const now=Date.now(); return flashLive().filter(f=>f.percent>0 && new Date(f.start).getTime()<=now); }
+function flashCovers(f,p){ const cats=(p.categories&&p.categories.length)?p.categories:[p.cat]; return (f.productIds||[]).includes(p.id) || (f.categories||[]).some(c=>cats.includes(c)); }
+function flashFor(p){
+  if(!p || p.isKit) return null;
+  const f = flashSalesActive().find(x=>flashCovers(x,p)); if(!f) return null;
+  const price = Math.round(p.price*(1-f.percent/100)*100)/100;
+  return price<p.price ? {sale:f, price} : null;
+}
+function effectivePrice(p){
+  const base = (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price;
+  const fl = flashFor(p);
+  return fl && fl.price<base ? fl.price : base;
+}
 
 /* ============== MAYOREO ============== */
 const WHOLESALE_KEY = 'cdlp_wholesale_code';
@@ -1876,7 +1897,7 @@ function renderProductDetailDrawer(){
       <div class="detail-info">
         <div class="detail-cat">${productCats(p).join(' · ')}</div>
         <h2 class="detail-name">${p.name}</h2>
-        <div class="detail-price">${p.promoPrice>0 && p.promoPrice<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
+        <div class="detail-price">${effectivePrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
         ${(!matchedVariant || !(matchedVariant.priceOverride>0)) && savingsLabel(p) ? `<div class="detail-save">${savingsLabel(p)}</div>` : ''}
         ${renderPromoCountdownBadge(p) ? `<div style="margin-bottom:8px;">${renderPromoCountdownBadge(p)}</div>` : ''}
         ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
@@ -2125,7 +2146,7 @@ function renderMiniCard(p, opts){
   return `<div class="rel-card" onclick="${pre}${open}">
     <div class="rel-img">${img}</div>
     <div class="rel-name">${p.name}</div>
-    <div class="rel-price">${money(automaticDiscountedPrice(p))}</div>
+    <div class="rel-price">${automaticDiscountedPrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:500;font-size:11px;margin-right:4px;">${money(p.price)}</s>` : ''}${money(automaticDiscountedPrice(p))}</div>
     ${isKioskMode() ? '' : cardAction(p,'mini')}
   </div>`;
 }
@@ -2750,6 +2771,8 @@ function formatPromoCountdown(endDate){
   return `Termina en ${minutes} min`;
 }
 function renderPromoCountdownBadge(p){
+  const fl = flashFor(p);
+  if(fl){ const lab = formatPromoCountdown(new Date(fl.sale.end)); return `<span class="badge badge-best promo-countdown" style="background:var(--rose);">⚡ ${lab||'Relámpago'}</span>`; }
   const end = soonestPromoEndDate(p);
   if(!end) return '';
   const label = formatPromoCountdown(end);
@@ -2758,10 +2781,10 @@ function renderPromoCountdownBadge(p){
 }
 let promoCountdownTimer = null;
 function ensurePromoCountdownTimer(){
-  const hasCountdown = state.products.some(p=>soonestPromoEndDate(p));
+  const hasCountdown = flashLive().length>0 || state.products.some(p=>soonestPromoEndDate(p));
   if(hasCountdown && !promoCountdownTimer){
     promoCountdownTimer = setInterval(()=>{
-      if(state.products.some(p=>soonestPromoEndDate(p))) render(); else { clearInterval(promoCountdownTimer); promoCountdownTimer = null; }
+      if(flashLive().length>0 || state.products.some(p=>soonestPromoEndDate(p))) render(); else { clearInterval(promoCountdownTimer); promoCountdownTimer = null; }
     }, 60000);
   } else if(!hasCountdown && promoCountdownTimer){
     clearInterval(promoCountdownTimer); promoCountdownTimer = null;
@@ -2788,7 +2811,7 @@ function renderProductCard(p, forceBest){
   const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
   const hasVariants = p.variantGroups && p.variantGroups.length>0;
-  const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
+  const hasPromo = effectivePrice(p)<p.price;
   const tier = activeWholesaleTier();
   const wholesaleEligible = tier && isEligibleForTier(p, tier);
   const wholesaleUnlocked = wholesaleEligible && wholesaleCartProgress(tier).unlocked;
@@ -2919,6 +2942,18 @@ function renderFooterSection(){
   </div>`;
 }
 
+function renderFlashSection(){
+  const list = flashSalesActive(); if(!list.length) return '';
+  return list.map(f=>{
+    const prods = state.products.filter(p=>!p.hidden && !p.isKit && (p.stock||0)>0 && flashCovers(f,p)).slice(0,10);
+    if(!prods.length) return '';
+    const lab = formatPromoCountdown(new Date(f.end)) || 'Última hora';
+    return `<div class="flash-block">
+      <div class="flash-head"><div class="flash-title">⚡ ${String(f.name||'Oferta relámpago').replace(/</g,'&lt;')} · ${f.percent}% menos</div><div class="flash-timer">${lab}</div></div>
+      <div class="rel-row">${prods.map(p=>renderMiniCard(p)).join('')}</div>
+    </div>`;
+  }).join('');
+}
 const SECTION_RENDERERS = {
   hero: renderHeroSection,
   featured: renderFeaturedSection,
@@ -3173,8 +3208,8 @@ function renderStore(){
     knownKeys.add(defSection.key);
   });
   const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
-  const after = { hero: ['trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
-  const FIXED = { trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
+  const after = { hero: ['flash','trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
+  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
 
   const searching = state.searchQuery.trim().length>0;
   let body = '';

@@ -606,6 +606,16 @@
   .cal-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
   .cal-nav .cal-title{flex:1;text-align:center;font-weight:800;text-transform:capitalize;font-size:15px;}
   .cal-nav button{flex:0 0 auto;width:44px;min-height:44px;border:1.5px solid var(--border);background:var(--surface);border-radius:10px;font-size:18px;cursor:pointer;color:var(--ink);padding:0;}
+  .flash-chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px;}
+  .flash-chips button{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface-soft);font:inherit;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;}
+  .liq-row{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft);margin-bottom:8px;}
+  .liq-ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .liq-ctl input{width:64px;min-height:40px;padding:0 8px;border:1px solid var(--border);border-radius:10px;font:inherit;text-align:center;background:#fff;}
+  .close-item{display:flex;gap:10px;align-items:flex-start;width:100%;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft);font:inherit;color:var(--ink);text-align:left;min-height:48px;}
+  button.close-item{cursor:pointer;}
+  .close-ico{flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;margin-top:1px;}
+  .close-ico.ok{background:var(--green);} .close-ico.warn{background:var(--amber);color:#2B1620;}
+  .close-sum{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:13.5px;align-items:baseline;}
   .cal-nav button:disabled{opacity:.35;cursor:default;}
   .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;}
   .cal-dow{text-align:center;font-size:10.5px;font-weight:800;color:var(--ink-soft);padding:2px 0;}
@@ -838,7 +848,7 @@ let state = {
   designSubpanel:null,
   centers:[], transfers:[], audits:[], centersSubview:"centros", newCenterInput:"", centerModal:null,
   suppliers:[], restockItems:[], newSupplierInput:"", restockAddSearch:"", restockPickedProductId:null, restockPickedQty:"", restockPickedSupplierId:"",
-  wholesaleModal:null, wholesaleProductSearch:"",
+  wholesaleModal:null, wholesaleProductSearch:"", flashModal:null, flashProductSearch:"", liqPct:{}, closeMonth:null,
   customers:[], customerModal:null, customerSearch:"", customerFilters:{country:"Todos",state:"Todos",city:"Todos",regDate:"Todas",inactive:false,tag:"Todas"}, customerMoreFiltersOpen:false,
   customerImportOpen:false, customerImportText:"", customerImportPreview:[],
   couponModal:null, couponProductSearch:"", couponUsage:[],
@@ -4239,6 +4249,397 @@ function renderAdmin(){
   `;
 }
 
+/* ============== OFERTAS RELÁMPAGO ==============
+   Descuento por horas sobre productos o categorías. Vive en settings.flashSales
+   [{id,name,percent,start,end,productIds,categories,active}] con fechas "YYYY-MM-DDTHH:MM" en hora
+   local. La tienda y el POS lo aplican solos mientras esté en curso (flashFor en index.html y pos.html)
+   y el precio vuelve al normal al terminar, sin tener que editar productos. */
+function flashList(){ return state.settings.flashSales || []; }
+function flashCovers(f, p){
+  const cats = (p.categories && p.categories.length) ? p.categories : [p.cat];
+  return (f.productIds||[]).includes(p.id) || (f.categories||[]).some(c=>cats.includes(c));
+}
+function flashProducts(f){ return state.products.filter(p=>!p.isKit && flashCovers(f,p)); }
+function flashBelowCost(f){ return flashProducts(f).filter(p=>p.cost>0 && p.price*(1-(Number(f.percent)||0)/100) < p.cost); }
+function flashStatus(f){
+  if(f.active===false) return 'pausada';
+  const now = Date.now(), s = new Date(f.start).getTime(), e = new Date(f.end).getTime();
+  if(now>=e) return 'terminada';
+  if(now<s) return 'programada';
+  return 'en_curso';
+}
+const FLASH_STATUS = {en_curso:['En curso','var(--green)'], programada:['Programada','var(--amber)'], terminada:['Terminada','#8a6b78'], pausada:['Pausada','#8a6b78']};
+function toLocalInput(d){ return localDateStr(d)+'T'+pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+function fmtFlashDate(s){ return new Date(s).toLocaleString('es-MX',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
+function openFlashModal(id, asCopy){
+  const ex = id ? flashList().find(x=>x.id===id) : null;
+  const s = new Date(); s.setSeconds(0,0);
+  const e = new Date(s.getTime()+3*3600000);
+  if(ex && !asCopy) state.flashModal = JSON.parse(JSON.stringify(ex));
+  else if(ex) state.flashModal = {...JSON.parse(JSON.stringify(ex)), id:uid('fl_'), start:toLocalInput(s), end:toLocalInput(new Date(s.getTime()+(new Date(ex.end)-new Date(ex.start)))), active:true};
+  else state.flashModal = {id:uid('fl_'), name:'', percent:20, start:toLocalInput(s), end:toLocalInput(e), productIds:[], categories:[], active:true};
+  state.flashProductSearch = ''; render();
+}
+function closeFlashModal(){ state.flashModal = null; render(); }
+function toggleFlashProduct(pid, checked){
+  const f = state.flashModal; if(!f) return;
+  if(checked){ if(!f.productIds.includes(pid)) f.productIds.push(pid); } else f.productIds = f.productIds.filter(x=>x!==pid);
+  render();
+}
+function toggleFlashCategory(cat, checked){
+  const f = state.flashModal; if(!f) return;
+  if(checked){ if(!f.categories.includes(cat)) f.categories.push(cat); } else f.categories = f.categories.filter(x=>x!==cat);
+  render();
+}
+function setFlashDuration(h){
+  const f = state.flashModal; if(!f) return;
+  const s = new Date(f.start); if(isNaN(s.getTime())) return;
+  f.end = toLocalInput(new Date(s.getTime()+h*3600000)); render();
+}
+function renderFlashModal(){
+  const f = state.flashModal;
+  const q = (state.flashProductSearch||'').trim().toLowerCase();
+  const cands = q ? state.products.filter(p=>!p.isKit && (p.name||'').toLowerCase().includes(q)).slice(0,12) : [];
+  const covered = flashProducts(f);
+  const below = flashBelowCost(f);
+  const picked = f.productIds.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const secBase = pmSection('fl_base','La oferta',{icon:'clock', body:`
+    <div class="form-field"><label>Nombre (lo ve la clienta)</label><input id="fl-name" value="${escDescHtml(f.name||'')}" placeholder="Ej. Relámpago de viernes" oninput="state.flashModal.name=this.value"></div>
+    <div class="form-field"><label>Descuento (%)</label><input id="fl-pct" type="number" inputmode="decimal" min="1" max="90" value="${f.percent}" oninput="state.flashModal.percent=this.value" onchange="render()"></div>`});
+  const secWhen = pmSection('fl_cuando','Cuándo',{icon:'calendar', body:`
+    <div class="form-field"><label>Empieza</label><input id="fl-start" type="datetime-local" value="${f.start}" onchange="state.flashModal.start=this.value;render()"></div>
+    <div class="form-field"><label>Termina</label><input id="fl-end" type="datetime-local" value="${f.end}" onchange="state.flashModal.end=this.value;render()"></div>
+    <div class="row-sub">Duración rápida desde el inicio:</div>
+    <div class="flash-chips">${[1,3,6,12,24].map(h=>`<button type="button" onclick="setFlashDuration(${h})">${h} h</button>`).join('')}</div>`});
+  const secWhat = pmSection('fl_que','Qué entra en la oferta',{icon:'grid', badge:`${covered.length} producto${covered.length===1?'':'s'}`, body:`
+    <div class="form-field"><label>Categorías completas</label>
+      <div class="pm-chips">${(state.settings.categories||[]).map(c=>`<label><input type="checkbox" ${(f.categories||[]).includes(c)?'checked':''} onchange="toggleFlashCategory('${c.replace(/'/g,"\\'")}',this.checked)"> ${escDescHtml(c)}</label>`).join('')}</div>
+    </div>
+    <div class="form-field"><label>Productos sueltos</label><input id="fl-search" placeholder="Buscar por nombre…" value="${escDescHtml(state.flashProductSearch||'')}" oninput="state.flashProductSearch=this.value;render()"></div>
+    ${cands.length ? `<div style="max-height:170px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">${cands.map(p=>`<label class="list-row" style="margin:0;border-radius:0;border:none;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" ${(f.productIds||[]).includes(p.id)?'checked':''} onchange="toggleFlashProduct('${p.id}',this.checked)"><div class="row-main"><div class="row-title" style="font-size:13px;">${escDescHtml(p.name)}</div></div></label>`).join('')}</div>` : ''}
+    ${picked.length ? `<div class="flash-chips">${picked.map(p=>`<button type="button" onclick="toggleFlashProduct('${p.id}',false)">${escDescHtml(p.name.length>26?p.name.slice(0,25)+'…':p.name)} ✕</button>`).join('')}</div>` : ''}
+    ${below.length ? `<div class="note-box" style="background:#F6DDE3;color:#7A2E45;">${icon('alert-triangle',14)} Con ese descuento ${below.length} producto${below.length===1?'':'s'} se vender${below.length===1?'ía':'ían'} por debajo del costo: ${escDescHtml(below.slice(0,3).map(p=>p.name).join(', '))}${below.length>3?'…':''}.</div>` : ''}`});
+  return `<div class="modal-overlay"><div class="modal" style="max-width:560px;">
+    <h3>${flashList().some(x=>x.id===f.id)?'Editar':'Nueva'} oferta relámpago</h3>
+    ${secBase}${secWhen}${secWhat}
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeFlashModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveFlashSale()">Guardar</button>
+    </div>
+  </div></div>`;
+}
+async function saveFlashSale(){
+  const f = state.flashModal; if(!f) return;
+  const name = (f.name||'').trim() || 'Oferta relámpago';
+  const percent = Number(f.percent);
+  if(!(percent>=1 && percent<=90)){ showToast('El descuento debe estar entre 1% y 90%'); return; }
+  const s = new Date(f.start), e = new Date(f.end);
+  if(isNaN(s.getTime()) || isNaN(e.getTime())){ showToast('Pon la fecha y hora de inicio y de fin'); return; }
+  if(e<=s){ showToast('El fin debe ser después del inicio'); return; }
+  if(!(f.productIds.length || f.categories.length)){ showToast('Elige al menos un producto o una categoría'); return; }
+  const upd = {...f, name, percent};
+  const list = (state.settings.flashSales||[]).slice();
+  const i = list.findIndex(x=>x.id===f.id);
+  if(i>=0) list[i] = upd; else list.push(upd);
+  state.settings.flashSales = list;
+  await saveSettings();
+  logAdminAction('oferta_relampago','promoción',name,`${percent}% · ${fmtFlashDate(f.start)} a ${fmtFlashDate(f.end)}`);
+  state.flashModal = null; showToast('Oferta relámpago guardada'); render();
+}
+async function toggleFlashActive(id){
+  const f = flashList().find(x=>x.id===id); if(!f) return;
+  f.active = (f.active===false); await saveSettings(); render();
+}
+async function deleteFlashSale(id){
+  const prev = flashList(); const f = prev.find(x=>x.id===id); if(!f) return;
+  state.settings.flashSales = prev.filter(x=>x.id!==id);
+  await saveSettings(); render();
+  showUndo(`Oferta "${f.name}" eliminada`, async()=>{ state.settings.flashSales = [...(state.settings.flashSales||[]), f]; await saveSettings(); render(); });
+}
+function flashMessage(f){
+  const link = `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html`;
+  const n = flashProducts(f).length;
+  const e = new Date(f.end).toLocaleString('es-MX',{weekday:'long',hour:'numeric',minute:'2-digit'});
+  return `⚡ ${f.name}\n${f.percent}% de descuento en ${n} producto${n===1?'':'s'} hasta el ${e}\nEnvío discreto y pago contra entrega 💕\n👉 ${link}`;
+}
+function copyFlashMessage(id){
+  const f = flashList().find(x=>x.id===id); if(!f) return;
+  navigator.clipboard.writeText(flashMessage(f)).then(()=>showToast('Mensaje copiado, pégalo en WhatsApp')).catch(()=>showToast('No se pudo copiar'));
+}
+function renderFlashSubpanel(){
+  const order = {en_curso:0, programada:1, pausada:2, terminada:3};
+  const list = flashList().slice().sort((a,b)=>order[flashStatus(a)]-order[flashStatus(b)] || new Date(b.start)-new Date(a.start));
+  return `
+    <div class="note-box">Un descuento por horas en los productos o categorías que elijas. Empieza y termina solo: la tienda y el Punto de Venta muestran el precio rebajado con cuenta regresiva, y al terminar vuelve el precio normal sin tocar los productos.</div>
+    <button class="btn-add-new" style="margin-bottom:14px;" onclick="openFlashModal(null)">+ Nueva oferta relámpago</button>
+    ${list.length===0 ? `<div class="empty-state">Aún no has creado ninguna oferta relámpago.</div>` : list.map(f=>{
+      const st = flashStatus(f); const [lab,col] = FLASH_STATUS[st];
+      const below = flashBelowCost(f).length;
+      return `<div class="list-row" style="flex-direction:column;align-items:stretch;${st==='terminada'?'opacity:.75;':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div class="row-title">${escDescHtml(f.name)} <span class="status-badge" style="background:${col};">${lab}</span></div>
+          <div class="row-actions">
+            ${st!=='terminada' ? `<button class="icon-btn" title="${f.active===false?'Reanudar':'Pausar'}" onclick="toggleFlashActive('${f.id}')">${f.active===false?'▶':'⏸'}</button>` : `<button class="btn-tertiary" onclick="openFlashModal('${f.id}',true)">Repetir</button>`}
+            <button class="icon-btn" title="Editar" onclick="openFlashModal('${f.id}')">${icon('edit')}</button>
+            <button class="icon-btn danger" title="Eliminar" onclick="deleteFlashSale('${f.id}')">${icon('trash')}</button>
+          </div>
+        </div>
+        <div class="row-sub">${f.percent}% de descuento · ${flashProducts(f).length} producto(s)</div>
+        <div class="row-sub">${fmtFlashDate(f.start)} → ${fmtFlashDate(f.end)}</div>
+        ${below ? `<div class="row-sub" style="color:var(--rose);">${below} producto(s) quedarían bajo el costo</div>` : ''}
+        ${st!=='terminada' ? `<div style="margin-top:8px;"><button class="btn-outline" style="width:auto;min-height:36px;padding:0 12px;" onclick="copyFlashMessage('${f.id}')">Copiar mensaje para WhatsApp</button></div>` : ''}
+      </div>`;
+    }).join('')}
+    ${state.flashModal ? renderFlashModal() : ''}`;
+}
+
+/* ============== LIQUIDACIÓN DE PRODUCTOS POR CADUCAR ==============
+   Revisa lo que caduca en los próximos 45 días (por lote si el producto tiene lotes), sugiere un
+   descuento según los días que faltan, nunca por debajo del costo, y lo pone en oferta con un toque
+   (promoPrice del producto). Si a tu ritmo de venta alcanzas a venderlo antes, lo avisa. */
+const LIQ_WINDOW_DAYS = 45;
+function liqSuggestPct(days){ return days<=7 ? 40 : days<=15 ? 30 : days<=30 ? 20 : 10; }
+function liqPriceFor(p, pct){
+  let price = p.price*(1-pct/100);
+  if(p.cost>0 && price<p.cost) price = p.cost;
+  price = Math.round(price);
+  return price;
+}
+function liqUnitsSold30(){
+  const since = Date.now()-30*86400000, m = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    if(new Date(o.date).getTime()<since) return;
+    (o.items||[]).forEach(it=>{ if(it.id) m[it.id] = (m[it.id]||0) + (it.qty||0); });
+  });
+  return m;
+}
+function computeLiquidation(){
+  const todayStr = localDateStr();
+  const limitStr = localDateStr(new Date(Date.now()+LIQ_WINDOW_DAYS*86400000));
+  const sold = liqUnitsSold30();
+  const rows = [], expired = [];
+  const dayDiff = (s)=> Math.ceil((new Date(s+'T00:00:00') - new Date(todayStr+'T00:00:00'))/86400000);
+  state.products.forEach(p=>{
+    if(p.isKit || p.deletedAt) return;
+    const stock = totalStock(p); if(stock<=0) return;
+    const bs = (p.batches||[]).filter(b=>(b.qty||0)>0 && b.expirationDate);
+    let exp, qty, expQty = 0;
+    if(bs.length){
+      expQty = bs.filter(b=>b.expirationDate<todayStr).reduce((s,b)=>s+b.qty,0);
+      const live = bs.filter(b=>b.expirationDate>=todayStr && b.expirationDate<=limitStr);
+      exp = live.map(b=>b.expirationDate).sort()[0]; qty = live.reduce((s,b)=>s+b.qty,0);
+    } else if(p.expirationDate){
+      if(p.expirationDate<todayStr) expQty = stock;
+      else if(p.expirationDate<=limitStr){ exp = p.expirationDate; qty = stock; }
+    }
+    if(expQty>0) expired.push({p, qty:expQty});
+    if(!exp || !(qty>0)) return;
+    const days = dayDiff(exp);
+    const perDay = (sold[p.id]||0)/30;
+    const sellsOut = perDay>0 && (qty/perDay) <= days;
+    const onPromo = p.promoPrice>0 && p.promoPrice<p.price;
+    rows.push({p, days, exp, qty, perDay, sellsOut, onPromo, other: Math.max(0, stock-qty)});
+  });
+  rows.sort((a,b)=>a.days-b.days);
+  return {rows, expired};
+}
+function setLiqPct(id, v){ state.liqPct = state.liqPct||{}; state.liqPct[id] = v; render(); }
+async function applyLiquidation(id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  const g = computeLiquidation().rows.find(r=>r.p.id===id);
+  const pct = Number((state.liqPct||{})[id] ?? (g ? liqSuggestPct(g.days) : 20));
+  if(!(pct>=1 && pct<=90)){ showToast('El descuento debe estar entre 1% y 90%'); return; }
+  const price = liqPriceFor(p, pct);
+  if(!(price<p.price)){ showToast('No hay margen para descontar este producto sin bajar del costo'); return; }
+  const prev = {promoPrice:p.promoPrice||0, promoSince:p.promoSince||null};
+  try{
+    await db.collection('products').doc(id).update({promoPrice:price, promoSince:new Date().toISOString()});
+  }catch(e){ console.error(e); showToast('No se pudo guardar la oferta'); return; }
+  p.promoPrice = price; p.promoSince = new Date().toISOString();
+  logAdminAction('liquidacion','producto',p.name,`-${pct}% por caducar → ${money(price)}`, id);
+  render();
+  showUndo(`"${p.name}" en oferta a ${money(price)}`, async()=>{
+    await db.collection('products').doc(id).update(prev);
+    p.promoPrice = prev.promoPrice; p.promoSince = prev.promoSince; render();
+  }, 10000);
+}
+async function removeLiquidation(id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  const prev = {promoPrice:p.promoPrice||0, promoSince:p.promoSince||null};
+  try{ await db.collection('products').doc(id).update({promoPrice:0, promoSince:null}); }
+  catch(e){ console.error(e); showToast('No se pudo quitar la oferta'); return; }
+  p.promoPrice = 0; p.promoSince = null; render();
+  showUndo(`Oferta quitada de "${p.name}"`, async()=>{ await db.collection('products').doc(id).update(prev); p.promoPrice=prev.promoPrice; p.promoSince=prev.promoSince; render(); });
+}
+function renderLiquidationPanel(){
+  const {rows, expired} = computeLiquidation();
+  if(!rows.length && !expired.length) return '';
+  const rowHtml = (r)=>{
+    const p = r.p;
+    const pct = Number((state.liqPct||{})[p.id] ?? liqSuggestPct(r.days));
+    const price = liqPriceFor(p, pct);
+    const atCost = p.cost>0 && price<=Math.round(p.cost);
+    const margin = (p.cost>0 && price>0) ? Math.round((price-p.cost)/price*100) : null;
+    const when = r.days===0 ? 'caduca hoy' : r.days===1 ? 'caduca mañana' : `caduca en ${r.days} días`;
+    return `<div class="liq-row">
+      <div class="row-title">${escDescHtml(p.name)}</div>
+      <div class="row-sub">${when} · ${r.qty} pza${r.qty===1?'':'s'} en riesgo${r.other>0?` (+${r.other} con fecha posterior; la oferta aplica a todas)`:''}</div>
+      ${r.sellsOut ? `<div class="row-sub" style="color:var(--green);font-weight:700;">A tu ritmo (${(r.perDay*7).toFixed(1)} por semana) alcanzas a venderlas antes</div>` : (r.perDay>0 ? `<div class="row-sub">Vendes ~${(r.perDay*7).toFixed(1)} por semana: no alcanzan a salir solas</div>` : `<div class="row-sub">Sin ventas en 30 días</div>`)}
+      ${r.onPromo ? `<div class="liq-ctl"><span class="status-badge status-ok">En oferta a ${money(p.promoPrice)}</span><button class="btn-tertiary" onclick="removeLiquidation('${p.id}')">Quitar oferta</button></div>` : `
+      <div class="liq-ctl">
+        <input type="number" inputmode="numeric" min="1" max="90" value="${pct}" aria-label="Descuento en porcentaje" onchange="setLiqPct('${p.id}',this.value)"><span>%</span>
+        <span class="row-sub" style="margin:0;">→ <strong>${money(price)}</strong> (antes ${money(p.price)})${margin!==null?` · margen ${margin}%`:''}</span>
+      </div>
+      ${atCost ? `<div class="row-sub" style="color:var(--rose);">Quedaría a costo: no se baja más para no vender con pérdida.</div>` : ''}
+      <button class="btn-primary" style="min-height:40px;" onclick="applyLiquidation('${p.id}')">Poner en oferta</button>`}
+    </div>`;
+  };
+  return `<div class="panel" id="liq-panel">
+    <div class="panel-title">${icon('alert-triangle',15)} Liquidar antes de que caduquen (${rows.length})</div>
+    <div class="panel-sub">Productos que caducan en los próximos ${LIQ_WINDOW_DAYS} días. El descuento sugerido sube mientras menos días quedan y nunca baja del costo.</div>
+    ${rows.length ? rows.map(rowHtml).join('') : `<div class="empty-state">Nada por caducar en los próximos ${LIQ_WINDOW_DAYS} días.</div>`}
+    ${expired.length ? `<div class="note-box" style="margin-top:8px;background:#F6DDE3;color:#7A2E45;">${icon('alert-triangle',14)} Ya caducado${expired.length===1?'':'s'}: ${expired.slice(0,4).map(x=>`${escDescHtml(x.p.name)} (${x.qty})`).join(', ')}${expired.length>4?'…':''}. Retíralos del inventario registrando la merma. <button class="btn-tertiary" onclick="state.adminTab='centros';state.centersSubview='mermas';render()">Ir a Mermas</button></div>` : ''}
+  </div>`;
+}
+
+/* ============== CIERRE DE MES GUIADO ==============
+   Revisa lo que suele quedar suelto al terminar el mes (pedidos abiertos, cobros pendientes, cajas,
+   costos sin capturar, conteo, respaldo), deja marcar a mano lo que no se puede medir y guarda una
+   foto de las cifras al cerrar: settings.monthCloses[YYYY-MM] = {checks, closedAt, closedBy, snapshot}. */
+const CLOSE_MANUAL = [
+  {id:'gastos', text:'Capturé todos los gastos del mes', sub:'Renta, luz, internet, sueldos, paquetería, publicidad.'},
+  {id:'proveedores', text:'Registré lo que pagué o debo a proveedores', sub:'Para que la utilidad no salga inflada.'},
+  {id:'cambios', text:'Revisé devoluciones y cambios', sub:'Que cada devolución esté registrada y su stock repuesto.'},
+];
+function monthLabelOf(key){ const [y,m]=key.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'}); }
+function prevMonthKey(key){ const [y,m]=key.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+pad2(d.getMonth()+1); }
+function monthCloseOf(key){ return (state.settings.monthCloses||{})[key] || null; }
+function defaultCloseMonth(){
+  const now = new Date(), cur = currentMonthKey(), prev = prevMonthKey(cur);
+  if(now.getDate()<=7){ const c = monthCloseOf(prev); if(!(c && c.closedAt)) return prev; }
+  return cur;
+}
+function computeMonthClose(key){
+  const {start,end} = monthRangeOf(key);
+  const np = computeNetProfit(key);
+  const inMonth = state.orders.filter(o=>{ if(o.status==='Cancelado') return false; const d=new Date(o.date); return !isNaN(d.getTime()) && d>=start && d<end; });
+  const orders = inMonth.length;
+  const prev = computeNetProfit(prevMonthKey(key));
+  const byProd = {};
+  inMonth.forEach(o=>(o.items||[]).forEach(it=>{ if(!it.id||it.id==='promo_buyxpayy') return; const n=String(it.name||'').replace(/\s*\(.*\)$/,''); byProd[n]=(byProd[n]||0)+(it.qty||0); }));
+  const top = Object.entries(byProd).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const summary = {revenue:np.revenue, cogs:np.cogs, gross:np.grossMargin, expenses:np.expensesTotal, net:np.net, orders, avg: orders? np.revenue/orders : 0, prevRevenue:prev.revenue, top};
+  const checks = [];
+  const openOld = state.orders.filter(o=>!o.archived && ['Nuevo','Preparando','En camino'].includes(o.status) && new Date(o.date)<end && Date.now()-new Date(o.date).getTime()>3*86400000);
+  checks.push({id:'abiertos', ok:openOld.length===0, text: openOld.length ? `${openOld.length} pedido${openOld.length===1?'':'s'} sin cerrar con más de 3 días` : 'Todos los pedidos están cerrados o recientes', sub: openOld.length ? 'Entrégalos, cancélalos o archívalos para que las cifras sean reales.' : '', go:"state.adminTab='pedidos';state.orderStatusFilter='Todos';state.orderRiskOnly=false;state.orderUnpaidOnly=false;render()"});
+  const unpaid = state.orders.filter(o=>orderIsUnpaidDelivered(o) && new Date(o.date)>=start && new Date(o.date)<end);
+  const unpaidSum = unpaid.reduce((a,o)=>a+(o.total||0),0);
+  checks.push({id:'cobros', ok:unpaid.length===0, text: unpaid.length ? `${unpaid.length} pedido${unpaid.length===1?'':'s'} entregado${unpaid.length===1?'':'s'} sin cobrar (${money(unpaidSum)})` : 'Todo lo entregado está cobrado', sub: unpaid.length ? 'Cóbralos o márcalos como pagados.' : '', go:"state.adminTab='pedidos';state.orderStatusFilter='Todos';state.orderRiskOnly=false;state.orderUnpaidOnly=true;render()"});
+  const regs = (state.cashRegisters||[]).filter(r=>{ const d=new Date(r.openedAt); return d>=start && d<end; });
+  const regOpen = regs.filter(r=>r.status==='abierta').length;
+  const regDiff = regs.filter(r=>r.status==='cerrada' && Math.abs(r.difference||0)>0).length;
+  checks.push({id:'cajas', ok:regOpen===0, text: regOpen ? `${regOpen} caja${regOpen===1?'':'s'} sin cerrar` : (regs.length ? `${regs.length} cierre${regs.length===1?'':'s'} de caja hechos` : 'Sin cajas del POS este mes'), sub: regDiff ? `${regDiff} cierre${regDiff===1?'':'s'} con diferencia: revísalo${regDiff===1?'':'s'}.` : '', go:"state.adminTab='caja';render()"});
+  checks.push({id:'costos', ok:np.soldWithoutCost===0, text: np.soldWithoutCost ? `${np.soldWithoutCost} pieza${np.soldWithoutCost===1?'':'s'} vendida${np.soldWithoutCost===1?'':'s'} sin costo capturado` : 'Todo lo vendido tiene costo', sub: np.soldWithoutCost ? 'La utilidad sale más alta de lo real hasta que captures esos costos.' : '', go:"state.adminTab='productos';render()"});
+  const aud = (state.audits||[]).filter(a=>{ const d=new Date(a.date); return d>=start && d<end; }).length;
+  checks.push({id:'conteo', ok:aud>0, text: aud ? `${aud} conteo${aud===1?'':'s'} de inventario en el mes` : 'No hiciste conteo de inventario este mes', sub: aud ? '' : 'Un conteo rápido de lo más vendido ayuda a detectar faltantes.', go:"state.adminTab='centros';state.centersSubview='auditorias';render()"});
+  const exp = state.settings.lastExportAt ? Math.floor((Date.now()-new Date(state.settings.lastExportAt).getTime())/86400000) : null;
+  checks.push({id:'respaldo', ok: exp!==null && exp<=30, text: exp===null ? 'Nunca has exportado un respaldo del catálogo' : exp<=30 ? `Respaldo hecho hace ${exp} día${exp===1?'':'s'}` : `Último respaldo hace ${exp} días`, sub: (exp===null||exp>30) ? 'Expórtalo desde Productos → Herramientas.' : '', go:"state.adminTab='productos';state.productToolsOpen=true;render()"});
+  const mc = monthCloseOf(key); const manual = (mc && mc.checks) || {};
+  CLOSE_MANUAL.forEach(m=>checks.push({id:m.id, manual:true, ok:!!manual[m.id], text:m.text, sub:m.sub}));
+  const pending = checks.filter(c=>!c.ok).length;
+  return {key, summary, checks, pending, expensesCount: np.expenses.length, closed: mc && mc.closedAt ? mc : null};
+}
+function setCloseMonth(delta){
+  const key = state.closeMonth || defaultCloseMonth();
+  const [y,m] = key.split('-').map(Number);
+  const d = new Date(y,m-1+delta,1);
+  const k = d.getFullYear()+'-'+pad2(d.getMonth()+1);
+  if(k>currentMonthKey()) return;
+  state.closeMonth = k; render();
+}
+async function toggleCloseCheck(key, id){
+  const all = {...(state.settings.monthCloses||{})};
+  const cur = {...(all[key]||{})}; cur.checks = {...(cur.checks||{})}; cur.checks[id] = !cur.checks[id];
+  all[key] = cur; state.settings.monthCloses = all;
+  render(); await saveSettings();
+}
+async function closeMonthNow(key){
+  const c = computeMonthClose(key);
+  const all = {...(state.settings.monthCloses||{})};
+  all[key] = {...(all[key]||{}), closedAt:new Date().toISOString(), closedBy: state.user?state.user.email:'', pendingAtClose:c.pending, snapshot:{revenue:Math.round(c.summary.revenue), net:Math.round(c.summary.net), expenses:Math.round(c.summary.expenses), orders:c.summary.orders}};
+  state.settings.monthCloses = all;
+  await saveSettings();
+  logAdminAction('cierre_mes','mes',monthLabelOf(key),`Ventas ${money(c.summary.revenue)} · utilidad ${money(c.summary.net)}${c.pending?` · cerrado con ${c.pending} pendiente(s)`:''}`);
+  showToast('Mes cerrado'); render();
+}
+async function reopenMonth(key){
+  const all = {...(state.settings.monthCloses||{})};
+  const prev = all[key]; if(!prev) return;
+  const {closedAt, closedBy, pendingAtClose, snapshot, ...rest} = prev;
+  all[key] = rest; state.settings.monthCloses = all;
+  await saveSettings(); render();
+  showUndo(`${monthLabelOf(key)} reabierto`, async()=>{ const a={...(state.settings.monthCloses||{})}; a[key]=prev; state.settings.monthCloses=a; await saveSettings(); render(); });
+}
+function monthSummaryText(key){
+  const c = computeMonthClose(key), s = c.summary;
+  const L = [`Cierre de ${monthLabelOf(key)} — ${state.settings.storeName||'La Casa de los Placeres'}`, `Ventas: ${money(s.revenue)} (${s.orders} pedidos, ticket promedio ${money(s.avg)})`, `Costo de lo vendido: ${money(s.cogs)}`, `Utilidad bruta: ${money(s.gross)}`, `Gastos: ${money(s.expenses)}`, `Utilidad neta: ${money(s.net)}`];
+  if(s.top.length) L.push('Lo más vendido: '+s.top.map(t=>`${t[0]} (${t[1]})`).join(', '));
+  if(c.pending) L.push(`Pendientes al cierre: ${c.pending}`);
+  return L.join('\n');
+}
+function copyMonthSummary(key){ navigator.clipboard.writeText(monthSummaryText(key)).then(()=>showToast('Resumen copiado')).catch(()=>showToast('No se pudo copiar')); }
+function pendingMonthClose(){
+  const now = new Date(), cur = currentMonthKey(), prev = prevMonthKey(cur);
+  let key = null;
+  if(now.getDate()<=7 && !(monthCloseOf(prev)||{}).closedAt) key = prev;
+  else if(now.getDate()>=28 && !(monthCloseOf(cur)||{}).closedAt) key = cur;
+  if(!key) return null;
+  return {key, pending: computeMonthClose(key).pending};
+}
+function renderStatsCierre(){
+  const key = state.closeMonth || defaultCloseMonth();
+  const c = computeMonthClose(key), s = c.summary;
+  const isCur = key===currentMonthKey();
+  const vs = s.prevRevenue>0 ? Math.round((s.revenue-s.prevRevenue)/s.prevRevenue*100) : null;
+  const done = c.checks.length - c.pending;
+  return `
+  <div class="cal-nav">
+    <button type="button" onclick="setCloseMonth(-1)" aria-label="Mes anterior">‹</button>
+    <div class="cal-title" style="text-transform:capitalize;">${monthLabelOf(key)}</div>
+    <button type="button" onclick="setCloseMonth(1)" aria-label="Mes siguiente" ${isCur?'disabled':''}>›</button>
+  </div>
+  ${c.closed ? `<div class="note-box" style="background:#E3F3EA;color:#1E6B45;">${icon('check',14)} Cerrado el ${new Date(c.closed.closedAt).toLocaleDateString('es-MX',{day:'numeric',month:'long'})}${c.closed.pendingAtClose?` con ${c.closed.pendingAtClose} pendiente${c.closed.pendingAtClose===1?'':'s'}`:''}. <button class="btn-tertiary" onclick="reopenMonth('${key}')">Reabrir</button></div>` : (isCur ? `<div class="note-box">El mes sigue en curso: puedes revisar los pendientes desde ahora y cerrarlo cuando termine.</div>` : '')}
+  <div class="panel">
+    <div class="panel-title">Resumen</div>
+    <div class="close-sum">
+      <span>Ventas</span><strong>${money(s.revenue)}</strong>
+      <span>Pedidos · ticket promedio</span><span>${s.orders} · ${money(s.avg)}</span>
+      <span>Costo de lo vendido</span><span>${money(s.cogs)}</span>
+      <span>Utilidad bruta</span><span>${money(s.gross)}</span>
+      <span>Gastos (${c.expensesCount})</span><span>${money(s.expenses)}</span>
+      <span><strong>Utilidad neta</strong></span><strong style="color:${s.net>=0?'var(--green)':'var(--rose)'};">${s.net<0?'-':''}${money(Math.abs(s.net))}</strong>
+      ${vs!==null ? `<span>Ventas vs mes anterior</span><span style="color:${vs>=0?'var(--green)':'var(--rose)'};">${vs>=0?'▲':'▼'} ${Math.abs(vs)}%</span>` : ''}
+    </div>
+    ${s.top.length ? `<div class="row-sub" style="margin-top:10px;">Lo más vendido: ${s.top.map(t=>`${escDescHtml(t[0])} (${t[1]})`).join(' · ')}</div>` : ''}
+    <button class="btn-outline" style="margin-top:10px;" onclick="copyMonthSummary('${key}')">Copiar resumen para WhatsApp</button>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Antes de cerrar (${done} de ${c.checks.length})</div>
+    <div class="panel-sub">Lo automático se revisa solo; lo demás márcalo tú.</div>
+    ${c.checks.map(k=>{
+      const tag = k.manual ? 'button' : (k.go && !k.ok ? 'button' : 'div');
+      const act = k.manual ? `onclick="toggleCloseCheck('${key}','${k.id}')"` : (k.go && !k.ok ? `onclick="${k.go.replace(/"/g,'&quot;')}"` : '');
+      return `<${tag} ${tag==='button'?'type="button"':''} class="close-item" ${act}>
+        <span class="close-ico ${k.ok?'ok':'warn'}">${k.ok?'✓':'!'}</span>
+        <span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13.5px;">${escDescHtml(k.text)}</span>${k.sub?`<span class="row-sub" style="display:block;margin:2px 0 0;">${escDescHtml(k.sub)}</span>`:''}</span>
+        ${tag==='button' && !k.manual ? '<span class="today-go">Ir ›</span>' : ''}
+      </${tag}>`;
+    }).join('')}
+    ${c.closed ? '' : `<button class="btn-primary" style="margin-top:10px;" onclick="closeMonthNow('${key}')">${c.pending ? `Cerrar de todos modos (${c.pending} pendiente${c.pending===1?'':'s'})` : 'Cerrar el mes'}</button>`}
+  </div>`;
+}
+
 /* ============== LOTES CON CADUCIDAD (primero en caducar, primero en salir) ==============
    Un producto puede tener varios lotes {id, qty, expirationDate, note}. La fecha más próxima de los
    lotes con piezas se copia a "expirationDate" del producto, así todos los avisos de caducidad que
@@ -4595,6 +4996,10 @@ function computeTodayTasks(){
     const pend = sPlan.rows.filter(r=>!r.inList).length;
     if(pend) t.push({tone:'ambar', n:pend, text:`producto${pend===1?'':'s'} por reponer para ${sPlan.season.ev.name} (${sPlan.season.daysLeft===0?'es hoy':`faltan ${sPlan.season.daysLeft} día${sPlan.season.daysLeft===1?'':'s'}`})`, go:"state.adminTab='centros';state.centersSubview='reabasto';render()"});
   }
+  const mcl = pendingMonthClose();
+  if(mcl) t.push({tone:'info', n:mcl.pending, text: mcl.pending ? `${mcl.pending===1?'pendiente':'pendientes'} para cerrar ${monthLabelOf(mcl.key)}` : `todo listo para cerrar ${monthLabelOf(mcl.key)}`, go:"state.adminTab='estadísticas';state.statsSubview='cierre';state.closeMonth='"+mcl.key+"';render()"});
+  const liqN = computeLiquidation().rows.filter(r=>!r.onPromo && !r.sellsOut && r.days<=15).length;
+  if(liqN) t.push({tone:'ambar', n:liqN, text:`producto${liqN===1?'':'s'} caduca${liqN===1?'':'n'} en 15 días o menos y no alcanza${liqN===1?'':'n'} a venderse — ponlo${liqN===1?'':'s'} en oferta`, go:"state.adminTab='estadísticas';state.statsSubview='productos';render();var e=document.getElementById('liq-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   const m = computeMetrics();
   if(m.lowStock.length) t.push({tone:'ambar', n:m.lowStock.length, text:`producto${m.lowStock.length===1?'':'s'} con poco stock o agotado${m.lowStock.length===1?'':'s'}`, go:"var e=document.getElementById('resumen-reabasto');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   if(m.expiringOrExpired) t.push({tone:'ambar', n:m.expiringOrExpired, text:`producto${m.expiringOrExpired===1?'':'s'} por caducar o caducado${m.expiringOrExpired===1?'':'s'}`, go:"state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"});
@@ -5025,6 +5430,7 @@ const STATS_SUBTAB_GROUPS = [
   {label:'Ventas', items:[
     {key:'general', label:'General'},
     {key:'calendario', label:'Calendario'},
+    {key:'cierre', label:'Cierre de mes'},
     {key:'pagos', label:'Pagos'},
     {key:'comisiones', label:'Comisiones'},
     {key:'carritoabandonado', label:'Carrito abandonado'},
@@ -5070,6 +5476,7 @@ function renderEstadisticas(){
     ${sub==='trafico' ? renderStatsTrafico() : ''}
     ${sub==='campanas' ? renderStatsCampanas() : ''}
     ${sub==='calendario' ? renderStatsCalendario() : ''}
+    ${sub==='cierre' ? renderStatsCierre() : ''}
     ${sub==='tiemporeal' ? renderStatsTiempoReal() : ''}
     ${sub==='visitas' ? renderStatsVisitas() : ''}
     ${sub==='margen' ? renderStatsMargen() : ''}
@@ -5421,6 +5828,7 @@ function renderStatsProductos(){
       <div class="stat-card"><div class="stat-label">Sin ninguna venta</div><div class="stat-value">${pa.noSales.length}</div></div>
       <div class="stat-card"><div class="stat-label">Valor de inventario</div><div class="stat-value">${money(m.inventoryValue)}</div></div>
     </div>
+    ${renderLiquidationPanel()}
     ${restock.length>0 ? (()=>{
       const {shown, remaining} = showMoreSlice('restockShowMore', restock);
       return `
@@ -8717,6 +9125,7 @@ const MARKETING_SUBPANELS = [
   {key:'mayoreo', icon:icon('package'), label:'Precios de mayoreo'},
   {key:'cupones', icon:icon('tag'), label:'Cupones de descuento'},
   {key:'promociones', icon:icon('star'), label:'Promociones automáticas'},
+  {key:'relampago', icon:icon('clock'), label:'Ofertas relámpago'},
   {key:'recordatorio', icon:icon('bell'), label:'Recordatorio al cobrar (POS)'},
   {key:'recompra', icon:icon('history'), label:'Recordatorio de recompra'},
   {key:'riesgo', icon:icon('alert-triangle'), label:'Clientes en riesgo de fuga'},
@@ -8738,7 +9147,7 @@ function renderMarketing(){
 }
 function renderMarketingSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.marketingSubpanel=null;render()">‹ Volver a Marketing</button>`;
-  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, recompra: renderRepurchaseSubpanel, riesgo: renderChurnRiskSubpanel, temporadas: renderSeasonsSubpanel};
+  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, recompra: renderRepurchaseSubpanel, riesgo: renderChurnRiskSubpanel, temporadas: renderSeasonsSubpanel, relampago: renderFlashSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 
@@ -12120,7 +12529,7 @@ const NAV_ADMIN_MODALS = [
   ['bulkTagModal', null], ['trashOpen', false], ['promoListOpen', false], ['duplicatesOpen', false],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
   ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
-  ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['couponModal', ()=>closeCouponModal()],
+  ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],
   ['promoModal', ()=>closePromoModal()], ['centerModal', null], ['cajaDetail', null], ['importOpen', false], ['customerImportOpen', false],
   ['catImportOpen', false], ['catAssignOpen', false], ['needAssignOpen', false], ['catalogMaintOpen', false], ['bgFixOpen', false],
   ['adminNavOpen', false],

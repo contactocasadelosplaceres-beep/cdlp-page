@@ -1067,7 +1067,20 @@ async function confirmCashClose(){
 }
 
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
-function effectivePrice(p){ return (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price; }
+/* Ofertas relámpago (se programan en Admin → Marketing): mismo cálculo que la tienda. */
+function flashFor(p){
+  if(!p || p.isKit) return null;
+  const now = Date.now(), cats = (p.categories&&p.categories.length)?p.categories:[p.cat];
+  const f = ((state.settings&&state.settings.flashSales)||[]).find(x=>x.active!==false && x.percent>0 && x.start && x.end && new Date(x.start).getTime()<=now && new Date(x.end).getTime()>now && ((x.productIds||[]).includes(p.id) || (x.categories||[]).some(c=>cats.includes(c))));
+  if(!f) return null;
+  const price = Math.round(p.price*(1-f.percent/100)*100)/100;
+  return price<p.price ? {sale:f, price} : null;
+}
+function effectivePrice(p){
+  const base = (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price;
+  const fl = flashFor(p);
+  return fl && fl.price<base ? fl.price : base;
+}
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
 function parseCartKey(key){
   const parts = key.split('::');
@@ -1806,14 +1819,14 @@ function renderPOS(){
           const remaining = filtered.length - visible.length;
           return visible.map(p=>{
           const hasVariants = p.variantGroups && p.variantGroups.length>0;
-          const hasPromo = p.promoPrice>0 && p.promoPrice<p.price;
+          const hasPromo = effectivePrice(p)<p.price;
           const stock = hasVariants ? null : centerStock(p, state.activeCenter.id);
           const outOfStock = !hasVariants && stock<=0;
           return `
           <div class="prod-card ${outOfStock?'out-of-stock':''}" ${outOfStock?'':`onclick="addToCart('${p.id}')"`}>
             ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
-            <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)}</div>
+            <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(effectivePrice(p))}`:money(p.price)}</div>
             <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
           </div>`;
         }).join('') + (remaining>0 ? `<button class="btn-ver-mas-pos" onclick="state.prodGridLimit+=PROD_GRID_PAGE_SIZE;render()">Ver más (${remaining} más)</button>` : '');
