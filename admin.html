@@ -510,6 +510,61 @@
   .camp-metrics span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:700;}
   .camp-metrics strong{font-size:14px;overflow-wrap:anywhere;}
   .order-camp-tag{display:inline-block;margin-top:3px;font-size:11px;font-weight:700;color:var(--primary-deep);background:var(--surface-soft);padding:2px 8px;border-radius:999px;overflow-wrap:anywhere;}
+  /* ===== Ventanas y formularios: título y botones fijos, secciones en tarjetas ===== */
+  .modal h3{position:sticky;top:-22px;z-index:3;margin:-22px -20px 14px;padding:16px 20px 12px;background:var(--surface);border-bottom:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+  .modal-actions{position:sticky;bottom:-22px;z-index:3;margin:16px -20px -22px;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -8px 16px -12px rgba(43,22,32,.25);}
+  .form-section-label{border-top:none;padding:2px 0 2px 10px;margin:22px 0 12px;border-left:3px solid var(--primary);font-size:11.5px;}
+  .form-section-label:first-of-type{margin-top:4px;padding-top:2px;}
+  .modal .row-main{min-width:0;}
+  .modal .row-sub,.modal .row-title{overflow-wrap:anywhere;}
+  .pm-modal{max-width:620px;}
+  .fsec{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);margin:0 0 14px;box-shadow:var(--shadow-sm);}
+  .fsec-head{display:flex;align-items:center;gap:10px;padding:13px 14px;list-style:none;cursor:default;}
+  summary.fsec-head{cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  summary.fsec-head::-webkit-details-marker{display:none;}
+  .fsec-ico{flex:0 0 auto;width:30px;height:30px;border-radius:9px;background:var(--surface-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;}
+  .fsec-titles{flex:1;min-width:0;}
+  .fsec-title{font-size:14.5px;font-weight:700;color:var(--primary-deep);font-family:'League Spartan',sans-serif;line-height:1.2;}
+  .fsec-hint{font-size:12px;color:var(--ink-soft);margin-top:2px;overflow-wrap:anywhere;}
+  .fsec-badge{flex:0 0 auto;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--surface-soft);color:var(--ink-soft);white-space:nowrap;}
+  .fsec-chev{flex:0 0 auto;color:var(--ink-soft);transition:transform .15s ease;}
+  details.fsec[open]>summary .fsec-chev{transform:rotate(180deg);}
+  .fsec-body{padding:2px 14px 14px;}
+  details.fsec[open]>summary.fsec-head{padding-bottom:8px;}
+  .fsec-body .form-field:last-child{margin-bottom:0;}
+  .two-col-keep{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .two-col-keep>*,.two-col>*{min-width:0;}
+  .modal input[type=date]{min-width:0;max-width:100%;}
+  .pm-switch{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;background:var(--surface-soft);cursor:pointer;margin-top:4px;}
+  .pm-switch .pm-switch-txt{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:1.3;}
+  .pm-switch .pm-switch-txt small{display:block;font-weight:400;color:var(--ink-soft);font-size:11.5px;margin-top:2px;}
+  .pm-switch input{appearance:none;-webkit-appearance:none;flex:0 0 auto;width:42px;height:24px;border-radius:999px;background:var(--border);position:relative;transition:background .15s ease;margin:0;padding:0;border:none;}
+  .pm-switch input::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s ease;}
+  .pm-switch input:checked{background:var(--primary);}
+  .pm-switch input:checked::after{transform:translateX(18px);}
+  .pm-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-top:4px;}
+  .pm-photos .img-thumb{width:auto;height:auto;aspect-ratio:1;}
+  .pm-photos .add-thumb{display:flex;align-items:center;justify-content:center;border:1.5px dashed var(--primary);color:var(--primary);background:var(--surface-soft);font-size:26px;cursor:pointer;box-shadow:none;}
+  .pm-cover{position:absolute;left:5px;top:5px;z-index:1;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:var(--primary);color:#fff;padding:2px 6px;border-radius:999px;}
+  .pm-result{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+  .pm-result>div{background:var(--surface-soft);border-radius:10px;padding:10px 12px;}
+  .pm-result .row-sub{font-size:11.5px;}
+  .pm-result strong{font-size:18px;display:block;margin-top:2px;}
+  .pm-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .pm-chips label{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--surface-soft);padding:8px 11px;border-radius:999px;cursor:pointer;border:1.5px solid transparent;margin:0;}
+  .pm-chips label:has(input:checked){background:rgba(153,52,119,.12);border-color:var(--primary);color:var(--primary-deep);}
+  .pm-chips label{white-space:nowrap;}
+  .pm-chips input{margin:0;width:auto;flex:0 0 auto;}
+  .fsub{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;}
+  .fsub>summary{list-style:none;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;padding:4px 0;}
+  .fsub>summary::-webkit-details-marker{display:none;}
+  .fsub>summary::after{content:"▾";margin-left:auto;transition:transform .15s ease;}
+  .fsub[open]>summary::after{transform:rotate(180deg);}
+  .pm-barcode{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg);border-radius:10px;padding:10px;}
+  .pm-barcode svg{max-width:100%;height:auto;max-height:90px;}
+  .pm-stock-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);}
+  .pm-stock-row:first-of-type{border-top:none;}
+  .pm-stock-total{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:var(--surface-soft);border-radius:10px;font-size:13px;font-weight:600;}
 </style>
 </head>
 <body>
@@ -5014,7 +5069,7 @@ function renderStatsCampanas(){
     <div class="stat-grid">
       <div class="stat-card primary"><div class="stat-label">Ventas por campañas</div><div class="stat-value">${money(c.campRevenue)}</div></div>
       <div class="stat-card"><div class="stat-label">Pedidos por campañas</div><div class="stat-value">${c.campOrders}</div></div>
-      <div class="stat-card"><div class="stat-label">% de pedidos de la tienda con campaña</div><div class="stat-value">${c.sharePct}%</div></div>
+      <div class="stat-card"><div class="stat-label">Pedidos con campaña</div><div class="stat-value">${c.sharePct}%</div></div>
     </div>
     <div class="panel">
       <div class="panel-title">Rendimiento por campaña</div>
@@ -6143,13 +6198,19 @@ function renderCashierModal(){
   const c = state.cashierModal;
   const NOTIF_OPTIONS = [{key:'ventas',label:'Ventas nuevas (Punto de Venta)'},{key:'pedidos',label:'Pedidos nuevos (tienda online)'},{key:'stockBajo',label:'Alertas de stock bajo'}];
   const isColaborador = c.role==='colaborador';
-  return `
-  <div class="modal-overlay">
-    <div class="modal">
-      <h3>${c.id?'Editar usuario':'Nuevo usuario'}</h3>
+  const sw = (checked, onchange, label)=>`
+    <label class="pm-switch" style="margin-top:8px;">
+      <span class="pm-switch-txt">${label}</span>
+      <input type="checkbox" ${checked?'checked':''} onchange="${onchange}">
+    </label>`;
+  const secPerson = pmSection('cash_persona','Datos del usuario',{icon:'user', body:`
       <div class="form-field"><label>Nombre</label><input id="cash-name" value="${c.name||''}" oninput="state.cashierModal.name=this.value"></div>
-      <div class="form-field"><label>Email ${isColaborador?'(con el que va a iniciar sesión)':'(opcional)'}</label><input id="cash-email" type="email" value="${c.email||''}" oninput="state.cashierModal.email=this.value"></div>
-      <div class="form-field"><label>Permisos</label>
+      <div class="two-col">
+        <div class="form-field"><label>Email ${isColaborador?'(con el que inicia sesión)':'(opcional)'}</label><input id="cash-email" type="email" value="${c.email||''}" oninput="state.cashierModal.email=this.value"></div>
+        <div class="form-field"><label>PIN del Punto de Venta</label><input id="cash-pin" inputmode="numeric" maxlength="6" placeholder="4 dígitos" value="${c.pin||''}" oninput="state.cashierModal.pin=this.value"></div>
+      </div>`});
+  const secAccess = pmSection('cash_acceso','Acceso',{icon:'shield', hint:'Qué puede hacer esta persona', body:`
+      <div class="form-field" style="margin-bottom:0;"><label>Tipo de usuario</label>
         <select id="cash-role" onchange="setCashierRole(this.value)">
           <option value="cajero" ${c.role!=='administrador'&&c.role!=='colaborador'?'selected':''}>Cajero (solo Punto de Venta)</option>
           <option value="colaborador" ${c.role==='colaborador'?'selected':''}>Colaborador (acceso limitado y personalizable al panel)</option>
@@ -6157,31 +6218,24 @@ function renderCashierModal(){
         </select>
       </div>
       ${isColaborador ? `
-      <div class="form-field">
-        <label>¿A qué secciones del panel tiene acceso?</label>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          ${PERMISSION_DEFS.map(p=>`
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:9px 12px;border-radius:9px;cursor:pointer;">
-              <input type="checkbox" ${c.permissions&&c.permissions[p.key]?'checked':''} onchange="toggleCashierPermission('${p.key}',this.checked)">
-              ${p.label}
-            </label>`).join('')}
-        </div>
+      <div class="form-field" style="margin:14px 0 0;">
+        <label>Secciones del panel a las que tiene acceso</label>
+        ${PERMISSION_DEFS.map(p=>sw(c.permissions&&c.permissions[p.key], `toggleCashierPermission('${p.key}',this.checked)`, p.label)).join('')}
       </div>
-      <div class="note-box" style="margin-top:4px;">
-        Un colaborador nunca puede administrar Usuarios (esta sección) ni darse permisos a sí mismo, aunque tenga todo lo demás marcado.<br><br>
-        Antes de que pueda entrar, crea su cuenta en la consola de Firebase (Authentication → Add user) con este mismo correo — aquí solo defines qué puede ver y hacer una vez que inicie sesión, no crea la cuenta.
-      </div>` : ''}
-      <div class="form-field"><label>PIN para el Punto de Venta (4 dígitos)</label><input id="cash-pin" maxlength="6" value="${c.pin||''}" oninput="state.cashierModal.pin=this.value"></div>
-      <div class="form-field"><label>Notificaciones</label>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          ${NOTIF_OPTIONS.map(n=>`
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:9px 12px;border-radius:9px;cursor:pointer;">
-              <input type="checkbox" ${c.notify&&c.notify[n.key]?'checked':''} onchange="toggleCashierNotify('${n.key}',this.checked)">
-              ${n.label}
-            </label>`).join('')}
-        </div>
-      </div>
-      <div class="note-box" style="margin-top:4px;">Las notificaciones se envían por el robot de WhatsApp/Slack que configuramos aparte (activo cuando retomes ese pendiente) — aquí solo defines quién debe recibir cuáles.</div>
+      <div class="note-box" style="margin:12px 0 0;">
+        Un colaborador nunca puede administrar Usuarios ni darse permisos a sí mismo.<br><br>
+        Antes de que pueda entrar, crea su cuenta en la consola de Firebase (Authentication → Add user) con este mismo correo — aquí solo defines qué puede ver y hacer, no se crea la cuenta.
+      </div>` : ''}`});
+  const secNotify = pmSection('cash_avisos','Notificaciones',{icon:'bell', collapsible:true, open:!!(c.notify&&Object.values(c.notify).some(Boolean)), badge:'Opcional', hint:'Qué avisos recibe esta persona', body:`
+      ${NOTIF_OPTIONS.map(n=>sw(c.notify&&c.notify[n.key], `toggleCashierNotify('${n.key}',this.checked)`, n.label)).join('')}
+      <div class="note-box" style="margin:12px 0 0;">Los avisos se envían por el robot de WhatsApp/Slack que configuramos aparte (se activa cuando retomes ese pendiente) — aquí solo defines quién debe recibir cuáles.</div>`});
+  return `
+  <div class="modal-overlay">
+    <div class="modal">
+      <h3>${c.id?'Editar usuario':'Nuevo usuario'}</h3>
+      ${secPerson}
+      ${secAccess}
+      ${secNotify}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.cashierModal=null;render()">Cancelar</button>
         <button class="btn-primary" onclick="saveCashierForm()">Guardar</button>
@@ -7815,40 +7869,48 @@ function renderClientes(){
 }
 function renderCustomerModal(){
   const c = state.customerModal;
-  return `
-  <div class="modal-overlay">
-    <div class="modal">
-      <h3>${c.id?'Editar cliente':'Nuevo cliente'}</h3>
+  const hasAddr = !!(c.address||c.city||c.state||c.country);
+  const hasNotes = !!((c.notesLog||[]).length||c.notes||(c.tags||[]).length);
+  const secContact = pmSection('cm_contacto','Contacto',{icon:'user', body:`
       <div class="form-field"><label>Nombre</label><input id="cm-name" value="${c.name||''}" oninput="state.customerModal.name=this.value"></div>
       <div class="two-col">
-        <div class="form-field"><label>Teléfono / WhatsApp</label><input id="cm-phone" value="${c.phone||''}" oninput="state.customerModal.phone=this.value"></div>
-        <div class="form-field"><label>Email</label><input id="cm-email" value="${c.email||''}" oninput="state.customerModal.email=this.value"></div>
-      </div>
-      <div class="form-field"><label>Dirección</label><textarea id="cm-address" placeholder="Calle, número, colonia, referencias" oninput="state.customerModal.address=this.value">${c.address||''}</textarea></div>
-      <div class="two-col">
+        <div class="form-field"><label>Teléfono / WhatsApp</label><input id="cm-phone" type="tel" inputmode="tel" value="${c.phone||''}" oninput="state.customerModal.phone=this.value"></div>
+        <div class="form-field"><label>Email</label><input id="cm-email" type="email" value="${c.email||''}" oninput="state.customerModal.email=this.value"></div>
+      </div>`});
+  const secAddr = pmSection('cm_dir','Dirección de entrega',{icon:'map-pin', collapsible:true, open:hasAddr||!c.id, badge: hasAddr?'':'Opcional', body:`
+      <div class="form-field"><label>Dirección</label><textarea id="cm-address" rows="2" placeholder="Calle, número, colonia, referencias" oninput="state.customerModal.address=this.value">${c.address||''}</textarea></div>
+      <div class="two-col-keep">
         <div class="form-field"><label>Ciudad</label><input id="cm-city" value="${c.city||''}" oninput="state.customerModal.city=this.value"></div>
         <div class="form-field"><label>Estado</label><input id="cm-state" value="${c.state||''}" oninput="state.customerModal.state=this.value"></div>
       </div>
-      <div class="form-field"><label>País</label><input id="cm-country" value="${c.country||''}" oninput="state.customerModal.country=this.value"></div>
+      <div class="form-field"><label>País</label><input id="cm-country" value="${c.country||''}" oninput="state.customerModal.country=this.value"></div>`});
+  const secNotes = pmSection('cm_notas','Notas y etiquetas',{icon:'message-square', collapsible:true, open:hasNotes, badge: (c.notesLog||[]).length?`${(c.notesLog||[]).length} nota(s)`:'Opcional', hint:'Preferencias, recordatorios y cómo la conociste', body:`
       <div class="form-field"><label>Bitácora de notas (con fecha)</label>
         <div style="display:flex;gap:6px;">
-          <input id="cm-new-note" placeholder="Ej. Le interesa lencería talla grande, prefiere que le escriban por la tarde…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomerNote();}">
+          <input id="cm-new-note" placeholder="Ej. Le interesa lencería talla grande…" style="flex:1;min-width:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomerNote();}">
           <button class="btn-outline" style="white-space:nowrap;" onclick="addCustomerNote()">Agregar</button>
         </div>
         ${(c.notesLog||[]).length===0 ? `<div class="panel-sub" style="margin-top:6px;">Aún no hay notas registradas.</div>` : `
           <div style="max-height:190px;overflow-y:auto;margin-top:8px;">
             ${(c.notesLog||[]).map((n,i)=>`
               <div style="border-bottom:1px solid var(--border);padding:8px 0;display:flex;gap:8px;align-items:flex-start;">
-                <div style="flex:1;">
+                <div style="flex:1;min-width:0;">
                   <div class="row-sub">${new Date(n.date).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}${n.author?` · ${n.author}`:''}</div>
-                  <div style="white-space:pre-wrap;font-size:13px;margin-top:2px;">${(n.text||'').replace(/</g,'&lt;')}</div>
+                  <div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;margin-top:2px;">${(n.text||'').replace(/</g,'&lt;')}</div>
                 </div>
                 <button class="icon-btn danger" title="Borrar nota" onclick="removeCustomerNote(${i})">${icon('trash',14)}</button>
               </div>`).join('')}
           </div>`}
       </div>
-      <div class="form-field"><label>Nota general</label><textarea id="cm-notes" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
-      <div class="form-field"><label>Etiquetas (separadas por coma)</label><input id="cm-tags" placeholder="mayorista, referido por Ana" value="${(c.tags||[]).join(', ')}"></div>
+      <div class="form-field"><label>Nota general</label><textarea id="cm-notes" rows="2" oninput="state.customerModal.notes=this.value">${c.notes||''}</textarea></div>
+      <div class="form-field"><label>Etiquetas (separadas por coma)</label><input id="cm-tags" placeholder="mayorista, referido por Ana" value="${(c.tags||[]).join(', ')}"></div>`});
+  return `
+  <div class="modal-overlay">
+    <div class="modal">
+      <h3>${c.id?'Editar cliente':'Nuevo cliente'}</h3>
+      ${secContact}
+      ${secAddr}
+      ${secNotes}
       ${c.id ? renderCustomerMessageHistory() : ''}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCustomerModal()">Cancelar</button>
@@ -8026,15 +8088,13 @@ function renderWholesaleModal(){
   const t = state.wholesaleModal;
   const q = (state.wholesaleProductSearch||'').trim().toLowerCase();
   const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
-  return `
-  <div class="modal-overlay">
-    <div class="modal" style="max-width:520px;">
-      <h3>${t.name?'Editar':'Nueva'} tabla de precios de mayoreo</h3>
+  const secBase = pmSection('wt_base','Tabla de precios',{icon:'package', body:`
       <div class="form-field"><label>Nombre</label><input id="wt-name" value="${t.name||''}" placeholder="Ej. Mayoristas chicos" oninput="state.wholesaleModal.name=this.value"></div>
-      <div class="two-col">
-        <div class="form-field"><label>Descuento (%)</label><input id="wt-discount" type="number" value="${t.discountPercent}" oninput="state.wholesaleModal.discountPercent=this.value"></div>
+      <div class="two-col-keep">
+        <div class="form-field"><label>Descuento (%)</label><input id="wt-discount" type="number" inputmode="decimal" value="${t.discountPercent}" oninput="state.wholesaleModal.discountPercent=this.value"></div>
         <div class="form-field"><label>Código de acceso</label><input id="wt-code" value="${t.code}" style="text-transform:uppercase;" oninput="state.wholesaleModal.code=this.value"></div>
-      </div>
+      </div>`});
+  const secScope = pmSection('wt_aplica','¿Dónde aplica?',{icon:'grid', body:`
       <div class="form-field"><label>¿A qué aplica el descuento?</label>
         <select id="wt-scope" onchange="state.wholesaleModal.scope=this.value;render()">
           <option value="all" ${t.scope==='all'?'selected':''}>Toda la tienda</option>
@@ -8044,9 +8104,9 @@ function renderWholesaleModal(){
       </div>
       ${t.scope==='categories' ? `
         <div class="form-field"><label>Categorías incluidas</label>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;">
+          <div class="pm-chips">
             ${state.settings.categories.map(c=>`
-              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+              <label>
                 <input type="checkbox" value="${c}" ${(t.categories||[]).includes(c)?'checked':''} onchange="toggleWholesaleCategory('${c.replace(/'/g,"\\'")}',this.checked)">
                 ${c}
               </label>`).join('')}
@@ -8067,16 +8127,24 @@ function renderWholesaleModal(){
           </div>
         ` : ''}
         <div class="panel-sub">${(t.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
-      ` : ''}
-      <div class="two-col" style="margin-top:10px;">
+      ` : ''}`});
+  const secMin = pmSection('wt_minimo','Compra mínima',{icon:'dollar-sign', hint:'Desde cuánto se activa este precio', body:`
+      <div class="two-col-keep">
         <div class="form-field"><label>Compra mínima por</label>
           <select id="wt-mintype" onchange="state.wholesaleModal.minType=this.value">
             <option value="amount" ${t.minType==='amount'?'selected':''}>Monto ($)</option>
             <option value="qty" ${t.minType==='qty'?'selected':''}>Cantidad de piezas</option>
           </select>
         </div>
-        <div class="form-field"><label>Valor mínimo</label><input id="wt-minvalue" type="number" value="${t.minValue}" oninput="state.wholesaleModal.minValue=this.value"></div>
-      </div>
+        <div class="form-field"><label>Valor mínimo</label><input id="wt-minvalue" type="number" inputmode="numeric" value="${t.minValue}" oninput="state.wholesaleModal.minValue=this.value"></div>
+      </div>`});
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:560px;">
+      <h3>${t.name?'Editar':'Nueva'} tabla de precios de mayoreo</h3>
+      ${secBase}
+      ${secScope}
+      ${secMin}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeWholesaleModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveWholesaleTier()">Guardar</button>
@@ -8185,14 +8253,12 @@ function renderCouponModal(){
   const c = state.couponModal;
   const q = (state.couponProductSearch||'').trim().toLowerCase();
   const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
-  return `
-  <div class="modal-overlay">
-    <div class="modal" style="max-width:520px;">
-      <h3>${c.code?'Editar':'Nuevo'} cupón</h3>
-      <div class="two-col">
+  const secBase = pmSection('cp_base','Cupón',{icon:'tag', body:`
+      <div class="two-col-keep">
         <div class="form-field"><label>Código</label><input id="cp-code" value="${c.code||''}" style="text-transform:uppercase;" placeholder="Ej. VERANO20" oninput="state.couponModal.code=this.value"></div>
-        <div class="form-field"><label>Descuento (%)</label><input id="cp-discount" type="number" value="${c.discountPercent}" oninput="state.couponModal.discountPercent=this.value"></div>
-      </div>
+        <div class="form-field"><label>Descuento (%)</label><input id="cp-discount" type="number" inputmode="decimal" value="${c.discountPercent}" oninput="state.couponModal.discountPercent=this.value"></div>
+      </div>`});
+  const secScope = pmSection('cp_aplica','¿Dónde aplica?',{icon:'grid', body:`
       <div class="form-field"><label>¿A qué aplica?</label>
         <select id="cp-scope" onchange="state.couponModal.scope=this.value;render()">
           <option value="all" ${c.scope==='all'?'selected':''}>Toda la tienda</option>
@@ -8202,9 +8268,9 @@ function renderCouponModal(){
       </div>
       ${c.scope==='categories' ? `
         <div class="form-field"><label>Categorías incluidas</label>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;">
+          <div class="pm-chips">
             ${state.settings.categories.map(cat=>`
-              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+              <label>
                 <input type="checkbox" value="${cat}" ${(c.categories||[]).includes(cat)?'checked':''} onchange="toggleCouponCategory('${cat.replace(/'/g,"\\'")}',this.checked)">
                 ${cat}
               </label>`).join('')}
@@ -8225,17 +8291,25 @@ function renderCouponModal(){
           </div>
         ` : ''}
         <div class="panel-sub">${(c.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
-      ` : ''}
-      <div class="two-col" style="margin-top:10px;">
-        <div class="form-field"><label>Vigente desde (opcional)</label><input id="cp-start" type="date" value="${c.startDate||''}" oninput="state.couponModal.startDate=this.value"></div>
-        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="cp-end" type="date" value="${c.endDate||''}" oninput="state.couponModal.endDate=this.value"></div>
+      ` : ''}`});
+  const secLimits = pmSection('cp_limites','Vigencia y límites',{icon:'calendar', hint:'Todo es opcional', body:`
+      <div class="two-col">
+        <div class="form-field"><label>Vigente desde</label><input id="cp-start" type="date" value="${c.startDate||''}" oninput="state.couponModal.startDate=this.value"></div>
+        <div class="form-field"><label>Vigente hasta</label><input id="cp-end" type="date" value="${c.endDate||''}" oninput="state.couponModal.endDate=this.value"></div>
       </div>
-      <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" value="${c.maxUses||0}" oninput="state.couponModal.maxUses=this.value"></div>
-      <label class="checkbox-row">
+      <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" inputmode="numeric" value="${c.maxUses||0}" oninput="state.couponModal.maxUses=this.value"></div>
+      <label class="pm-switch">
+        <span class="pm-switch-txt">Un solo uso por cliente<small>Por teléfono — útil para cupones de "primera compra"</small></span>
         <input id="cp-single-use" type="checkbox" ${c.singleUsePerCustomer?'checked':''}>
-        <span>Un solo uso por cliente (por teléfono) — útil para cupones de "primera compra"</span>
       </label>
-      ${couponUsedCount(c.code)>0 ? `<div class="panel-sub" style="margin-top:4px;">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}
+      ${couponUsedCount(c.code)>0 ? `<div class="panel-sub" style="margin:8px 0 0;">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}`});
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:560px;">
+      <h3>${c.code?'Editar':'Nuevo'} cupón</h3>
+      ${secBase}
+      ${secScope}
+      ${secLimits}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeCouponModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveCoupon()">Guardar</button>
@@ -8393,9 +8467,9 @@ function renderPromoScopePicker(p){
     </div>
     ${p.scope==='categories' ? `
       <div class="form-field"><label>Categorías incluidas</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;">
+        <div class="pm-chips">
           ${state.settings.categories.map(c=>`
-            <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
+            <label>
               <input type="checkbox" value="${c}" ${(p.categories||[]).includes(c)?'checked':''} onchange="togglePromoCategory('${c.replace(/'/g,"\\'")}',this.checked)">
               ${c}
             </label>`).join('')}
@@ -8421,17 +8495,14 @@ function renderPromoScopePicker(p){
 }
 function renderPromoModal(){
   const p = state.promoModal;
-  return `
-  <div class="modal-overlay">
-    <div class="modal" style="max-width:560px;">
-      <h3>${p.name?'Editar':'Nueva'} promoción</h3>
-      <div class="form-field"><label>Nombre (uso interno, no lo ven tus clientes)</label><input id="pr-name" value="${p.name||''}" oninput="state.promoModal.name=this.value"></div>
-      <div class="form-field"><label>Tipo de descuento</label>
+  const secBase = pmSection('pr_base','Promoción',{icon:'star', body:`
+      <div class="form-field"><label>Nombre (uso interno, tus clientes no lo ven)</label><input id="pr-name" value="${p.name||''}" oninput="state.promoModal.name=this.value"></div>
+      <div class="form-field" style="margin-bottom:0;"><label>Tipo de descuento</label>
         <select id="pr-type" onchange="state.promoModal.type=this.value;render()">
           ${Object.entries(PROMO_TYPES).map(([k,v])=>`<option value="${k}" ${p.type===k?'selected':''}>${v}</option>`).join('')}
         </select>
-      </div>
-
+      </div>`});
+  const secRules = pmSection('pr_reglas','Cómo funciona',{icon:'sliders', hint:'Se ajusta al tipo que elegiste', body:`
       ${p.type==='buyxpayy' ? `
         <div class="two-col">
           <div class="form-field"><label>Llevando (unidades)</label><input id="pr-buyqty" type="number" value="${p.buyQty}" oninput="state.promoModal.buyQty=this.value"></div>
@@ -8507,11 +8578,19 @@ function renderPromoModal(){
         ` : ''}
         <div class="panel-sub">Producto B: ${p.discountProductId ? (state.products.find(x=>x.id===p.discountProductId)||{}).name || '—' : 'ninguno'}</div>
       ` : ''}
-
-      <div class="two-col" style="margin-top:10px;">
-        <div class="form-field"><label>Vigente desde (opcional)</label><input id="pr-start" type="date" value="${p.startDate||''}" oninput="state.promoModal.startDate=this.value"></div>
-        <div class="form-field"><label>Vigente hasta (opcional)</label><input id="pr-end" type="date" value="${p.endDate||''}" oninput="state.promoModal.endDate=this.value"></div>
-      </div>
+  `});
+  const secDates = pmSection('pr_vigencia','Vigencia',{icon:'calendar', hint:'Opcional: déjalo vacío para que no caduque', body:`
+      <div class="two-col">
+        <div class="form-field" style="margin-bottom:0;"><label>Desde</label><input id="pr-start" type="date" value="${p.startDate||''}" oninput="state.promoModal.startDate=this.value"></div>
+        <div class="form-field" style="margin-bottom:0;"><label>Hasta</label><input id="pr-end" type="date" value="${p.endDate||''}" oninput="state.promoModal.endDate=this.value"></div>
+      </div>`});
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:560px;">
+      <h3>${p.name?'Editar':'Nueva'} promoción</h3>
+      ${secBase}
+      ${secRules}
+      ${secDates}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closePromoModal()">Cancelar</button>
         <button class="btn-primary" onclick="savePromotion()">Guardar</button>
@@ -10423,8 +10502,7 @@ function saveSynonyms(){
 function renderOperativoSubpanel(){
   const s = state.settings;
   return `
-  <div class="panel">
-    <div class="panel-title">${icon('alert-triangle',15)} Tienda en pausa</div>
+  ${pmSection('op_pausa','Tienda en pausa',{icon:'alert-triangle', collapsible:true, open:s.storePaused, badge:s.storePaused?'En pausa':'Operando', hint:'Vacaciones, imprevistos o inventario en reconteo', body:`
     <div class="panel-sub">Actívalo cuando no puedas surtir pedidos (vacaciones, imprevisto, inventario en reconteo). La tienda se sigue viendo normal — los productos siguen visibles — pero nadie puede agregar al carrito ni completar un pedido hasta que lo desactives. No hace falta ocultar producto por producto.</div>
     <label class="checkbox-row">
       <input type="checkbox" ${s.storePaused?'checked':''} onchange="state.settings.storePaused=this.checked;saveSettings();render()">
@@ -10434,17 +10512,15 @@ function renderOperativoSubpanel(){
       <textarea id="set-store-paused-msg" rows="2" oninput="state.settings.storePausedMessage=this.value">${s.storePausedMessage||''}</textarea>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
-  </div>
-  <div class="panel">
-    <div class="panel-title">Verificación de mayoría de edad</div>
+  `})}
+  ${pmSection('op_edad','Verificación de mayoría de edad',{icon:'user', collapsible:true, open:false, badge:s.ageGateEnabled!==false?'Activa':'Apagada', hint:'Pregunta de mayoría de edad al entrar', body:`
     <div class="panel-sub">Antes de ver el catálogo, quien entra a la tienda debe declarar que es mayor de edad (se guarda en su celular para no volver a preguntarle en su próxima visita).</div>
     <label class="checkbox-row">
       <input type="checkbox" ${s.ageGateEnabled!==false?'checked':''} onchange="state.settings.ageGateEnabled=this.checked;saveSettings();render()">
       <span>Pedir confirmación de mayoría de edad al entrar</span>
     </label>
-  </div>
-  <div class="panel">
-    <div class="panel-title">Aceptación del aviso de privacidad</div>
+  `})}
+  ${pmSection('op_priv','Aceptación del aviso de privacidad',{icon:'shield', collapsible:true, open:false, badge:s.termsEnabled!==false?'Activo':'Apagado', hint:'Aviso de privacidad y política de devoluciones', body:`
     <div class="panel-sub">Es obligatorio: la persona debe marcar la casilla antes de poder confirmar su compra. Solo se le pide una vez por celular/navegador — en cuanto la acepta en su primera compra, queda guardado en ese dispositivo y no se le vuelve a pedir en las siguientes.</div>
     <label class="checkbox-row">
       <input type="checkbox" ${s.termsEnabled!==false?'checked':''} onchange="state.settings.termsEnabled=this.checked;saveSettings();render()">
@@ -10460,9 +10536,8 @@ function renderOperativoSubpanel(){
       <textarea id="set-return-policy-text" rows="10" oninput="state.settings.returnPolicyText=this.value">${escDescHtml(s.returnPolicyText||'')}</textarea>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
-  </div>
-  <div class="panel">
-    <div class="panel-title">Modo kiosko / vitrina</div>
+  `})}
+  ${pmSection('op_kiosko','Modo kiosko / vitrina',{icon:'grid', collapsible:true, open:false, badge:'', hint:'Catálogo sin compras para una tablet del mostrador', body:`
     <div class="panel-sub">Para una tablet en el mostrador de la tienda física: muestra el catálogo para que la clienta lo hojee (fotos, precios, existencias), pero sin botones de comprar ni carrito — cualquier compra la completa el personal desde el Punto de Venta. Abre el enlace de abajo una sola vez en esa tablet; queda activado en ese dispositivo aunque se apague o se recargue la página.</div>
     <div class="form-field">
       <label>Enlace para activar el modo vitrina en una tablet</label>
@@ -10474,9 +10549,8 @@ function renderOperativoSubpanel(){
       <input id="kiosk-link-off" readonly value="${kioskModeLink(true)}" onclick="this.select()">
       <button class="btn-tertiary" style="margin-top:6px;" onclick="navigator.clipboard.writeText(document.getElementById('kiosk-link-off').value);showToast('Enlace copiado');">Copiar enlace</button>
     </div>
-  </div>
-  <div class="panel">
-    <div class="panel-title">Datos operativos</div>
+  `})}
+  ${pmSection('op_datos','Datos operativos',{icon:'sliders', collapsible:true, open:true, badge:'', hint:'WhatsApp, horario, dirección y avisos', body:`
     <div class="form-field"><label>WhatsApp para confirmaciones (con código de país)</label><input id="set-wa" value="${s.whatsapp}" oninput="state.settings.whatsapp=this.value"></div>
     <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}" oninput="state.settings.schedule=this.value"></div>
     <div class="form-field"><label>Dirección de origen (de donde sale cada pedido)</label><input id="set-store-address" value="${s.storeAddress||''}" placeholder="Ej. Miguel Hidalgo 815 interior 22" oninput="state.settings.storeAddress=this.value"></div>
@@ -10493,7 +10567,7 @@ function renderOperativoSubpanel(){
       <div class="note-box" style="margin-top:6px;">El "+X pedidos" que ven tus clientes junto a las estrellas cuenta automáticamente los pedidos y ventas reales que ha registrado el sistema desde que existe el folio consecutivo. Si ya importaste tu historial de ventas de Tiendanube (588 pedidos), o tienes ventas anteriores que no quedaron en ese conteo, ponlas aquí para que se sumen — es un número real, no decorativo, así que solo cuenta ventas que de verdad ocurrieron.</div>
     </div>
     <button class="btn-primary" onclick="handleSaveSettings()">Guardar cambios</button>
-  </div>`;
+  `})}`;
 }
 /* ============== ENCUESTA POST-ENTREGA ==============
    Preguntas cortas y editables (Configuración → Encuesta post-entrega) que se mandan por
@@ -10725,6 +10799,23 @@ async function renameCategory(oldName, newLabel){
   }catch(e){ console.error(e); showToast('No se pudo renombrar la categoría'); }
 }
 
+/* ----- Ficha de producto: secciones en tarjetas -----
+   Orden pensado por importancia: lo que el cliente ve (foto, nombre, precio, existencias, descripción)
+   va siempre abierto arriba; lo que se toca pocas veces (variantes, datos internos, tipo de producto)
+   va en secciones que se abren y se cierran. Los ids de los campos (pf-*) y todas las funciones que
+   guardan son los mismos de siempre. */
+function pmOpen(key, dflt){ const o = state.pmOpen||{}; return (key in o) ? o[key] : dflt; }
+function pmToggle(key, open){ if(!state.pmOpen) state.pmOpen = {}; state.pmOpen[key] = !!open; }
+function pmSection(key, title, o){
+  o = o||{};
+  const head = `
+    <span class="fsec-ico">${icon(o.icon||'tag',16)}</span>
+    <span class="fsec-titles"><div class="fsec-title">${title}</div>${o.hint?`<div class="fsec-hint">${o.hint}</div>`:''}</span>
+    ${o.badge?`<span class="fsec-badge">${o.badge}</span>`:''}`;
+  if(!o.collapsible) return `<section class="fsec"><div class="fsec-head">${head}</div><div class="fsec-body">${o.body}</div></section>`;
+  const open = pmOpen(key, !!o.open);
+  return `<details class="fsec" ${open?'open':''} ontoggle="pmToggle('${key}',this.open)"><summary class="fsec-head">${head}<span class="fsec-chev">▾</span></summary><div class="fsec-body">${o.body}</div></details>`;
+}
 function renderProductModal(){
   const p = state.productModal; const isNew = !p.id;
   const price = Number(p.price)||0;
@@ -10733,49 +10824,17 @@ function renderProductModal(){
   const effective = promo>0 ? promo : price;
   const margin = effective>0 ? Math.round(((effective-cost)/effective)*1000)/10 : 0;
   const profit = Math.round((effective-cost)*100)/100;
-  return `
-  <div class="modal-overlay">
-    <div class="modal">
-      <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
+  const hasVariants = !!(p.variants&&p.variants.length);
+  const canTypeSwitch = !(!isNew && hasVariants);
+  const activeCenters = state.centers.filter(c=>c.active);
+  const stockTotal = Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0);
 
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
-        <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''} onchange="state.productModal.hidden=this.checked">
-        Ocultar este producto del catálogo público (sigue existiendo, solo no se muestra en la tienda)
-      </label>
-
-      ${!isNew && (p.variants&&p.variants.length) ? '' : `
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
-        <input type="checkbox" id="pf-iskit" ${p.isKit?'checked':''} onchange="toggleProductIsKit(this.checked)">
-        Este producto es un kit o combo (se arma con otros productos ya existentes)
-      </label>`}
-
-      ${!isNew && (p.variants&&p.variants.length) ? '' : `
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;background:var(--surface-soft);padding:10px 12px;border-radius:9px;margin-bottom:14px;cursor:pointer;">
-        <input type="checkbox" id="pf-mysterybox" ${p.isMysteryBox?'checked':''} onchange="toggleProductIsMysteryBox(this.checked)">
-        Este producto es una caja sorpresa (combo aleatorio armado al momento del pedido)
-      </label>`}
-      ${p.isMysteryBox ? `
-      <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
-        <div class="panel-sub" style="margin-top:0;">Al comprarla, el sistema elige al azar productos reales con existencia (de la categoría que elijas abajo) hasta completar el número de piezas indicado. La clienta no ve cuáles son hasta que le llega — a ti sí te aparecerán en el detalle del pedido, para que sepas exactamente qué empacar.</div>
-        <div class="two-col">
-          <div class="form-field"><label>Categoría de donde se sortean los productos</label>
-            <select id="pf-mystery-cat" onchange="state.productModal.mysteryCategory=this.value">
-              <option value="Cualquiera" ${(p.mysteryCategory||'Cualquiera')==='Cualquiera'?'selected':''}>Cualquiera (todo el catálogo)</option>
-              ${state.settings.categories.map(c=>`<option value="${c}" ${p.mysteryCategory===c?'selected':''}>${c}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-field"><label>Número de productos que incluye</label>
-            <input id="pf-mystery-count" type="number" min="1" value="${p.mysteryItemCount||3}" oninput="state.productModal.mysteryItemCount=this.value">
-          </div>
-        </div>
-        <div class="panel-sub" style="margin-bottom:0;">El stock de esta caja se maneja como cualquier producto (ajústalo tú mismo abajo, en Inventario) — represéntalo como cuántas cajas puedes armar por ahora.</div>
-      </div>` : ''}
-
-      <div class="form-section-label">Multimedia</div>
-      <div class="form-field"><label>Imágenes (máx. 5) — la primera es la portada</label>
-        <div class="img-thumbs">
+  const secPhoto = pmSection('foto','Foto y nombre',{icon:'image', body:`
+      <div class="form-field"><label>Fotos (máx. 5) — la primera es la portada</label>
+        <div class="pm-photos">
           ${(p.images||[]).map((src,idx)=>`
             <div class="img-thumb">
+              ${idx===0?'<span class="pm-cover">Portada</span>':''}
               <img src="${src}">
               <div class="img-thumb-actions">
                 ${idx>0?`<button onclick="moveImage(${idx},-1)">◀</button>`:''}
@@ -10783,134 +10842,156 @@ function renderProductModal(){
                 <button onclick="removeImage(${idx})">${icon('x')}</button>
               </div>
             </div>`).join('')}
-          ${(p.images||[]).length<5 ? `<div class="img-thumb add-thumb" onclick="document.getElementById('img-file-input').click()">+</div>` : ''}
+          ${(p.images||[]).length<5 ? `<div class="img-thumb add-thumb" onclick="document.getElementById('img-file-input').click()" role="button" aria-label="Agregar foto">+</div>` : ''}
         </div>
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
       </div>
+      <div class="form-field"><label>Nombre del producto</label><input id="pf-name" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
+      <label class="pm-switch">
+        <span class="pm-switch-txt">Ocultar de la tienda<small>Sigue existiendo, solo no se muestra a tus clientes</small></span>
+        <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''} onchange="state.productModal.hidden=this.checked">
+      </label>`});
 
-      <div class="form-section-label">Información básica</div>
-      <div class="form-field"><label>Nombre</label><input id="pf-name" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
+  const analysis = !isNew ? (()=>{
+    const perf = hasVariants ? computeVariantPerformance(p.id) : [];
+    const best = perf.length && perf[0].unitsTotal>0 ? perf[0].id : null;
+    const together = computeFrequentlyBoughtTogether(p.id, 3);
+    return `
+      <details class="fsub" ${pmOpen('analisis',false)?'open':''} ontoggle="pmToggle('analisis',this.open)">
+        <summary>${icon('bar-chart',14)} Historial y rendimiento</summary>
+        ${renderCostHistorySection(p)}
+        <div class="row-sub" style="margin-top:10px;">Visto en la tienda ${productViewsInLastDays(p.id,30)} vez(es) en los últimos 30 días</div>
+        <button class="btn-tertiary" style="margin-top:10px;" onclick="openProductPriceHistory('${p.id}')">${icon('history',13)} Ver historial de cambios</button>
+        ${perf.length ? `<div style="margin-top:14px;"><div class="row-sub" style="margin-bottom:6px;">Rendimiento por variante:</div>
+          ${perf.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:4px 0;gap:8px;"><span>${r.label}${r.id===best?' <span class="status-badge status-ok" style="margin-left:4px;">Más vendida</span>':''}</span><span style="color:var(--ink-soft);text-align:right;">Stock ${r.stock} · ${r.units90} vendida(s) en 90 días · ${r.unitsTotal} en total</span></div>`).join('')}</div>` : ''}
+        ${together.length ? `<div style="margin-top:14px;"><div class="row-sub" style="margin-bottom:6px;">Se compra junto con:</div>
+          ${together.map(t=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;"><span>${t.product.name}</span><span style="color:var(--ink-soft);">${t.count} vez(es)</span></div>`).join('')}</div>` : ''}
+      </details>`;
+  })() : `<div class="panel-sub" style="margin:10px 0 0;">El historial de costos y de cambios aparece aquí después de guardar el producto.</div>`;
 
+  const secPrice = pmSection('precio','Precio y ganancia',{icon:'dollar-sign', body:`
+      <div class="two-col-keep">
+        <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" inputmode="decimal" value="${p.price||''}" placeholder="0.00" oninput="state.productModal.price=this.value;updatePriceCalc()"></div>
+        <div class="form-field"><label>Precio promocional</label><input id="pf-promo" type="number" inputmode="decimal" value="${p.promoPrice||''}" placeholder="0.00" oninput="state.productModal.promoPrice=this.value;updatePriceCalc()"></div>
+      </div>
+      <div class="form-field" style="margin-bottom:0;"><label>Costo (solo para ti)</label><input id="pf-cost" type="number" inputmode="decimal" value="${p.cost||''}" placeholder="0.00" oninput="state.productModal.cost=this.value;updatePriceCalc()"></div>
+      <div class="pm-result">
+        <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="color:var(--primary-deep);">${margin}%</strong></div>
+        <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="color:var(--green);">${money(profit)}</strong></div>
+      </div>
+      <div class="panel-sub" style="margin:8px 0 0;">Tus clientes no ven el costo ni la ganancia.</div>
+      ${analysis}`});
+
+  const secStock = p.isKit
+    ? pmSection('inventario','Productos del kit',{icon:'package', body: renderKitEditor(p)})
+    : pmSection('inventario','Existencias',{icon:'package', hint:`${stockTotal} ${stockTotal===1?'pieza':'piezas'} en total`, body:`
+        ${activeCenters.map(c=>`
+          <div class="pm-stock-row">
+            <div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px;font-weight:600;">${c.name}${c.isDefault?' <span style="color:var(--ink-soft);font-weight:400;">(Principal)</span>':''}</div>
+            <input type="number" min="0" inputmode="numeric" style="width:92px;flex-shrink:0;padding:9px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${(p.stockByCenter&&p.stockByCenter[c.id])||0}" onchange="setProductCenterStock('${c.id}', this.value)" aria-label="Existencias en ${escDescHtml(c.name)}">
+          </div>`).join('')}
+        <div class="pm-stock-total"><span>Total</span><strong><span id="pf-stock-total">${stockTotal}</span> unidades</strong></div>
+        <div class="panel-sub" style="margin:8px 0 0;">El total se suma solo a partir de cada centro.</div>`});
+
+  const secDesc = pmSection('desc','Descripción',{icon:'edit', hint:'Lo que tus clientes leen en la tienda', body:`
+      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea>
+        <div id="ai-desc-box">${aiDescBoxHtml()}</div></div>`});
+
+  const secCats = pmSection('categorias','Categorías y público',{icon:'tag', hint:'Para que tus clientes lo encuentren', body:`
+      <div class="form-field"><label>Categorías</label>
+        <div class="pm-chips">
+          ${state.settings.categories.map(c=>`
+            <label><input type="checkbox" value="${escDescHtml(c)}" ${(p.categories||[p.cat]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}',this.checked)"> ${c}</label>`).join('')}
+        </div>
+      </div>
+      <div class="form-field" style="margin-bottom:0;"><label>¿Para quién es?</label>
+        <div class="panel-sub" style="margin:0 0 8px;">Aparece en la sección "¿Qué estás buscando?" de la tienda.</div>
+        <button type="button" class="btn-tertiary" style="margin-bottom:10px;" onclick="applySuggestedNeeds()">${icon('star',13)} Sugerir según nombre y categoría</button>
+        <div class="pm-chips">
+          ${(state.settings.needs||DEFAULT_NEEDS).map(n=>`
+            <label><input type="checkbox" value="${n.key}" ${(p.needs||[]).includes(n.key)?'checked':''} onchange="toggleProductNeed('${n.key}',this.checked)"> ${n.label}</label>`).join('')}
+        </div>
+      </div>`});
+
+  const variantCount = (p.variants||[]).length;
+  const secVariants = pmSection('variantes','Variantes',{icon:'grid', collapsible:true, open: variantCount>0 || (p.variantGroups||[]).length>0,
+    badge: variantCount ? `${variantCount}` : 'Opcional', hint:'Color, talla u otras opciones', body: renderVariantsEditor(p)});
+
+  const secInternal = pmSection('interno','Datos internos',{icon:'sliders', collapsible:true, open:false, badge:'Solo tú', hint:'SKU, ubicación, proveedor, caducidad y código de barras', body:`
       <div class="two-col">
         <div class="form-field"><label>SKU</label>
           <div style="display:flex;gap:6px;">
-            <input id="pf-sku" value="${p.sku||''}" style="flex:1;" oninput="state.productModal.sku=this.value;render()">
+            <input id="pf-sku" value="${p.sku||''}" style="flex:1;min-width:0;" oninput="state.productModal.sku=this.value;render()">
             <button class="btn-outline" style="padding:0 12px;white-space:nowrap;" onclick="regenerateSKU()">Generar</button>
           </div>
         </div>
         <div class="form-field"><label>Ubicación en almacén</label>
           <input id="pf-location" placeholder="Ej. Pasillo 2, Estante C" value="${p.location||''}" oninput="state.productModal.location=this.value">
         </div>
-      </div>
-
-      <div class="two-col">
-        <div class="form-field"><label>Proveedor (opcional)</label>
+        <div class="form-field"><label>Proveedor</label>
           <select id="pf-supplier" onchange="state.productModal.supplierId=this.value">
             <option value="">Sin proveedor</option>
             ${state.suppliers.map(s=>`<option value="${s.id}" ${p.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}
           </select>
         </div>
-      </div>
-
-      <div class="two-col">
-        <div class="form-field"><label>Fecha de caducidad (opcional)</label>
+        <div class="form-field"><label>Fecha de caducidad</label>
           <input id="pf-expiration" type="date" value="${p.expirationDate||''}" oninput="state.productModal.expirationDate=this.value">
         </div>
-        <div class="form-field"><label>Avisarme cuando queden (opcional)</label>
-          <input id="pf-low-stock-threshold" type="number" min="1" placeholder="3 (por default)" value="${p.lowStockThreshold||''}" oninput="state.productModal.lowStockThreshold=this.value">
+        <div class="form-field"><label>Avisarme cuando queden</label>
+          <input id="pf-low-stock-threshold" type="number" min="1" inputmode="numeric" placeholder="3 (por default)" value="${p.lowStockThreshold||''}" oninput="state.productModal.lowStockThreshold=this.value">
         </div>
       </div>
-
-      <div class="form-field">
-        <label>Historial de este producto</label>
-        <button class="btn-outline" style="width:100%;" onclick="openProductHistory('${p.id}')">${icon('history',14)} Ver movimientos</button>
-      </div>
-
-      <div class="form-field" style="margin-bottom:16px;">
-        <label>Código de barras</label>
+      <div class="form-field"><label>Código de barras</label>
         ${p.sku ? `
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--bg);border-radius:10px;padding:10px;">
+          <div class="pm-barcode">
             <svg id="pf-barcode-svg"></svg>
             <button class="btn-outline" onclick="printProductLabel('${p.id}')">${icon('printer',14)} Imprimir etiqueta</button>
           </div>
         ` : `<div class="panel-sub" style="margin:4px 0 0;">Genera o escribe un SKU arriba para poder crear su código de barras.</div>`}
       </div>
+      ${!isNew ? `<button class="btn-outline" style="width:100%;" onclick="openProductHistory('${p.id}')">${icon('history',14)} Ver movimientos de este producto</button>` : ''}`});
 
-      <div class="form-section-label">Categorización</div>
-      <div class="form-field">
-        <label>Categorías</label>
-          <div style="max-height:110px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;">
-            ${state.settings.categories.map(c=>`
-              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;background:var(--surface-soft);padding:6px 9px;border-radius:7px;cursor:pointer;">
-                <input type="checkbox" value="${c}" ${(p.categories||[p.cat]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}',this.checked)">
-                ${c}
-              </label>`).join('')}
-          </div>
-      </div>
-
-      <div class="form-section-label">Precio</div>
-      <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
+  const typeBody = `
+      ${canTypeSwitch ? `
+      <label class="pm-switch">
+        <span class="pm-switch-txt">Es un kit o combo<small>Se arma con otros productos que ya existen</small></span>
+        <input type="checkbox" id="pf-iskit" ${p.isKit?'checked':''} onchange="toggleProductIsKit(this.checked)">
+      </label>
+      <label class="pm-switch" style="margin-top:8px;">
+        <span class="pm-switch-txt">Es una caja sorpresa<small>Combo aleatorio armado al momento del pedido</small></span>
+        <input type="checkbox" id="pf-mysterybox" ${p.isMysteryBox?'checked':''} onchange="toggleProductIsMysteryBox(this.checked)">
+      </label>` : `<div class="panel-sub" style="margin:0;">Un producto con variantes no puede ser kit ni caja sorpresa.</div>`}
+      ${p.isMysteryBox ? `
+      <div class="panel" style="margin:12px 0 0;background:var(--bg);">
+        <div class="panel-sub" style="margin-top:0;">Al comprarla, el sistema elige al azar productos reales con existencia (de la categoría que elijas) hasta completar el número de piezas indicado. La clienta no ve cuáles son hasta que le llegue.</div>
         <div class="two-col">
-          <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" value="${p.price||''}" oninput="state.productModal.price=this.value;updatePriceCalc()"></div>
-          <div class="form-field"><label>Precio promocional</label><input id="pf-promo" type="number" value="${p.promoPrice||''}" placeholder="0.00" oninput="state.productModal.promoPrice=this.value;updatePriceCalc()"></div>
-        </div>
-        <div class="form-field"><label>Costo</label><input id="pf-cost" type="number" value="${p.cost||''}" oninput="state.productModal.cost=this.value;updatePriceCalc()"></div>
-        <div class="panel-sub" style="margin-bottom:0;">Es de uso interno, tus clientes no lo verán en la tienda.</div>
-        ${renderCostHistorySection(p)}
-        <div class="two-col" style="margin-top:10px;">
-          <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="font-size:16px;color:var(--primary-deep);">${margin}%</strong></div>
-          <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="font-size:16px;color:var(--green);">${money(profit)}</strong></div>
-        </div>
-        ${p.id ? `<div class="row-sub" style="margin-top:10px;">Visto en la tienda ${productViewsInLastDays(p.id,30)} vez(es) en los últimos 30 días</div>` : ''}
-        ${p.id ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="openProductPriceHistory('${p.id}')">${icon('history',13)} Ver historial de cambios</button>` : ''}
-        ${p.id && p.variants && p.variants.length ? (()=>{ const perf = computeVariantPerformance(p.id); const best = perf.length && perf[0].unitsTotal>0 ? perf[0].id : null; return `
-          <div style="margin-top:14px;">
-            <div class="row-sub" style="margin-bottom:6px;">Rendimiento por variante:</div>
-            ${perf.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:4px 0;gap:8px;"><span>${r.label}${r.id===best?' <span class="status-badge status-ok" style="margin-left:4px;">Más vendida</span>':''}</span><span style="color:var(--ink-soft);text-align:right;">Stock ${r.stock} · ${r.units90} vendida(s) en 90 días · ${r.unitsTotal} en total</span></div>`).join('')}
+          <div class="form-field"><label>Categoría de donde se sortean</label>
+            <select id="pf-mystery-cat" onchange="state.productModal.mysteryCategory=this.value">
+              <option value="Cualquiera" ${(p.mysteryCategory||'Cualquiera')==='Cualquiera'?'selected':''}>Cualquiera (todo el catálogo)</option>
+              ${state.settings.categories.map(c=>`<option value="${c}" ${p.mysteryCategory===c?'selected':''}>${c}</option>`).join('')}
+            </select>
           </div>
-        `; })() : ''}
-        ${p.id ? (()=>{ const together = computeFrequentlyBoughtTogether(p.id, 3); return together.length===0 ? '' : `
-          <div style="margin-top:14px;">
-            <div class="row-sub" style="margin-bottom:6px;">Se compra junto con:</div>
-            ${together.map(t=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;"><span>${t.product.name}</span><span style="color:var(--ink-soft);">${t.count} vez(es)</span></div>`).join('')}
+          <div class="form-field"><label>Productos que incluye</label>
+            <input id="pf-mystery-count" type="number" min="1" inputmode="numeric" value="${p.mysteryItemCount||3}" oninput="state.productModal.mysteryItemCount=this.value">
           </div>
-        `; })() : ''}
-      </div>
-
-      <div class="form-section-label">${p.isKit ? 'Productos del kit' : 'Inventario'}</div>
-      ${p.isKit ? renderKitEditor(p) : `
-      <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
-        <div class="form-field" style="margin-bottom:0;"><label>Existencias por centro de distribución</label>
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            ${state.centers.filter(c=>c.active).map(c=>`
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:13px;font-weight:600;">${c.name}${c.isDefault?' <span style="color:var(--ink-soft);font-weight:400;">(Principal)</span>':''}</div>
-                <input type="number" min="0" style="width:90px;flex-shrink:0;padding:9px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${(p.stockByCenter&&p.stockByCenter[c.id])||0}" onchange="setProductCenterStock('${c.id}', this.value)">
-              </div>
-            `).join('')}
-          </div>
-          <div class="panel-sub" style="margin-top:8px;margin-bottom:0;">Total: <strong id="pf-stock-total">${Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0)}</strong> unidades (se suma automáticamente)</div>
         </div>
-      </div>`}
+        <div class="panel-sub" style="margin-bottom:0;">Las existencias se manejan como cualquier producto: represéntalas como cuántas cajas puedes armar por ahora.</div>
+      </div>` : ''}`;
+  const secType = pmSection('tipo','Tipo de producto',{icon:'package', collapsible:true, open: !!(p.isKit||p.isMysteryBox),
+    badge: p.isKit?'Kit':(p.isMysteryBox?'Caja sorpresa':'Normal'), hint:'Kit, combo o caja sorpresa', body:typeBody});
 
-      <div class="form-section-label">Descripción y categorización</div>
-      <div class="form-field"><label>Descripción breve</label><textarea id="pf-desc" oninput="state.productModal.desc=this.value;paintAiDescLabel()">${p.desc||''}</textarea>
-        <div id="ai-desc-box">${aiDescBoxHtml()}</div></div>
-
-      <div class="form-field"><label>¿Para quién es? (aparece en la sección "¿Qué estás buscando?" de la tienda)</label>
-        <button type="button" class="btn-tertiary" style="margin-bottom:8px;" onclick="applySuggestedNeeds()">${icon('star',13)} Sugerir según nombre y categoría</button>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          ${(state.settings.needs||DEFAULT_NEEDS).map(n=>`
-            <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--surface-soft);padding:8px 11px;border-radius:9px;cursor:pointer;">
-              <input type="checkbox" value="${n.key}" ${(p.needs||[]).includes(n.key)?'checked':''} onchange="toggleProductNeed('${n.key}',this.checked)">
-              ${n.label}
-            </label>`).join('')}
-        </div>
-      </div>
-
-      <div class="form-section-label">Variantes (opcional)</div>
-      ${renderVariantsEditor(p)}
-
+  return `
+  <div class="modal-overlay">
+    <div class="modal pm-modal">
+      <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
+      ${secPhoto}
+      ${secPrice}
+      ${secStock}
+      ${secDesc}
+      ${secCats}
+      ${secVariants}
+      ${secType}
+      ${secInternal}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.productModal=null;render()" ${state.savingProduct?'disabled':''}>Cancelar</button>
         <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')" ${state.savingProduct?'disabled':''}>${state.savingProduct?'Guardando…':'Guardar'}</button>
