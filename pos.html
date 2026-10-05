@@ -1437,6 +1437,18 @@ setInterval(()=>{ if(!(typeof navigator!=='undefined' && 'onLine' in navigator &
 class InsufficientStockError extends Error {
   constructor(items){ super('insufficient_stock'); this.name = 'InsufficientStockError'; this.insufficientItems = items; }
 }
+// Lotes con caducidad (los captura el admin): al vender se gastan primero las piezas que caducan antes.
+function posEarliestExpiry(batches){
+  const d = (batches||[]).filter(b=>(b.qty||0)>0 && b.expirationDate).map(b=>b.expirationDate).sort();
+  return d[0] || '';
+}
+function posFefoConsume(batches, qty){
+  const list = (batches||[]).map(b=>({...b}));
+  const order = list.map((_,i)=>i).sort((a,b)=> String(list[a].expirationDate||'9999-99-99').localeCompare(String(list[b].expirationDate||'9999-99-99')));
+  let left = qty;
+  for(const i of order){ if(left<=0) break; const take = Math.min(list[i].qty||0, left); list[i].qty = (list[i].qty||0) - take; left -= take; }
+  return list.filter(b=>(b.qty||0)>0);
+}
 async function reserveStockForSale(items, centerId){
   const demandByDoc = new Map(); // docId -> {center: qty, variants: Map(variantId->qty)}
   function addCenterDemand(docId, qty){
@@ -1482,6 +1494,10 @@ async function reserveStockForSale(items, centerId){
           stockByCenter[centerId] = current - demand.center;
           payload.stockByCenter = stockByCenter;
           payload.stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
+          if(Array.isArray(data.batches) && data.batches.length){
+            payload.batches = posFefoConsume(data.batches, demand.center);
+            payload.expirationDate = posEarliestExpiry(payload.batches);
+          }
         }
       }
       if(ok && demand.variants.size){
@@ -1493,7 +1509,13 @@ async function reserveStockForSale(items, centerId){
           if(!v || current < qty){ ok = false; break; }
           v.stock = current - qty; variantQtyUsed += qty;
         }
-        if(ok){ payload.variants = variants; payload.stock = Math.max(0, (data.stock||0) - variantQtyUsed); }
+        if(ok){
+          payload.variants = variants; payload.stock = Math.max(0, (data.stock||0) - variantQtyUsed);
+          if(Array.isArray(data.batches) && data.batches.length){
+            payload.batches = posFefoConsume(payload.batches || data.batches, variantQtyUsed);
+            payload.expirationDate = posEarliestExpiry(payload.batches);
+          }
+        }
       }
       if(!ok){ insufficient.push({id:docId, name}); return; }
       updates.push({ref: refs[idx], payload, docId});

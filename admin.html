@@ -582,6 +582,51 @@
   .today-ok{margin-top:8px;padding:12px 14px;background:var(--surface-soft);border-radius:12px;font-size:13.5px;color:var(--ink-soft);}
   .order-risk-tag{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px;font-size:11.5px;font-weight:700;color:#8a5a1a;background:#FDEBD3;padding:4px 8px;border-radius:10px;overflow-wrap:anywhere;}
   .order-risk-tag button{flex:0 0 auto;width:auto;min-height:26px;padding:0 10px;border:1px solid #8a5a1a;background:transparent;color:#8a5a1a;border-radius:999px;font-size:11.5px;font-weight:700;cursor:pointer;}
+  /* ---- Pago del pedido, entrega fallida ---- */
+  .order-fail-tag{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px;font-size:11.5px;font-weight:700;color:#8e1f3b;background:#FBE0E6;padding:4px 8px;border-radius:10px;overflow-wrap:anywhere;}
+  .order-pay-pill.paid{background:#DDF3E4;color:#1f6b3a;}
+  .order-pay-pill.pending-cash{background:#FDEBD3;color:#8a5a1a;}
+  .order-pay-pill.recon{background:#E1ECFA;color:#1d4f8f;}
+  .pay-box{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;}
+  .pay-seg{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px;}
+  .pay-seg button{flex:1 1 0;min-width:92px;min-height:40px;padding:0 10px;border:1.5px solid var(--border);background:var(--surface);color:var(--ink);border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;}
+  .pay-seg button.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .fail-reasons{display:flex;flex-direction:column;gap:6px;margin:8px 0 12px;}
+  .fail-reasons label{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer;}
+  .fail-reasons label.on{border-color:var(--primary);background:var(--surface-soft);font-weight:700;}
+  .fail-reasons input{width:auto;flex:0 0 auto;}
+  /* ---- Proyección de cierre de mes + calendario de ventas ---- */
+  .proj-main{font-size:30px;font-weight:800;color:var(--primary-deep);line-height:1.1;margin:6px 0 2px;font-variant-numeric:tabular-nums;}
+  .proj-bar{height:14px;border-radius:999px;background:var(--bg);overflow:hidden;margin:10px 0 6px;position:relative;}
+  .proj-bar > i{display:block;height:100%;border-radius:999px;background:var(--primary);}
+  .proj-lines{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:13px;}
+  .proj-lines div{display:flex;justify-content:space-between;gap:12px;align-items:baseline;}
+  .proj-lines div > span:first-child{color:var(--ink-soft);}
+  .proj-lines div > span:last-child{font-weight:700;text-align:right;overflow-wrap:anywhere;}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+  .cal-nav .cal-title{flex:1;text-align:center;font-weight:800;text-transform:capitalize;font-size:15px;}
+  .cal-nav button{flex:0 0 auto;width:44px;min-height:44px;border:1.5px solid var(--border);background:var(--surface);border-radius:10px;font-size:18px;cursor:pointer;color:var(--ink);padding:0;}
+  .cal-nav button:disabled{opacity:.35;cursor:default;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;}
+  .cal-dow{text-align:center;font-size:10.5px;font-weight:800;color:var(--ink-soft);padding:2px 0;}
+  .cal-day{min-width:0;min-height:54px;border:1px solid var(--border);border-radius:8px;padding:4px 1px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:var(--surface);font:inherit;color:var(--ink);cursor:pointer;}
+  .cal-day .n{font-size:11px;font-weight:700;opacity:.8;}
+  .cal-day .v{font-size:10.5px;font-weight:800;white-space:nowrap;}
+  .cal-day.future{opacity:.4;cursor:default;}
+  .cal-day.today{outline:2px solid var(--primary);outline-offset:-2px;}
+  .cal-day.sel{border-color:var(--primary-deep);box-shadow:inset 0 0 0 2px var(--primary-deep);}
+  .cal-blank{min-height:54px;}
+  /* ---- Reabasto para temporadas ---- */
+  .season-restock-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap;}
+  .season-restock-row:first-of-type{border-top:none;}
+  .season-restock-row .row-main{flex:1 1 150px;min-width:0;}
+  .season-restock-row button{flex:0 0 auto;width:auto;min-height:40px;white-space:nowrap;}
+  /* ---- Lotes y caducidades ---- */
+  .pm-batch{border:1px solid var(--border);border-radius:12px;padding:10px 10px 8px;margin-bottom:8px;background:var(--surface-soft);}
+  .pm-batch .form-field{margin-bottom:8px;}
+  .pm-batch-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .pm-batch-foot input{flex:1 1 120px;min-width:0;}
+  .pm-batch-foot .status-badge{flex:0 0 auto;}
 </style>
 </head>
 <body>
@@ -2023,6 +2068,8 @@ function renderOrderDetailModal(){
         ` : `<button class="btn-outline" style="width:100%;" onclick="startEditOrderDiscount('${o.id}')">+ Agregar descuento</button>`)}
       </div>
 
+      ${!isPos ? renderOrderPaymentBox(o) : ''}
+      ${!isPos ? failureTagHtml(o,true) : ''}
       ${isPos ? `
         <div class="order-detail" style="margin-bottom:14px;">
           <div><span>Atendió</span><span>${o.cashierName||'—'}</span></div>
@@ -2064,6 +2111,7 @@ function renderOrderDetailModal(){
           <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
           Enviar al repartidor
         </button>
+        ${!isPos && o.status!=='Cancelado' && o.status!=='Entregado' ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;color:#8e1f3b;border-color:#e3a3b2;" onclick="openFailModal('${o.id}')">${icon('alert-triangle',16)} No se pudo entregar (rechazó / no estaba)</button>` : ''}
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printPackingSlip('${o.id}')">${icon('printer',16)} Imprimir hoja de preparación</button>
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printOrderReceipt('${o.id}')">${icon('receipt',16)} Recibo en PDF / Imprimir</button>
         ${o.status==='Entregado' && orderContactPhone(o) ? `
@@ -2189,7 +2237,7 @@ function showToast(msg){
 /* ---- Aviso "Deshacer": reemplaza al toast en acciones que se pueden revertir. ----
    Vive en <body> (fuera de #root) para que render() no lo borre mientras corre su cuenta atrás. */
 let _undoFn = null, _undoTimer = null;
-function showUndo(msg, fn, ms){
+function showUndo(msg, fn, ms, label){
   let bar = document.getElementById('undo-bar');
   if(!bar){
     bar = document.createElement('div'); bar.id='undo-bar'; bar.className='undo-bar';
@@ -2198,6 +2246,7 @@ function showUndo(msg, fn, ms){
     document.body.appendChild(bar);
   }
   bar.querySelector('.undo-msg').textContent = msg;
+  bar.querySelector('button').textContent = label || 'Deshacer';
   _undoFn = fn;
   bar.classList.add('show');
   clearTimeout(_undoTimer); _undoTimer = setTimeout(hideUndo, ms||8000);
@@ -2730,6 +2779,7 @@ async function saveProduct(p){
     desc:p.desc, images:p.images||[], needs:p.needs||[],
     stockByCenter: isKit ? {} : (p.stockByCenter||{}), hidden: !!p.hidden,
     variantGroups: p.variantGroups||[], variants: p.variants||[],
+    batches: p.batches||[],
     isKit, kitItems,
     isMysteryBox, mysteryCategory: isMysteryBox ? (p.mysteryCategory||'Cualquiera') : '', mysteryItemCount: isMysteryBox ? Math.max(1, Number(p.mysteryItemCount)||3) : 0,
     // .set() reemplaza el documento completo, así que cualquier campo que no se mande aquí se
@@ -3022,6 +3072,7 @@ async function updateOrderStatus(id,status,fromUndo){
   const prevStatus = o.status;
   o.status=status;
   await saveOrdersStatus(id,status,o.source);
+  if(o.source!=='pos' && prevStatus!==status) await syncOnlineOrderStock(o, status);
   if(status==='Cancelado' && prevStatus!=='Cancelado'){
     logAdminAction('cancelacion', o.source==='pos'?'venta':'pedido', formatFolio(o.orderNumber), `Total: ${money(o.total)}`);
   }
@@ -3036,12 +3087,17 @@ async function updateOrderStatus(id,status,fromUndo){
   render();
   if(status==='Cancelado' && prevStatus!=='Cancelado' && !fromUndo){
     showUndo(`${o.source==='pos'?'Venta':'Pedido'} ${formatFolio(o.orderNumber)} cancelado`, ()=>updateOrderStatus(id, prevStatus, true));
+  } else if(status==='Entregado' && prevStatus!=='Entregado' && o.source!=='pos' && orderPayState(o)!=='pagado' && !fromUndo){
+    showUndo(`${formatFolio(o.orderNumber)} entregado. ¿Ya cobraste?`, ()=>setOrderPayment(id,{paymentStatus:'pagado'}), 9000, 'Marcar pagado');
   }
 }
 // sign=1 restaura stock (venta cancelada); sign=-1 lo vuelve a descontar (venta reactivada
 // desde "Cancelado" a cualquier otro estado). Refleja exactamente el descuento que hace
 // chargeSale() en pos.html: por variante (v.stock + p.stock) o por centro (stockByCenter + p.stock).
-async function adjustStockForSale(sale, sign){
+async function adjustStockForSale(sale, sign, opts){
+  opts = opts || {};
+  const isOnline = opts.kind==='tienda';
+  const short = [];
   const centerId = sale.centerId;
   const updates = [];
   const touchedComponentIds = [];
@@ -3049,7 +3105,7 @@ async function adjustStockForSale(sale, sign){
     if(!it.id || it.id==='promo_buyxpayy') return;
     const p = state.products.find(x=>x.id===it.id);
     if(!p) return;
-    logStockMovement(p.id, sign>0?'cancelacion_pos':'reactivacion_pos', sign*it.qty, `Venta ${formatFolio(sale.orderNumber)}`);
+    logStockMovement(p.id, isOnline ? (sign>0?'cancelacion_tienda':'pedido_tienda') : (sign>0?'cancelacion_pos':'reactivacion_pos'), sign*it.qty, `${isOnline?'Pedido':'Venta'} ${formatFolio(sale.orderNumber)}`, centerId||null);
     if(p.isKit){
       // Un kit no tiene stock propio por centro: cancelar/reactivar su venta ajusta a cada uno
       // de sus productos componentes, igual que se descontaron al venderse (ver chargeSale).
@@ -3057,31 +3113,170 @@ async function adjustStockForSale(sale, sign){
         const comp = state.products.find(x=>x.id===ki.productId);
         if(!comp) return;
         if(!comp.stockByCenter) comp.stockByCenter = {};
+        if(sign<0 && centerId && (comp.stockByCenter[centerId]||0) + sign*(ki.qty||1)*it.qty < 0) short.push(comp.name);
         if(centerId) comp.stockByCenter[centerId] = Math.max(0, (comp.stockByCenter[centerId]||0) + sign*(ki.qty||1)*it.qty);
         comp.stock = totalStock(comp);
         touchedComponentIds.push(comp.id);
-        updates.push(db.collection('products').doc(comp.id).update({stockByCenter: comp.stockByCenter, stock: comp.stock}));
+        const compUpd = {stockByCenter: comp.stockByCenter, stock: comp.stock};
+        if(sign<0 && comp.batches && comp.batches.length){ comp.batches = fefoConsume(comp.batches, (ki.qty||1)*it.qty); comp.expirationDate = earliestExpiry(comp.batches); compUpd.batches = comp.batches; compUpd.expirationDate = comp.expirationDate; }
+        updates.push(db.collection('products').doc(comp.id).update(compUpd));
       });
     } else if(it.variantId){
       const v = (p.variants||[]).find(x=>x.id===it.variantId);
+      if(sign<0 && v && (v.stock||0) + sign*it.qty < 0) short.push(`${p.name}`);
       if(v) v.stock = Math.max(0, (v.stock||0) + sign*it.qty);
       p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
-      updates.push(db.collection('products').doc(p.id).update({variants: p.variants, stock: p.stock}));
+      const varUpd = {variants: p.variants, stock: p.stock};
+      if(sign<0 && p.batches && p.batches.length){ p.batches = fefoConsume(p.batches, it.qty); p.expirationDate = earliestExpiry(p.batches); varUpd.batches = p.batches; varUpd.expirationDate = p.expirationDate; }
+      updates.push(db.collection('products').doc(p.id).update(varUpd));
     } else {
       if(!p.stockByCenter) p.stockByCenter = {};
+      if(sign<0 && (centerId ? (p.stockByCenter[centerId]||0) : (p.stock||0)) + sign*it.qty < 0) short.push(p.name);
       if(centerId) p.stockByCenter[centerId] = Math.max(0, (p.stockByCenter[centerId]||0) + sign*it.qty);
       p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
-      updates.push(db.collection('products').doc(p.id).update({stockByCenter: p.stockByCenter, stock: p.stock}));
+      const plainUpd = {stockByCenter: p.stockByCenter, stock: p.stock};
+      if(sign<0 && p.batches && p.batches.length){ p.batches = fefoConsume(p.batches, it.qty); p.expirationDate = earliestExpiry(p.batches); plainUpd.batches = p.batches; plainUpd.expirationDate = p.expirationDate; }
+      updates.push(db.collection('products').doc(p.id).update(plainUpd));
       touchedComponentIds.push(p.id);
     }
   });
-  if(!updates.length) return;
+  if(!updates.length) return {ok:true, short};
   try{
     await Promise.all(updates);
     if(touchedComponentIds.length) await recomputeKitStocksFor(touchedComponentIds);
-    showToast(sign>0 ? 'Inventario restaurado' : 'Inventario descontado de nuevo');
+    if(!isOnline) showToast(sign>0 ? 'Inventario restaurado' : 'Inventario descontado de nuevo');
+    return {ok:true, short};
   }
-  catch(e){ console.error('No se pudo ajustar el inventario de esta venta', e); showToast('No se pudo ajustar el inventario de esta venta'); }
+  catch(e){ console.error('No se pudo ajustar el inventario de esta venta', e); showToast('No se pudo ajustar el inventario de esta venta'); return {ok:false, short}; }
+}
+/* ============== INVENTARIO AUTOMÁTICO EN PEDIDOS DE LA TIENDA ==============
+   Opcional (Configuración → Datos operativos). Al pasar un pedido de la tienda a "En camino" o
+   "Entregado" se descuenta del centro principal; si vuelve atrás o se cancela, se devuelve.
+   "stockDeducted" evita descontar dos veces el mismo pedido. */
+const ONLINE_DEDUCT_STATUSES = ['En camino','Entregado'];
+function defaultCenterId(){ return (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id || null; }
+async function syncOnlineOrderStock(o, newStatus){
+  if(!o || o.source==='pos') return;
+  const should = ONLINE_DEDUCT_STATUSES.includes(newStatus);
+  try{
+    if(should && !o.stockDeducted && state.settings.autoDeductOnlineStock){
+      const cid = defaultCenterId();
+      const r = await adjustStockForSale({...o, centerId:cid}, -1, {kind:'tienda'});
+      if(r && r.ok===false) return;
+      o.stockDeducted = true; o.stockCenterId = cid;
+      await db.collection('orders').doc(o.id).update({stockDeducted:true, stockCenterId:cid||null});
+      const uniq = [...new Set((r&&r.short)||[])];
+      showToast(uniq.length ? `Inventario descontado. Se quedó en 0: ${uniq.slice(0,2).join(', ')}${uniq.length>2?'…':''}` : 'Inventario descontado');
+    } else if(!should && o.stockDeducted){
+      const r = await adjustStockForSale({...o, centerId:o.stockCenterId||defaultCenterId()}, 1, {kind:'tienda'});
+      if(r && r.ok===false) return;
+      o.stockDeducted = false;
+      await db.collection('orders').doc(o.id).update({stockDeducted:false});
+      showToast('Inventario devuelto');
+    }
+  }catch(e){ console.error(e); showToast('No se pudo ajustar el inventario del pedido'); }
+}
+
+/* ============== PAGO DEL PEDIDO (tienda) ==============
+   Los pedidos de la tienda se cobran contra entrega, pero también hay transferencias y tarjeta
+   coordinadas por WhatsApp: aquí queda anotado si ya se cobró, cómo, y qué falta conciliar. */
+const PAYMENT_STATUS_LABELS = {pendiente:'Pendiente', por_conciliar:'Por conciliar', pagado:'Pagado'};
+function orderPayState(o){ return (o && o.paymentStatus) || 'pendiente'; }
+function orderIsUnpaidDelivered(o){ return o.source!=='pos' && !o.archived && o.status==='Entregado' && orderPayState(o)!=='pagado'; }
+function snapshotOrderFields(o, keys){ const s={}; keys.forEach(k=>{ s[k] = (o[k]&&typeof o[k]==='object') ? JSON.parse(JSON.stringify(o[k])) : o[k]; }); return s; }
+async function restoreOrderFields(id, snap, msg){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  const del = firebase.firestore.FieldValue.delete();
+  const payload = {};
+  Object.keys(snap).forEach(k=>{ payload[k] = snap[k]===undefined ? del : snap[k]; });
+  await db.collection('orders').doc(id).update(payload);
+  Object.keys(snap).forEach(k=>{ if(snap[k]===undefined) delete o[k]; else o[k]=snap[k]; });
+  if(msg) showToast(msg);
+  render();
+}
+async function setOrderPayment(id, patch, quiet){
+  const o = state.orders.find(x=>x.id===id); if(!o || o.source==='pos') return;
+  const keys = ['paymentStatus','paymentMethod','paidAt'];
+  const prev = snapshotOrderFields(o, keys);
+  const del = firebase.firestore.FieldValue.delete();
+  const upd = {...patch};
+  const newStatus = patch.paymentStatus || orderPayState(o);
+  if(patch.paymentStatus==='pagado'){ upd.paidAt = o.paidAt || new Date().toISOString(); if(!patch.paymentMethod && !o.paymentMethod) upd.paymentMethod = 'Efectivo'; }
+  else if(patch.paymentStatus){ upd.paidAt = del; }
+  try{
+    await db.collection('orders').doc(id).update(upd);
+    Object.keys(upd).forEach(k=>{ if(upd[k]===del) delete o[k]; else o[k]=upd[k]; });
+    render();
+    if(!quiet) showUndo(newStatus==='pagado' ? `Pedido ${formatFolio(o.orderNumber)} marcado como pagado` : 'Pago actualizado', ()=>restoreOrderFields(id, prev, 'Pago restaurado'));
+  }catch(e){ console.error(e); showToast('No se pudo guardar el pago'); }
+}
+function renderOrderPaymentBox(o){
+  const st = orderPayState(o);
+  const m = o.paymentMethod || '';
+  return `<div class="pay-box">
+    <div class="row-title">Pago</div>
+    <div class="row-sub" style="margin-top:6px;">Estado</div>
+    <div class="pay-seg">${Object.keys(PAYMENT_STATUS_LABELS).map(k=>`<button type="button" class="${st===k?'on':''}" onclick="setOrderPayment('${o.id}',{paymentStatus:'${k}'})">${PAYMENT_STATUS_LABELS[k]}</button>`).join('')}</div>
+    <div class="row-sub">Cómo pagó</div>
+    <div class="pay-seg" style="margin-bottom:4px;">${PAY_METHODS.map(x=>`<button type="button" class="${m===x?'on':''}" onclick="setOrderPayment('${o.id}',{paymentMethod:'${x}'})">${x}</button>`).join('')}</div>
+    ${o.paidAt ? `<div class="row-sub">Cobrado el ${new Date(o.paidAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+    ${o.stockDeducted ? `<div class="row-sub" style="margin-top:4px;">${icon('package',12)} Inventario ya descontado de este pedido</div>` : ''}
+  </div>`;
+}
+
+/* ============== PEDIDO NO RECIBIDO O RECHAZADO ==============
+   Marca por qué no se pudo entregar. El pedido pasa a "Cancelado" (el inventario se devuelve solo
+   si ya se había descontado) y queda guardado en el pedido para avisar si ese teléfono vuelve a
+   pedir: sale "Revisar" con el motivo, igual que otras señales de riesgo. */
+const FAIL_REASONS = {rechazado:'Rechazó el pedido', no_estaba:'No estaba en casa', no_contesto:'No contestó', direccion:'Dirección incorrecta o no se encontró', otro:'Otro motivo'};
+function openFailModal(id){ state.orderActionsMenu=null; state.failModal={id, reason:'rechazado', note:''}; render(); }
+function closeFailModal(){ state.failModal=null; render(); }
+function phoneFailureCount(phone, exceptId){
+  const k = riskPhoneKey(phone); if(!k) return 0;
+  const ex = state.orders.find(x=>x.id===exceptId);
+  return Math.max(0, (riskIndex().fails[k]||0) - (ex && ex.deliveryFailure && riskPhoneKey(ex.phone)===k ? 1 : 0));
+}
+function renderFailModal(){
+  const m = state.failModal; if(!m) return '';
+  const o = state.orders.find(x=>x.id===m.id); if(!o) return '';
+  return `<div class="modal-overlay"><div class="modal" style="max-width:460px;">
+    <h3>No se pudo entregar</h3>
+    <div class="panel-sub" style="margin:-8px 0 8px;">${formatFolio(o.orderNumber)} · ${escDescHtml(o.customer||'Cliente')}</div>
+    <div class="note-box" style="margin-bottom:6px;">El pedido pasará a <strong>Cancelado</strong> y, si ya se había descontado, el inventario se devuelve. Si este teléfono vuelve a pedir, te saldrá un aviso.</div>
+    <div class="fail-reasons">${Object.keys(FAIL_REASONS).map(k=>`<label class="${m.reason===k?'on':''}"><input type="radio" name="fail-reason" ${m.reason===k?'checked':''} onchange="state.failModal.reason='${k}';render()"> ${FAIL_REASONS[k]}</label>`).join('')}</div>
+    <div class="form-field"><label>Nota (opcional)</label><input id="fail-note" type="text" placeholder="Ej. dijo que ya no lo quería" value="${escDescHtml(m.note||'')}" oninput="state.failModal.note=this.value"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeFailModal()">Cancelar</button>
+      <button class="btn-primary" style="background:#BC355C;" onclick="saveDeliveryFailure()">Marcar como no entregado</button>
+    </div>
+  </div></div>`;
+}
+async function saveDeliveryFailure(){
+  const m = state.failModal; if(!m) return;
+  const o = state.orders.find(x=>x.id===m.id); if(!o) return;
+  const failure = {reason:m.reason, note:(m.note||'').trim(), date:new Date().toISOString(), by: state.user ? state.user.email : ''};
+  const prevStatus = o.status;
+  try{ await db.collection('orders').doc(o.id).update({deliveryFailure:failure}); }
+  catch(e){ console.error(e); showToast('No se pudo guardar'); return; }
+  o.deliveryFailure = failure; state.failModal = null;
+  await updateOrderStatus(o.id, 'Cancelado', true);
+  logAdminAction('entrega_fallida', 'pedido', formatFolio(o.orderNumber), `${FAIL_REASONS[failure.reason]||failure.reason}${failure.note?' — '+failure.note:''}`);
+  showUndo(`Marcado como no entregado: ${FAIL_REASONS[failure.reason]||failure.reason}`, async()=>{
+    await db.collection('orders').doc(o.id).update({deliveryFailure: firebase.firestore.FieldValue.delete()});
+    delete o.deliveryFailure;
+    await updateOrderStatus(o.id, prevStatus, true);
+  }, 10000);
+}
+async function clearDeliveryFailure(id){
+  const o = state.orders.find(x=>x.id===id); if(!o || !o.deliveryFailure) return;
+  const prev = snapshotOrderFields(o, ['deliveryFailure']);
+  await db.collection('orders').doc(id).update({deliveryFailure: firebase.firestore.FieldValue.delete()});
+  delete o.deliveryFailure; render();
+  showUndo('Se quitó la marca de entrega fallida', ()=>restoreOrderFields(id, prev, 'Marca restaurada'));
+}
+function failureTagHtml(o, withBtn){
+  const f = o.deliveryFailure; if(!f) return '';
+  return `<div class="order-fail-tag">${icon('alert-triangle',12)} <span>No recibido: ${escDescHtml(FAIL_REASONS[f.reason]||f.reason)}${f.note?' · '+escDescHtml(f.note):''}</span>${withBtn?`<button type="button" class="btn-outline" style="width:auto;min-height:28px;padding:0 10px;font-size:11.5px;" onclick="clearDeliveryFailure('${o.id}')">Quitar marca</button>`:''}</div>`;
 }
 async function toggleArchiveOrder(id,archived,silent,fromUndo){ const o=state.orders.find(x=>x.id===id); if(!o) return; o.archived=archived; await saveOrderArchived(id,archived,o.source); if(!silent){ render(); if(archived && !fromUndo) showUndo('Pedido archivado', ()=>toggleArchiveOrder(id,false,false,true)); else showToast(archived?'Pedido archivado':'Pedido restaurado'); } }
 async function saveSettingsForm(s){ state.settings={...state.settings,...s}; await saveSettings(); showToast('Configuración guardada'); render(); }
@@ -3400,6 +3595,8 @@ function scanForRecompress(){
 }
 const STOCK_MOVEMENT_LABELS = {
   venta_pos: 'Venta en Punto de Venta',
+  pedido_tienda: 'Pedido de la tienda (descuento automático)',
+  cancelacion_tienda: 'Pedido de la tienda cancelado o regresado (se devolvió)',
   cancelacion_pos: 'Venta cancelada (se restauró)',
   reactivacion_pos: 'Venta reactivada (se descontó de nuevo)',
   ajuste_manual: 'Editado a mano en la ficha',
@@ -4018,6 +4215,7 @@ function renderAdmin(){
   </div>
   ${state.productModal!==null ? renderProductModal() : ''}
   ${state.abandonedCartsOpen ? renderAbandonedCartsModal() : ''}
+  ${state.failModal ? renderFailModal() : ''}
   ${state.globalSearchOpen ? renderGlobalSearchModal() : ''}
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
@@ -4041,6 +4239,190 @@ function renderAdmin(){
   `;
 }
 
+/* ============== LOTES CON CADUCIDAD (primero en caducar, primero en salir) ==============
+   Un producto puede tener varios lotes {id, qty, expirationDate, note}. La fecha más próxima de los
+   lotes con piezas se copia a "expirationDate" del producto, así todos los avisos de caducidad que
+   ya existían siguen funcionando. Al vender (POS) o descontar un pedido, se gastan primero los
+   lotes que caducan antes. */
+function earliestExpiry(batches){
+  const d = (batches||[]).filter(b=>(b.qty||0)>0 && b.expirationDate).map(b=>b.expirationDate).sort();
+  return d[0] || '';
+}
+function fefoConsume(batches, qty){
+  const list = (batches||[]).map(b=>({...b}));
+  const order = list.map((_,i)=>i).sort((a,b)=> String(list[a].expirationDate||'9999-99-99').localeCompare(String(list[b].expirationDate||'9999-99-99')));
+  let left = qty;
+  for(const i of order){ if(left<=0) break; const take = Math.min(list[i].qty||0, left); list[i].qty = (list[i].qty||0) - take; left -= take; }
+  return list.filter(b=>(b.qty||0)>0);
+}
+function addBatch(){ const m = state.productModal; if(!m) return; if(!m.batches) m.batches=[]; m.batches.push({id:uid('lot_'), qty:'', expirationDate:'', note:''}); state.pmOpen = {...(state.pmOpen||{}), lotes:true}; render(); }
+function setBatchField(id, field, value){
+  const b = ((state.productModal||{}).batches||[]).find(x=>x.id===id); if(!b) return;
+  b[field] = field==='qty' ? Math.max(0, Math.floor(Number(value)||0)) : value;
+  if(field!=='note') render();
+}
+function removeBatch(id){ const m = state.productModal; if(!m) return; m.batches = (m.batches||[]).filter(b=>b.id!==id); render(); }
+function renderBatchesSection(p){
+  const bs = p.batches || [];
+  const sumQ = bs.reduce((a,b)=>a+(Number(b.qty)||0),0);
+  const stock = Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0) || (p.stock||0);
+  const near = earliestExpiry(bs);
+  const today = localDateStr();
+  const fmt = (d)=> new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+  return pmSection('lotes','Lotes y caducidades',{icon:'calendar', collapsible:true, open: bs.length>0,
+    badge: bs.length ? `${bs.length} lote${bs.length===1?'':'s'}` : 'Opcional', hint:'Varias fechas de caducidad en un mismo producto', body:`
+    <div class="panel-sub">Anota cuántas piezas hay de cada fecha de caducidad. Al vender se descuentan primero las que caducan antes, y la fecha más próxima es la que usan los avisos de caducidad.</div>
+    ${bs.map(b=>{
+      const exp = b.expirationDate && b.expirationDate < today;
+      return `<div class="pm-batch">
+        <div class="two-col">
+          <div class="form-field"><label>Piezas</label><input type="number" min="0" step="1" inputmode="numeric" placeholder="0" value="${b.qty||''}" onchange="setBatchField('${b.id}','qty',this.value)"></div>
+          <div class="form-field"><label>Fecha de caducidad</label><input type="date" value="${b.expirationDate||''}" onchange="setBatchField('${b.id}','expirationDate',this.value)"></div>
+        </div>
+        <div class="pm-batch-foot">
+          <input type="text" placeholder="Lote o nota (opcional)" value="${escDescHtml(b.note||'')}" oninput="setBatchField('${b.id}','note',this.value)">
+          ${exp ? '<span class="status-badge" style="background:#BC355C;color:#fff;">Caducado</span>' : ''}
+          <button type="button" class="icon-btn danger" title="Quitar lote" aria-label="Quitar lote" onclick="removeBatch('${b.id}')">${icon('trash',14)}</button>
+        </div>
+      </div>`; }).join('')}
+    <button type="button" class="btn-outline" style="width:100%;" onclick="addBatch()">+ Agregar lote</button>
+    ${bs.length ? `<div class="row-sub" style="margin-top:8px;line-height:1.5;">
+      ${near ? `Caduca primero: <strong>${fmt(near)}</strong>. ` : 'Ningún lote tiene fecha todavía. '}Los lotes suman <strong>${sumQ}</strong> pieza${sumQ===1?'':'s'}${stock>0?` de ${stock} en existencia`:''}${stock>sumQ ? ` — ${stock-sumQ} sin fecha registrada` : ''}${sumQ>stock && stock>0 ? ' (los lotes suman más que tu existencia, revisa las cantidades)' : ''}.</div>` : ''}
+  `});
+}
+
+/* ============== VENTAS POR DÍA, PROYECCIÓN DE CIERRE DE MES Y CALENDARIO ============== */
+function moneyK(n){
+  n = Math.round(n||0);
+  if(n<1000) return '$'+n;
+  if(n<10000) return '$'+(n/1000).toFixed(1).replace(/\.0$/,'')+'k';
+  return '$'+Math.round(n/1000)+'k';
+}
+// Venta por día (fecha local), sin pedidos cancelados; tienda y Punto de Venta juntos.
+function dailyRevenueMap(){
+  const m = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const d = new Date(o.date); if(isNaN(d.getTime())) return;
+    const k = localDateStr(d); m[k] = (m[k]||0) + (o.total||0);
+  });
+  return m;
+}
+function computeMonthProjection(){
+  const now = new Date();
+  const y = now.getFullYear(), mo = now.getMonth();
+  const dim = new Date(y, mo+1, 0).getDate(), day = now.getDate();
+  const map = dailyRevenueMap();
+  const ymd = (i)=> y+'-'+pad2(mo+1)+'-'+pad2(i);
+  let before = 0; for(let i=1;i<day;i++) before += map[ymd(i)]||0;
+  const today = map[ymd(day)]||0;
+  const dates = state.orders.map(o=>new Date(o.date).getTime()).filter(t=>!isNaN(t));
+  const first = dates.length ? Math.min(...dates) : Date.now();
+  const histDays = Math.floor((now.getTime()-first)/86400000);
+  // Promedio por día de la semana en las últimas 8 semanas (solo días posteriores al primer pedido).
+  const sums=[0,0,0,0,0,0,0], cnt=[0,0,0,0,0,0,0];
+  for(let i=1;i<=56;i++){
+    const d = new Date(now); d.setDate(now.getDate()-i);
+    if(d.getTime() < first - 86400000) continue;
+    sums[d.getDay()] += map[localDateStr(d)]||0; cnt[d.getDay()]++;
+  }
+  const enough = histDays >= 21 && cnt.every(c=>c>=2);
+  const runRate = day>0 ? (before+today)/day : 0;
+  const avg = sums.map((v,i)=> enough ? v/cnt[i] : runRate);
+  const expToday = avg[now.getDay()];
+  let future = 0;
+  for(let i=day+1;i<=dim;i++){ future += avg[new Date(y,mo,i).getDay()]; }
+  const toDate = before + today;
+  const remaining = Math.max(0, Math.max(today, expToday) - today) + future;
+  const projected = toDate + remaining;
+  const low = toDate + remaining*0.8, high = toDate + remaining*1.2;
+  const goal = state.settings.salesGoalMonthly||0;
+  const prevKey = (()=>{ const d=new Date(y,mo-1,1); return d.getFullYear()+'-'+pad2(d.getMonth()+1); })();
+  const prevRev = computeNetProfit(prevKey).revenue;
+  const np = computeNetProfit(currentMonthKey());
+  const marginRate = (np.revenue>0 && np.cogs>0) ? np.grossMargin/np.revenue : null;
+  const profit = marginRate!=null ? projected*marginRate - np.expensesTotal : null;
+  return {dim, day, daysLeft: dim-day, toDate, projected, low, high, goal, prevRev, profit, expensesSoFar: np.expensesTotal, soldWithoutCost: np.soldWithoutCost, enough, monthName: now.toLocaleDateString('es-MX',{month:'long'})};
+}
+function renderProjectionPanel(){
+  const p = computeMonthProjection();
+  const pct = p.projected>0 ? Math.min(100, p.toDate/p.projected*100) : 0;
+  const vsPrev = p.prevRev>0 ? Math.round((p.projected-p.prevRev)/p.prevRev*100) : null;
+  const goalLine = p.goal>0 ? (p.projected>=p.goal ? `Superarías tu meta de ${money(p.goal)} (${Math.round(p.projected/p.goal*100)}%)` : `Llegarías al ${Math.round(p.projected/p.goal*100)}% de tu meta de ${money(p.goal)}`) : '';
+  return `<div class="panel" id="proj-panel">
+    <div class="panel-title" style="margin:0;">Proyección de cierre de ${p.monthName}</div>
+    <div class="proj-main">${money(p.projected)}</div>
+    <div class="panel-sub" style="margin:0;">Rango probable ${money(p.low)} – ${money(p.high)} · ${p.daysLeft===0?'último día del mes':`quedan ${p.daysLeft} día${p.daysLeft===1?'':'s'}`}</div>
+    <div class="proj-bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+    <div class="row-sub">Llevas ${money(p.toDate)} (${pct.toFixed(0)}% de lo proyectado)</div>
+    <div class="proj-lines">
+      ${vsPrev!==null ? `<div><span>Contra el mes pasado (${money(p.prevRev)})</span><span style="color:${vsPrev>=0?'var(--green)':'var(--rose)'};">${vsPrev>=0?'▲':'▼'} ${Math.abs(vsPrev)}%</span></div>` : ''}
+      ${goalLine ? `<div><span>Meta del mes</span><span>${goalLine}</span></div>` : ''}
+      ${p.profit!==null ? `<div><span>Utilidad estimada</span><span style="color:${p.profit>=0?'var(--green)':'var(--rose)'};">${p.profit<0?'-':''}${money(Math.abs(p.profit))}</span></div>` : ''}
+    </div>
+    <div class="row-sub" style="margin-top:10px;line-height:1.45;">${p.enough ? 'Se calcula con lo que vendes cada día de la semana en las últimas 8 semanas.' : 'Todavía hay poco historial: se calcula con tu promedio diario de este mes, así que puede moverse bastante.'}${p.profit!==null ? ` La utilidad usa tu margen actual y los gastos registrados hasta hoy (${money(p.expensesSoFar)}).` : ''}${p.soldWithoutCost>0 ? ' Hay productos vendidos sin costo capturado, la utilidad puede salir más alta de lo real.' : ''}</div>
+  </div>`;
+}
+function setCalMonth(delta){
+  const [y,m] = (state.calMonth||currentMonthKey()).split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  const key = d.getFullYear()+'-'+pad2(d.getMonth()+1);
+  if(key > currentMonthKey()) return;
+  state.calMonth = key; state.calDay = null; render();
+}
+function selectCalDay(key){ state.calDay = (state.calDay===key) ? null : key; render(); }
+function renderStatsCalendario(){
+  const key = state.calMonth || currentMonthKey();
+  const [y,m] = key.split('-').map(Number);
+  const dim = new Date(y, m, 0).getDate();
+  const map = dailyRevenueMap();
+  const todayKey = localDateStr();
+  const days = []; for(let i=1;i<=dim;i++){ const k = y+'-'+pad2(m)+'-'+pad2(i); days.push({i,k,v:map[k]||0,future:k>todayKey}); }
+  const past = days.filter(d=>!d.future);
+  const total = days.reduce((a,d)=>a+d.v,0);
+  const withSales = past.filter(d=>d.v>0);
+  const best = withSales.length ? withSales.reduce((a,b)=>b.v>a.v?b:a) : null;
+  const max = Math.max(1, ...days.map(d=>d.v));
+  const lead = (new Date(y,m-1,1).getDay()+6)%7; // lunes primero
+  const sel = state.calDay && state.calDay.startsWith(key) ? state.calDay : null;
+  const dayOrders = sel ? state.orders.filter(o=>o.status!=='Cancelado' && !isNaN(new Date(o.date).getTime()) && localDateStr(new Date(o.date))===sel).sort((a,b)=>new Date(a.date)-new Date(b.date)) : [];
+  const selTotal = dayOrders.reduce((a,o)=>a+(o.total||0),0);
+  return `
+  <div class="panel">
+    <div class="cal-nav">
+      <button type="button" aria-label="Mes anterior" onclick="setCalMonth(-1)">‹</button>
+      <div class="cal-title">${monthLabel(key)}</div>
+      <button type="button" aria-label="Mes siguiente" ${key>=currentMonthKey()?'disabled':''} onclick="setCalMonth(1)">›</button>
+    </div>
+    <div class="stat-grid" style="margin-bottom:12px;">
+      <div class="stat-card primary"><div class="stat-label">Ventas del mes</div><div class="stat-value">${money(total)}</div></div>
+      <div class="stat-card"><div class="stat-label">Promedio por día</div><div class="stat-value">${money(past.length? total/past.length : 0)}</div></div>
+      <div class="stat-card"><div class="stat-label">Mejor día</div><div class="stat-value">${best?money(best.v):'—'}</div>${best?`<div class="stat-delta">${best.i} de ${new Date(y,m-1,1).toLocaleDateString('es-MX',{month:'short'})}</div>`:''}</div>
+      <div class="stat-card"><div class="stat-label">Días sin venta</div><div class="stat-value">${past.length - withSales.length}</div></div>
+    </div>
+    <div class="cal-grid" role="grid" aria-label="Ventas por día">
+      ${['Lu','Ma','Mi','Ju','Vi','Sa','Do'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}
+      ${Array.from({length:lead},()=>'<div class="cal-blank"></div>').join('')}
+      ${days.map(d=>{
+        const heat = d.v>0 ? Math.round(12 + (d.v/max)*58) : 0;
+        const bg = d.v>0 ? `background:color-mix(in srgb, var(--primary) ${heat}%, var(--surface));` : '';
+        return `<button type="button" class="cal-day ${d.future?'future':''} ${d.k===todayKey?'today':''} ${d.k===sel?'sel':''}" style="${bg}" ${d.future?'disabled':`onclick="selectCalDay('${d.k}')"`} aria-label="${d.i}: ${d.v>0?money(d.v):'sin ventas'}"><span class="n">${d.i}</span><span class="v">${d.v>0?moneyK(d.v):(d.future?'':'·')}</span></button>`;
+      }).join('')}
+    </div>
+    <div class="row-sub" style="margin-top:10px;">Más oscuro = más venta. Cuenta tienda en línea y punto de venta, sin pedidos cancelados. Toca un día para ver sus ventas.</div>
+  </div>
+  ${sel ? `<div class="panel" id="cal-detail">
+    <div class="panel-title" style="margin:0;">${new Date(sel+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'})}</div>
+    <div class="panel-sub" style="margin:2px 0 8px;">${dayOrders.length} venta${dayOrders.length===1?'':'s'} · ${money(selTotal)}${dayOrders.length?` · ticket promedio ${money(selTotal/dayOrders.length)}`:''}</div>
+    ${dayOrders.length ? dayOrders.slice(0,40).map(o=>`
+      <div class="list-row">
+        <div class="row-main"><div class="row-title">${formatFolio(o.orderNumber)} · ${escDescHtml(o.customer||(o.source==='pos'?'Venta en tienda física':'Cliente'))}</div>
+        <div class="row-sub">${new Date(o.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})} · ${o.source==='pos'?'Punto de venta':'Tienda en línea'}</div></div>
+        <strong>${money(o.total)}</strong>
+      </div>`).join('') : `<div class="panel-sub">Ese día no hubo ventas.</div>`}
+    ${dayOrders.length>40?`<div class="row-sub">Y ${dayOrders.length-40} más…</div>`:''}
+  </div>` : ''}`;
+}
 function computeMonthProgress(){
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -4123,15 +4505,16 @@ function riskGuardOn(){ return state.settings.fraudGuardEnabled!==false; }
 function riskPhoneKey(ph){ const d=String(ph||'').replace(/\D/g,''); return d.length>10 ? d.slice(-10) : d; }
 let _riskIdxCache = null;
 function riskIndex(){
-  const key = state.orders.length+':'+state.orders.filter(o=>o.status==='Cancelado').length;
+  const key = state.orders.length+':'+state.orders.filter(o=>o.status==='Cancelado').length+':'+state.orders.filter(o=>o.deliveryFailure).length;
   if(_riskIdxCache && _riskIdxCache.key===key) return _riskIdxCache;
-  const byPhone = {}; let sum=0, n=0;
+  const byPhone = {}, fails = {}; let sum=0, n=0;
   state.orders.forEach(o=>{
     if(o.source==='pos') return;
     const k = riskPhoneKey(o.phone); if(k) (byPhone[k] = byPhone[k]||[]).push(o);
+    if(k && o.deliveryFailure) fails[k] = (fails[k]||0)+1;
     if(o.status!=='Cancelado'){ sum += o.total||0; n++; }
   });
-  _riskIdxCache = {key, byPhone, avg: n? sum/n : 0, n};
+  _riskIdxCache = {key, byPhone, fails, avg: n? sum/n : 0, n};
   return _riskIdxCache;
 }
 function orderRiskReasons(o){
@@ -4145,7 +4528,9 @@ function orderRiskReasons(o){
   const t0 = new Date(o.date).getTime();
   const near = same.filter(x=>Math.abs(new Date(x.date).getTime()-t0) <= 24*3600*1000).length;
   if(k && near>=3) r.push(`${near} pedidos con este teléfono en 24 h`);
-  const canceled = same.filter(x=>x.id!==o.id && x.status==='Cancelado').length;
+  const failedBefore = phoneFailureCount(o.phone, o.id);
+  if(failedBefore>0) r.push(`No recibió ${failedBefore} pedido${failedBefore===1?'':'s'} anterior${failedBefore===1?'':'es'}`);
+  const canceled = same.filter(x=>x.id!==o.id && x.status==='Cancelado' && !x.deliveryFailure).length;
   if(canceled>=2) r.push(`${canceled} pedidos anteriores cancelados con este teléfono`);
   const nm = String(o.customer||'').trim();
   const letters = (nm.match(/[a-záéíóúüñ]/gi)||[]).length;
@@ -4183,14 +4568,19 @@ function computeTodayTasks(){
   const nuevos = live.filter(o=>o.status==='Nuevo');
   if(nuevos.length){
     const old = nuevos.filter(o=>Date.now()-new Date(o.date).getTime() > 2*3600*1000).length;
-    t.push({tone: old?'rojo':'ambar', n:nuevos.length, text:`pedido${nuevos.length===1?'':'s'} nuevo${nuevos.length===1?'':'s'} por confirmar${old?` (${old} con más de 2 horas esperando)`:''}`, go:"state.adminTab='pedidos';state.orderStatusFilter='Nuevo';state.orderRiskOnly=false;render()"});
+    t.push({tone: old?'rojo':'ambar', n:nuevos.length, text:`pedido${nuevos.length===1?'':'s'} nuevo${nuevos.length===1?'':'s'} por confirmar${old?` (${old} con más de 2 horas esperando)`:''}`, go:"state.adminTab='pedidos';state.orderStatusFilter='Nuevo';state.orderRiskOnly=false;state.orderUnpaidOnly=false;render()"});
   }
   const risky = riskOrders();
-  if(risky.length) t.push({tone:'rojo', n:risky.length, text:`pedido${risky.length===1?'':'s'} con señales sospechosas — confírmalo${risky.length===1?'':'s'} por WhatsApp antes de enviar`, go:"state.adminTab='pedidos';state.orderStatusFilter='Todos';state.orderSourceFilter='Todos';state.showArchived=false;state.orderRiskOnly=true;render()"});
+  if(risky.length) t.push({tone:'rojo', n:risky.length, text:`pedido${risky.length===1?'':'s'} con señales sospechosas — confírmalo${risky.length===1?'':'s'} por WhatsApp antes de enviar`, go:"state.adminTab='pedidos';state.orderStatusFilter='Todos';state.orderSourceFilter='Todos';state.showArchived=false;state.orderRiskOnly=true;state.orderUnpaidOnly=false;render()"});
+  const unpaid = state.orders.filter(orderIsUnpaidDelivered);
+  if(unpaid.length){
+    const sum = unpaid.reduce((a,o)=>a+(o.total||0),0);
+    t.push({tone:'ambar', n:unpaid.length, text:`pedido${unpaid.length===1?'':'s'} entregado${unpaid.length===1?'':'s'} sin marcar como cobrado${unpaid.length===1?'':'s'} (${money(sum)})`, go:"state.adminTab='pedidos';state.orderStatusFilter='Todos';state.orderRiskOnly=false;state.orderUnpaidOnly=true;state.showArchived=false;render()"});
+  }
   const prep = live.filter(o=>o.status==='Preparando');
-  if(prep.length) t.push({tone:'info', n:prep.length, text:`pedido${prep.length===1?'':'s'} en preparación por enviar`, go:"state.adminTab='pedidos';state.orderStatusFilter='Preparando';state.orderRiskOnly=false;render()"});
+  if(prep.length) t.push({tone:'info', n:prep.length, text:`pedido${prep.length===1?'':'s'} en preparación por enviar`, go:"state.adminTab='pedidos';state.orderStatusFilter='Preparando';state.orderRiskOnly=false;state.orderUnpaidOnly=false;render()"});
   const stuck = live.filter(o=>o.status==='En camino' && Date.now()-new Date(o.date).getTime() > 2*86400000);
-  if(stuck.length) t.push({tone:'ambar', n:stuck.length, text:`pedido${stuck.length===1?'':'s'} en camino desde hace más de 2 días — confirma si ya llegó${stuck.length===1?'':'ron'}`, go:"state.adminTab='pedidos';state.orderStatusFilter='En camino';state.orderRiskOnly=false;render()"});
+  if(stuck.length) t.push({tone:'ambar', n:stuck.length, text:`pedido${stuck.length===1?'':'s'} en camino desde hace más de 2 días — confirma si ya llegó${stuck.length===1?'':'ron'}`, go:"state.adminTab='pedidos';state.orderStatusFilter='En camino';state.orderRiskOnly=false;state.orderUnpaidOnly=false;render()"});
   const msgsNew = (state.storeMessages||[]).filter(m=>!m.archived && (m.status||'nuevo')==='nuevo').length;
   if(msgsNew) t.push({tone:'ambar', n:msgsNew, text:`mensaje${msgsNew===1?'':'s'} del buzón sin responder`, go:"state.adminTab='mensajes';state.newMessageCount=0;render()"});
   const carts = pendingAbandonedCarts().filter(c=>!c.contacted).length;
@@ -4200,6 +4590,11 @@ function computeTodayTasks(){
   if(oldReg) t.push({tone:'rojo', n:oldReg, text:`caja${oldReg===1?' abierta':'s abiertas'} desde un día anterior — haz el cierre`, go:"state.adminTab='caja';render()"});
   const waiting = computeRestockDemand().filter(g=>g.stock>0).reduce((s,g)=>s+g.people.length,0);
   if(waiting) t.push({tone:'ambar', n:waiting, text:`persona${waiting===1?'':'s'} esperando productos que ya repusiste — avísales`, go:"state.adminTab='centros';state.centersSubview='reabasto';render()"});
+  const sPlan = nextSeasonRestockPlan();
+  if(sPlan){
+    const pend = sPlan.rows.filter(r=>!r.inList).length;
+    if(pend) t.push({tone:'ambar', n:pend, text:`producto${pend===1?'':'s'} por reponer para ${sPlan.season.ev.name} (${sPlan.season.daysLeft===0?'es hoy':`faltan ${sPlan.season.daysLeft} día${sPlan.season.daysLeft===1?'':'s'}`})`, go:"state.adminTab='centros';state.centersSubview='reabasto';render()"});
+  }
   const m = computeMetrics();
   if(m.lowStock.length) t.push({tone:'ambar', n:m.lowStock.length, text:`producto${m.lowStock.length===1?'':'s'} con poco stock o agotado${m.lowStock.length===1?'':'s'}`, go:"var e=document.getElementById('resumen-reabasto');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   if(m.expiringOrExpired) t.push({tone:'ambar', n:m.expiringOrExpired, text:`producto${m.expiringOrExpired===1?'':'s'} por caducar o caducado${m.expiringOrExpired===1?'':'s'}`, go:"state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"});
@@ -4346,6 +4741,7 @@ function renderResumen(){
         </div>
       `}
     </div>
+    ${renderProjectionPanel()}
     ${renderUpcomingSeasonsPanel()}
     <div class="stat-grid">
       <div class="stat-card primary"><div class="stat-label">${icon('dollar-sign',13)} Ingresos totales</div><div class="stat-value">${money(m.totalRevenue)}</div></div>
@@ -4628,6 +5024,7 @@ function ensureRealtimeTimer(active){
 const STATS_SUBTAB_GROUPS = [
   {label:'Ventas', items:[
     {key:'general', label:'General'},
+    {key:'calendario', label:'Calendario'},
     {key:'pagos', label:'Pagos'},
     {key:'comisiones', label:'Comisiones'},
     {key:'carritoabandonado', label:'Carrito abandonado'},
@@ -4672,6 +5069,7 @@ function renderEstadisticas(){
     ${sub==='productos' ? renderStatsProductos() : ''}
     ${sub==='trafico' ? renderStatsTrafico() : ''}
     ${sub==='campanas' ? renderStatsCampanas() : ''}
+    ${sub==='calendario' ? renderStatsCalendario() : ''}
     ${sub==='tiemporeal' ? renderStatsTiempoReal() : ''}
     ${sub==='visitas' ? renderStatsVisitas() : ''}
     ${sub==='margen' ? renderStatsMargen() : ''}
@@ -5935,7 +6333,7 @@ function onOrderSearchInput(v){
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 function resetOrderFilters(){
-  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter='Todos'; state.orderRiskOnly=false;
+  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter='Todos'; state.orderRiskOnly=false; state.orderUnpaidOnly=false;
   state.selectedOrders=[]; resetShowMore('ordersShowMore'); render();
 }
 function setOrderFilter(key, val){
@@ -5952,19 +6350,22 @@ function renderPedidos(){
   const newCount = state.orders.filter(o=>!o.archived && o.status==='Nuevo').length;
   const base = scope.filter(o=> (source==='Todos'||o.source===source) && orderMatchesSearch(o,q));
   const riskOnly = !!state.orderRiskOnly;
+  const unpaidOnly = !!state.orderUnpaidOnly;
   const riskIds = new Set(riskOrders().map(o=>o.id));
-  const shown = base.filter(o=> (statusF==='Todos' || o.status===statusF) && (!riskOnly || riskIds.has(o.id)));
+  const unpaidList = state.orders.filter(orderIsUnpaidDelivered);
+  const unpaidSum = unpaidList.reduce((a,o)=>a+(o.total||0),0);
+  const shown = base.filter(o=> (statusF==='Todos' || o.status===statusF) && (!riskOnly || riskIds.has(o.id)) && (!unpaidOnly || orderIsUnpaidDelivered(o)));
   const abandonedCount = pendingAbandonedCarts().length;
-  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!=='Todos'?1:0) + (riskOnly?1:0);
+  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!=='Todos'?1:0) + (riskOnly?1:0) + (unpaidOnly?1:0);
   const chips = ["Todos", ...STATUS_FLOW].map(f=>{
     const n = f==='Todos' ? base.length : base.filter(o=>o.status===f).length;
     return `<button class="${statusF===f?'active':''}" onclick="setOrderFilter('orderStatusFilter','${f}')">${f} <span class="chip-n">${n}</span></button>`;
-  }).join('') + (riskIds.size || riskOnly ? `<button class="${riskOnly?'active':''}" onclick="state.orderRiskOnly=!state.orderRiskOnly;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Revisar <span class="chip-n">${riskIds.size}</span></button>` : '');
+  }).join('') + (riskIds.size || riskOnly ? `<button class="${riskOnly?'active':''}" onclick="state.orderRiskOnly=!state.orderRiskOnly;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Revisar <span class="chip-n">${riskIds.size}</span></button>` : '') + (unpaidList.length || unpaidOnly ? `<button class="${unpaidOnly?'active':''}" onclick="state.orderUnpaidOnly=!state.orderUnpaidOnly;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Sin cobrar <span class="chip-n">${unpaidList.length}</span></button>` : '');
   return `
     <div class="prod-head">
       <div>
         <div class="prod-title">Pedidos</div>
-        <div class="prod-sub">${activeCount} activo${activeCount===1?'':'s'}${newCount?` · <strong style="color:var(--primary);">${newCount} nuevo${newCount===1?'':'s'} por atender</strong>`:''}${archivedCount?` · ${archivedCount} archivado${archivedCount===1?'':'s'}`:''}</div>
+        <div class="prod-sub">${activeCount} activo${activeCount===1?'':'s'}${newCount?` · <strong style="color:var(--primary);">${newCount} nuevo${newCount===1?'':'s'} por atender</strong>`:''}${archivedCount?` · ${archivedCount} archivado${archivedCount===1?'':'s'}`:''}${unpaidList.length?` · <strong style="color:#8a5a1a;">${money(unpaidSum)} por cobrar</strong>`:''}</div>
       </div>
       <div class="prod-head-actions">
         <button class="btn-tools" onclick="state.abandonedCartsOpen=true;render()">${icon('bag',15)} Carritos abandonados${abandonedCount?` (${abandonedCount})`:''}</button>
@@ -6066,8 +6467,10 @@ function renderOrderRow(o){
   const itemCount = (o.items||[]).reduce((s,it)=>s+it.qty,0);
   const shipSub = isPos ? '' : (o.address || '');
   const isSplitPay = isPos && salePayments(o).length > 1;
-  const payLabel = isPos ? paymentMethodShortLabel(o) : 'Contra entrega';
-  const payLabelFull = isPos ? paymentMethodLabel(o) : 'Contra entrega';
+  const _ps = orderPayState(o);
+  const payLabel = isPos ? paymentMethodShortLabel(o) : (_ps==='pagado' ? `Pagado · ${o.paymentMethod||'Efectivo'}` : _ps==='por_conciliar' ? 'Por conciliar' : (o.status==='Entregado' ? 'Sin cobrar' : 'Contra entrega'));
+  const payLabelFull = isPos ? paymentMethodLabel(o) : payLabel;
+  const payCls = isPos ? '' : (_ps==='pagado' ? 'paid' : _ps==='por_conciliar' ? 'recon' : (o.status==='Entregado' ? 'pending-cash' : ''));
   const next = !o.archived ? ORDER_NEXT_STATUS[o.status] : null;
   let rows = `
     <tr class="${o.archived?'archived-row':''}${isSelected?' selected-row':''}">
@@ -6085,11 +6488,12 @@ function renderOrderRow(o){
         <div class="order-source-tag">${isPos?`${icon('receipt')} Punto de venta · ${escDescHtml(o.cashierName||'')}`:icon('bag')+' Tienda en línea'}</div>
         ${(!isPos && o.campaign)?`<div class="order-camp-tag">Campaña: ${escDescHtml(o.campaign)}</div>`:''}
         ${!isPos ? riskTagHtml(o) : ''}
+        ${!isPos ? failureTagHtml(o) : ''}
         ${shipSub ? `<div class="order-ship-sub" title="${escDescHtml(shipSub)}">${icon('map-pin',11)} ${escDescHtml(shipSub)}</div>` : ''}
       </td>
       <td class="c-total">
         <strong>${money(o.total)}</strong>
-        <span class="order-pay-pill ${isSplitPay?'split':''}" ${isSplitPay?`title="${escDescHtml(payLabelFull)}"`:''}>${isSplitPay?icon('layers',12):'$'} ${escDescHtml(payLabel)}</span>
+        <span class="order-pay-pill ${isSplitPay?'split':''} ${payCls}" ${isSplitPay?`title="${escDescHtml(payLabelFull)}"`:''}>${isSplitPay?icon('layers',12):'$'} ${escDescHtml(payLabel)}</span>
       </td>
       <td class="c-prod">
         <button class="order-products-toggle ${productsOpen?'open':''}" onclick="state.orderDetail=state.orderDetail==='${o.id}'?null:'${o.id}';render()">
@@ -6110,6 +6514,8 @@ function renderOrderRow(o){
             <hr>
             <button onclick="state.orderActionsMenu=null;openOrderDetailModal('${o.id}')">${icon('receipt',14)} Ver detalle</button>
             ${!isPos ? `<button onclick="state.orderActionsMenu=null;sendToDelivery('${o.id}')">${icon('truck',14)} Enviar al repartidor</button>` : ''}
+            ${!isPos && o.status!=='Cancelado' && o.status!=='Entregado' ? `<button onclick="openFailModal('${o.id}')">${icon('alert-triangle',14)} No se pudo entregar</button>` : ''}
+            ${!isPos && orderPayState(o)!=='pagado' && o.status!=='Cancelado' ? `<button onclick="state.orderActionsMenu=null;setOrderPayment('${o.id}',{paymentStatus:'pagado'})">${icon('dollar-sign',14)} Marcar como pagado</button>` : ''}
             ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
             <button onclick="state.orderActionsMenu=null;state.assignCommissionOrderId='${o.id}';render()">${icon('percent',14)} ${o.commissionAgentName?`Comisión: ${escDescHtml(o.commissionAgentName)}`:'Asignar comisionista'}</button>
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
@@ -7628,6 +8034,94 @@ function seasonLastYearStats(ev, occurrence){
   const top = Object.entries(units).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([name,qty])=>({name,qty}));
   return {revenue, count, top, hasData: count>0};
 }
+/* ---- Reabasto anticipado para una temporada ----
+   Mira lo que se vendió de cada producto en las 2 semanas previas a la misma fecha del año
+   pasado (por id; si el historial importado no trae id, por nombre sin variante), lo ajusta por
+   cuánto ha crecido o bajado la venta de los últimos 90 días contra el mismo periodo del año
+   pasado (entre 0.7x y 1.5x) y sugiere cuánto reponer para llegar con inventario. */
+function seasonNormName(n){ return String(n||'').replace(/\s*\(.*\)$/,'').trim().toLowerCase(); }
+function seasonGrowthFactor(){
+  const now = new Date();
+  const a0 = new Date(now); a0.setDate(a0.getDate()-90);
+  const b1 = new Date(now); b1.setFullYear(b1.getFullYear()-1);
+  const b0 = new Date(a0); b0.setFullYear(b0.getFullYear()-1);
+  let cur=0, prev=0, prevN=0;
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const d = new Date(o.date); if(isNaN(d.getTime())) return;
+    if(d>=a0 && d<=now) cur += (o.total||0);
+    else if(d>=b0 && d<=b1){ prev += (o.total||0); prevN++; }
+  });
+  if(prevN<10 || prev<=0) return {factor:1, known:false};
+  return {factor: Math.max(0.7, Math.min(1.5, cur/prev)), known:true};
+}
+function computeSeasonRestock(ev, occurrence){
+  const ly = seasonDateForYear(ev, occurrence.getFullYear()-1);
+  const start = new Date(ly.getFullYear(), ly.getMonth(), ly.getDate()-14);
+  const end = new Date(ly.getFullYear(), ly.getMonth(), ly.getDate()+2);
+  const byId = {}, byName = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado') return;
+    const d = new Date(o.date); if(isNaN(d.getTime()) || d<start || d>=end) return;
+    (o.items||[]).forEach(it=>{
+      if(it.id==='promo_buyxpayy' || !(it.price>0)) return;
+      if(it.id) byId[it.id] = (byId[it.id]||0) + (it.qty||0);
+      else if(it.name){ const k = seasonNormName(it.name); byName[k] = (byName[k]||0) + (it.qty||0); }
+    });
+  });
+  const g = seasonGrowthFactor();
+  const nameToProduct = {};
+  state.products.forEach(p=>{ const k = seasonNormName(p.name); if(k && !nameToProduct[k]) nameToProduct[k] = p; });
+  const units = {};
+  Object.keys(byId).forEach(id=>{ units[id] = (units[id]||0) + byId[id]; });
+  Object.keys(byName).forEach(k=>{ const p = nameToProduct[k]; if(p) units[p.id] = (units[p.id]||0) + byName[k]; });
+  const rows = [];
+  state.products.forEach(p=>{
+    const u = units[p.id]; if(!u || p.isKit) return;
+    const need = Math.ceil(u*g.factor);
+    const stock = totalStock(p);
+    const suggested = need - stock;
+    if(suggested>0) rows.push({id:p.id, name:p.name, lastYear:u, need, stock, suggested, inList: !!state.restockItems.find(r=>r.productId===p.id)});
+  });
+  rows.sort((a,b)=>b.suggested-a.suggested);
+  return {rows, growth:g};
+}
+// La temporada más cercana que ya está en etapa de preparación (o a menos de 60 días) y tiene qué reponer.
+function nextSeasonRestockPlan(){
+  const cand = computeUpcomingSeasons(6).filter(x=>x.daysLeft<=Math.max(x.ev.prepDays,60));
+  for(const x of cand){
+    const r = computeSeasonRestock(x.ev, x.date);
+    if(r.rows.length) return {season:x, ...r};
+  }
+  return null;
+}
+async function addSeasonRestockAll(){
+  const plan = nextSeasonRestockPlan(); if(!plan) return;
+  let n = 0;
+  for(const r of plan.rows.slice(0,15)){
+    if(r.inList) continue;
+    const p = state.products.find(x=>x.id===r.id); if(!p) continue;
+    const payload = { productId:p.id, productName:p.name, productCat:p.cat||'', qty:r.suggested, supplierId:p.supplierId||'', addedAt:new Date().toISOString() };
+    try{ await db.collection('restockItems').doc(p.id).set(payload); state.restockItems.push({id:p.id, ...payload}); n++; }catch(e){ console.error(e); }
+  }
+  showToast(n ? `${n} producto${n===1?'':'s'} agregado${n===1?'':'s'} a la lista de reabasto` : 'Ya estaban en la lista'); render();
+}
+function renderSeasonRestockPanel(){
+  const plan = nextSeasonRestockPlan(); if(!plan) return '';
+  const x = plan.season;
+  const rows = plan.rows.slice(0,10);
+  const pending = plan.rows.filter(r=>!r.inList).length;
+  return `<div class="panel" id="season-restock">
+    <div class="panel-title" style="margin:0;">Para ${escDescHtml(x.ev.name)}</div>
+    <div class="panel-sub" style="margin:2px 0 8px;">${x.date.toLocaleDateString('es-MX',{day:'numeric',month:'long'})} · ${seasonCountdownLabel(x).toLowerCase()}. Según lo que vendiste en las 2 semanas previas del año pasado${plan.growth.known?`, ajustado por cómo va tu venta este año (${plan.growth.factor>=1?'+':''}${Math.round((plan.growth.factor-1)*100)}%)`:' (sin suficiente historial para ajustar por crecimiento)'}.</div>
+    ${rows.map(r=>`<div class="season-restock-row">
+      <div class="row-main"><div class="row-title">${escDescHtml(r.name)}</div><div class="row-sub">Año pasado: ${r.lastYear} pza${r.lastYear===1?'':'s'} · hoy tienes ${r.stock} · pedir ~${r.suggested}</div></div>
+      ${r.inList ? `<span class="status-badge status-ok">${icon('check',11)} En la lista</span>` : `<button class="btn-tertiary" onclick="addProductToRestock('${r.id}',${r.suggested})">${icon('package',13)} Agregar</button>`}
+    </div>`).join('')}
+    ${plan.rows.length>10?`<div class="row-sub" style="margin-top:6px;">Y ${plan.rows.length-10} producto${plan.rows.length-10===1?'':'s'} más con menor cantidad.</div>`:''}
+    ${pending ? `<button class="btn-primary" style="margin-top:10px;" onclick="addSeasonRestockAll()">Agregar los ${Math.min(15,pending)} principales a la lista</button>` : ''}
+  </div>`;
+}
 function computeUpcomingSeasons(limit, includeHidden){
   const today = new Date();
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -8041,6 +8535,7 @@ function renderClientes(){
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
             <div class="row-title">${escDescHtml(c.name)}${c.isManual?'':' <span class="cust-auto">automático</span>'}</div>
             <div class="row-sub">${c.lastDate?`Última compra: ${new Date(c.lastDate).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}${f.inactive?` (hace ${Math.floor((Date.now()-new Date(c.lastDate).getTime())/86400000)} días)`:''} · `:'Sin compras · '}${c.purchaseCount} compra${c.purchaseCount===1?'':'s'}${c.phone?` · ${escDescHtml(c.phone)}`:''}</div>
+            ${(()=>{ const nf = phoneFailureCount(c.phone); return nf ? `<div class="order-fail-tag" style="display:inline-flex;">${icon('alert-triangle',12)} No recibió ${nf} pedido${nf===1?'':'s'}</div>` : ''; })()}
             ${(c.tags&&c.tags.length)?`<div class="cust-tags">${c.tags.map(t=>`<span class="status-badge" style="background:var(--surface-soft);color:var(--ink);font-weight:600;">${escDescHtml(t)}</span>`).join('')}</div>`:''}
           </div>
           <div class="cust-total">${money(c.totalSpent)}</div>
@@ -8973,7 +9468,7 @@ function renderCentros(){
     ${sub==='inventario' ? renderInventarioPorCentro() : ''}
     ${sub==='auditorias' ? renderAuditorias() : ''}
     ${sub==='mermas' ? renderMermas() : ''}
-    ${sub==='reabasto' ? renderRestockDemandPanel() + renderReabasto() : ''}
+    ${sub==='reabasto' ? renderSeasonRestockPanel() + renderRestockDemandPanel() + renderReabasto() : ''}
     ${sub==='rendimiento' ? renderCenterPerformance() : ''}
     ${state.centerModal ? renderCenterModal() : ''}
   `;
@@ -10744,6 +11239,14 @@ function renderOperativoSubpanel(){
       <input id="set-fraud-max" type="number" inputmode="numeric" min="0" max="20" step="1" value="${s.fraudMaxOrdersPerDay==null?3:s.fraudMaxOrdersPerDay}" onchange="state.settings.fraudMaxOrdersPerDay=Math.max(0,Math.min(20,parseInt(this.value,10)||0));saveSettings();showToast('Límite guardado');render()">
     </div>
   `})}
+  ${pmSection('op_stock','Inventario de pedidos de la tienda',{icon:'package', collapsible:true, open:false, badge:s.autoDeductOnlineStock?'Automático':'A mano', hint:'Descontar el stock solo al enviar o entregar', body:`
+    <div class="panel-sub">Si lo activas, cuando un pedido de la tienda pasa a <strong>En camino</strong> o <strong>Entregado</strong> el inventario se descuenta solo del centro principal (una sola vez por pedido). Si el pedido se cancela o regresa a un estado anterior, se devuelve. Los pedidos que ya estén en camino o entregados antes de activarlo no se tocan.</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.autoDeductOnlineStock?'checked':''} onchange="state.settings.autoDeductOnlineStock=this.checked;saveSettings();render()">
+      <span>Descontar inventario automáticamente</span>
+    </label>
+    <div class="note-box" style="margin-top:8px;background:#FFF6E0;color:#8a6300;">${icon('alert-triangle',14)} Actívalo solo si ya no ajustas el stock a mano al preparar pedidos; si no, se descontaría dos veces.</div>
+  `})}
   ${pmSection('op_kiosko','Modo kiosko / vitrina',{icon:'grid', collapsible:true, open:false, badge:'', hint:'Catálogo sin compras para una tablet del mostrador', body:`
     <div class="panel-sub">Para una tablet en el mostrador de la tienda física: muestra el catálogo para que la clienta lo hojee (fotos, precios, existencias), pero sin botones de comprar ni carrito — cualquier compra la completa el personal desde el Punto de Venta. Abre el enlace de abajo una sola vez en esa tablet; queda activado en ese dispositivo aunque se apague o se recargue la página.</div>
     <div class="form-field">
@@ -11142,7 +11645,8 @@ function renderProductModal(){
           </select>
         </div>
         <div class="form-field"><label>Fecha de caducidad</label>
-          <input id="pf-expiration" type="date" value="${p.expirationDate||''}" oninput="state.productModal.expirationDate=this.value">
+          <input id="pf-expiration" type="date" value="${(p.batches&&p.batches.length) ? earliestExpiry(p.batches) : (p.expirationDate||'')}" ${(p.batches&&p.batches.length)?'disabled title="Se toma de tus lotes"':''} oninput="state.productModal.expirationDate=this.value">
+          ${(p.batches&&p.batches.length) ? '<div class="row-sub" style="margin-top:4px;">Se toma del lote que caduca primero (ver Lotes y caducidades).</div>' : ''}
         </div>
         <div class="form-field"><label>Avisarme cuando queden</label>
           <input id="pf-low-stock-threshold" type="number" min="1" inputmode="numeric" placeholder="3 (por default)" value="${p.lowStockThreshold||''}" oninput="state.productModal.lowStockThreshold=this.value">
@@ -11194,6 +11698,7 @@ function renderProductModal(){
       ${secPhoto}
       ${secPrice}
       ${secStock}
+      ${p.isKit ? '' : renderBatchesSection(p)}
       ${secDesc}
       ${secCats}
       ${secVariants}
@@ -11451,7 +11956,8 @@ function handleSaveProduct(existingId){
   const sku = document.getElementById('pf-sku').value.trim();
   const location = document.getElementById('pf-location').value.trim();
   const supplierId = document.getElementById('pf-supplier').value || '';
-  const expirationDate = document.getElementById('pf-expiration').value || '';
+  const batches = ((state.productModal.batches)||[]).filter(b=>(Number(b.qty)||0)>0).map(b=>({id:b.id, qty:Math.floor(Number(b.qty)||0), expirationDate:b.expirationDate||'', note:(b.note||'').trim()}));
+  const expirationDate = batches.length ? earliestExpiry(batches) : (document.getElementById('pf-expiration').value || '');
   const lowStockThreshold = Number(document.getElementById('pf-low-stock-threshold').value) || 0;
   const price = Number(document.getElementById('pf-price').value)||0;
   const promoPrice = Number(document.getElementById('pf-promo').value)||0;
@@ -11464,7 +11970,7 @@ function handleSaveProduct(existingId){
   const stockByCenter = state.productModal.stockByCenter || {};
   const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
   saveProduct({
-    id: existingId||null, name, sku, location, supplierId, expirationDate, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
+    id: existingId||null, name, sku, location, supplierId, expirationDate, batches, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
     variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
     costHistory: state.productModal.costHistory||[],
@@ -11613,7 +12119,7 @@ const NAV_ADMIN_MODALS = [
   ['productHistoryOpen', ()=>closeProductHistory()], ['needsManageOpen', false], ['catManageOpen', false],
   ['bulkTagModal', null], ['trashOpen', false], ['promoListOpen', false], ['duplicatesOpen', false],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
-  ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['productModal', null],
+  ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['couponModal', ()=>closeCouponModal()],
   ['promoModal', ()=>closePromoModal()], ['centerModal', null], ['cajaDetail', null], ['importOpen', false], ['customerImportOpen', false],
   ['catImportOpen', false], ['catAssignOpen', false], ['needAssignOpen', false], ['catalogMaintOpen', false], ['bgFixOpen', false],
