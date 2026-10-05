@@ -1,23 +1,5 @@
-/* La Casa de los Placeres — descuento seguro de inventario para pedidos de la tienda.
- *
- * Se ejecuta en los servidores de Firebase cada vez que se crea un documento en "orders".
- * La tienda (clientas) NO necesita permiso para tocar "products": solo crea el pedido y este código,
- * que corre con permisos de administrador, descuenta el stock en UNA transacción (o todo o nada).
- * Cancelar / reactivar / eliminar pedidos lo sigue haciendo el panel de administración.
- *
- * IMPORTANTE: REGION debe ser la misma región de tu base de datos Firestore
- * (Firebase → Firestore Database → pestaña Datos: aparece "Ubicación").
- *   nam5 (Estados Unidos)  → "us-central1"
- *   nam7                   → "us-east1"
- *   southamerica-east1     → "southamerica-east1"
- */
-const REGION = 'us-central1';
-
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
-const admin = require('firebase-admin');
-admin.initializeApp();
-const db = admin.firestore();
-
+/* Núcleo del descuento de inventario de un pedido de la tienda (transacción de Firestore: todo o nada).
+   Lo usa scripts/reconcile-stock.js, que corre en GitHub Actions con una cuenta de servicio. */
 const MAX_LINES = 40, MAX_QTY = 50;
 
 function earliestExpiry(batches) {
@@ -34,8 +16,7 @@ function fefoConsume(batches, qty) {
 }
 function totalStock(p) { return p.stockByCenter ? Object.values(p.stockByCenter).reduce((s, n) => s + (n || 0), 0) : (p.stock || 0); }
 
-exports.descontarInventarioPedido = onDocumentCreated({ document: 'orders/{orderId}', region: REGION }, async (event) => {
-  const orderRef = event.data.ref;
+async function descontarPedido(db, orderRef) {
   const centersSnap = await db.collection('centers').get();
   const center = centersSnap.docs.find(d => (d.data() || {}).isDefault) || centersSnap.docs[0];
   const centerId = center ? center.id : null;
@@ -115,4 +96,6 @@ exports.descontarInventarioPedido = onDocumentCreated({ document: 'orders/{order
     }));
     tx.update(orderRef, { stockDeducted: true, stockCenterId: centerId, stockDeductedBy: 'servidor' });
   });
-});
+}
+
+module.exports = { descontarPedido };

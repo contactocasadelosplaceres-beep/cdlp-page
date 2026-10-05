@@ -11702,7 +11702,7 @@ function renderOperativoSubpanel(){
     </div>
   `})}
   ${pmSection('op_stock','Inventario de pedidos de la tienda',{icon:'package', collapsible:true, open:false, badge:autoDeductOnlineOn()?'Automático':'A mano', hint:'El stock baja solo cuando entra un pedido', body:`
-    <div class="panel-sub">Cada pedido de la tienda descuenta su inventario del centro principal en cuanto entra (una sola vez por pedido), igual que una venta del Punto de Venta, que descuenta al cobrar. Si el pedido se cancela, se marca como no recibido o se elimina, las piezas regresan al inventario. Con la función del servidor instalada (carpeta <strong>functions</strong>) el descuento es inmediato aunque este panel esté cerrado; sin ella, el panel lo hace al abrirse y cada 45 segundos mientras está abierto.</div>
+    <div class="panel-sub">Cada pedido de la tienda descuenta su inventario del centro principal en cuanto entra (una sola vez por pedido), igual que una venta del Punto de Venta, que descuenta al cobrar. Si el pedido se cancela, se marca como no recibido o se elimina, las piezas regresan al inventario. Además, un proceso automático de GitHub revisa cada ~5 minutos los pedidos sin descontar aunque este panel esté cerrado (requiere configurar el secreto FIREBASE_SERVICE_ACCOUNT); el panel también lo hace al abrirse y cada 45 segundos mientras está abierto.</div>
     <label class="checkbox-row">
       <input type="checkbox" ${autoDeductOnlineOn()?'checked':''} onchange="state.settings.autoDeductOnlineStock=this.checked;if(this.checked&&!state.settings.autoDeductOnlineSince)state.settings.autoDeductOnlineSince=new Date().toISOString();saveSettings();render()">
       <span>Descontar inventario automáticamente</span>
