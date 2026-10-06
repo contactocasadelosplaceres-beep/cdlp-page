@@ -201,8 +201,8 @@
   /* ADAPTABLE: ESCRITORIO */
   @media(min-width:900px){
     :root{--cart-w:400px;}
-    .app:has(.sale-panel){max-width:none;margin:0;padding-right:var(--cart-w);}
-    .app:has(.sale-panel) .prod-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));}
+    .app.dk{max-width:none;margin:0;padding-right:var(--cart-w);}
+    .app.dk .prod-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));}
     .sale-panel{left:auto;width:var(--cart-w);top:0;max-height:none;border-radius:0;border-top:0;border-left:1px solid var(--border);box-shadow:-16px 0 40px -22px rgba(43,22,32,0.28);}
     .sale-panel .sale-arrow{display:none;}
     .sale-head{cursor:default!important;}
@@ -211,7 +211,7 @@
 
   /* REDISEÑO PANTALLA DE VENTA (escritorio/tablet): buscar primero, catálogo en ventana, carrito plegable */
   @media(min-width:900px){
-    .app.dk-closed{padding-right:0;}
+    .app.dk.dk-closed{padding-right:0;}
     .dk-main{flex:1;min-height:0;overflow-y:auto;padding:22px 26px 40px;display:flex;flex-direction:column;gap:18px;max-width:980px;width:100%;margin:0 auto;}
     .dk-search{display:flex;gap:10px;align-items:stretch;}
     .dk-search .search-row{flex:1;min-width:0;}
@@ -235,12 +235,16 @@
     .dk-hint{margin:auto;text-align:center;max-width:420px;padding:30px 10px;color:var(--ink-soft);}
     .dk-hint-ic{width:74px;height:74px;border-radius:50%;background:var(--surface-soft);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
     .dk-hint h3{font-size:20px;color:var(--ink);margin-bottom:6px;}
-    .dk-hint p{font-size:13.5px;line-height:1.5;margin-bottom:18px;}
+    .dk-hint p{font-size:13.5px;line-height:1.5;margin-bottom:0;}
     .dk-hint-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
     .dk-results-head{font-size:13.5px;color:var(--ink-soft);display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
     .dk-link{background:none;border:0;color:var(--primary-deep);font-weight:700;cursor:pointer;margin-left:auto;font-size:13px;}
     .dk-results,.catalog-grid{padding:0;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));}
-    .dk-cart .sale-head{display:flex;align-items:center;justify-content:space-between;}
+    .dk-cart .sale-head{display:flex;align-items:center;justify-content:space-between;padding-top:2px;}
+    .dk-grip{display:block;width:100%;height:26px;border:0;background:none;cursor:pointer;position:relative;flex:0 0 auto;padding:0;}
+    .dk-grip::after{content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);width:44px;height:5px;border-radius:3px;background:var(--border);transition:background .15s;}
+    .dk-grip:hover::after{background:var(--primary);}
+    .dk-cart::before{display:none;}
     .dk-hide{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;color:var(--ink-soft);background:var(--surface-soft);border:0;border-radius:var(--radius-sm);padding:8px 12px;cursor:pointer;}
     .dk-hide:hover{color:var(--primary-deep);}
     .dk-meta{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 10px;}
@@ -1968,9 +1972,6 @@ function renderDeskMain(){
       ${tile('user','Cliente',state.activeCustomer?state.activeCustomer.name:'Agregar o buscar',0,'openCustomerPicker()',!!state.activeCustomer)}
       ${tile('percent','Descuento',disc,0,'openDiscountModal()',!!state.manualDiscount)}
       ${tile('file-text','Notas',state.saleNotes?'Nota agregada':'Agregar nota',0,'openNotesModal()',!!state.saleNotes)}
-      ${tile('star','Frecuentes','Los más vendidos',0,`openCatalog('${FREQUENT_CAT}')`,false)}
-      ${tile('refresh-cw','Cambio','Cambio de producto',0,'openExchangeModal()',false)}
-      ${tile('map-pin','Almacén','Ver existencias',0,'openWarehouseView()',false)}
     </div>
     ${q ? `
       <div class="dk-results-head"><b>${res.length} resultado${res.length===1?'':'s'}</b> para “${q.replace(/</g,'&lt;')}” <button class="dk-link" onclick="state.search='';render()">Limpiar</button></div>
@@ -1979,11 +1980,7 @@ function renderDeskMain(){
       <div class="dk-hint">
         <div class="dk-hint-ic">${icon('search',34)}</div>
         <h3>Empieza una venta</h3>
-        <p>Escribe el nombre, escanea el código de barras o abre el catálogo para agregar productos al carrito.</p>
-        <div class="dk-hint-btns">
-          <button class="btn-primary" style="width:auto;margin:0;padding:12px 22px;" onclick="openCatalog()">${icon('layers',16)} Abrir catálogo</button>
-          <button class="dk-ghost" onclick="openBarcodeScanner()">${icon('camera',16)} Escanear</button>
-        </div>
+        <p>Busca por nombre, escanea el código de barras o abre el catálogo.</p>
       </div>`}
   </div>`;
 }
@@ -1992,21 +1989,14 @@ function renderDeskCart(entries){
   const n = cartCount();
   const fab = `<button class="cart-fab" onclick="setCartPanel(true)" aria-label="Abrir venta actual">${icon('receipt',18)}<span>Venta actual</span>${n?`<span class="cart-fab-n">${n}</span><b>${money(saleTotal())}</b>`:''}</button>`;
   if(!open) return fab;
-  const empty = `<div class="dk-empty">${icon('receipt',40)}<h4>Carrito vacío</h4><p>Agrega productos para empezar la venta.</p>
-    <button class="btn-primary" style="margin:0 0 8px;" onclick="openCatalog()">${icon('layers',16)} Agregar productos</button>
-    <button class="dk-ghost" style="width:100%;justify-content:center;" onclick="openBarcodeScanner()">${icon('camera',16)} Escanear productos</button></div>`;
-  const meta = [
-    state.activeCustomer ? `<button class="cat-chip active" onclick="openCustomerPicker()">${icon('user')} ${state.activeCustomer.name}</button>`:'',
-    state.manualDiscount ? `<button class="cat-chip active" onclick="openDiscountModal()">${icon('percent')} ${state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))}</button>`:'',
-    state.saleNotes ? `<button class="cat-chip active" onclick="openNotesModal()">${icon('file-text')} Notas ${icon('check',12)}</button>`:''
-  ].join('');
+  const empty = `<div class="dk-empty">${icon('receipt',40)}<h4>Carrito vacío</h4><p>Agrega productos para empezar la venta.</p></div>`;
+
   return `
     <div class="sale-panel dk-cart">
-      <div class="sale-head">
+      <button class="dk-grip" onclick="setCartPanel(false)" aria-label="Ocultar venta actual" title="Toca la rayita para ocultar"></button>
+      <div class="sale-head" style="cursor:pointer;" onclick="setCartPanel(false)">
         <h3>Venta actual (${n})</h3>
-        <button class="dk-hide" onclick="setCartPanel(false)" aria-label="Ocultar venta actual" title="Ocultar">Ocultar ${icon('chevron-right',15)}</button>
       </div>
-      ${meta ? `<div class="dk-meta">${meta}</div>` : ''}
       <div class="sale-items">${renderSaleItems(entries, empty)}</div>
       ${renderSaleFoot(entries)}
     </div>`;
