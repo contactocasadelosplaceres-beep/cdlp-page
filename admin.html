@@ -919,7 +919,7 @@ let state = {
   heatMetric:'count', heatDays:90,
   loadWarnings:[],
   expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
-  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, receiveGoodsVariants:{},
+  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, receiveGoodsVariants:{},
   restockRequests:[], notifyModalProductId:null,
   searchMisses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
@@ -2129,6 +2129,10 @@ function renderOrderDetailModal(){
         ` : `<button class="btn-outline" style="width:100%;" onclick="startEditOrderDiscount('${o.id}')">+ Agregar descuento</button>`)}
       </div>
 
+      ${(o.returns||[]).length ? `<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+        <div class="row-title" style="margin-bottom:6px;">Devoluciones</div>
+        ${o.returns.map(r=>`<div class="row-sub" style="margin-bottom:6px;">${new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${(r.items||[]).map(i=>`${i.qty}× ${escDescHtml(i.name)}`).join(', ')} · ${r.condition==='merma'?'a merma':'regresó al inventario'}${r.refund?` · reembolso ${money(r.refund)} (${escDescHtml(r.method||'')})`:''}${r.reason?` · ${escDescHtml(r.reason)}`:''}</div>`).join('')}
+      </div>` : ''}
       ${!isPos ? renderOrderPaymentBox(o) : ''}
       ${!isPos ? failureTagHtml(o,true) : ''}
       ${isPos ? `
@@ -2173,6 +2177,7 @@ function renderOrderDetailModal(){
           Enviar al repartidor
         </button>
         ${!isPos && o.status!=='Cancelado' && o.status!=='Entregado' ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;color:#8e1f3b;border-color:#e3a3b2;" onclick="openFailModal('${o.id}')">${icon('alert-triangle',16)} No se pudo entregar (rechazó / no estaba)</button>` : ''}
+        ${orderCanReturn(o) ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openReturnModal('${o.id}')">${icon('refresh-cw',16)} Registrar devolución</button>` : ''}
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printPackingSlip('${o.id}')">${icon('printer',16)} Imprimir hoja de preparación</button>
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printOrderReceipt('${o.id}')">${icon('receipt',16)} Recibo en PDF / Imprimir</button>
         ${o.status==='Entregado' && orderContactPhone(o) ? `
@@ -3166,6 +3171,12 @@ async function updateOrderStatus(id,status,fromUndo){
 // sign=1 restaura stock (venta cancelada); sign=-1 lo vuelve a descontar (venta reactivada
 // desde "Cancelado" a cualquier otro estado). Refleja exactamente el descuento que hace
 // chargeSale() en pos.html: por variante (v.stock + p.stock) o por centro (stockByCenter + p.stock).
+// Lo ya devuelto por el cliente (sale.returns) ya movió su propio inventario: al cancelar o reactivar
+// el pedido solo se ajusta lo que NO se devolvió, para no restaurar dos veces la misma pieza.
+function saleItemsNetOfReturns(sale){
+  const ret = {}; (sale.returns||[]).forEach(r=>(r.items||[]).forEach(i=>{ ret[i.idx] = (ret[i.idx]||0) + (i.qty||0); }));
+  return (sale.items||[]).map((it,idx)=>({...it, qty: Math.max(0,(it.qty||0)-(ret[idx]||0))})).filter(it=>it.qty>0);
+}
 async function adjustStockForSale(sale, sign, opts){
   opts = opts || {};
   const isOnline = opts.kind==='tienda';
@@ -3173,11 +3184,11 @@ async function adjustStockForSale(sale, sign, opts){
   const centerId = sale.centerId;
   const updates = [];
   const touchedComponentIds = [];
-  (sale.items||[]).forEach(it=>{
+  (opts.itemsOverride || saleItemsNetOfReturns(sale)).forEach(it=>{
     if(!it.id || it.id==='promo_buyxpayy') return;
     const p = state.products.find(x=>x.id===it.id);
     if(!p) return;
-    logStockMovement(p.id, isOnline ? (sign>0?'cancelacion_tienda':'pedido_tienda') : (sign>0?'cancelacion_pos':'reactivacion_pos'), sign*it.qty, `${isOnline?'Pedido':'Venta'} ${formatFolio(sale.orderNumber)}`, centerId||null);
+    logStockMovement(p.id, opts.logType || (isOnline ? (sign>0?'cancelacion_tienda':'pedido_tienda') : (sign>0?'cancelacion_pos':'reactivacion_pos')), sign*it.qty, opts.logNote || `${isOnline?'Pedido':'Venta'} ${formatFolio(sale.orderNumber)}`, centerId||null);
     if(p.isKit){
       // Un kit no tiene stock propio por centro: cancelar/reactivar su venta ajusta a cada uno
       // de sus productos componentes, igual que se descontaron al venderse (ver chargeSale).
@@ -3681,6 +3692,7 @@ const STOCK_MOVEMENT_LABELS = {
   transferencia_entrada: 'Entró por transferencia',
   auditoria: 'Ajuste por auditoría de inventario',
   merma: 'Merma (baja de inventario)',
+  devolucion_cliente: 'Devolución de cliente',
   recepcion_mercancia: 'Mercancía recibida de proveedor',
   cambio_producto: 'Cambio de producto',
 };
@@ -4303,6 +4315,7 @@ function renderAdmin(){
   ${state.cashierModal!==null ? renderCashierModal() : ''}
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
+  ${state.returnModal ? renderReturnModal() : ''}
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.catManageOpen ? renderOrganizeModal('cat') : ''}
   ${state.bulkTagModal ? renderBulkTagModal() : ''}
@@ -8088,6 +8101,97 @@ function renderStatsCarritoAbandonado(){
     `}
   `;
 }
+
+/* ============== DEVOLUCIÓN DE UN PEDIDO / VENTA ==============
+   El cliente regresa piezas de un pedido ya entregado (o de una venta del POS). Cada pieza vuelve al
+   inventario del centro del que salió (buen estado) o se da de baja como merma (dañada). Queda anotado
+   en el pedido y en "Cambios de producto"; si luego se cancela el pedido, no se restaura dos veces. */
+function orderReturnedQty(o, idx){ let n=0; (o.returns||[]).forEach(r=>(r.items||[]).forEach(i=>{ if(i.idx===idx) n+=(i.qty||0); })); return n; }
+function orderCanReturn(o){
+  if(!o || o.status==='Cancelado') return false;
+  if(o.source==='pos') return true;
+  return o.status==='Entregado' && !!o.stockDeducted;
+}
+function openReturnModal(orderId){
+  const o = state.orders.find(x=>x.id===orderId); if(!o) return;
+  state.returnModal = {orderId, qty:{}, condition:'bueno', reason:'', method:'Efectivo', refund:'', busy:false};
+  render();
+}
+function closeReturnModal(){ state.returnModal = null; render(); }
+function returnRefundAuto(){
+  const m = state.returnModal; const o = state.orders.find(x=>x.id===m.orderId); if(!o) return 0;
+  return (o.items||[]).reduce((s,it,idx)=>s + (Number(m.qty[idx])||0)*(Number(it.price)||0), 0);
+}
+function setReturnQty(idx, v){
+  const m = state.returnModal; const o = state.orders.find(x=>x.id===m.orderId); if(!o) return;
+  const it = (o.items||[])[idx]; const max = Math.max(0,(it.qty||0) - orderReturnedQty(o, idx));
+  m.qty[idx] = Math.max(0, Math.min(max, Math.floor(Number(v)||0)));
+  render();
+}
+async function confirmOrderReturn(){
+  const m = state.returnModal; if(!m || m.busy) return;
+  const o = state.orders.find(x=>x.id===m.orderId); if(!o) return;
+  const items = (o.items||[]).map((it,idx)=>({it,idx,qty:Number(m.qty[idx])||0})).filter(x=>x.qty>0 && x.it.id && x.it.id!=='promo_buyxpayy');
+  if(!items.length){ showToast('Elige cuántas piezas regresan'); return; }
+  const refund = m.refund!=='' ? Math.max(0, Number(m.refund)||0) : returnRefundAuto();
+  const toStock = m.condition!=='merma';
+  const centerId = o.source==='pos' ? o.centerId : (o.stockCenterId || defaultCenterId());
+  const center = state.centers.find(c=>c.id===centerId);
+  const retItems = items.map(x=>({idx:x.idx, id:x.it.id, variantId:x.it.variantId||null, name:x.it.name, qty:x.qty, price:x.it.price}));
+  m.busy = true; render();
+  try{
+    if(toStock){
+      await adjustStockForSale({centerId, orderNumber:o.orderNumber}, 1, {kind:o.source==='pos'?'pos':'tienda', itemsOverride: items.map(x=>({...x.it, qty:x.qty})), logType:'devolucion_cliente', logNote:`Devolución ${formatFolio(o.orderNumber)}${m.reason?' — '+m.reason:''}`});
+    }else{
+      for(const x of items){
+        const p = state.products.find(q=>q.id===x.it.id);
+        const v = p && x.it.variantId ? (p.variants||[]).find(q=>q.id===x.it.variantId) : null;
+        const unitCost = (v && Number(v.cost)>0) ? Number(v.cost) : ((p&&p.cost)||0);
+        const rec = {date:new Date().toISOString(), productId:x.it.id, productName:x.it.name, variantId:x.it.variantId||null, qty:x.qty, reason:'Devuelto dañado', note:m.reason||`Devolución ${formatFolio(o.orderNumber)}`, centerId:centerId||null, centerName:center?center.name:'', unitCost, totalCost:unitCost*x.qty, user:state.user?state.user.email:'', source:'admin_devolucion'};
+        const ref = await db.collection('shrinkage').add(rec); state.shrinkage.unshift({id:ref.id, ...rec});
+      }
+    }
+    const ret = {date:new Date().toISOString(), items:retItems, condition:toStock?'bueno':'merma', reason:m.reason||'', refund, method:refund?m.method:'', by:state.user?state.user.email:''};
+    await db.collection('orders').doc(o.id).update({returns: firebase.firestore.FieldValue.arrayUnion(ret)});
+    if(!o.returns) o.returns = []; o.returns.push(ret);
+    const ex = {type:'devolucion', source:'admin', date:ret.date, centerId:centerId||null, centerName:center?center.name:'', cashierName:state.user?state.user.email:'', orderNumber:o.orderNumber,
+      outProduct:{name:retItems.map(i=>`${i.qty}× ${i.name}`).join(', '), qty:retItems.reduce((s,i)=>s+i.qty,0)}, inProduct:null, priceDifference:-refund, condition:ret.condition, reason:ret.reason, method:ret.method};
+    const er = await db.collection('productExchanges').add(ex); state.productExchanges.unshift({id:er.id, ...ex});
+    logAdminAction('devolucion','pedido',formatFolio(o.orderNumber),`${retItems.reduce((s,i)=>s+i.qty,0)} pza · ${toStock?'al inventario':'a merma'} · reembolso ${money(refund)}`, o.id);
+    state.returnModal = null;
+    showToast(toStock ? 'Devolución registrada y piezas regresadas al inventario' : 'Devolución registrada; las piezas se dieron de baja como merma');
+    render();
+  }catch(e){ console.error(e); if(state.returnModal) state.returnModal.busy=false; showToast('No se pudo registrar la devolución'); render(); }
+}
+function renderReturnModal(){
+  const m = state.returnModal; const o = state.orders.find(x=>x.id===m.orderId); if(!o) return '';
+  const auto = returnRefundAuto();
+  return `
+  <div class="modal-overlay" style="z-index:70;">
+    <div class="modal" style="max-width:520px;">
+      <h3>Devolución · ${formatFolio(o.orderNumber)}</h3>
+      <div class="panel-sub" style="margin:-8px 0 12px;">Elige qué piezas regresan. Vuelven al inventario${o.source==='pos'?` de ${escDescHtml(o.centerName||'su centro')}`:' del centro de donde salieron'} o se dan de baja si vienen dañadas.</div>
+      ${(o.items||[]).map((it,idx)=>{ if(!it.id || it.id==='promo_buyxpayy') return ''; const max = Math.max(0,(it.qty||0)-orderReturnedQty(o,idx)); return `
+        <div class="list-row" style="align-items:center;">
+          <div class="row-main"><div class="row-title">${escDescHtml(it.name)}</div><div class="row-sub">${money(it.price)} c/u · ${max} por devolver${orderReturnedQty(o,idx)?` (ya regresaron ${orderReturnedQty(o,idx)})`:''}</div></div>
+          ${max>0 ? `<div style="display:flex;align-items:center;gap:6px;"><button class="icon-btn" onclick="setReturnQty(${idx},${(Number(m.qty[idx])||0)-1})">−</button><strong style="min-width:18px;text-align:center;">${Number(m.qty[idx])||0}</strong><button class="icon-btn" onclick="setReturnQty(${idx},${(Number(m.qty[idx])||0)+1})">+</button></div>` : '<span class="row-sub">—</span>'}
+        </div>`; }).join('')}
+      <div class="form-field" style="margin-top:12px;"><label>¿En qué estado regresan?</label>
+        <label class="checkbox-row" style="margin-bottom:6px;"><input type="radio" name="retcond" ${m.condition!=='merma'?'checked':''} onchange="state.returnModal.condition='bueno';render()"><span>Buen estado — regresan al inventario</span></label>
+        <label class="checkbox-row"><input type="radio" name="retcond" ${m.condition==='merma'?'checked':''} onchange="state.returnModal.condition='merma';render()"><span>Dañado o sin reventa — se da de baja (merma)</span></label></div>
+      <div class="two-col">
+        <div class="form-field"><label>Reembolso</label><input type="number" min="0" inputmode="decimal" placeholder="${auto}" value="${m.refund}" oninput="state.returnModal.refund=this.value"></div>
+        <div class="form-field"><label>Cómo se devuelve</label><select onchange="state.returnModal.method=this.value">${['Efectivo','Transferencia','Tarjeta','Otro'].map(x=>`<option ${m.method===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-field"><label>Motivo (opcional)</label><input value="${escDescHtml(m.reason)}" oninput="state.returnModal.reason=this.value" placeholder="Ej. talla incorrecta, defecto…"></div>
+      ${o.source==='pos' ? '' : `<div class="panel-sub">El reembolso queda anotado aquí; el dinero lo devuelves tú (no pasa por la caja del POS).</div>`}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeReturnModal()">Cancelar</button>
+        <button class="btn-primary" ${m.busy?'disabled style="opacity:.5"':''} onclick="confirmOrderReturn()">${m.busy?'Guardando…':'Registrar devolución'}</button>
+      </div>
+    </div>
+  </div>`;
+}
 /* ============== CAMBIOS DE PRODUCTO (POS) ==============
    Cada vez que en el POS se usa "Cambio de producto" (el cliente regresa uno y se lleva otro),
    se guarda un registro completo del cambio -- esto ya pasaba desde hace tiempo, pero ningún
@@ -8099,21 +8203,22 @@ function computeProductExchangeStats(days){
   const since = days ? Date.now() - days*86400000 : 0;
   const rows = (state.productExchanges||[]).filter(r=> new Date(r.date).getTime() >= since);
   const total = rows.length;
-  let extraCharged = 0, refunded = 0;
-  rows.forEach(r=>{ const d = r.priceDifference||0; if(d>0) extraCharged += d; else refunded += -d; });
+  let extraCharged = 0, refunded = 0, returns = 0, toShrink = 0;
+  rows.forEach(r=>{ const d = r.priceDifference||0; if(d>0) extraCharged += d; else refunded += -d; if(r.type==='devolucion') returns++; if(r.condition==='merma') toShrink++; });
   const recent = [...rows].sort((a,b)=> new Date(b.date) - new Date(a.date)).slice(0,100);
-  return { total, extraCharged, refunded, recent };
+  return { total, extraCharged, refunded, recent, returns, toShrink };
 }
 function renderStatsCambiosProducto(){
   const days = state.productExchangeDays || 30;
-  const { total, extraCharged, refunded, recent } = computeProductExchangeStats(days);
+  const { total, extraCharged, refunded, recent, returns, toShrink } = computeProductExchangeStats(days);
   return `
-    <div class="panel-title" style="margin-bottom:4px;">Cambios de producto</div>
-    <div class="panel-sub" style="margin-bottom:12px;">Cuando en el POS se regresa un producto y se lleva otro distinto ("Cambio de producto"), el cambio queda registrado aquí con ambos productos, quién lo hizo y la diferencia de precio.</div>
+    <div class="panel-title" style="margin-bottom:4px;">Devoluciones y cambios</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Devoluciones de dinero y cambios de producto hechos en el POS o desde un pedido. Cuando en el POS se regresa un producto y se lleva otro distinto ("Devolución o cambio"), el cambio queda registrado aquí con ambos productos, quién lo hizo y la diferencia de precio.</div>
     <div class="form-field" style="max-width:240px;"><select onchange="state.productExchangeDays=Number(this.value);render()">${[7,30,90,3650].map(d=>`<option value="${d}" ${days===d?'selected':''}>${d===3650?'Todo':`Últimos ${d} días`}</option>`).join('')}</select></div>
     ${total===0 ? `<div class="empty-state">No hay cambios de producto registrados en este periodo.</div>` : `
       <div class="panel" style="margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
-        <div><div class="panel-sub">Cambios</div><div style="font-size:20px;font-weight:700;">${total}</div></div>
+        <div><div class="panel-sub">Movimientos</div><div style="font-size:20px;font-weight:700;">${total}</div><div class="row-sub">${returns} devolución${returns===1?'':'es'} · ${total-returns} cambio${total-returns===1?'':'s'}</div></div>
+        <div><div class="panel-sub">Piezas a merma</div><div style="font-size:20px;font-weight:700;">${toShrink}</div></div>
         <div><div class="panel-sub">Cobrado de más</div><div style="font-size:20px;font-weight:700;">${money(extraCharged)}</div></div>
         <div><div class="panel-sub">Regresado al cliente</div><div style="font-size:20px;font-weight:700;">${money(refunded)}</div></div>
       </div>
@@ -8121,11 +8226,11 @@ function renderStatsCambiosProducto(){
       ${recent.map(r=>{
         const center = state.centers.find(c=>c.id===r.centerId);
         const diff = r.priceDifference||0;
-        const diffLabel = diff>0 ? `Cliente pagó ${money(diff)} más` : diff<0 ? `Se le regresaron ${money(-diff)}` : 'Sin diferencia de precio';
+        const diffLabel = diff>0 ? `Cliente pagó ${money(diff)} más` : diff<0 ? `Se le regresaron ${money(-diff)}${r.method?' ('+r.method+')':''}` : 'Sin diferencia de precio';
         return `
         <div class="list-row">
           <div class="row-main">
-            <div class="row-title">${(r.outProduct&&r.outProduct.name)||'—'} → ${(r.inProduct&&r.inProduct.name)||'—'}</div>
+            <div class="row-title">${r.type==='devolucion' ? 'Devolución: '+((r.outProduct&&r.outProduct.name)||'—') : ((r.outProduct&&r.outProduct.name)||'—')+' → '+((r.inProduct&&r.inProduct.name)||'—')}${r.condition==='merma'?' <span class="status-badge" style="background:var(--rose);">a merma</span>':''}</div>
             <div class="row-sub">${diffLabel} · ${r.cashierName||'—'}${center?' · '+center.name:''} · ${r.date?new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>
           </div>
         </div>`;
@@ -13152,6 +13257,7 @@ window.addEventListener('popstate', (e)=>{
 });
 
 const NAV_ADMIN_MODALS = [
+  ['returnModal', ()=>closeReturnModal()],
   ['postModalProductId', ()=>closePostModal()], ['notifyModalProductId', null], ['massPriceModalOpen', ()=>closeMassPriceModal()],
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],

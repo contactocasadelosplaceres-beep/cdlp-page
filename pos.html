@@ -198,6 +198,9 @@
   .denom-step input{width:44px!important;min-width:0;height:36px;margin:0!important;padding:0 2px!important;text-align:center;font-size:16px;font-weight:700;border:1.5px solid var(--border);border-radius:10px;}
   .denom-sub{flex:1 1 0;min-width:0;text-align:right;white-space:nowrap;font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
   .denom-total{display:flex;justify-content:space-between;align-items:center;gap:8px;white-space:nowrap;padding:10px 0 4px;border-top:2px solid var(--border);margin-top:4px;font-weight:800;}
+  .checkbox-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.35;cursor:pointer;padding:9px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);}
+  .checkbox-row input{margin-top:1px;flex-shrink:0;width:18px;height:18px;}
+  .btn-tertiary{background:none;border:0;color:var(--primary-deep);font-weight:700;font-size:13px;padding:8px 4px;cursor:pointer;}
   /* ADAPTABLE: ESCRITORIO */
   @media(min-width:900px){
     :root{--cart-w:400px;}
@@ -355,7 +358,7 @@ let state = {
   saleNotes:"", notesModalOpen:false, notesDraft:"",
   barcodeScannerOpen:false, scannerLoading:false,
   salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
-  exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null,
+  exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null, exchangeMode:'cambio', exchangeVarPick:null, exchangeCondition:'bueno', exchangeReason:'', exchangeMethod:'Efectivo', exchangeBusy:false,
   checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
   warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
   scannerContext:'checkout',
@@ -511,18 +514,35 @@ function handlePosSearchKeydown(e){
   const i = document.getElementById('pos-search-input');
   if(i) i.focus();
 }
-/* ---- Cambio de producto/talla: "esto por aquello", sin cancelar y volver a cobrar ---- */
+/* ---- Devolución o cambio: el cliente regresa algo (y se lleva otra cosa, o se le devuelve el dinero).
+   La pieza que regresa vuelve al inventario del centro (buen estado) o se da de baja como merma (dañada).
+   Todo queda registrado, y el dinero en efectivo se anota como movimiento de caja. ---- */
+const EXCHANGE_METHODS = ['Efectivo','Transferencia','Tarjeta'];
+function exVariantsOf(p){ return (p && p.variants && p.variants.length) ? p.variants : []; }
 function openExchangeModal(){
-  state.exchangeModalOpen = true; state.exchangeSearchOut=''; state.exchangeSearchIn=''; state.exchangeOut=null; state.exchangeIn=null;
+  state.exchangeModalOpen = true; state.exchangeMode='cambio'; state.exchangeSearchOut=''; state.exchangeSearchIn='';
+  state.exchangeOut=null; state.exchangeIn=null; state.exchangeVarPick=null; state.exchangeCondition='bueno';
+  state.exchangeReason=''; state.exchangeMethod='Efectivo'; state.exchangeBusy=false;
   render();
 }
 function closeExchangeModal(){ state.exchangeModalOpen = false; render(); }
+function setExchangeMode(m){ state.exchangeMode = m; state.exchangeVarPick=null; if(m==='devolucion') state.exchangeIn=null; render(); }
 function pickExchangeProduct(side, id){
   const p = state.products.find(x=>x.id===id); if(!p) return;
-  const entry = {id:p.id, name:p.name, price: effectivePrice(p), qty:1};
+  if(exVariantsOf(p).length){ state.exchangeVarPick = {side, id}; render(); return; }
+  setExchangeEntry(side, p, null);
+}
+function pickExchangeVariant(variantId){
+  const vp = state.exchangeVarPick; if(!vp) return;
+  const p = state.products.find(x=>x.id===vp.id); if(!p) return;
+  const v = exVariantsOf(p).find(x=>x.id===variantId); if(!v) return;
+  setExchangeEntry(vp.side, p, v);
+}
+function setExchangeEntry(side, p, v){
+  const entry = {id:p.id, variantId: v?v.id:null, name: p.name+(v?` (${variantLabel(v)})`:''), price: itemPrice(p, v), qty:1};
   if(side==='out'){ state.exchangeOut = entry; state.exchangeSearchOut=''; }
   else{ state.exchangeIn = entry; state.exchangeSearchIn=''; }
-  render();
+  state.exchangeVarPick = null; render();
 }
 function setExchangeQty(side, qty){
   qty = Math.max(1, qty);
@@ -530,67 +550,134 @@ function setExchangeQty(side, qty){
   if(side==='in' && state.exchangeIn) state.exchangeIn.qty = qty;
   render();
 }
-async function confirmExchange(){
+function setExchangeOutPrice(v){ if(state.exchangeOut){ state.exchangeOut.price = Math.max(0, Number(v)||0); render(); } }
+function exchangeAmount(){
   const out = state.exchangeOut, inp = state.exchangeIn;
-  if(!out || !inp){ showToast('Elige el producto que regresa y el que se lleva'); return; }
-  const pIn = state.products.find(x=>x.id===inp.id);
-  const availableIn = centerStock(pIn, state.activeCenter.id);
-  if(availableIn < inp.qty){ showToast(`Solo hay ${availableIn} disponible(s) de "${inp.name}" en ${state.activeCenter.name}`); return; }
-  const diff = (inp.price*inp.qty) - (out.price*out.qty);
+  if(!out) return null;
+  if(state.exchangeMode==='devolucion') return -(out.price*out.qty);
+  if(!inp) return null;
+  return (inp.price*inp.qty) - (out.price*out.qty);
+}
+// Suma (delta>0) o resta (delta<0) piezas de un producto/variante en el centro activo y guarda.
+async function exchangeMoveStock(entry, delta){
+  const p = state.products.find(x=>x.id===entry.id); if(!p) return;
+  const cid = state.activeCenter.id;
+  if(entry.variantId){
+    const v = (p.variants||[]).find(x=>x.id===entry.variantId); if(!v) return;
+    vSetCenterStock(v, cid, vCenterStock(v, cid) + delta); vProductSync(p);
+    await db.collection('products').doc(p.id).update({variants:p.variants, stock:p.stock, stockByCenter:p.stockByCenter});
+  }else{
+    if(!p.stockByCenter) p.stockByCenter = {};
+    p.stockByCenter[cid] = Math.max(0, (p.stockByCenter[cid]||0) + delta);
+    p.stock = Object.values(p.stockByCenter).reduce((s,n)=>s+(n||0),0);
+    await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock});
+  }
+}
+async function confirmExchange(){
+  if(state.exchangeBusy) return;
+  const out = state.exchangeOut, inp = state.exchangeIn, mode = state.exchangeMode;
+  if(!out){ showToast('Elige el producto que regresa'); return; }
+  if(mode==='cambio' && !inp){ showToast('Elige el producto que se lleva'); return; }
+  const cid = state.activeCenter.id;
+  if(mode==='cambio'){
+    const pIn = state.products.find(x=>x.id===inp.id);
+    const vIn = inp.variantId ? exVariantsOf(pIn).find(x=>x.id===inp.variantId) : null;
+    const availableIn = vIn ? vCenterStock(vIn, cid) : centerStock(pIn, cid);
+    if(availableIn < inp.qty){ showToast(`Solo hay ${availableIn} disponible(s) de "${inp.name}" en ${state.activeCenter.name}`); return; }
+  }
+  const amount = exchangeAmount();           // >0 el cliente paga, <0 se le regresa
+  const method = state.exchangeMethod || 'Efectivo';
+  const toStock = state.exchangeCondition !== 'merma';
+  const reason = (state.exchangeReason||'').trim();
+  state.exchangeBusy = true;
   try{
     const pOut = state.products.find(x=>x.id===out.id);
-    if(pOut){
-      pOut.stockByCenter[state.activeCenter.id] = (pOut.stockByCenter[state.activeCenter.id]||0) + out.qty;
-      pOut.stock = Object.values(pOut.stockByCenter).reduce((s,n)=>s+(n||0),0);
-      await db.collection('products').doc(pOut.id).update({stockByCenter:pOut.stockByCenter, stock:pOut.stock});
-      logStockMovement(pOut.id, 'cambio_producto', out.qty, `Cambio: regresó por "${inp.name}"`, state.activeCenter.id);
+    if(toStock){
+      await exchangeMoveStock(out, out.qty);
+      logStockMovement(out.id, mode==='cambio'?'cambio_producto':'devolucion_cliente', out.qty, mode==='cambio'?`Cambio: regresó "${out.name}" por "${inp.name}"`:`Devolución de cliente: ${out.name}${reason?' — '+reason:''}`, cid);
+    }else{
+      const vOut = out.variantId ? exVariantsOf(pOut).find(x=>x.id===out.variantId) : null;
+      const unitCost = (vOut && Number(vOut.cost)>0) ? Number(vOut.cost) : (pOut&&pOut.cost)||0;
+      await db.collection('shrinkage').add({
+        date:new Date().toISOString(), productId:out.id, productName:out.name, variantId:out.variantId||null, qty:out.qty,
+        reason:'Devuelto dañado', note: reason || (mode==='cambio'?`Cambio por "${inp.name}"`:'Devolución de cliente'),
+        centerId:cid, centerName:state.activeCenter.name, unitCost, totalCost:unitCost*out.qty, user:state.activeCashier.name, source:'pos_devolucion',
+      });
     }
-    pIn.stockByCenter[state.activeCenter.id] = (pIn.stockByCenter[state.activeCenter.id]||0) - inp.qty;
-    pIn.stock = Object.values(pIn.stockByCenter).reduce((s,n)=>s+(n||0),0);
-    await db.collection('products').doc(pIn.id).update({stockByCenter:pIn.stockByCenter, stock:pIn.stock});
-    logStockMovement(pIn.id, 'cambio_producto', -inp.qty, `Cambio: se llevó en vez de "${out.name}"`, state.activeCenter.id);
+    if(mode==='cambio'){
+      await exchangeMoveStock(inp, -inp.qty);
+      logStockMovement(inp.id, 'cambio_producto', -inp.qty, `Cambio: se llevó "${inp.name}" en vez de "${out.name}"`, cid);
+    }
     await db.collection('productExchanges').add({
-      date: new Date().toISOString(), centerId: state.activeCenter.id, cashierName: state.activeCashier.name,
-      outProduct: out, inProduct: inp, priceDifference: diff,
+      type: mode, date: new Date().toISOString(), centerId: cid, centerName: state.activeCenter.name, cashierName: state.activeCashier.name,
+      outProduct: out, inProduct: mode==='cambio'?inp:null, priceDifference: amount,
+      condition: toStock?'bueno':'merma', reason, method: amount ? method : '',
     });
-    showToast(diff>0 ? `Cambio registrado — el cliente paga ${money(diff)} más` : diff<0 ? `Cambio registrado — se le regresan ${money(-diff)}` : 'Cambio registrado — sin diferencia de precio');
+    // El efectivo que entra o sale queda en la caja abierta (los demás métodos no tocan el efectivo).
+    if(amount && method==='Efectivo' && state.activeCashRegister){
+      const mov = {type: amount>0?'ingreso':'retiro', amount: Math.abs(amount), note: (mode==='cambio'?'Cambio de producto':'Devolución')+`: ${out.name}`, date:new Date().toISOString()};
+      try{
+        await db.collection('cashRegisters').doc(state.activeCashRegister.id).update({movements: firebase.firestore.FieldValue.arrayUnion(mov)});
+        if(!state.activeCashRegister.movements) state.activeCashRegister.movements=[];
+        state.activeCashRegister.movements.push(mov);
+      }catch(e){ console.error('No se pudo anotar el efectivo en la caja', e); showToast('Se registró, pero anota el efectivo en la caja a mano'); }
+    }
+    const tail = toStock ? 'regresó al inventario' : 'se dio de baja como merma';
+    showToast(mode==='devolucion' ? `Devolución registrada — se le regresan ${money(-amount)} (${tail})`
+      : amount>0 ? `Cambio registrado — el cliente paga ${money(amount)} más` : amount<0 ? `Cambio registrado — se le regresan ${money(-amount)}` : 'Cambio registrado — sin diferencia de precio');
+    state.exchangeBusy = false;
     closeExchangeModal();
-  }catch(e){ console.error('No se pudo registrar el cambio', e); showToast('No se pudo completar el cambio'); }
+  }catch(e){ state.exchangeBusy = false; console.error('No se pudo registrar', e); showToast('No se pudo completar el movimiento'); render(); }
 }
 function renderExchangeModal(){
-  const diff = (state.exchangeOut&&state.exchangeIn) ? (state.exchangeIn.price*state.exchangeIn.qty) - (state.exchangeOut.price*state.exchangeOut.qty) : null;
+  const mode = state.exchangeMode || 'cambio';
+  const amount = exchangeAmount();
   function pickerBlock(side, label, entry, searchVal){
-    const q = searchVal.trim().toLowerCase();
-    const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,8) : [];
+    const q = (searchVal||'').trim().toLowerCase();
+    const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || exVariantsOf(p).some(v=>(v.sku||'').toLowerCase().includes(q))).slice(0,8) : [];
+    const vp = state.exchangeVarPick && state.exchangeVarPick.side===side ? state.products.find(x=>x.id===state.exchangeVarPick.id) : null;
     return `
       <div class="form-field"><label>${label}</label>
         ${entry ? `
-          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;gap:8px;">
-            <span style="min-width:0;overflow-wrap:anywhere;word-break:break-word;flex:1;">${entry.name}</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;gap:8px;flex-wrap:wrap;">
+            <span style="min-width:0;overflow-wrap:anywhere;word-break:break-word;flex:1 1 140px;">${entry.name}</span>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
               <button class="icon-btn" onclick="setExchangeQty('${side}', ${entry.qty-1})">−</button>
               <span>${entry.qty}</span>
               <button class="icon-btn" onclick="setExchangeQty('${side}', ${entry.qty+1})">+</button>
               <button class="icon-btn danger" onclick="state.exchange${side==='out'?'Out':'In'}=null;render()">${icon('x',14)}</button>
             </div>
+            ${side==='out' ? `<label style="flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-soft);">Precio al que se lo llevó (c/u)<input class="field-input" style="width:100px;margin:0;text-align:right;" type="number" inputmode="decimal" min="0" value="${entry.price}" onchange="setExchangeOutPrice(this.value)"></label>` : ''}
           </div>
+        ` : vp ? `
+          <div class="panel-sub" style="margin:0 0 6px;">${vp.name} — elige la variante</div>
+          ${exVariantsOf(vp).map(v=>{ const st = vCenterStock(v, state.activeCenter.id); const dis = side==='in' && st<=0; return `<button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;" ${dis?'disabled':''} onclick="pickExchangeVariant('${v.id}')"><span style="display:flex;align-items:center;gap:8px;min-width:0;">${vImage(vp,v)?`<img src="${vImage(vp,v)}" alt="" style="width:34px;height:34px;border-radius:7px;object-fit:cover;flex-shrink:0;">`:''}<span style="overflow-wrap:anywhere;text-align:left;">${variantLabel(v)}</span></span><span style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">${side==='in'?(st<=0?'Agotado':'Stock: '+st):money(itemPrice(vp,v))}</span></button>`; }).join('')}
+          <button class="btn-tertiary" onclick="state.exchangeVarPick=null;render()">Elegir otro producto</button>
         ` : `
-          <input id="exchange-search-${side}" class="field-input" placeholder="Nombre o SKU..." value="${searchVal}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render()">
+          <input id="exchange-search-${side}" class="field-input" placeholder="Nombre o SKU..." value="${searchVal||''}" oninput="state.exchangeSearch${side==='out'?'Out':'In'}=this.value;render();var i=document.getElementById('exchange-search-${side}');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}">
           ${results.length>0 ? `<div style="max-height:160px;overflow-y:auto;margin-top:6px;">${results.map(p=>`
-            <button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="pickExchangeProduct('${side}','${p.id}')">${p.name} — ${money(effectivePrice(p))}</button>
+            <button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="pickExchangeProduct('${side}','${p.id}')">${p.name}${exVariantsOf(p).length?` ${icon('layers',13)}`:` — ${money(effectivePrice(p))}`}</button>
           `).join('')}</div>` : ''}
         `}
       </div>`;
   }
+  const seg = (m,l)=>`<button class="pay-btn ${mode===m?'active':''}" onclick="setExchangeMode('${m}')">${l}</button>`;
   return `
   <div class="modal-overlay">
-    <div class="modal" style="max-width:420px;">
-      <h3>Cambio de producto</h3>
-      <div class="panel-sub">Para cuando alguien se lleva otra cosa (u otra talla) en vez de lo que compró — sin cancelar la venta original.</div>
+    <div class="modal" style="max-width:440px;max-height:90vh;overflow-y:auto;">
+      <h3>Devolución o cambio</h3>
+      <div class="pay-row" style="margin:6px 0 12px;">${seg('cambio','Cambio')}${seg('devolucion','Devolución')}</div>
+      <div class="panel-sub">${mode==='cambio' ? 'El cliente regresa algo y se lleva otra cosa (u otra talla), sin cancelar la venta original.' : 'El cliente regresa algo y se le devuelve su dinero.'}</div>
       ${pickerBlock('out', 'Producto que regresa', state.exchangeOut, state.exchangeSearchOut)}
-      ${pickerBlock('in', 'Producto que se lleva', state.exchangeIn, state.exchangeSearchIn)}
-      ${diff!==null ? `<div class="panel-sub" style="font-weight:700;margin:10px 0;">${diff>0?`El cliente paga ${money(diff)} más`:diff<0?`Se le regresan ${money(-diff)}`:'Sin diferencia de precio'}</div>` : ''}
-      <button class="btn-primary" style="width:100%;margin-top:6px;" onclick="confirmExchange()">Confirmar cambio</button>
+      <div class="form-field"><label>¿En qué estado regresa?</label>
+        <label class="checkbox-row" style="margin-bottom:6px;"><input type="radio" name="excond" ${state.exchangeCondition!=='merma'?'checked':''} onchange="state.exchangeCondition='bueno';render()"><span>Buen estado — vuelve al inventario de ${state.activeCenter.name}</span></label>
+        <label class="checkbox-row"><input type="radio" name="excond" ${state.exchangeCondition==='merma'?'checked':''} onchange="state.exchangeCondition='merma';render()"><span>Dañado o sin reventa — se da de baja (merma)</span></label>
+      </div>
+      <div class="form-field"><label>Motivo (opcional)</label><input class="field-input" placeholder="Ej. talla incorrecta, defecto…" value="${(state.exchangeReason||'').replace(/"/g,'&quot;')}" oninput="state.exchangeReason=this.value"></div>
+      ${mode==='cambio' ? pickerBlock('in', 'Producto que se lleva', state.exchangeIn, state.exchangeSearchIn) : ''}
+      ${amount!==null ? `<div class="panel-sub" style="font-weight:700;margin:10px 0 6px;">${mode==='devolucion'?`Se le regresan ${money(-amount)}`:amount>0?`El cliente paga ${money(amount)} más`:amount<0?`Se le regresan ${money(-amount)}`:'Sin diferencia de precio'}</div>
+        ${amount!==0 ? `<div class="form-field"><label>${amount>0?'Cómo paga la diferencia':'Cómo se le regresa'}</label><div class="pay-row">${EXCHANGE_METHODS.map(m=>`<button class="pay-btn ${state.exchangeMethod===m?'active':''}" onclick="state.exchangeMethod='${m}';render()">${m}</button>`).join('')}</div>${state.exchangeMethod==='Efectivo'?`<div class="panel-sub" style="margin-top:6px;">Se anota como ${amount>0?'ingreso':'retiro'} en la caja abierta.</div>`:''}</div>` : ''}` : ''}
+      <button class="btn-primary" style="width:100%;margin-top:6px;" ${state.exchangeBusy?'disabled style="opacity:.5;width:100%;margin-top:6px;"':''} onclick="confirmExchange()">${state.exchangeBusy?'Guardando…':(mode==='cambio'?'Confirmar cambio':'Confirmar devolución')}</button>
       <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="closeExchangeModal()">Cancelar</button>
     </div>
   </div>`;
@@ -2055,7 +2142,7 @@ function renderPOS(){
           ${state.posMoreMenuOpen ? `
           <div class="top-more-overlay" onclick="state.posMoreMenuOpen=false;render()"></div>
           <div class="top-more-menu" onclick="event.stopPropagation()">
-            <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Cambio de producto</button>
+            <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Devolución o cambio</button>
             <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén</button>
             <hr>
             <button onclick="state.posMoreMenuOpen=false;changeCenter()">Cambiar centro</button>
