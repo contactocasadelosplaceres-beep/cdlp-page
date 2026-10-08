@@ -2782,6 +2782,78 @@ async function removePromos(ids){
     render();
   }catch(e){ console.error(e); showToast('No se pudo quitar: '+(e.message||'error')); }
 }
+
+/* ============== LISTA DE PRODUCTOS PARA PROMOCIONAR ==============
+   Selección propia de la dueña: productos que considera aptos para promocionar (redes, anuncios,
+   difusión). Se guarda como product.promoCandidate en cada producto; no cambia precios ni la tienda. */
+function openPromoPick(){ state.promoPickOpen = true; state.promoPickSearch = ''; render(); }
+function closePromoPick(){ state.promoPickOpen = false; render(); }
+async function setPromoCandidate(ids, val){
+  ids = ids.filter(id=>state.products.some(p=>p.id===id)); if(!ids.length) return;
+  try{
+    for(let i=0;i<ids.length;i+=400){
+      const batch = db.batch();
+      ids.slice(i,i+400).forEach(id=>{ const p = state.products.find(x=>x.id===id); p.promoCandidate = val; batch.update(db.collection('products').doc(id), {promoCandidate: val}); });
+      await batch.commit();
+    }
+    showToast(val ? `${ids.length} producto(s) agregado(s) a tu lista para promocionar` : `${ids.length} producto(s) quitado(s) de tu lista`);
+    render();
+  }catch(e){ console.error(e); showToast('No se pudo actualizar la lista'); }
+}
+async function bulkSetPromoCandidate(val){
+  const ids = [...(state.selectedProducts||[])];
+  await setPromoCandidate(ids, val);
+  state.selectedProducts = []; render();
+}
+function onPromoPickSearch(v){
+  state.promoPickSearch = v; render();
+  const i = document.getElementById('promo-pick-search'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
+}
+function promoPickText(){
+  const base = location.href.replace(/admin\.html.*$/, 'index.html');
+  return state.products.filter(p=>p.promoCandidate).map(p=>{
+    const price = p.promoPrice>0 && p.promoPrice<(p.price||0) ? `${money(p.promoPrice)} (antes ${money(p.price)})` : money(p.price);
+    return `• ${p.name} — ${price}\n  ${base}?producto=${encodeURIComponent(p.id)}`;
+  }).join('\n');
+}
+function copyPromoPickList(){
+  const t = promoPickText(); if(!t){ showToast('Tu lista está vacía'); return; }
+  try{ navigator.clipboard.writeText(t); showToast('Lista copiada — pégala en WhatsApp, Notas o donde quieras'); }catch(e){ showToast('No se pudo copiar la lista'); }
+}
+function renderPromoPickModal(){
+  const list = state.products.filter(p=>p.promoCandidate);
+  const q = (state.promoPickSearch||'').trim().toLowerCase();
+  const cands = q ? state.products.filter(p=>!p.promoCandidate && ((p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q)||(p.cat||'').toLowerCase().includes(q))).slice(0,30) : [];
+  const row = (p, inList)=>`
+    <div class="list-row">
+      ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+      <div class="row-main">
+        <div class="row-title">${escDescHtml(p.name)}</div>
+        <div class="row-sub">${p.promoPrice>0&&p.promoPrice<(p.price||0)?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.stock||0)<=0?'agotado':`${p.stock} en stock`}${p.hidden?' · oculto en tienda':''}</div>
+      </div>
+      <div class="row-actions">
+        ${inList ? `<button class="icon-btn" title="Crear publicación" onclick="state.promoPickOpen=false;openPostModal('${p.id}')">${icon('share',15)}</button>
+        <button class="btn-outline" style="padding:7px 12px;font-size:12.5px;white-space:nowrap;" onclick="setPromoCandidate(['${p.id}'],false)">Quitar</button>`
+        : `<button class="btn-primary" style="padding:7px 12px;font-size:12.5px;white-space:nowrap;" onclick="setPromoCandidate(['${p.id}'],true)">Agregar</button>`}
+      </div>
+    </div>`;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this){closePromoPick()}">
+    <div class="modal" style="max-width:640px;">
+      <h3>Lista para promocionar</h3>
+      <div class="panel-sub" style="margin-top:0;">Elige los productos que consideras aptos para promocionar. También puedes marcarlos desde Productos (menú ⋯ de cada uno o seleccionando varios).</div>
+      <div class="form-field"><label>Buscar un producto para agregar</label>
+        <input id="promo-pick-search" type="search" placeholder="Nombre, SKU o categoría…" value="${escDescHtml(state.promoPickSearch||'')}" oninput="onPromoPickSearch(this.value)"></div>
+      ${q ? (cands.length ? cands.map(p=>row(p,false)).join('') : `<div class="empty-state">Sin resultados para "${escDescHtml(state.promoPickSearch)}" (o ya están en tu lista).</div>`) : ''}
+      <div class="panel-title" style="margin:14px 0 6px;">En tu lista (${list.length})</div>
+      ${list.length ? list.map(p=>row(p,true)).join('') : `<div class="empty-state">Aún no hay productos. Busca arriba para agregar.</div>`}
+      <div class="modal-actions">
+        ${list.length ? `<button class="btn-cancel" onclick="copyPromoPickList()">${icon('copy',14)} Copiar lista</button>` : ''}
+        <button class="btn-primary" onclick="closePromoPick()">Listo</button>
+      </div>
+    </div>
+  </div>`;
+}
 function renderPromoListModal(){
   const items = state.products.filter(isPromoActive)
     .sort((a,b)=>(promoDays(b)??-1)-(promoDays(a)??-1));
@@ -4322,6 +4394,7 @@ function renderAdmin(){
   ${state.auditScannerOpen ? renderAuditScannerModal() : ''}
   ${state.trashOpen ? renderTrashModal() : ''}
   ${state.promoListOpen ? renderPromoListModal() : ''}
+  ${state.promoPickOpen ? renderPromoPickModal() : ''}
   ${state.duplicatesOpen ? renderDuplicatesModal() : ''}
   ${state.needsManageOpen ? renderOrganizeModal('need') : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
@@ -6484,6 +6557,7 @@ const PRODUCT_STATUS_FILTERS = [
   {key:'ocultos', label:'Ocultos'},
   {key:'sinfoto', label:'Sin foto'},
   {key:'promo', label:'En promoción'},
+  {key:'apto', label:'En mi lista para promocionar'},
 ];
 const PRODUCT_SORTS = [
   {key:'auto', label:'Orden: predeterminado'},
@@ -6503,6 +6577,7 @@ function productMatchesStatus(p, key){
   if(key==='ocultos') return !!p.hidden;
   if(key==='sinfoto') return !(p.images && p.images.length);
   if(key==='promo') return p.promoPrice>0 && p.promoPrice<(p.price||0);
+  if(key==='apto') return !!p.promoCandidate;
   return true;
 }
 // Unidades vendidas por producto en los últimos 90 días (pedidos y ventas no canceladas).
@@ -6598,6 +6673,7 @@ function renderProductos(){
             <button onclick="state.productToolsOpen=false;state.needsManageOpen=true;render()">${icon('tag',15)} Etiquetas "para quién"</button>
             <div class="tools-menu-label">Precios</div>
             <button onclick="state.productToolsOpen=false;openPromoList()">${icon('percent',15)} Productos en promoción (${state.products.filter(isPromoActive).length})</button>
+            <button onclick="state.productToolsOpen=false;openPromoPick()">${icon('star',15)} Lista para promocionar (${state.products.filter(p=>p.promoCandidate).length})</button>
             <div class="tools-menu-label">Mantenimiento</div>
             <button onclick="state.productToolsOpen=false;openDuplicatesTool()">${icon('copy',15)} Buscar productos duplicados</button>
             <button onclick="state.productToolsOpen=false;state.trashOpen=true;render()">${icon('trash',15)} Papelera${state.trashProducts.length?` (${state.trashProducts.length})`:''}</button>
@@ -6650,6 +6726,8 @@ function renderProductos(){
             <button class="btn-tertiary" onclick="openBulkTagModal()">${icon('tag',14)} Categoría / etiqueta</button>
             <button class="btn-tertiary" onclick="openMassPriceModal()">${icon('dollar-sign',14)} Cambiar precios</button>
             <button class="btn-tertiary" onclick='printProductLabelsBulk(${JSON.stringify(selected)})'>${icon('printer',14)} Imprimir etiquetas</button>
+            <button class="btn-tertiary" onclick="bulkSetPromoCandidate(true)">${icon('star',14)} A mi lista de promoción</button>
+            <button class="btn-tertiary" onclick="bulkSetPromoCandidate(false)">Quitar de la lista</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(true)">Ocultar</button>
             <button class="btn-tertiary" onclick="bulkSetProductsHidden(false)">Mostrar</button>
             <button class="btn-danger-text" onclick="bulkDeleteProducts()">${icon('trash',14)} Eliminar</button>
@@ -6673,7 +6751,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
         <input type="checkbox" ${isSelected?'checked':''} onchange="toggleProductSelection('${p.id}')">
         ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
         <div class="row-main">
-          <div class="row-title">${p.name} ${p.isKit?'<span class="status-badge" style="background:var(--teal);">Kit</span>':''} ${p.isMysteryBox?'<span class="status-badge" style="background:var(--navy);">Caja sorpresa</span>':''} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''}</div>
+          <div class="row-title">${p.name} ${p.isKit?'<span class="status-badge" style="background:var(--teal);">Kit</span>':''} ${p.isMysteryBox?'<span class="status-badge" style="background:var(--navy);">Caja sorpresa</span>':''} ${p.hidden?'<span class="status-badge" style="background:#8a6b78;">Oculto</span>':''} ${p.promoCandidate?'<span class="status-badge" style="background:var(--primary);">★ Para promocionar</span>':''}</div>
           <div class="row-sub">${(p.categories||[p.cat]).join(', ')} · ${p.promoPrice>0?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.images||[]).length} foto(s)${p.sku?` · SKU: ${p.sku}`:''}${p.location?` · ${icon('map-pin',12)} ${p.location}`:''}${p.variants&&p.variants.length?` · ${p.variants.length} variante(s)`:''}${p.isKit?` · ${(p.kitItems||[]).length} producto(s) en el kit`:''}${p.isMysteryBox?` · ${p.mysteryItemCount||3} producto(s) sorpresa de ${p.mysteryCategory||'Cualquiera'}`:''}</div>
           <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
             ${canQuickAdjustStock(p) ? `<span class="qstock" title="Ajuste rápido de stock">
@@ -6690,6 +6768,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
             <div class="row-more-menu" onclick="event.stopPropagation()">
               ${catFilter!=='Todas' ? `<button onclick="state.productRowMenuOpenId=null;removeProductTag('${p.id}','cat','${catFilter.replace(/'/g,"\\'")}')">${icon('x',15)} Quitar de "${catFilter}"</button>` : ''}
               ${needFilter!=='Todas' ? `<button onclick="state.productRowMenuOpenId=null;removeProductTag('${p.id}','need','${needFilter}')">${icon('x',15)} Quitar de esta etiqueta</button>` : ''}
+              <button onclick="state.productRowMenuOpenId=null;setPromoCandidate(['${p.id}'],${p.promoCandidate?'false':'true'})">${icon('star',15)} ${p.promoCandidate?'Quitar de mi lista de promoción':'Agregar a mi lista de promoción'}</button>
               <button onclick="state.productRowMenuOpenId=null;duplicateProduct('${p.id}')">${icon('copy',15)} Duplicar producto</button>
               <button onclick="state.productRowMenuOpenId=null;openPostModal('${p.id}')">${icon('share',15)} Crear publicación</button>
               <button onclick="state.productRowMenuOpenId=null;copyProductLink('${p.id}')">${icon('link',15)} Copiar enlace</button>
@@ -13262,7 +13341,7 @@ const NAV_ADMIN_MODALS = [
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],
   ['productHistoryOpen', ()=>closeProductHistory()], ['needsManageOpen', false], ['catManageOpen', false],
-  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['duplicatesOpen', false],
+  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['promoPickOpen', false], ['duplicatesOpen', false],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
   ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],
