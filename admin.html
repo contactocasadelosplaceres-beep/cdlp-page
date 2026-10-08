@@ -645,6 +645,26 @@
   .pm-batch-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .pm-batch-foot input{flex:1 1 120px;min-width:0;}
   .pm-batch-foot .status-badge{flex:0 0 auto;}
+  /* Editor de variantes en tabla */
+  .var-allbar{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:10px;}
+  .var-allbar label{display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;}
+  .var-wrap{container-type:inline-size;}
+  .var-table{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden;}
+  .var-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;border-top:1px solid var(--border);}
+  .var-row:first-child{border-top:0;}
+  .var-name{grid-column:1/-1;font-weight:700;color:var(--primary-deep);overflow-wrap:anywhere;}
+  .var-row>div{min-width:0;}
+  .var-lbl{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;}
+  .var-in{width:100%;min-width:0;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;background:var(--surface);}
+  .var-head{display:none;}
+  .var-total{background:var(--surface-soft);}
+  @container (min-width:520px){
+    .var-row{grid-template-columns:minmax(110px,1.5fr) 74px minmax(90px,1fr) 100px 100px;align-items:center;}
+    .var-name{grid-column:auto;}
+    .var-lbl{display:none;}
+    .var-head{display:grid;background:var(--surface-soft);font-weight:700;font-size:12.5px;border-top:0;}
+    .var-total{grid-template-columns:minmax(110px,1.5fr) 1fr;}
+  }
 </style>
 </head>
 <body>
@@ -10354,7 +10374,19 @@ function auditReasonLabel(k){ const r = AUDIT_REASONS.find(x=>x[0]===k); return 
 function auditRecountUnits(){ const n = Number(state.settings.auditRecountUnits); return n>0 ? n : 2; }
 function auditRecountMoney(){ const n = Number(state.settings.auditRecountMoney); return n>0 ? n : 300; }
 function auditDailyBatch(){ const n = Math.floor(Number(state.settings.auditDailyBatch)); return n>0 ? n : 25; }
-function auditProdCost(p){ return Number(p && p.cost) || 0; }
+function auditProdCost(p, v){ const vc = v ? Number(v.cost) : 0; return vc>0 ? vc : (Number(p && p.cost) || 0); }
+/* Productos con variantes: se cuenta cada variante (clave "idProducto::idVariante"); el resto, por producto. */
+function auditHasVars(p){ return !!(p && p.variants && p.variants.length); }
+function auditKey(p, v){ return v ? p.id+'::'+v.id : p.id; }
+function auditEntry(key){
+  const parts = String(key).split('::'); const p = state.products.find(x=>x.id===parts[0]); if(!p) return null;
+  if(!parts[1]) return {p, v:null};
+  const v = (p.variants||[]).find(x=>x.id===parts[1]); return v ? {p, v} : null;
+}
+function auditVarLabel(v){ return Object.values((v&&v.combo)||{}).join(' / ') || 'Variante'; }
+function auditSysQty(p, v, cid){ return v ? (v.stock||0) : centerStock(p, cid); }
+function auditProdStock(p, cid){ return auditHasVars(p) ? p.variants.reduce((s,v)=>s+(v.stock||0),0) : centerStock(p, cid); }
+function auditCountedProduct(p){ return !!p && (auditHasVars(p) ? p.variants.some(v=>state.auditCounts[auditKey(p,v)]!==undefined) : state.auditCounts[p.id]!==undefined); }
 
 /* ---- Borrador (se guarda en este navegador; se borra al finalizar o descartar) ---- */
 function auditSaveDraft(){
@@ -10394,40 +10426,47 @@ function auditChooseCenter(id){
   state.auditCenter = id; state.auditListLimit = 20; auditSaveDraft(); render();
 }
 function auditEnsureStart(){ if(!state.auditStartedAt) state.auditStartedAt = new Date().toISOString(); }
-function auditEnsureSnap(p){ if(state.auditSnap[p.id]===undefined) state.auditSnap[p.id] = centerStock(p, state.auditCenter); }
+function auditEnsureSnap(key){ if(state.auditSnap[key]===undefined){ const e = auditEntry(key); if(e) state.auditSnap[key] = auditSysQty(e.p, e.v, state.auditCenter); } }
 
 /* ---- Captura: escribir cantidad, +/- y escanear ---- */
-function setAuditCount(pid, value){
-  const p = state.products.find(x=>x.id===pid); if(!p) return;
+function setAuditCount(key, value){
+  if(!auditEntry(key)) return;
   const v = String(value==null?'':value).trim();
-  auditEnsureStart(); auditEnsureSnap(p);
-  if(v===''){ delete state.auditCounts[pid]; delete state.auditRecounts[pid]; }
-  else{ state.auditCounts[pid] = Math.max(0, Math.floor(Number(v)||0)); }
+  auditEnsureStart(); auditEnsureSnap(key);
+  if(v===''){ delete state.auditCounts[key]; delete state.auditRecounts[key]; }
+  else{ state.auditCounts[key] = Math.max(0, Math.floor(Number(v)||0)); }
   auditSaveDraft();
 }
-function auditStep(pid, delta){
-  const p = state.products.find(x=>x.id===pid); if(!p) return;
-  auditEnsureStart(); auditEnsureSnap(p);
-  state.auditCounts[pid] = Math.max(0, (state.auditCounts[pid]||0) + delta);
+function auditStep(key, delta){
+  if(!auditEntry(key)) return;
+  auditEnsureStart(); auditEnsureSnap(key);
+  state.auditCounts[key] = Math.max(0, (state.auditCounts[key]||0) + delta);
   auditSaveDraft(); render();
 }
 function auditFindByCode(code){
   const c = String(code||'').trim().toLowerCase(); if(!c) return null;
-  return state.products.find(p=>!p.isKit && p.sku && String(p.sku).trim().toLowerCase()===c)
-      || state.products.find(p=>!p.isKit && p.id===code.trim())
-      || null;
+  for(const p of state.products){ if(p.isKit) continue; for(const v of (p.variants||[])){ if(v.sku && String(v.sku).trim().toLowerCase()===c) return {p, v}; } }
+  const p = state.products.find(p=>!p.isKit && p.sku && String(p.sku).trim().toLowerCase()===c)
+      || state.products.find(p=>!p.isKit && p.id===String(code).trim());
+  return p ? {p, v:null} : null;
 }
 function auditScan(code, fromCamera){
-  const p = auditFindByCode(code);
-  if(!p){ showToast(`Código "${String(code).trim()}" no coincide con ningún producto`); return null; }
+  const f = auditFindByCode(code);
+  if(!f){ showToast(`Código "${String(code).trim()}" no coincide con ningún producto`); return null; }
+  const p = f.p, v = f.v;
   if(!state.auditCenter){ showToast('Primero elige el centro que estás contando'); return null; }
-  auditEnsureStart(); auditEnsureSnap(p);
-  state.auditCounts[p.id] = (state.auditCounts[p.id]||0) + 1;
-  state.auditLast = {pid:p.id, name:p.name, n:state.auditCounts[p.id]};
+  if(auditHasVars(p) && !v){
+    showToast(`${p.name} tiene variantes: cuenta cada variante en la lista`);
+    state.auditSearch = p.name; state.auditListLimit = 20; render(); return null;
+  }
+  const key = auditKey(p, v), label = p.name + (v ? ' — '+auditVarLabel(v) : '');
+  auditEnsureStart(); auditEnsureSnap(key);
+  state.auditCounts[key] = (state.auditCounts[key]||0) + 1;
+  state.auditLast = {pid:key, name:label, n:state.auditCounts[key]};
   auditSaveDraft();
   if(fromCamera){
     const el = document.getElementById('audit-scan-status');
-    if(el) el.innerHTML = `<strong>${escapeHtmlAudit(p.name)}</strong><br>Contados: ${state.auditCounts[p.id]}`;
+    if(el) el.innerHTML = `<strong>${escapeHtmlAudit(label)}</strong><br>Contados: ${state.auditCounts[key]}`;
     try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
   } else { render(); }
   return p;
@@ -10510,12 +10549,13 @@ function auditCountedFinal(pid){
 function auditDiffRows(){
   if(!state.auditCenter) return [];
   return Object.keys(state.auditCounts).map(pid=>{
-    const p = state.products.find(x=>x.id===pid); if(!p) return null;
-    const system = state.auditSnap[pid]!==undefined ? state.auditSnap[pid] : centerStock(p, state.auditCenter);
+    const e = auditEntry(pid); if(!e) return null;
+    const p = e.p, v = e.v;
+    const system = state.auditSnap[pid]!==undefined ? state.auditSnap[pid] : auditSysQty(p, v, state.auditCenter);
     const first = state.auditCounts[pid], counted = auditCountedFinal(pid);
-    const cost = auditProdCost(p), diff = counted - system;
+    const cost = auditProdCost(p, v), diff = counted - system;
     const big = Math.abs(first - system) >= auditRecountUnits() || Math.abs((first - system)*cost) >= auditRecountMoney();
-    return {pid, name:p.name, sku:p.sku||'', system, first, counted, diff, cost, value: Math.round(diff*cost*100)/100, big, recounted: counted!==first, p};
+    return {pid, v, name:p.name+(v?' — '+auditVarLabel(v):''), sku:(v&&v.sku)||p.sku||'', system, first, counted, diff, cost, value: Math.round(diff*cost*100)/100, big, recounted: counted!==first, p};
   }).filter(Boolean);
 }
 async function commitAudit(applyAdjustment){
@@ -10526,7 +10566,8 @@ async function commitAudit(applyAdjustment){
   if(pendingRecount && !confirm(`${pendingRecount} diferencia${pendingRecount===1?'':'s'} grande${pendingRecount===1?'':'s'} no se ${pendingRecount===1?'ha':'han'} vuelto a contar. ¿Guardar así de todos modos?`)) return;
   const center = state.centers.find(c=>c.id===state.auditCenter);
   const items = rows.map(r=>{
-    const it = {productId:r.pid, name:r.name, systemQty:r.system, countedQty:r.counted, diff:r.diff, unitCost:r.cost, valueDiff:r.value};
+    const it = {productId:r.p.id, name:r.name, systemQty:r.system, countedQty:r.counted, diff:r.diff, unitCost:r.cost, valueDiff:r.value};
+    if(r.v){ it.variantId = r.v.id; it.variantLabel = auditVarLabel(r.v); }
     if(r.recounted) it.firstCount = r.first;
     if(r.diff!==0){ it.reason = state.auditReasons[r.pid] || 'investigar'; it.status = 'abierta'; } else { it.status = 'ok'; }
     return it;
@@ -10540,20 +10581,32 @@ async function commitAudit(applyAdjustment){
     const touched = [], moves = [];
     if(applyAdjustment){
       const batch = db.batch();
+      const varProds = {};
       rows.forEach(r=>{
-        const p = state.products.find(x=>x.id===r.pid); if(!p) return;
+        const p = r.p; if(!p) return;
+        if(r.v){
+          const current = r.v.stock||0, next = Math.max(0, r.counted + (current - r.system));
+          r.v.stock = next; varProds[p.id] = p;
+          if(next!==current) moves.push([p.id, next-current, ' · '+auditVarLabel(r.v)]);
+          touched.push(p.id);
+          return;
+        }
         if(!p.stockByCenter) p.stockByCenter = {};
         const current = p.stockByCenter[state.auditCenter]||0;
         // Se conserva lo vendido/recibido mientras se contaba: nuevo = contado + (existencia actual - existencia al empezar a contar)
         const next = Math.max(0, r.counted + (current - r.system));
         p.stockByCenter[state.auditCenter] = next; p.stock = totalStock(p);
-        if(next!==current) moves.push([r.pid, next-current]);
-        touched.push(r.pid);
-        batch.update(db.collection('products').doc(r.pid), {stockByCenter:p.stockByCenter, stock:p.stock});
+        if(next!==current) moves.push([p.id, next-current, '']);
+        touched.push(p.id);
+        batch.update(db.collection('products').doc(p.id), {stockByCenter:p.stockByCenter, stock:p.stock});
+      });
+      Object.values(varProds).forEach(p=>{
+        p.stock = p.variants.reduce((s,v)=>s+(v.stock||0),0);
+        batch.update(db.collection('products').doc(p.id), {variants:p.variants, stock:p.stock});
       });
       batch.set(ref, auditDoc);
       await batch.commit();
-      moves.forEach(([pid,d])=>logStockMovement(pid,'auditoria',d,`Auditoría en ${auditDoc.centerName}`,state.auditCenter));
+      moves.forEach(([pid,d,sfx])=>logStockMovement(pid,'auditoria',d,`Auditoría en ${auditDoc.centerName}${sfx||''}`,state.auditCenter));
       if(touched.length) recomputeKitStocksFor(touched);
     }else{
       await ref.set(auditDoc);
@@ -10608,7 +10661,7 @@ function computeCountPlan(centerId){
   (state.audits||[]).filter(a=>a.centerId===centerId).sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(a=>{
     (a.items||[]).forEach(it=>{ last[it.productId] = new Date(a.date).getTime(); if(it.diff) diffRecent[it.productId] = new Date(a.date).getTime(); });
   });
-  const elig = state.products.filter(p=>!p.isKit && (centerStock(p,centerId)>0 || sales[p.id]>0 || last[p.id]));
+  const elig = state.products.filter(p=>!p.isKit && (auditProdStock(p,centerId)>0 || sales[p.id]>0 || last[p.id]));
   elig.sort((a,b)=>(sales[b.id]||0)-(sales[a.id]||0));
   const totalSales = elig.reduce((s,p)=>s+(sales[p.id]||0),0);
   let cum = 0; const now = Date.now(), rows = [];
@@ -10672,8 +10725,41 @@ function auditScopeProducts(){
   if(state.auditPlan && state.auditPlanOnly){ const set = new Set(state.auditPlan); list = list.filter(p=>set.has(p.id)); }
   if(state.auditCategory && state.auditCategory!=='Todas') list = list.filter(p=>(p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(state.auditCategory));
   const q = (state.auditSearch||'').trim().toLowerCase();
-  if(q) list = list.filter(p=>(p.name||'').toLowerCase().includes(q) || String(p.sku||'').toLowerCase().includes(q));
+  if(q) list = list.filter(p=>(p.name||'').toLowerCase().includes(q) || String(p.sku||'').toLowerCase().includes(q) || (p.variants||[]).some(v=>String(v.sku||'').toLowerCase().includes(q) || auditVarLabel(v).toLowerCase().includes(q)));
   return list.sort((a,b)=> String(a.location||'~').localeCompare(String(b.location||'~'),'es') || String(a.name||'').localeCompare(String(b.name||''),'es'));
+}
+
+function auditCountControls(key, n){
+  return `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+    <button class="icon-btn" aria-label="Quitar uno" onclick="auditStep('${key}',-1)">−</button>
+    <input id="audit-count-${key}" type="number" inputmode="numeric" min="0" placeholder="Conteo" style="width:76px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${n??''}" onchange="setAuditCount('${key}', this.value);render()">
+    <button class="icon-btn" aria-label="Agregar uno" onclick="auditStep('${key}',1)">+</button>
+  </div>`;
+}
+function auditCandBlock(p, showSys){
+  const sw = p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`;
+  const rowCss = 'margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;flex-wrap:wrap;row-gap:8px;';
+  if(auditHasVars(p)){
+    const tot = p.variants.reduce((s,v)=>s+(state.auditCounts[auditKey(p,v)]||0),0);
+    const any = auditCountedProduct(p);
+    return `
+      <div class="list-row" style="${rowCss}${any?'background:var(--surface-soft);':''}">
+        ${sw}
+        <div class="row-main"><div class="row-title">${escapeHtmlAudit(p.name)}</div><div class="row-sub">${p.variants.length} variantes · cuenta cada una${p.location?` · ${escapeHtmlAudit(p.location)}`:''}${any?` · Contadas: ${tot}`:''}</div></div>
+      </div>
+      ${p.variants.map(v=>{ const key = auditKey(p,v), n = state.auditCounts[key]; return `
+      <div class="list-row" style="${rowCss}padding-left:26px;${n!==undefined?'background:var(--surface-soft);':''}">
+        <div class="row-main"><div class="row-title" style="font-weight:600;">${escapeHtmlAudit(auditVarLabel(v))}</div><div class="row-sub">${escapeHtmlAudit(v.sku||'sin código')}${showSys?` · Sistema dice: ${state.auditSnap[key]!==undefined?state.auditSnap[key]:(v.stock||0)}`:''}</div></div>
+        ${auditCountControls(key, n)}
+      </div>`; }).join('')}`;
+  }
+  const n = state.auditCounts[p.id];
+  return `
+    <div class="list-row" style="${rowCss}${n!==undefined?'background:var(--surface-soft);':''}">
+      ${sw}
+      <div class="row-main"><div class="row-title">${escapeHtmlAudit(p.name)}</div><div class="row-sub">${escapeHtmlAudit(p.sku||'sin código')}${p.location?` · ${escapeHtmlAudit(p.location)}`:''}${showSys?` · Sistema dice: ${state.auditSnap[p.id]!==undefined?state.auditSnap[p.id]:centerStock(p,state.auditCenter)}`:''}</div></div>
+      ${auditCountControls(p.id, n)}
+    </div>`;
 }
 function renderAuditContar(){
   const rows = auditDiffRows();
@@ -10682,7 +10768,7 @@ function renderAuditContar(){
   const candidates = scoped.slice(0, state.auditListLimit);
   const hasMore = scoped.length > candidates.length;
   const planN = state.auditPlan ? state.auditPlan.length : 0;
-  const countedPlan = state.auditPlan ? state.auditPlan.filter(id=>state.auditCounts[id]!==undefined).length : 0;
+  const countedPlan = state.auditPlan ? state.auditPlan.filter(id=>auditCountedProduct(state.products.find(x=>x.id===id))).length : 0;
   const draftBanner = auditHasDraft() ? `
     <div class="note-box" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
       <div>${state.auditResumed?'<strong>Retomaste tu conteo en curso.</strong> ':'<strong>Conteo en curso.</strong> '}Se guarda solo en este navegador: si recargas no se pierde, hasta que lo finalices.<br>${rows.length} producto${rows.length===1?'':'s'} contado${rows.length===1?'':'s'}${planN?` · tanda de hoy: ${countedPlan}/${planN}`:''}${state.auditStartedAt?` · desde ${new Date(state.auditStartedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}</div>
@@ -10721,16 +10807,7 @@ function renderAuditContar(){
         ${state.auditPlan ? `<div class="row-sub" style="margin:0 0 8px;">${state.auditPlanOnly?`Mostrando tu tanda de hoy (${planN} productos, ordenados por ubicación).`:'Mostrando todo el catálogo.'} <a href="#" onclick="event.preventDefault();state.auditPlanOnly=!state.auditPlanOnly;state.auditListLimit=20;auditSaveDraft();render()" style="color:var(--primary);font-weight:700;">${state.auditPlanOnly?'Ver todo el catálogo':'Ver solo mi tanda'}</a></div>` : ''}
         ${candidates.length>0 ? `
           <div style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
-            ${candidates.map(p=>{ const n = state.auditCounts[p.id]; return `
-              <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;flex-wrap:wrap;row-gap:8px;${n!==undefined?'background:var(--surface-soft);':''}">
-                ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-                <div class="row-main"><div class="row-title">${escapeHtmlAudit(p.name)}</div><div class="row-sub">${escapeHtmlAudit(p.sku||'sin código')}${p.location?` · ${escapeHtmlAudit(p.location)}`:''}${showSys?` · Sistema dice: ${state.auditSnap[p.id]!==undefined?state.auditSnap[p.id]:centerStock(p,state.auditCenter)}`:''}</div></div>
-                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                  <button class="icon-btn" aria-label="Quitar uno" onclick="auditStep('${p.id}',-1)">−</button>
-                  <input id="audit-count-${p.id}" type="number" inputmode="numeric" min="0" placeholder="Conteo" style="width:76px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" value="${n??''}" onchange="setAuditCount('${p.id}', this.value);render()">
-                  <button class="icon-btn" aria-label="Agregar uno" onclick="auditStep('${p.id}',1)">+</button>
-                </div>
-              </div>`; }).join('')}
+            ${candidates.map(p=>auditCandBlock(p, showSys)).join('')}
           </div>
           ${hasMore ? `<div style="text-align:center;margin-bottom:14px;"><button class="btn-outline" onclick="state.auditListLimit+=20;render()">Ver más productos</button></div>` : ''}
         ` : `<div class="empty-state" style="margin-bottom:14px;">No hay productos que coincidan con este filtro.</div>`}
@@ -12723,6 +12800,7 @@ function printProductLabelsBulk(ids){
 function renderVariantsEditor(p){
   const groups = p.variantGroups || [];
   const variants = p.variants || [];
+  const pcost = Number(p.cost)||0, pprice = Number(p.price)||0;
   return `
     <div class="panel" style="background:var(--bg);">
       <div class="panel-sub" style="margin-top:0;">Combina diferentes propiedades de tu producto. Ejemplo: color + talla.</div>
@@ -12738,17 +12816,27 @@ function renderVariantsEditor(p){
         <button class="btn-primary" onclick="generateVariantCombos()">Generar variantes</button>
       </div>
       ${variants.length>0 ? `
-        <div class="panel-title" style="font-size:12.5px;margin:12px 0 8px;">Combinaciones (${variants.length})</div>
-        ${variants.map(v=>`
-          <div class="list-row" style="align-items:center;flex-wrap:wrap;row-gap:8px;">
-            <div class="row-main"><div class="row-title">${Object.entries(v.combo||{}).map(([k,val])=>`${k}: ${val}`).join(' · ')}</div></div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;">
-              <input placeholder="SKU" value="${v.sku||''}" style="flex:1;min-width:90px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="setVariantField('${v.id}','sku',this.value)">
-              <input type="number" min="0" placeholder="Precio (si es distinto)" value="${v.priceOverride||''}" style="flex:1;min-width:90px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;" onchange="setVariantField('${v.id}','priceOverride',this.value)">
-              <input type="number" min="0" placeholder="Stock" value="${v.stock||0}" style="width:70px;flex-shrink:0;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;" onchange="setVariantField('${v.id}','stock',this.value)">
-            </div>
+        <div class="panel-title" style="font-size:12.5px;margin:12px 0 8px;">Variantes (${variants.length})</div>
+        <div class="var-allbar">
+          <label for="var-cost-all">Mismo costo para todas las variantes</label>
+          <div style="display:flex;gap:8px;">
+            <input id="var-cost-all" class="var-in" type="number" min="0" step="0.01" inputmode="decimal" placeholder="${pcost>0?pcost:'0.00'}" value="${pcost>0&&variants.every(v=>Number(v.cost)===pcost)?pcost:''}">
+            <button type="button" class="btn-outline" style="white-space:nowrap;" onclick="applyVariantCostAll()">Aplicar a todas</button>
           </div>
-        `).join('')}
+        </div>
+        <div class="var-wrap"><div class="var-table">
+          <div class="var-row var-head"><div>Variante</div><div>Stock</div><div>SKU</div><div>Precio</div><div>Costo</div></div>
+          ${variants.map(v=>`
+          <div class="var-row">
+            <div class="var-name">${escDescHtml(Object.values(v.combo||{}).join(' / ')||'Variante')}</div>
+            <div><span class="var-lbl">Stock</span><input class="var-in" type="number" min="0" inputmode="numeric" value="${v.stock||0}" onchange="setVariantField('${v.id}','stock',this.value)"></div>
+            <div><span class="var-lbl">SKU</span><input class="var-in" style="text-align:left;" placeholder="SKU" value="${escDescHtml(v.sku||'')}" onchange="setVariantField('${v.id}','sku',this.value)"></div>
+            <div><span class="var-lbl">Precio</span><input class="var-in" type="number" min="0" step="0.01" inputmode="decimal" placeholder="${pprice>0?pprice:'Igual'}" value="${v.priceOverride||''}" onchange="setVariantField('${v.id}','priceOverride',this.value)"></div>
+            <div><span class="var-lbl">Costo</span><input class="var-in" type="number" min="0" step="0.01" inputmode="decimal" placeholder="${pcost>0?pcost:'0.00'}" value="${v.cost||''}" data-var-cost onchange="setVariantField('${v.id}','cost',this.value)"></div>
+          </div>`).join('')}
+          <div class="var-row var-total"><div class="var-name">Stock total</div><div><strong id="var-stock-total">${variants.reduce((s,v)=>s+(v.stock||0),0)}</strong> pzas</div></div>
+        </div></div>
+        <div class="panel-sub" style="margin:8px 0 0;">Precio o costo vacío = se usa el del producto. El costo solo lo ves tú.</div>
       ` : ''}
     </div>`;
 }
@@ -12788,7 +12876,17 @@ function generateVariantCombos(){
 function setVariantField(variantId, field, value){
   const v = (state.productModal.variants||[]).find(x=>x.id===variantId);
   if(!v) return;
-  v[field] = (field==='stock'||field==='priceOverride') ? Math.max(0, Number(value)||0) : value;
+  v[field] = (field==='stock'||field==='priceOverride'||field==='cost') ? Math.max(0, Number(value)||0) : value;
+  if(field==='stock'){ const el = document.getElementById('var-stock-total'); if(el) el.textContent = (state.productModal.variants||[]).reduce((s,x)=>s+(x.stock||0),0); }
+}
+function applyVariantCostAll(){
+  const el = document.getElementById('var-cost-all');
+  const c = Math.max(0, Number(el && el.value)||0);
+  if(!(c>0)){ showToast('Escribe el costo que quieres aplicar'); return; }
+  (state.productModal.variants||[]).forEach(v=>{ v.cost = c; });
+  document.querySelectorAll('[data-var-cost]').forEach(i=>{ i.value = c; });
+  if(!(Number(state.productModal.cost)>0)){ state.productModal.cost = c; const pc = document.getElementById('pf-cost'); if(pc) pc.value = c; if(typeof updatePriceCalc==='function') updatePriceCalc(); }
+  showToast('Costo aplicado a todas las variantes');
 }
 function handleSaveProduct(existingId){
   // Evita el doble-guardado: un doble click o un dedo lento en pantallas táctiles podía disparar
