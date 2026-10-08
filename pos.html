@@ -372,6 +372,29 @@ function centerStock(p, centerId){
   if(p && p.isKit) return computeKitStockAtCenter(p, centerId);
   return (p.stockByCenter && p.stockByCenter[centerId]) || 0;
 }
+/* ---- Variantes con existencias POR CENTRO ----
+   v.stockByCenter = {idCentro: piezas}; v.stock siempre es la suma (la tienda en línea lee ese total).
+   Una variante antigua (sin stockByCenter) se considera guardada toda en el centro principal. */
+function vImage(p, v){ return (v && typeof v.imageIdx==='number' && p && p.images && p.images[v.imageIdx]) || null; }
+function posDefaultCenterId(){ const c = (state.centers||[]).find(x=>x.isDefault) || (state.centers||[])[0]; return c ? c.id : ''; }
+function vCenterStock(v, cid){
+  if(!v) return 0;
+  if(v.stockByCenter) return v.stockByCenter[cid]||0;
+  return cid===posDefaultCenterId() ? (v.stock||0) : 0;
+}
+function vSetCenterStock(v, cid, n){
+  if(!v.stockByCenter){ v.stockByCenter = {}; const d = posDefaultCenterId(); if(d) v.stockByCenter[d] = v.stock||0; }
+  v.stockByCenter[cid] = Math.max(0, Math.floor(Number(n)||0));
+  v.stock = Object.values(v.stockByCenter).reduce((s,x)=>s+(x||0),0);
+}
+// El producto con variantes guarda también su total por centro (suma de sus variantes) para que listas y reportes cuadren.
+function vProductSync(p){
+  if(!(p.variants && p.variants.length)) return;
+  const ids = new Set([posDefaultCenterId()]); (state.centers||[]).forEach(c=>ids.add(c.id));
+  p.variants.forEach(v=>Object.keys(v.stockByCenter||{}).forEach(k=>ids.add(k)));
+  const sbc = {}; ids.forEach(id=>{ if(!id) return; const n = p.variants.reduce((s,v)=>s+vCenterStock(v,id),0); if(n>0 || (p.stockByCenter&&p.stockByCenter[id]!==undefined)) sbc[id]=n; });
+  p.stockByCenter = sbc; p.stock = p.variants.reduce((s,v)=>s+(v.stock||0),0);
+}
 function totalStock(p){ return p.stockByCenter ? Object.values(p.stockByCenter).reduce((s,n)=>s+(n||0),0) : (p.stock||0); }
 function computeKitStockAtCenter(p, centerId){
   const items = p.kitItems||[];
@@ -1236,7 +1259,7 @@ function renderCheckoutReminderModal(){
   </div>`;
 }
 function itemPrice(p, v){ return v && v.priceOverride>0 ? v.priceOverride : effectivePrice(p); }
-function itemStockPOS(p, v){ return v ? (v.stock||0) : centerStock(p, state.activeCenter.id); }
+function itemStockPOS(p, v){ return v ? vCenterStock(v, state.activeCenter.id) : centerStock(p, state.activeCenter.id); }
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
 function cartTotal(){ return Object.entries(state.cart).reduce((s,[key,qty])=>{const {p,v}=parseCartKey(key); return s+(p?itemPrice(p,v)*qty:0);},0); }
 // "Frecuentes": cada dispositivo recuerda (en localStorage, sin tocar Firestore) qué
@@ -1619,12 +1642,14 @@ async function reserveStockForSale(items, centerId){
         let variantQtyUsed = 0;
         for(const [variantId, qty] of demand.variants){
           const v = variants.find(x=>x.id===variantId);
-          const current = v ? (v.stock||0) : 0;
+          const current = v ? vCenterStock(v, centerId) : 0;
           if(!v || current < qty){ ok = false; break; }
-          v.stock = current - qty; variantQtyUsed += qty;
+          if(v.stockByCenter) v.stockByCenter = {...v.stockByCenter};
+          vSetCenterStock(v, centerId, current - qty); variantQtyUsed += qty;
         }
         if(ok){
-          payload.variants = variants; payload.stock = Math.max(0, (data.stock||0) - variantQtyUsed);
+          const tmp = {variants, stockByCenter:data.stockByCenter}; vProductSync(tmp);
+          payload.variants = variants; payload.stock = tmp.stock; payload.stockByCenter = tmp.stockByCenter;
           if(Array.isArray(data.batches) && data.batches.length){
             payload.batches = posFefoConsume(payload.batches || data.batches, variantQtyUsed);
             payload.expirationDate = posEarliestExpiry(payload.batches);
@@ -1725,9 +1750,9 @@ async function chargeSale(){
       }
       if(it.variantId){
         const v = (p.variants||[]).find(x=>x.id===it.variantId);
-        v.stock = Math.max(0, (v.stock||0) - it.qty);
-        p.stock = Math.max(0, (p.stock||0) - it.qty);
-        stockUpdates.push({id:it.id, payload:{variants: p.variants, stock: p.stock}});
+        if(v) vSetCenterStock(v, centerId, vCenterStock(v, centerId) - it.qty);
+        vProductSync(p);
+        stockUpdates.push({id:it.id, payload:{variants: p.variants, stock: p.stock, stockByCenter: p.stockByCenter}});
         return;
       }
       if(!p.stockByCenter) p.stockByCenter = {};
@@ -1797,9 +1822,9 @@ function renderVariantPickerModal(){
       <h3>${p.name}</h3>
       <p style="font-size:12.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:12px;">Elige la variante</p>
       ${(p.variants||[]).map(v=>`
-        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" ${v.stock<=0?'disabled style="opacity:.4"':''} onclick="pickVariant('${v.id}')">
-          <span>${variantLabel(v)}</span>
-          <span style="font-size:12px;color:var(--ink-soft);">${v.stock<=0?'Agotado':`Stock: ${v.stock}`}</span>
+        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" ${vCenterStock(v,state.activeCenter.id)<=0?'disabled':''} onclick="pickVariant('${v.id}')">
+          <span style="display:flex;align-items:center;gap:10px;min-width:0;">${vImage(p,v)?`<img src="${vImage(p,v)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}<span style="overflow-wrap:anywhere;text-align:left;">${variantLabel(v)}</span></span>
+          <span style="font-size:12px;color:var(--ink-soft);">${vCenterStock(v,state.activeCenter.id)<=0?'Agotado':`Stock: ${vCenterStock(v,state.activeCenter.id)}`}</span>
         </button>
       `).join('')}
       <button class="pill-btn" style="width:100%;background:var(--surface-soft);color:var(--ink-soft);margin-top:4px;" onclick="state.variantPickerProduct=null;render()">Cancelar</button>
@@ -1868,14 +1893,14 @@ const FREQUENT_CAT = '__frecuentes__';
 function posProdCard(p){
   const hasVariants = p.variantGroups && p.variantGroups.length>0;
   const hasPromo = effectivePrice(p)<p.price;
-  const stock = hasVariants ? null : centerStock(p, state.activeCenter.id);
-  const outOfStock = !hasVariants && stock<=0;
+  const stock = hasVariants ? (p.variants||[]).reduce((s,v)=>s+vCenterStock(v,state.activeCenter.id),0) : centerStock(p, state.activeCenter.id);
+  const outOfStock = stock<=0;
   return `
   <div class="prod-card ${outOfStock?'out-of-stock':''}" ${outOfStock?'':`onclick="addToCart('${p.id}')"`}>
     ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
     <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
     <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(p.price)}</s> ${money(effectivePrice(p))}`:money(p.price)}</div>
-    <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?'Elegir variante':`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
+    <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?`Elegir variante · ${stock} en ${state.activeCenter.name}`:`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
   </div>`;
 }
 function renderProdGrid(list){

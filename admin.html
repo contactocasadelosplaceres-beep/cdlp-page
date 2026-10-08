@@ -657,9 +657,24 @@
   .var-lbl{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;}
   .var-in{width:100%;min-width:0;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;text-align:center;background:var(--surface);}
   .var-head{display:none;}
+  .var-name{display:flex;align-items:center;gap:10px;}
+  .var-thumb{position:relative;flex:0 0 46px;width:46px;height:46px;border-radius:10px;border:1.5px dashed var(--border);background:var(--surface-soft);color:var(--ink-soft);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+  .var-thumb img{width:100%;height:100%;object-fit:cover;border-radius:9px;display:block;}
+  .var-thumb-edit{position:absolute;right:-5px;bottom:-5px;width:20px;height:20px;border-radius:50%;background:var(--surface);border:1px solid var(--border);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;}
+  .var-pick{grid-column:1/-1;background:var(--surface-soft);border-radius:10px;padding:10px;}
+  .var-pick-t{font-size:12px;color:var(--ink-soft);margin-bottom:8px;}
+  .var-pick-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .var-pick-img{width:54px;height:54px;border-radius:10px;border:2px solid transparent;padding:0;background:var(--surface);cursor:pointer;overflow:hidden;}
+  .var-pick-img img{width:100%;height:100%;object-fit:cover;display:block;}
+  .var-pick-img.on{border-color:var(--primary);}
+  .var-stockcell{display:flex;flex-direction:column;gap:6px;}
+  .var-cs{display:flex;align-items:center;gap:6px;}
+  .var-cs>span{flex:1;min-width:0;font-size:11.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .var-cs .var-in{width:70px;flex:0 0 70px;}
+  .var-sum{font-size:11.5px;color:var(--ink-soft);text-align:right;}
   .var-total{background:var(--surface-soft);}
   @container (min-width:520px){
-    .var-row{grid-template-columns:minmax(110px,1.5fr) 74px minmax(90px,1fr) 100px 100px;align-items:center;}
+    .var-row{grid-template-columns:minmax(110px,1.4fr) minmax(120px,1fr) minmax(90px,1fr) 100px 100px;align-items:center;}
     .var-name{grid-column:auto;}
     .var-lbl{display:none;}
     .var-head{display:grid;background:var(--surface-soft);font-weight:700;font-size:12.5px;border-top:0;}
@@ -904,7 +919,7 @@ let state = {
   heatMetric:'count', heatDays:90,
   loadWarnings:[],
   expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
-  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'',
+  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, receiveGoodsVariants:{},
   restockRequests:[], notifyModalProductId:null,
   searchMisses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
@@ -3180,10 +3195,11 @@ async function adjustStockForSale(sale, sign, opts){
       });
     } else if(it.variantId){
       const v = (p.variants||[]).find(x=>x.id===it.variantId);
-      if(sign<0 && v && (v.stock||0) + sign*it.qty < 0) short.push(`${p.name}`);
-      if(v) v.stock = Math.max(0, (v.stock||0) + sign*it.qty);
-      p.stock = Math.max(0, (p.stock||0) + sign*it.qty);
-      const varUpd = {variants: p.variants, stock: p.stock};
+      const vcid = centerId || defaultCenterId();
+      if(sign<0 && v && vCenterStock(v, vcid) + sign*it.qty < 0) short.push(`${p.name}`);
+      if(v) vSetCenterStock(v, vcid, vCenterStock(v, vcid) + sign*it.qty);
+      vProductSync(p);
+      const varUpd = {variants: p.variants, stock: p.stock, stockByCenter: p.stockByCenter};
       if(sign<0 && p.batches && p.batches.length){ p.batches = fefoConsume(p.batches, it.qty); p.expirationDate = earliestExpiry(p.batches); varUpd.batches = p.batches; varUpd.expirationDate = p.expirationDate; }
       updates.push(db.collection('products').doc(p.id).update(varUpd));
     } else {
@@ -3958,11 +3974,17 @@ function applyCrop(){
   else state.productModal.images.push(dataUrl);
   state.cropOpen = false; cropCtx = null; render();
 }
-function removeImage(idx){ state.productModal.images.splice(idx,1); render(); }
+function removeImage(idx){
+  state.productModal.images.splice(idx,1);
+  (state.productModal.variants||[]).forEach(v=>{ if(typeof v.imageIdx==='number'){ if(v.imageIdx===idx) delete v.imageIdx; else if(v.imageIdx>idx) v.imageIdx--; } });
+  render();
+}
 function moveImage(idx,dir){
   const arr = state.productModal.images;
   const j = idx+dir; if(j<0||j>=arr.length) return;
-  [arr[idx],arr[j]] = [arr[j],arr[idx]]; render();
+  [arr[idx],arr[j]] = [arr[j],arr[idx]];
+  (state.productModal.variants||[]).forEach(v=>{ if(v.imageIdx===idx) v.imageIdx=j; else if(v.imageIdx===j) v.imageIdx=idx; });
+  render();
 }
 
 /* ============== LISTAS LARGAS: "ver más" ============== */
@@ -7293,6 +7315,35 @@ function renderCashierModal(){
 
 /* ============== CENTROS DE DISTRIBUCIÓN ============== */
 function centerStock(p, centerId){ return (p.stockByCenter && p.stockByCenter[centerId]) || 0; }
+/* ---- Variantes con existencias POR CENTRO ----
+   v.stockByCenter = {idCentro: piezas}; v.stock siempre es la suma (la tienda en línea lee ese total).
+   Una variante antigua (sin stockByCenter) se considera guardada toda en el centro principal. */
+function vCenterStock(v, cid){
+  if(!v) return 0;
+  if(v.stockByCenter) return v.stockByCenter[cid]||0;
+  return cid===defaultCenterId() ? (v.stock||0) : 0;
+}
+function vSetCenterStock(v, cid, n){
+  if(!v.stockByCenter){ v.stockByCenter = {}; const d = defaultCenterId(); if(d) v.stockByCenter[d] = v.stock||0; }
+  v.stockByCenter[cid] = Math.max(0, Math.floor(Number(n)||0));
+  v.stock = Object.values(v.stockByCenter).reduce((s,x)=>s+(x||0),0);
+}
+function vImage(p, v){ return (v && typeof v.imageIdx==='number' && p && p.images && p.images[v.imageIdx]) || null; }
+function vNormalize(v){ if(!v.stockByCenter){ vSetCenterStock(v, defaultCenterId(), v.stock||0); } return v; }
+// El producto con variantes guarda también su total por centro (suma de sus variantes), para que listas y reportes cuadren.
+function vProductSync(p){
+  if(!(p.variants && p.variants.length)) return;
+  const ids = new Set(state.centers.map(c=>c.id)); p.variants.forEach(v=>Object.keys(v.stockByCenter||{}).forEach(k=>ids.add(k)));
+  const sbc = {}; ids.forEach(id=>{ if(!id) return; const n = p.variants.reduce((s,v)=>s+vCenterStock(v,id),0); if(n>0 || (p.stockByCenter && p.stockByCenter[id]!==undefined)) sbc[id]=n; });
+  p.stockByCenter = sbc; p.stock = p.variants.reduce((s,v)=>s+(v.stock||0),0);
+}
+/* "Unidades de stock": un producto sin variantes es una; con variantes, una por variante. Clave "idProducto" o "idProducto::idVariante". */
+function stockUnits(p){
+  if(p.variants && p.variants.length) return p.variants.map(v=>({key:p.id+'::'+v.id, p, v, label:p.name+' — '+(Object.values(v.combo||{}).join(' / ')||'Variante')}));
+  return [{key:p.id, p, v:null, label:p.name}];
+}
+function stockUnitByKey(key){ const parts=String(key).split('::'); const p=state.products.find(x=>x.id===parts[0]); if(!p) return null; if(!parts[1]) return {key, p, v:null, label:p.name}; return stockUnits(p).find(u=>u.key===key)||null; }
+function stockUnitAvail(u, cid){ return u.v ? vCenterStock(u.v, cid) : centerStock(u.p, cid); }
 function totalStock(p){ return p.stockByCenter ? Object.values(p.stockByCenter).reduce((s,n)=>s+(n||0),0) : (p.stock||0); }
 
 /* ============== KITS / COMBOS ==============
@@ -7466,23 +7517,30 @@ async function commitTransfer(){
   const toCenter = state.centers.find(c=>c.id===state.transferTo);
   const batch = db.batch();
   const transferItems = [];
-  for(const [pid, qty] of items){
-    const p = state.products.find(x=>x.id===pid);
-    if(!p) continue;
-    const available = centerStock(p, state.transferFrom);
-    if(qty > available){ showToast(`No hay suficiente stock de "${p.name}" en ${fromCenter.name} (disponible: ${available})`); return; }
+  for(const [key, qty] of items){
+    const u = stockUnitByKey(key); if(!u) continue;
+    const available = stockUnitAvail(u, state.transferFrom);
+    if(qty > available){ showToast(`No hay suficiente stock de "${u.label}" en ${fromCenter.name} (disponible: ${available})`); return; }
   }
-  items.forEach(([pid, qty])=>{
-    const p = state.products.find(x=>x.id===pid);
-    if(!p) return;
-    if(!p.stockByCenter) p.stockByCenter = {};
-    p.stockByCenter[state.transferFrom] = (p.stockByCenter[state.transferFrom]||0) - qty;
-    p.stockByCenter[state.transferTo] = (p.stockByCenter[state.transferTo]||0) + qty;
-    logStockMovement(pid, 'transferencia_salida', -qty, `Transferencia a ${toCenter.name}`, state.transferFrom);
-    logStockMovement(pid, 'transferencia_entrada', qty, `Transferencia desde ${fromCenter.name}`, state.transferTo);
-    batch.update(db.collection('products').doc(pid), {stockByCenter: p.stockByCenter});
-    transferItems.push({productId:pid, name:p.name, qty});
+  const touchedProds = new Set();
+  items.forEach(([key, qty])=>{
+    const u = stockUnitByKey(key); if(!u) return;
+    const p = u.p, pid = p.id;
+    if(u.v){
+      vSetCenterStock(u.v, state.transferFrom, vCenterStock(u.v,state.transferFrom) - qty);
+      vSetCenterStock(u.v, state.transferTo, vCenterStock(u.v,state.transferTo) + qty);
+      touchedProds.add(pid);
+    }else{
+      if(!p.stockByCenter) p.stockByCenter = {};
+      p.stockByCenter[state.transferFrom] = (p.stockByCenter[state.transferFrom]||0) - qty;
+      p.stockByCenter[state.transferTo] = (p.stockByCenter[state.transferTo]||0) + qty;
+      batch.update(db.collection('products').doc(pid), {stockByCenter: p.stockByCenter});
+    }
+    logStockMovement(pid, 'transferencia_salida', -qty, `Transferencia a ${toCenter.name}${u.v?' · '+u.label:''}`, state.transferFrom);
+    logStockMovement(pid, 'transferencia_entrada', qty, `Transferencia desde ${fromCenter.name}${u.v?' · '+u.label:''}`, state.transferTo);
+    transferItems.push(Object.assign({productId:pid, name:u.label, qty}, u.v?{variantId:u.v.id}:{}));
   });
+  touchedProds.forEach(pid=>{ const p = state.products.find(x=>x.id===pid); vProductSync(p); batch.update(db.collection('products').doc(pid), {variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock}); });
   const transferDoc = {
     date: new Date().toISOString(), fromCenterId: state.transferFrom, fromCenterName: fromCenter.name,
     toCenterId: state.transferTo, toCenterName: toCenter.name, items: transferItems, notes: state.transferNotes.trim(),
@@ -7514,9 +7572,9 @@ function setTransferQty(pid, qty){
 function selectAllTransfer(){
   if(!state.transferFrom) return;
   const q = (state.transferProductSearch||'').trim().toLowerCase();
-  state.products
-    .filter(p=>centerStock(p,state.transferFrom)>0 && (!q || (p.name||'').toLowerCase().includes(q)))
-    .forEach(p=>{ state.transferCart[p.id] = centerStock(p, state.transferFrom); });
+  state.products.flatMap(stockUnits)
+    .filter(u=>stockUnitAvail(u,state.transferFrom)>0 && (!q || u.label.toLowerCase().includes(q)))
+    .forEach(u=>{ state.transferCart[u.key] = stockUnitAvail(u, state.transferFrom); });
   render();
 }
 function clearAllTransfer(){ state.transferCart = {}; render(); }
@@ -7760,26 +7818,27 @@ function openShrinkForProduct(productId){
 async function registerShrinkage(){
   const p = state.products.find(x=>x.id===state.shrinkProductId);
   if(!p){ showToast('Elige primero el producto'); return; }
-  if(p.variants && p.variants.length){ showToast('Este producto maneja variantes: ajusta el stock de la variante en su ficha.'); return; }
+  const hasVars = !!(p.variants && p.variants.length);
+  const sv = hasVars ? p.variants.find(v=>v.id===state.shrinkVariantId) : null;
+  if(hasVars && !sv){ showToast('Elige la variante que se dio de baja'); return; }
   const centerId = state.shrinkCenterId || (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id;
   const center = state.centers.find(c=>c.id===centerId);
   const qty = Math.floor(Number((document.getElementById('shrink-qty')||{}).value)||0);
   const reason = (document.getElementById('shrink-reason')||{}).value || 'Otro';
   const note = ((document.getElementById('shrink-note')||{}).value||'').trim();
-  const available = (p.stockByCenter && p.stockByCenter[centerId]) || 0;
+  const available = sv ? vCenterStock(sv, centerId) : ((p.stockByCenter && p.stockByCenter[centerId]) || 0);
   if(qty<=0){ showToast('Escribe cuántas piezas'); return; }
   if(qty>available){ showToast(`Solo hay ${available} pieza(s) de "${p.name}" en ${center?center.name:'ese centro'}`); return; }
   try{
-    p.stockByCenter[centerId] = available - qty;
-    p.stock = totalStock(p);
-    await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock});
-    const unitCost = p.cost||0;
-    const rec = {date:new Date().toISOString(), productId:p.id, productName:p.name, qty, reason, note, centerId, centerName:center?center.name:'', unitCost, totalCost:unitCost*qty, user: state.user ? state.user.email : ''};
+    if(sv){ vSetCenterStock(sv, centerId, available - qty); vProductSync(p); await db.collection('products').doc(p.id).update({variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock}); }
+    else{ p.stockByCenter[centerId] = available - qty; p.stock = totalStock(p); await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock}); }
+    const unitCost = (sv && Number(sv.cost)>0) ? Number(sv.cost) : (p.cost||0);
+    const rec = {date:new Date().toISOString(), productId:p.id, productName:p.name+(sv?' — '+Object.values(sv.combo||{}).join(' / '):''), variantId: sv?sv.id:null, qty, reason, note, centerId, centerName:center?center.name:'', unitCost, totalCost:unitCost*qty, user: state.user ? state.user.email : ''};
     const ref = await db.collection('shrinkage').add(rec);
     state.shrinkage.unshift({id:ref.id, ...rec});
     logStockMovement(p.id, 'merma', -qty, `Merma: ${reason}${note?' — '+note:''}`, centerId);
     logAdminAction('merma', 'producto', p.name, `${qty} pza · ${reason} · ${money(unitCost*qty)}`, p.id);
-    state.shrinkProductId = null; state.shrinkSearch = '';
+    state.shrinkProductId = null; state.shrinkSearch = ''; state.shrinkVariantId = '';
     showToast('Merma registrada y descontada del inventario');
     render();
   }catch(e){ console.error('No se pudo registrar la merma', e); showToast('No se pudo registrar la merma'); }
@@ -7789,7 +7848,8 @@ function renderMermas(){
   const results = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q)).slice(0,8) : [];
   const p = state.products.find(x=>x.id===state.shrinkProductId);
   const centerId = state.shrinkCenterId || (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id || '';
-  const available = p ? ((p.stockByCenter && p.stockByCenter[centerId]) || 0) : 0;
+  const shrinkVar = p && p.variants && p.variants.length ? p.variants.find(v=>v.id===state.shrinkVariantId) : null;
+  const available = p ? (shrinkVar ? vCenterStock(shrinkVar, centerId) : (p.variants&&p.variants.length ? 0 : ((p.stockByCenter && p.stockByCenter[centerId]) || 0))) : 0;
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
   const monthly = state.shrinkage.filter(s=>new Date(s.date)>=monthStart);
   const byReason = {}; monthly.forEach(s=>{ byReason[s.reason] = (byReason[s.reason]||0)+(s.totalCost||0); });
@@ -7800,6 +7860,7 @@ function renderMermas(){
     <div class="panel-sub">Producto dañado, caducado, perdido o regalado como muestra. Se descuenta del inventario y queda el motivo y el costo, en vez de ajustar el stock a mano sin dejar rastro.</div>
     ${p ? `
       <div class="list-row"><div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Hay ${available} en ${(state.centers.find(c=>c.id===centerId)||{}).name||'este centro'}${p.cost>0?` · Costo ${money(p.cost)} c/u`:' · Sin costo capturado'}</div></div><button class="btn-tertiary" onclick="state.shrinkProductId=null;render()">Cambiar</button></div>
+      ${p.variants && p.variants.length ? `<div class="form-field" style="margin-top:10px;"><label>Variante</label><select onchange="state.shrinkVariantId=this.value;render()"><option value="">Elige la variante…</option>${p.variants.map(v=>`<option value="${v.id}" ${v.id===state.shrinkVariantId?'selected':''}>${Object.values(v.combo||{}).join(' / ')} (${vCenterStock(v,centerId)} en este centro)</option>`).join('')}</select></div>` : ''}
       <div class="two-col" style="margin-top:10px;">
         <div class="form-field"><label>Centro</label><select onchange="state.shrinkCenterId=this.value;render()">${state.centers.map(c=>`<option value="${c.id}" ${c.id===centerId?'selected':''}>${c.name}</option>`).join('')}</select></div>
         <div class="form-field"><label>Piezas</label><input id="shrink-qty" type="number" min="1" placeholder="1"></div>
@@ -7811,7 +7872,7 @@ function renderMermas(){
       <button class="btn-primary" style="width:100%;" onclick="registerShrinkage()">Dar de baja</button>
     ` : `
       <input id="shrink-search" placeholder="Buscar producto por nombre o SKU..." value="${(state.shrinkSearch||'').replace(/"/g,'&quot;')}" oninput="state.shrinkSearch=this.value;render()">
-      ${results.map(r=>`<button class="cashier-item" style="width:100%;text-align:left;margin-top:6px;" onclick="state.shrinkProductId='${r.id}';render()">${r.name} <span style="color:var(--ink-soft);">· stock ${r.stock||0}</span></button>`).join('')}
+      ${results.map(r=>`<button class="cashier-item" style="width:100%;text-align:left;margin-top:6px;" onclick="state.shrinkProductId='${r.id}';state.shrinkVariantId='';render()">${r.name} <span style="color:var(--ink-soft);">· stock ${r.stock||0}</span></button>`).join('')}
     `}
   </div>
   <div class="panel">
@@ -10055,6 +10116,7 @@ function openReceiveGoodsModal(supplierId){
   state.receiveGoodsModalOpen = true;
   state.receiveGoodsSupplierId = supplierId;
   state.receiveGoodsQuantities = {};
+  state.receiveGoodsVariants = {};
   state.receiveGoodsCosts = {};
   items.forEach(it=>{
     state.receiveGoodsQuantities[it.id] = it.qty;
@@ -10075,13 +10137,18 @@ async function confirmReceiveGoods(){
       if(received>0 && centerId){
         const p = state.products.find(x=>x.id===item.productId);
         if(p){
+          const rv = (p.variants && p.variants.length) ? p.variants.find(v=>v.id===(state.receiveGoodsVariants||{})[item.id]) : null;
+          if(p.variants && p.variants.length && !rv){ showToast(`Elige la variante de "${item.productName}" antes de recibir`); return; }
+          if(rv){ vSetCenterStock(rv, centerId, vCenterStock(rv, centerId) + received); vProductSync(p); }
+          else{
           if(!p.stockByCenter) p.stockByCenter = {};
           p.stockByCenter[centerId] = (p.stockByCenter[centerId]||0) + received;
           p.stock = totalStock(p);
+          }
           // Cada recepción queda en el historial de costos del producto (costo por pieza, fecha,
           // proveedor y cuántas llegaron); si el costo cambió, pasa a ser el costo actual.
           const unitCost = Number((state.receiveGoodsCosts||{})[item.id])||0;
-          const upd = {stockByCenter:p.stockByCenter, stock:p.stock};
+          const upd = {stockByCenter:p.stockByCenter, stock:p.stock}; if(rv) upd.variants = p.variants;
           if(unitCost>0){
             const entry = {cost:unitCost, date:new Date().toISOString(), supplierId:supplierId||'', supplierName:supplier?supplier.name:'', qty:received, source:'recepcion', by: state.user?state.user.email:''};
             const base = [...(p.costHistory||[])]; seedPreviousCost(base, p, unitCost);
@@ -10093,7 +10160,7 @@ async function confirmReceiveGoods(){
           }
           await db.collection('products').doc(p.id).update(upd);
           Object.assign(p, upd);
-          logStockMovement(p.id, 'recepcion_mercancia', received, `Recibido de ${supplier?supplier.name:'proveedor'}`, centerId);
+          logStockMovement(p.id, 'recepcion_mercancia', received, `Recibido de ${supplier?supplier.name:'proveedor'}${rv?' · '+Object.values(rv.combo||{}).join(' / '):''}`, centerId);
         }
       }
       await db.collection('restockItems').doc(item.id).delete();
@@ -10114,7 +10181,8 @@ function renderReceiveGoodsModal(){
       <p class="panel-sub">Confirma cuánto llegó de cada uno y a qué costo por pieza — queda en el historial de costos del producto, con este proveedor y la fecha de hoy.</p>
       ${items.map(it=>`
         <div class="list-row">
-          <div class="row-main"><div class="row-title">${it.productName}</div><div class="row-sub">Pedido: ${it.qty}</div></div>
+          <div class="row-main"><div class="row-title">${it.productName}</div><div class="row-sub">Pedido: ${it.qty}</div>
+            ${(()=>{ const pp = state.products.find(x=>x.id===it.productId); if(!(pp && pp.variants && pp.variants.length)) return ''; const sel = (state.receiveGoodsVariants||{})[it.id]||''; return `<select style="margin-top:6px;max-width:100%;padding:6px;border-radius:8px;border:1px solid var(--border);" onchange="state.receiveGoodsVariants['${it.id}']=this.value"><option value="">¿A qué variante?</option>${pp.variants.map(v=>`<option value="${v.id}" ${sel===v.id?'selected':''}>${Object.values(v.combo||{}).join(' / ')}</option>`).join('')}</select>`; })()}</div>
           <label style="display:flex;flex-direction:column;font-size:11px;color:var(--ink-soft);gap:2px;">Llegaron<input type="number" min="0" value="${state.receiveGoodsQuantities[it.id]}" style="width:76px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" oninput="state.receiveGoodsQuantities['${it.id}']=this.value"></label>
           <label style="display:flex;flex-direction:column;font-size:11px;color:var(--ink-soft);gap:2px;">Costo c/u<input type="number" min="0" step="0.01" value="${(state.receiveGoodsCosts||{})[it.id]}" placeholder="$" style="width:86px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" oninput="state.receiveGoodsCosts['${it.id}']=this.value"></label>
         </div>
@@ -10266,7 +10334,7 @@ function renderTransferencias(){
   const activeCenters = state.centers.filter(c=>c.active);
   const q = (state.transferProductSearch||'').trim().toLowerCase();
   const sourceProducts = state.transferFrom
-    ? state.products.filter(p=>centerStock(p,state.transferFrom)>0 && (!q || (p.name||'').toLowerCase().includes(q)))
+    ? state.products.flatMap(stockUnits).filter(u=>stockUnitAvail(u,state.transferFrom)>0 && (!q || u.label.toLowerCase().includes(q)))
     : [];
   const cartItems = Object.entries(state.transferCart).filter(([id,qty])=>qty>0);
   const totalPieces = cartItems.reduce((s,[,qty])=>s+qty,0);
@@ -10297,14 +10365,15 @@ function renderTransferencias(){
         </div>
         ${sourceProducts.length===0 ? `<div class="empty-state">${q?'No hay productos que coincidan con ese filtro en este centro.':'Este centro no tiene productos con existencias.'}</div>` : `
         <div style="max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-          ${sourceProducts.map(p=>{
-            const available = centerStock(p, state.transferFrom);
-            const qty = state.transferCart[p.id]||0;
+          ${sourceProducts.map(u=>{
+            const p = u.p;
+            const available = stockUnitAvail(u, state.transferFrom);
+            const qty = state.transferCart[u.key]||0;
             return `
             <div class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;">
-              ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">Disponible: ${available}</div></div>
-              <input type="number" min="0" max="${available}" value="${qty}" style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setTransferQty('${p.id}', this.value)">
+              ${p.images&&p.images.length?`<img class="row-swatch" src="${vImage(p,u.v)||p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+              <div class="row-main"><div class="row-title">${u.label}</div><div class="row-sub">Disponible: ${available}</div></div>
+              <input type="number" min="0" max="${available}" value="${qty}" style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;" onchange="setTransferQty('${u.key}', this.value)">
             </div>`;
           }).join('')}
         </div>`}
@@ -10384,8 +10453,8 @@ function auditEntry(key){
   const v = (p.variants||[]).find(x=>x.id===parts[1]); return v ? {p, v} : null;
 }
 function auditVarLabel(v){ return Object.values((v&&v.combo)||{}).join(' / ') || 'Variante'; }
-function auditSysQty(p, v, cid){ return v ? (v.stock||0) : centerStock(p, cid); }
-function auditProdStock(p, cid){ return auditHasVars(p) ? p.variants.reduce((s,v)=>s+(v.stock||0),0) : centerStock(p, cid); }
+function auditSysQty(p, v, cid){ return v ? vCenterStock(v, cid) : centerStock(p, cid); }
+function auditProdStock(p, cid){ return auditHasVars(p) ? p.variants.reduce((s,v)=>s+vCenterStock(v,cid),0) : centerStock(p, cid); }
 function auditCountedProduct(p){ return !!p && (auditHasVars(p) ? p.variants.some(v=>state.auditCounts[auditKey(p,v)]!==undefined) : state.auditCounts[p.id]!==undefined); }
 
 /* ---- Borrador (se guarda en este navegador; se borra al finalizar o descartar) ---- */
@@ -10585,8 +10654,8 @@ async function commitAudit(applyAdjustment){
       rows.forEach(r=>{
         const p = r.p; if(!p) return;
         if(r.v){
-          const current = r.v.stock||0, next = Math.max(0, r.counted + (current - r.system));
-          r.v.stock = next; varProds[p.id] = p;
+          const current = vCenterStock(r.v, state.auditCenter), next = Math.max(0, r.counted + (current - r.system));
+          vSetCenterStock(r.v, state.auditCenter, next); varProds[p.id] = p;
           if(next!==current) moves.push([p.id, next-current, ' · '+auditVarLabel(r.v)]);
           touched.push(p.id);
           return;
@@ -10601,8 +10670,8 @@ async function commitAudit(applyAdjustment){
         batch.update(db.collection('products').doc(p.id), {stockByCenter:p.stockByCenter, stock:p.stock});
       });
       Object.values(varProds).forEach(p=>{
-        p.stock = p.variants.reduce((s,v)=>s+(v.stock||0),0);
-        batch.update(db.collection('products').doc(p.id), {variants:p.variants, stock:p.stock});
+        vProductSync(p);
+        batch.update(db.collection('products').doc(p.id), {variants:p.variants, stock:p.stock, stockByCenter:p.stockByCenter});
       });
       batch.set(ref, auditDoc);
       await batch.commit();
@@ -10749,7 +10818,7 @@ function auditCandBlock(p, showSys){
       </div>
       ${p.variants.map(v=>{ const key = auditKey(p,v), n = state.auditCounts[key]; return `
       <div class="list-row" style="${rowCss}padding-left:26px;${n!==undefined?'background:var(--surface-soft);':''}">
-        <div class="row-main"><div class="row-title" style="font-weight:600;">${escapeHtmlAudit(auditVarLabel(v))}</div><div class="row-sub">${escapeHtmlAudit(v.sku||'sin código')}${showSys?` · Sistema dice: ${state.auditSnap[key]!==undefined?state.auditSnap[key]:(v.stock||0)}`:''}</div></div>
+        <div class="row-main"><div class="row-title" style="font-weight:600;">${escapeHtmlAudit(auditVarLabel(v))}</div><div class="row-sub">${escapeHtmlAudit(v.sku||'sin código')}${showSys?` · Sistema dice: ${state.auditSnap[key]!==undefined?state.auditSnap[key]:vCenterStock(v,state.auditCenter)}`:''}</div></div>
         ${auditCountControls(key, n)}
       </div>`; }).join('')}`;
   }
@@ -12515,6 +12584,9 @@ function renderProductModal(){
 
   const secStock = p.isKit
     ? pmSection('inventario','Productos del kit',{icon:'package', body: renderKitEditor(p)})
+    : hasVariants ? pmSection('inventario','Existencias',{icon:'package', hint:`${(p.variants||[]).reduce((s,v)=>s+(v.stock||0),0)} piezas en total`, body:`
+        ${activeCenters.map(c=>`<div class="pm-stock-row"><div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px;font-weight:600;">${c.name}${c.isDefault?' <span style="color:var(--ink-soft);font-weight:400;">(Principal)</span>':''}</div><strong>${(p.variants||[]).reduce((s,v)=>s+vCenterStock(v,c.id),0)}</strong></div>`).join('')}
+        <div class="panel-sub" style="margin:8px 0 0;">Este producto maneja variantes: las existencias se capturan por variante y por centro en la sección <strong>Variantes</strong>.</div>`})
     : pmSection('inventario','Existencias',{icon:'package', hint:`${stockTotal} ${stockTotal===1?'pieza':'piezas'} en total`, body:`
         ${activeCenters.map(c=>`
           <div class="pm-stock-row">
@@ -12801,6 +12873,7 @@ function renderVariantsEditor(p){
   const groups = p.variantGroups || [];
   const variants = p.variants || [];
   const pcost = Number(p.cost)||0, pprice = Number(p.price)||0;
+  const centersAct = state.centers.filter(c=>c.active);
   return `
     <div class="panel" style="background:var(--bg);">
       <div class="panel-sub" style="margin-top:0;">Combina diferentes propiedades de tu producto. Ejemplo: color + talla.</div>
@@ -12825,16 +12898,24 @@ function renderVariantsEditor(p){
           </div>
         </div>
         <div class="var-wrap"><div class="var-table">
-          <div class="var-row var-head"><div>Variante</div><div>Stock</div><div>SKU</div><div>Precio</div><div>Costo</div></div>
+          <div class="var-row var-head"><div>Variante</div><div>Stock${centersAct.length>1?' por centro':''}</div><div>SKU</div><div>Precio</div><div>Costo</div></div>
           ${variants.map(v=>`
           <div class="var-row">
-            <div class="var-name">${escDescHtml(Object.values(v.combo||{}).join(' / ')||'Variante')}</div>
-            <div><span class="var-lbl">Stock</span><input class="var-in" type="number" min="0" inputmode="numeric" value="${v.stock||0}" onchange="setVariantField('${v.id}','stock',this.value)"></div>
+            <div class="var-name"><button type="button" class="var-thumb" title="Elegir la foto de esta variante" onclick="toggleVarPhotoPick('${v.id}')">${vImage(p,v)?`<img src="${vImage(p,v)}" alt="">`:icon('image',18)}<span class="var-thumb-edit">${icon('edit',11)}</span></button><span>${escDescHtml(Object.values(v.combo||{}).join(' / ')||'Variante')}</span></div>
+            ${state.varPhotoPick===v.id ? `<div class="var-pick">
+              ${(p.images||[]).length ? `<div class="var-pick-t">Foto de esta variante:</div><div class="var-pick-row">
+                ${(p.images||[]).map((src,i)=>`<button type="button" class="var-pick-img ${v.imageIdx===i?'on':''}" onclick="setVariantImage('${v.id}',${i})"><img src="${src}" alt=""></button>`).join('')}
+                <button type="button" class="btn-tertiary" onclick="setVariantImage('${v.id}',null)">Sin foto propia</button></div>` : `<div class="var-pick-t">Primero sube fotos del producto (sección Foto) y aquí eliges cuál es de esta variante.</div>`}
+            </div>` : ''}
+            <div class="var-stockcell"><span class="var-lbl">Stock${centersAct.length>1?' por centro':''}</span>
+              ${centersAct.map(c=>`<label class="var-cs">${centersAct.length>1?`<span title="${escDescHtml(c.name)}">${escDescHtml(c.name.replace(/\s*\(.*\)/,''))}</span>`:''}<input class="var-in" type="number" min="0" inputmode="numeric" value="${vCenterStock(v,c.id)}" onchange="setVariantCenterStock('${v.id}','${c.id}',this.value)"></label>`).join('')}
+              ${centersAct.length>1?`<div class="var-sum">Total: <strong id="var-sum-${v.id}">${v.stock||0}</strong></div>`:''}
+            </div>
             <div><span class="var-lbl">SKU</span><input class="var-in" style="text-align:left;" placeholder="SKU" value="${escDescHtml(v.sku||'')}" onchange="setVariantField('${v.id}','sku',this.value)"></div>
             <div><span class="var-lbl">Precio</span><input class="var-in" type="number" min="0" step="0.01" inputmode="decimal" placeholder="${pprice>0?pprice:'Igual'}" value="${v.priceOverride||''}" onchange="setVariantField('${v.id}','priceOverride',this.value)"></div>
             <div><span class="var-lbl">Costo</span><input class="var-in" type="number" min="0" step="0.01" inputmode="decimal" placeholder="${pcost>0?pcost:'0.00'}" value="${v.cost||''}" data-var-cost onchange="setVariantField('${v.id}','cost',this.value)"></div>
           </div>`).join('')}
-          <div class="var-row var-total"><div class="var-name">Stock total</div><div><strong id="var-stock-total">${variants.reduce((s,v)=>s+(v.stock||0),0)}</strong> pzas</div></div>
+          <div class="var-row var-total"><div class="var-name">Stock total (todos los centros)</div><div><strong id="var-stock-total">${variants.reduce((s,v)=>s+(v.stock||0),0)}</strong> pzas</div></div>
         </div></div>
         <div class="panel-sub" style="margin:8px 0 0;">Precio o costo vacío = se usa el del producto. El costo solo lo ves tú.</div>
       ` : ''}
@@ -12876,8 +12957,19 @@ function generateVariantCombos(){
 function setVariantField(variantId, field, value){
   const v = (state.productModal.variants||[]).find(x=>x.id===variantId);
   if(!v) return;
-  v[field] = (field==='stock'||field==='priceOverride'||field==='cost') ? Math.max(0, Number(value)||0) : value;
-  if(field==='stock'){ const el = document.getElementById('var-stock-total'); if(el) el.textContent = (state.productModal.variants||[]).reduce((s,x)=>s+(x.stock||0),0); }
+  v[field] = (field==='priceOverride'||field==='cost') ? Math.max(0, Number(value)||0) : value;
+}
+function setVariantCenterStock(variantId, cid, value){
+  const v = (state.productModal.variants||[]).find(x=>x.id===variantId); if(!v) return;
+  vSetCenterStock(v, cid, value);
+  const sum = document.getElementById('var-sum-'+variantId); if(sum) sum.textContent = v.stock;
+  const el = document.getElementById('var-stock-total'); if(el) el.textContent = (state.productModal.variants||[]).reduce((s,x)=>s+(x.stock||0),0);
+}
+function toggleVarPhotoPick(id){ state.varPhotoPick = state.varPhotoPick===id ? null : id; render(); }
+function setVariantImage(id, idx){
+  const v = (state.productModal.variants||[]).find(x=>x.id===id); if(!v) return;
+  if(idx==null) delete v.imageIdx; else v.imageIdx = idx;
+  state.varPhotoPick = null; render();
 }
 function applyVariantCostAll(){
   const el = document.getElementById('var-cost-all');
@@ -12909,8 +13001,13 @@ function handleSaveProduct(existingId){
   if(!name){ state.savingProduct = false; showToast('Ponle un nombre al producto'); render(); return; }
   const categories = (state.productModal.categories && state.productModal.categories.length) ? state.productModal.categories : [state.settings.categories[0]];
   const cat = categories[0];
-  const stockByCenter = state.productModal.stockByCenter || {};
-  const stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
+  let stockByCenter = state.productModal.stockByCenter || {};
+  let stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
+  if((state.productModal.variants||[]).length){
+    state.productModal.variants.forEach(vNormalize);
+    const tmp = {variants: state.productModal.variants, stockByCenter}; vProductSync(tmp);
+    stockByCenter = tmp.stockByCenter; stock = tmp.stock;
+  }
   saveProduct({
     id: existingId||null, name, sku, location, supplierId, expirationDate, batches, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],

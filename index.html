@@ -1332,6 +1332,7 @@ function genericCartSuggestions(){
   return [...sameCat, ...featured, ...rest].slice(0,4);
 }
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+function vImage(p, v){ return (v && typeof v.imageIdx==='number' && p && p.images && p.images[v.imageIdx]) || null; }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
 function parseCartKey(key){
   const parts = key.split('::');
@@ -1488,6 +1489,9 @@ function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex
 function closeProductDetail(){ state.detailProductId=null; render(); }
 function selectVariantOption(groupName, value){
   state.detailSelectedVariant[groupName] = value;
+  const dp = state.products.find(x=>x.id===state.detailProductId);
+  const mv = dp ? findMatchingVariant(dp) : null;
+  if(mv && typeof mv.imageIdx==='number' && dp.images && dp.images[mv.imageIdx]) state.detailImageIndex = mv.imageIdx;
   render();
 }
 function findMatchingVariant(p){
@@ -3164,7 +3168,7 @@ function renderCartDrawer(){
       ${entries.length===0 ? `<div class="empty-state" style="padding:30px 20px 6px;">Tu carrito está vacío.</div>${isKioskMode() ? '' : `<div class="rel-block"><h3 class="rel-title">Lo más vendido</h3><div class="rel-grid">${popularProducts(4).map(x=>renderMiniCard(x,{close:'cartOpen'})).join('')}</div></div>`}` :
         entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return state.fullCatalogLoaded ? '' : `<div class="cart-item cart-item-loading"><div class="cart-item-swatch"></div><div class="cart-item-info"><div class="cart-item-name">Cargando producto…</div><div class="cart-item-price">${qty} pza</div></div></div>`; const basePrice = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p); const price = couponDiscountedPrice(p, basePrice); return `
           <div class="cart-item">
-            ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${p.images[0]}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
+            ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${vImage(p,v)||p.images[0]}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="cart-item-info">
               <div class="cart-item-name">${p.name}${v?` <span style="color:var(--ink-soft);font-weight:600;">(${variantLabel(v)})</span>`:''}</div>
               <div class="cart-item-price">${price<basePrice?`<s style="color:var(--ink-soft);">${money(basePrice)}</s> `:''}${money(price)} c/u</div>
