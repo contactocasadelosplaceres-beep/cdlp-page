@@ -2415,24 +2415,58 @@ function quizAnswer(field, val){
   requestAnimationFrame(()=>{ const b = document.querySelector('.drawer.open .drawer-body'); if(b) b.scrollTop = 0; });
 }
 function quizBack(){ if(state.quizStep>0){ state.quizStep--; render(); } }
+// Productos que el quiz puede recomendar: con existencia y que no sean cajas sorpresa.
+function quizPool(){ return dailyShuffledProducts().filter(p=>p.stock>0 && !p.isMysteryBox); }
+function quizBudgetOf(k){ return QUIZ_BUDGETS.find(x=>x.k===k); }
+function quizInBudget(p, b, slack){
+  if(!b) return true;
+  const pr = automaticDiscountedPrice(p), lo = b.min==null?0:b.min, hi = b.max;
+  return pr >= lo*(1-(slack||0)) && (hi==null || pr <= hi*(1+(slack||0)));
+}
+// Opciones que SÍ tienen productos con lo ya elegido: así nunca se llega a una combinación vacía.
+function quizCatOptions(need){
+  const pool = quizPool().filter(p=>!need || (p.needs||[]).includes(need));
+  return visibleCategories().map(c=>[c, pool.filter(p=>productCats(p).includes(c)).length]).filter(x=>x[1]>0);
+}
+function quizBudgetOptions(need, cat){
+  const pool = quizPool().filter(p=>(!need || (p.needs||[]).includes(need)) && (!cat || productCats(p).includes(cat)));
+  return QUIZ_BUDGETS.map(b=>[b, pool.filter(p=>quizInBudget(p,b,0)).length]).filter(x=>x[1]>0);
+}
+/* La categoría que elige la persona NUNCA se relaja: si pidió dildos no se le muestra ropa. Lo que se
+   amplía, en orden, es el presupuesto (±30 %) y solo si hace falta "para quién". Si ni así hay nada,
+   se dice claro en lugar de rellenar con productos de otra categoría. Se ordenan primero los que
+   coinciden con todo, luego los más vendidos, con foto y cercanos al presupuesto. */
 function quizResults(){
-  const a = state.quizAnswers, b = QUIZ_BUDGETS.find(x=>x.k===a.budget);
-  const pool = dailyShuffledProducts().filter(p=>p.stock>0 && !p.isMysteryBox);
-  const price = p=>automaticDiscountedPrice(p);
-  const okNeed = p=>!a.need || (p.needs||[]).includes(a.need);
+  const a = state.quizAnswers, b = quizBudgetOf(a.budget);
+  const pool = quizPool();
   const okCat = p=>!a.cat || productCats(p).includes(a.cat);
-  const okBud = p=>!b || ((b.min==null || price(p)>=b.min) && (b.max==null || price(p)<=b.max));
+  const okNeed = p=>!a.need || (p.needs||[]).includes(a.need);
+  const base = pool.filter(okCat);
   const pop = new Set(popularProducts(30).map(p=>p.id));
-  const levels = [[okNeed,okCat,okBud],[okNeed,okCat],[okNeed,okBud],[okNeed],[okCat,okBud],[okCat],[okBud],[]];
-  const items = []; let exact = 0;
-  levels.forEach((fs,li)=>{
+  const mid = b ? (b.max==null ? b.min*1.3 : (b.min+b.max)/2) : null;
+  const rank = (x,y)=>{
+    const sx = (pop.has(x.id)?2:0) + ((x.images&&x.images.length)?1:0) - (mid?Math.abs(automaticDiscountedPrice(x)-mid)/mid:0);
+    const sy = (pop.has(y.id)?2:0) + ((y.images&&y.images.length)?1:0) - (mid?Math.abs(automaticDiscountedPrice(y)-mid)/mid:0);
+    return sy-sx;
+  };
+  const levels = [
+    {f:p=>okNeed(p)&&quizInBudget(p,b,0), note:null},
+    {f:p=>okNeed(p)&&quizInBudget(p,b,0.3), note:'Ampliamos un poco el presupuesto para mostrarte más opciones.'},
+    {f:p=>okNeed(p), note:'Hay pocas opciones en ese presupuesto; te mostramos también otros precios.'},
+    {f:p=>quizInBudget(p,b,0.3), note:a.need?`Mostramos todo lo de ${a.cat||'la tienda'} en ese presupuesto, aunque no esté marcado para esa ocasión.`:null},
+    {f:p=>true, note:a.cat?`Mostramos lo que tenemos en ${a.cat}, sin importar el presupuesto.`:null},
+  ];
+  const items = []; let exact = 0, note = null;
+  levels.forEach((lv,li)=>{
     if(items.length>=6) return;
-    const r = pool.filter(p=>fs.every(f=>f(p)) && !items.some(i=>i.id===p.id));
-    r.sort((x,y)=>(pop.has(y.id)?1:0)-(pop.has(x.id)?1:0));
+    const r = base.filter(p=>lv.f(p) && !items.some(i=>i.id===p.id)).sort(rank);
     if(li===0) exact = r.length;
+    if(r.length && li>0 && items.length<3 && !note) note = lv.note;
     r.forEach(p=>{ if(items.length<6) items.push(p); });
   });
-  return {items, exact};
+  // Mostrar menos pero acertado: si hay coincidencias exactas de sobra, solo esas.
+  const out = exact>=3 ? items.slice(0, Math.min(6, exact)) : items;
+  return {items:out, exact, note: exact>=3 ? null : note, total: exact};
 }
 function quizSummaryText(){
   const a = state.quizAnswers;
@@ -2445,7 +2479,7 @@ function applyQuizToCatalog(){
   state.quizOpen = false;
   state.priceMin = b && b.min ? String(b.min) : '';
   state.priceMax = b && b.max ? String(b.max) : '';
-  if(a.need) filterByNeed(a.need);
+  if(a.need){ filterByNeed(a.need); if(a.cat){ state.activeCat = a.cat; render(); } }
   else goToCatalog(a.cat || 'Todos');
 }
 function renderQuizDrawer(){
@@ -2453,11 +2487,10 @@ function renderQuizDrawer(){
   const head = `<div class="drawer-head"><h2>Encuentra tu producto ideal</h2><button class="close-x" onclick="closeQuiz()">${icon('x')}</button></div>`;
   if(step<3){
     const needs = state.settings.needs || DEFAULT_NEEDS;
-    const cats = visibleCategories().slice(0,10);
     const Q = [
       {title:'¿Para quién o para qué ocasión es?', field:'need', opts:needs.map(n=>[n.key,n.label]), skip:'Estoy explorando'},
-      {title:'¿Qué tipo de producto te llama más la atención?', field:'cat', opts:cats.map(c=>[c,c]), skip:'Sorpréndeme'},
-      {title:'¿Cuánto quieres invertir?', field:'budget', opts:QUIZ_BUDGETS.map(x=>[x.k,x.label]), skip:'Sin presupuesto definido'},
+      {title:'¿Qué tipo de producto te llama más la atención?', field:'cat', opts:quizCatOptions(a.need).sort((p,q)=>q[1]-p[1]).slice(0,12).map(x=>[x[0],`${x[0]} (${x[1]})`,x[0]]), skip:'Sorpréndeme'},
+      {title:'¿Cuánto quieres invertir?', field:'budget', opts:quizBudgetOptions(a.need,a.cat).map(x=>[x[0].k,`${x[0].label} (${x[1]})`,x[0].k]), skip:'Sin presupuesto definido'},
     ][step];
     const sel = (v)=>String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     return `${head}
@@ -2471,14 +2504,15 @@ function renderQuizDrawer(){
       ${step>0 ? `<button class="btn-tertiary" style="margin-top:14px;" onclick="quizBack()">‹ Pregunta anterior</button>` : ''}
     </div>`;
   }
-  const {items, exact} = quizResults();
+  const {items, exact, note} = quizResults();
   const summary = quizSummaryText();
   const wa = `Hola, hice el quiz de la tienda${summary?` (${summary})`:''} y me gustaría que me ayuden a elegir.`;
   return `${head}
     <div class="drawer-body">
       <h3 class="quiz-q" style="margin-bottom:4px;">Te recomendamos</h3>
       ${summary ? `<div class="quiz-sum">${summary}</div>` : ''}
-      ${exact<3 ? `<div class="note-box" style="margin:10px 0;">Ampliamos un poco la búsqueda para mostrarte más opciones.</div>` : ''}
+      ${note ? `<div class="note-box" style="margin:10px 0;">${note}</div>` : ''}
+      ${exact>6 ? `<div class="quiz-sum">Estas son las ${items.length} que más te recomendamos de ${exact} que coinciden.</div>` : ''}
       ${items.length ? `<div class="rel-grid">${items.map(p=>renderMiniCard(p,{close:'quizOpen'})).join('')}</div>` : `<div class="empty-state">Por ahora no encontramos productos con existencia. Escríbenos y te ayudamos.</div>`}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
         <button class="btn-primary" onclick="applyQuizToCatalog()">Ver todos en el catálogo</button>
@@ -2760,7 +2794,8 @@ function renderGridSection(){
   } else if(state.activeNeed){
     const need = (state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===state.activeNeed);
     filtered = filtered.filter(p=>(p.needs||[]).includes(state.activeNeed));
-    heading = need ? need.label : 'Catálogo completo';
+    if(state.activeCat && state.activeCat!=='Todos') filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
+    heading = (need ? need.label : 'Catálogo completo') + (state.activeCat && state.activeCat!=='Todos' ? ' · '+state.activeCat : '');
     emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   } else if(state.activeCat!=="Todos"){
     filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
