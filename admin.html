@@ -921,7 +921,7 @@ let state = {
   expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
   shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, receiveGoodsVariants:{},
   restockRequests:[], notifyModalProductId:null,
-  searchMisses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
+  searchMisses:[], quizResponses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
   seasonNewName:'', seasonNewMonth:1, seasonNewDay:1,
   postModalProductId:null, postImageIdx:0, postText:'',
@@ -1073,6 +1073,8 @@ async function loadData(attempt){
     state.shrinkage = shrSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.restockRequests = reqSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.searchMisses = missSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    // Respuestas del quiz de la tienda: si las reglas aún no permiten leerlas, simplemente no se muestran (sin avisos).
+    try{ const qs = await db.collection('quizResponses').orderBy('date','desc').limit(2000).get(); state.quizResponses = qs.docs.map(d=>({id:d.id, ...d.data()})); }catch(e){ state.quizResponses = []; }
     state.priceChangeBatches = pcbSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cartAbandonSurveys = casSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.productExchanges = pexSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -8206,6 +8208,7 @@ function computeSearchMisses(days){
   const since = Date.now() - days*86400000;
   const map = {};
   state.searchMisses.forEach(m=>{
+    if(m.quiz || /^\[Quiz\]/.test(m.query||'')) return;
     if(new Date(m.date).getTime() < since) return;
     const k = m.normalized || (m.query||'').toLowerCase();
     const e = map[k] || (map[k] = {term:m.query, normalized:k, count:0, last:m.date, ids:[]});
@@ -8631,6 +8634,30 @@ function renderStatsMejorHoraRedes(){
       </div>`}
   `;
 }
+const QUIZ_BUDGET_LABELS = {a:'Hasta $150', b:'$150 – $300', c:'$300 – $600', d:'Más de $600'};
+const QUIZ_MODE_LABELS = {solo:'A solas', pareja:'En pareja', regalo:'Regalo'};
+function quizStatsRows(days){
+  const since = Date.now() - days*86400000;
+  const fromMiss = state.searchMisses.filter(m=>m.quiz).map(m=>({...m.quiz}));
+  return [...state.quizResponses, ...fromMiss].filter(r=>new Date(r.date).getTime()>=since);
+}
+function renderQuizStats(days){
+  const rows = quizStatsRows(days);
+  const needs = state.settings.needs || DEFAULT_NEEDS;
+  const tally = (get, label)=>{ const m = {}; rows.forEach(r=>{ const v = get(r); if(v) m[v]=(m[v]||0)+1; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,n])=>`${escDescHtml(label?label(k):k)} <strong>${n}</strong>`).join(' · ') || '—'; };
+  const combo = r=>[QUIZ_MODE_LABELS[r.mode], r.need ? ((needs.find(n=>n.key===r.need)||{}).label||r.need) : null, r.cat, r.extra && !String(r.extra).startsWith('t:') ? r.extra : (r.extra?String(r.extra).slice(2):null), QUIZ_BUDGET_LABELS[r.budget]].filter(Boolean).join(' · ') || 'Sin filtros';
+  const unmet = {}; rows.filter(r=>(r.exact||0)<3).forEach(r=>{ const k = combo(r); unmet[k] = unmet[k]||{n:0, exact:r.exact||0}; unmet[k].n++; });
+  const unmetRows = Object.entries(unmet).sort((a,b)=>b[1].n-a[1].n).slice(0,10);
+  return `
+    <div class="panel-title" style="margin:26px 0 4px;">Quiz «Encuentra tu producto ideal»</div>
+    <div class="panel-sub" style="margin-bottom:12px;">Anónimo: solo se guardan las respuestas, nada de la persona. Sirve para ver qué buscan y qué combinaciones no tienen suficientes productos.</div>
+    ${rows.length===0 ? `<div class="empty-state">Todavía no hay respuestas del quiz en este periodo.</div>` : `
+      <div class="list-row"><div class="row-main"><div class="row-title">${rows.length} quiz completado${rows.length===1?'':'s'}</div>
+        <div class="row-sub" style="line-height:1.7;">Para quién: ${tally(r=>r.need, k=>(needs.find(n=>n.key===k)||{}).label||k)}<br>Categorías: ${tally(r=>r.cat)}<br>Presupuesto: ${tally(r=>r.budget, k=>QUIZ_BUDGET_LABELS[k]||k)}<br>Uso: ${tally(r=>r.mode, k=>QUIZ_MODE_LABELS[k]||k)}</div></div></div>
+      <div class="panel-title" style="margin:14px 0 6px;font-size:15px;">Combinaciones con pocos productos (menos de 3 exactos)</div>
+      ${unmetRows.length ? unmetRows.map(([k,v])=>`<div class="list-row"><div class="row-main"><div class="row-title">${escDescHtml(k)}</div><div class="row-sub">${v.n} vez/veces · ${v.exact} producto(s) exacto(s)</div></div></div>`).join('') : `<div class="empty-state">Todas las combinaciones tuvieron productos suficientes.</div>`}`}
+  `;
+}
 function renderStatsBusquedas(){
   const days = state.searchMissDays || 30;
   const rows = computeSearchMisses(days);
@@ -8644,6 +8671,7 @@ function renderStatsBusquedas(){
         <button class="btn-outline" onclick="createProductFromSearch(decodeURIComponent('${attrEnc(r.term||'')}'))">Crear producto</button>
         <button class="btn-tertiary" title="Ya lo revisé o no me interesa" onclick="dismissSearchMiss(decodeURIComponent('${attrEnc(r.normalized||'')}'))">Descartar</button>
       </div>`).join('')}
+    ${renderQuizStats(days)}
   `;
 }
 
