@@ -2409,12 +2409,11 @@ const QUIZ_BUDGETS = [
   {k:'c', label:'$300 – $600', min:300, max:600},
   {k:'d', label:'Más de $600', min:600, max:null},
 ];
-function openQuiz(){ state.quizAnswers = {mode:null, need:null, cat:null, extra:null, budget:null}; state.quizStep = 0; state.quizShown = 6; state.quizLogged = false; state.quizOpen = true; render(); }
+function openQuiz(){ state.quizAnswers = {need:null, cat:null, extra:null, budget:null}; state.quizStep = 0; state.quizShown = 6; state.quizLogged = false; state.quizOpen = true; render(); }
 function closeQuiz(){ state.quizOpen = false; render(); }
-const QUIZ_MODES = [['solo','Para mí, a solas'],['pareja','Para usar en pareja'],['regalo','Es un regalo']];
 function quizSteps(a){
   a = a || state.quizAnswers;
-  return ['mode','need','cat', ...(a.cat && quizExtraDef(a) ? ['extra'] : []), 'budget'];
+  return ['need','cat', ...(a.cat && quizExtraDef(a) ? ['extra'] : []), 'budget'];
 }
 function quizAnswer(field, val){
   const a = state.quizAnswers;
@@ -2435,20 +2434,29 @@ function quizInBudget(p, b, slack){
   const pr = automaticDiscountedPrice(p), lo = b.min==null?0:b.min, hi = b.max;
   return pr >= lo*(1-(slack||0)) && (hi==null || pr <= hi*(1+(slack||0)));
 }
-function quizText(p){ return searchClean((p.name||'')+' '+String(p.desc||'').replace(/<[^>]*>/g,' ').slice(0,400)); }
-/* Pregunta extra según la categoría elegida (vibración, nivel, talla, tipo de lubricante…). Sale solo
-   si de verdad separa los productos que hay (al menos 2 opciones con productos); si no, se omite. */
+function quizName(p){ return searchClean(p.name); }
+function quizDesc(p){ return searchClean(String(p.desc||'').replace(/<[^>]*>/g,' ')); }
+// Solo se usan datos reales del producto: su nombre y frases explícitas de su descripción. Si no hay
+// evidencia clara, el producto queda "sin clasificar" y NO se mete en ninguna opción (se prefiere mostrar menos y acertar).
+function quizVibra(p){
+  const n = quizName(p), d = quizDesc(p);
+  if(/\b(sin|no tiene|no incluye|no lleva|no cuenta con) (vibraci|motor|vibra)/.test(n+' '+d)) return 'no';
+  if(/vibra|control remoto|pulsa/.test(n)) return 'si';
+  if(/\b(\d+|varios|multiples|diferentes) (modos|velocidades|patrones|funciones) de (vibraci|pulsa)|(con|funcion de|incluye|tiene) (\w+ )?vibraci|\bvibra\b|vibrante|motor (potente|silencioso)/.test(d)) return 'si';
+  if(/vibr|motor|pulsa/.test(n+' '+d)) return null;   // menciona algo ambiguo: no se clasifica
+  return d.length>=25 ? 'no' : null;
+}
 const QUIZ_EXTRAS = [
   {cat:/dildo|vibrador|consolador|juguete/, title:'¿Lo quieres con vibración?', opts:[
-    ['vib','Con vibración', p=>/vibra|vibrac|control remoto|pulsa|modos|estimula/.test(quizText(p))],
-    ['novib','Sin vibración', p=>!/vibra|vibrac|control remoto|pulsa|modos|estimula/.test(quizText(p))]]},
-  {cat:/plug|dilatador|anal/, title:'¿Cuál es tu nivel?', opts:[
-    ['princ','Estoy empezando', p=>/principiante|mini|peque|chico|inici|small|delgad|suave|starter/.test(quizText(p))],
-    ['exp','Ya tengo experiencia', p=>!/principiante|mini|peque|chico|inici|small|delgad|suave|starter/.test(quizText(p))]]},
+    ['vib','Con vibración', p=>quizVibra(p)==='si'],
+    ['novib','Sin vibración', p=>quizVibra(p)==='no']]},
+  {cat:/plug|dilatador|anal/, title:'¿Qué tamaño buscas?', opts:[
+    ['princ','Pequeño, para empezar', p=>/principiante|iniciacion|iniciar|mini\b|small|pequen|talla s\b|starter/.test(quizName(p))],
+    ['grande','Grande o avanzado', p=>/grande|xl|large|gigante|jumbo|avanzad|talla l\b/.test(quizName(p))]]},
   {cat:/lubric|gel|aceite/, title:'¿Qué tipo de lubricante buscas?', opts:[
-    ['agua','Base agua', p=>/agua/.test(quizText(p))],
-    ['sili','Base silicona', p=>/silicon/.test(quizText(p))],
-    ['sabor','Con sabor o efecto', p=>/sabor|efecto|calor|calient|frio|fresa|chocolate|comestible|estimul|cosquill/.test(quizText(p))]]},
+    ['agua','Base agua', p=>/base agua|a base de agua|water/.test(quizName(p)+' '+quizDesc(p))],
+    ['sili','Base silicona', p=>/base silicona|a base de silicona|silicone/.test(quizName(p)+' '+quizDesc(p))],
+    ['sabor','Con sabor', p=>/sabor|comestible/.test(quizName(p))]]},
 ];
 function quizSizeOpts(pool){
   const set = new Map();
@@ -2459,6 +2467,16 @@ function quizSizeOpts(pool){
     });
   });
   return [...set.entries()].map(([val,ids])=>({k:'t:'+val, label:'Talla '+val, count:ids.size, fn:p=>ids.has(p.id)}));
+}
+function quizColorOpts(pool){
+  const set = new Map();
+  pool.forEach(p=>{
+    (p.variantGroups||[]).forEach(g=>{
+      if(!/color|colour/i.test(g.name||'')) return;
+      (p.variants||[]).forEach(v=>{ const val = v.combo && v.combo[g.name]; if(val && (v.stock==null || v.stock>0)) set.set(String(val), (set.get(String(val))||new Set()).add(p.id)); });
+    });
+  });
+  return [...set.entries()].map(([val,ids])=>({k:'c:'+val, label:val, count:ids.size, fn:p=>ids.has(p.id)}));
 }
 function quizExtraDef(a){
   if(!a.cat) return null;
@@ -2471,6 +2489,8 @@ function quizExtraDef(a){
     const def = QUIZ_EXTRAS.find(x=>x.cat.test(catN));
     if(def){ title = def.title; opts = def.opts.map(o=>({k:o[0], label:o[1], fn:o[2], count:pool.filter(o[2]).length})); }
   }
+  opts = opts.filter(o=>o.count>0);
+  if(opts.length<2 && !/ropa|lencer|interior|body|disfraz/.test(catN)){ const col = quizColorOpts(pool); if(col.length>=2){ title = '¿De qué color lo prefieres?'; opts = col; } }
   opts = opts.filter(o=>o.count>0);
   if(!title || opts.length<2) return null;
   return {title, opts};
@@ -2489,14 +2509,6 @@ function quizBudgetOptions(a){
   const pool = quizPool().filter(p=>(!a.need || (p.needs||[]).includes(a.need)) && (!a.cat || productCats(p).includes(a.cat)) && (!ex || ex(p)));
   return QUIZ_BUDGETS.map(b=>[b, pool.filter(p=>quizInBudget(p,b,0)).length]).filter(x=>x[1]>0);
 }
-const QUIZ_PAIR_RX = /pareja|compart|\bdos\b|anillo vibrador/, QUIZ_GIFT_RX = /kit|set |regalo|caja|combo|paquete/;
-function quizModeBoost(p, mode){
-  if(!mode) return 0;
-  const needs = p.needs||[], t = searchClean(p.name);
-  if(mode==='pareja') return (needs.includes('compartir-pareja')||needs.includes('para-pareja') ? 1.5 : 0) + (QUIZ_PAIR_RX.test(t) ? 1 : 0);
-  if(mode==='regalo') return (QUIZ_GIFT_RX.test(t)||p.isKit ? 1.5 : 0) + (p.images&&p.images.length ? 0.3 : 0);
-  return (needs.includes('para-mi')||needs.includes('empezando') ? 1 : 0);
-}
 /* La categoría que elige la persona NUNCA se relaja. Lo que se amplía, en orden: la pregunta extra,
    el presupuesto (±30 %) y, solo si hace falta, "para quién". Se ordena por coincidencia, más vendidos,
    foto, cercanía al presupuesto, tipo de uso (solo / pareja / regalo) y, a igual relevancia, mejor margen. */
@@ -2506,23 +2518,21 @@ function quizResults(){
   const okCat = p=>!a.cat || productCats(p).includes(a.cat);
   const okNeed = p=>!a.need || (p.needs||[]).includes(a.need);
   const okEx = p=>!ex || ex(p);
-  const okExHard = p=>(ex && String(a.extra).startsWith('t:')) ? ex(p) : true;   // la talla nunca se relaja
-  const base = pool.filter(p=>okCat(p) && okExHard(p));
+  const base = pool.filter(p=>okCat(p) && okEx(p));   // categoría y característica elegidas: nunca se relajan
   const pop = new Set(popularProducts(30).map(p=>p.id));
   const mid = b ? (b.max==null ? b.min*1.3 : (b.min+b.max)/2) : null;
   const score = p=>{
     const pr = automaticDiscountedPrice(p);
     const margin = (p.cost>0 && pr>0) ? Math.max(0, Math.min(1, (pr-p.cost)/pr))*0.5 : 0;
-    return (pop.has(p.id)?2:0) + ((p.images&&p.images.length)?1:0) - (mid?Math.abs(pr-mid)/mid:0) + quizModeBoost(p,a.mode) + margin;
+    return (pop.has(p.id)?2:0) + ((p.images&&p.images.length)?1:0) - (mid?Math.abs(pr-mid)/mid:0) + margin;
   };
   const rank = (x,y)=>score(y)-score(x);
   const catTxt = a.cat||'la tienda';
   const levels = [
-    {f:p=>okNeed(p)&&okEx(p)&&quizInBudget(p,b,0), note:null},
-    {f:p=>okNeed(p)&&okEx(p)&&quizInBudget(p,b,0.3), note:'Ampliamos un poco el presupuesto para mostrarte más opciones.'},
-    {f:p=>okNeed(p)&&okEx(p), note:'Hay pocas opciones en ese presupuesto; te mostramos también otros precios.'},
-    {f:p=>okNeed(p)&&quizInBudget(p,b,0.3), note:ex?'Hay pocos con esa característica; te mostramos también otros parecidos.':null},
-    {f:p=>quizInBudget(p,b,0.3), note:a.need?`Mostramos todo lo de ${catTxt} en ese presupuesto, aunque no esté marcado para esa ocasión.`:null},
+    {f:p=>okNeed(p)&&quizInBudget(p,b,0), note:null},
+    {f:p=>okNeed(p)&&quizInBudget(p,b,0.25), note:'Hay pocas opciones exactas en ese presupuesto; ampliamos un poco el precio.'},
+    {f:p=>okNeed(p), note:'Hay pocas opciones en ese presupuesto; te mostramos también otros precios.'},
+    {f:p=>quizInBudget(p,b,0.25), note:a.need?`Aún hay pocos productos de ${catTxt} marcados para esa ocasión; te mostramos otros que cumplen lo demás.`:null},
     {f:p=>true, note:a.cat?`Mostramos lo que tenemos en ${a.cat}, sin importar el presupuesto.`:null},
   ];
   const items = []; let exact = 0, note = null;
@@ -2539,32 +2549,28 @@ function quizResults(){
   return {items, exact, note: (exact>=3 && !none) ? null : note, total: items.length, pop};
 }
 function quizTags(p, r){
-  const a = state.quizAnswers, b = quizBudgetOf(a.budget), tags = [];
+  const a = state.quizAnswers, tags = [];
   const d = a.extra ? quizExtraDef(a) : null, o = d && d.opts.find(x=>x.k===a.extra);
-  if(o && o.fn(p)) tags.push(o.label);
-  if(a.mode==='pareja' && quizModeBoost(p,'pareja')>=1) tags.push('Ideal en pareja');
-  if(a.mode==='regalo' && quizModeBoost(p,'regalo')>=1.5) tags.push('Buena opción de regalo');
+  if(o) tags.push(o.label);
   if(r.pop.has(p.id)) tags.push('Más vendido');
   if(automaticDiscountedPrice(p)<p.price) tags.push('En promoción');
-  if(b && quizInBudget(p,b,0)) tags.push('Dentro de tu presupuesto');
   return tags.slice(0,2);
 }
 function quizSummaryText(){
   const a = state.quizAnswers;
   const need = a.need ? ((state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===a.need)||{}).label : null;
   const b = QUIZ_BUDGETS.find(x=>x.k===a.budget);
-  const m = a.mode ? (QUIZ_MODES.find(x=>x[0]===a.mode)||[])[1] : null;
   const d = a.extra ? quizExtraDef(a) : null, o = d && d.opts.find(x=>x.k===a.extra);
-  return [m, need, a.cat, o?o.label:null, b ? b.label : null].filter(Boolean).join(' · ');
+  return [need, a.cat, o?o.label:null, b ? b.label : null].filter(Boolean).join(' · ');
 }
 // Respuestas anónimas del quiz (sin ningún dato personal) para ver en Estadísticas qué buscan y qué combinaciones no tienen producto.
 function quizLogResult(){
   if(state.quizLogged) return; state.quizLogged = true;
   const a = state.quizAnswers;
-  if(!a.mode && !a.need && !a.cat && !a.extra && !a.budget) return;
+  if(!a.need && !a.cat && !a.extra && !a.budget) return;
   try{
     const r = quizResults();
-    const rec = {mode:a.mode||null, need:a.need||null, cat:a.cat||null, extra:a.extra||null, budget:a.budget||null, exact:r.exact, shown:Math.min(6,r.items.length), date:new Date().toISOString()};
+    const rec = {need:a.need||null, cat:a.cat||null, extra:a.extra||null, budget:a.budget||null, exact:r.exact, shown:Math.min(6,r.items.length), date:new Date().toISOString()};
     db.collection('quizResponses').add(rec).catch(()=>{
       db.collection('searchMisses').add({query:'[Quiz] '+quizSummaryText(), normalized:'[quiz]', quiz:rec, date:rec.date}).catch(()=>{});
     });
@@ -2585,8 +2591,7 @@ function renderQuizDrawer(){
   if(step<steps.length){
     const field = steps[step], needs = state.settings.needs || DEFAULT_NEEDS;
     let Q;
-    if(field==='mode') Q = {title:'¿Cómo lo vas a disfrutar?', opts:QUIZ_MODES.map(m=>[m[0],m[1]]), skip:'Me da igual'};
-    else if(field==='need') Q = {title:'¿Para quién o para qué ocasión es?', opts:needs.map(n=>[n.key,n.label]), skip:'Muéstrame lo más vendido'};
+    if(field==='need') Q = {title:'¿Para quién o para qué ocasión es?', opts:needs.map(n=>[n.key,n.label]), skip:'Muéstrame lo más vendido'};
     else if(field==='cat') Q = {title:'¿Qué tipo de producto te llama más la atención?', opts:quizCatOptions(a.need).sort((p,q)=>q[1]-p[1]).slice(0,12).map(x=>[x[0],`${x[0]} (${x[1]})`]), skip:'Sorpréndeme con lo más popular'};
     else if(field==='extra'){ const d = quizExtraDef(a); Q = {title:d.title, opts:d.opts.map(o=>[o.k,`${o.label} (${o.count})`]), skip:'Me da igual'}; }
     else Q = {title:'¿Cuánto quieres invertir?', opts:quizBudgetOptions(a).map(x=>[x[0].k,`${x[0].label} (${x[1]})`]), skip:'Sin presupuesto definido'};
