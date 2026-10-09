@@ -634,7 +634,7 @@ function renderExchangeModal(){
   const amount = exchangeAmount();
   function pickerBlock(side, label, entry, searchVal){
     const q = (searchVal||'').trim().toLowerCase();
-    const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || exVariantsOf(p).some(v=>(v.sku||'').toLowerCase().includes(q))).slice(0,8) : [];
+    const results = q ? searchProducts(q).slice(0,8) : [];
     const vp = state.exchangeVarPick && state.exchangeVarPick.side===side ? state.products.find(x=>x.id===state.exchangeVarPick.id) : null;
     return `
       <div class="form-field"><label>${label}</label>
@@ -706,7 +706,7 @@ async function sendWarehouseNote(productId){
 }
 function renderWarehouseModal(){
   const q = state.warehouseSearch.trim().toLowerCase();
-  const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,30) : [];
+  const results = q ? searchProducts(q).slice(0,30) : [];
   return `
   <div class="modal-overlay">
     <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
@@ -1523,7 +1523,7 @@ function renderCustomerPickerModal(){
   // Solo se muestra algo cuando hay una búsqueda escrita — nunca la lista completa de
   // clientes de entrada, para que quien registre o revise a un cliente no vea de paso a
   // todos los demás.
-  let list = q ? state.customers.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q)) : [];
+  let list = q ? state.customers.filter(c=>tolMatch(q, c.name, c.phone)) : [];
   list = list.slice(0,40);
   return `
   <div class="modal-overlay">
@@ -2035,9 +2035,116 @@ function onCatSearchInput(v){
   state.catSearch = v; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render();
   const i = document.getElementById('cat-search-input'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
+/* ============== BÚSQUEDA TOLERANTE (misma lógica que la tienda) ==============
+   Ignora acentos y mayúsculas, acepta las palabras en cualquier orden, entiende plurales y perdona
+   una letra mal escrita en palabras largas ("lubrikante"). Respeta los sinónimos de Configuración.
+   searchProducts(q, lista) devuelve las coincidencias con las mejores primero; tolMatch(q, ...textos)
+   sirve para clientes, pedidos, mensajes, etc. */
+function searchClean(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
+function searchStem(t){
+  if(t.length>4 && t.endsWith('es')) return t.slice(0,-2);
+  if(t.length>3 && t.endsWith('s')) return t.slice(0,-1);
+  return t;
+}
+function withinOneEdit(a,b){
+  if(a===b) return true;
+  const la=a.length, lb=b.length; if(Math.abs(la-lb)>1) return false;
+  let i=0, j=0, edits=0;
+  while(i<la && j<lb){
+    if(a[i]===b[j]){ i++; j++; continue; }
+    if(++edits>1) return false;
+    if(la>lb) i++; else if(lb>la) j++; else { i++; j++; }
+  }
+  return edits + (la-i) + (lb-j) <= 1;
+}
+const _searchIdx = new Map();
+function productSearchEntry(p){
+  const cats = ((p.categories&&p.categories.length)?p.categories:(p.cat?[p.cat]:[])).join(' ');
+  const vs = (p.variants||[]).map(v=>(v.sku||'')+' '+(v.name||'')+' '+Object.values(v.combo||{}).join(' ')).join(' ');
+  const sig = (p.name||'')+'|'+cats+'|'+(p.sku||'')+'|'+(p.barcode||'')+'|'+(p.location||'')+'|'+vs;
+  let e = _searchIdx.get(p.id);
+  if(e && e.sig===sig) return e;
+  const name = searchClean(p.name), catsN = searchClean(cats), loc = searchClean(p.location), code = searchClean((p.sku||'')+' '+(p.barcode||'')+' '+vs);
+  e = {sig, name, cats:catsN, loc, code, words:new Set((name+' '+catsN).split(' ').filter(w=>w.length>=3))};
+  _searchIdx.set(p.id, e);
+  return e;
+}
+function productSearchScore(p, tokens, full){
+  const e = productSearchEntry(p);
+  let score = 0;
+  if(e.name.includes(full)) score += 10;
+  if(e.name.startsWith(full)) score += 5;
+  for(const t of tokens){
+    const s = searchStem(t);
+    if(e.name.includes(s)) score += 4;
+    else if(e.cats.includes(s)) score += 3;
+    else if(e.code && e.code.includes(t)) score += 3;
+    else if(e.loc && e.loc.includes(s)) score += 2;
+    else if(s.length>=5){
+      let hit = false;
+      for(const w of e.words){ if(withinOneEdit(searchStem(w), s) || withinOneEdit(w, t) || withinOneEdit(w.slice(0,s.length), s) || withinOneEdit(w.slice(0,s.length+1), s)){ hit = true; break; } }
+      if(hit) score += 1.5; else return -1;
+    } else return -1;
+  }
+  return score;
+}
+let _synSig = '', _synGroups = [];
+function synonymGroups(){
+  const raw = state.settings && state.settings.searchSynonyms;
+  const sig = JSON.stringify(raw||[]);
+  if(sig!==_synSig){
+    _synSig = sig;
+    _synGroups = (Array.isArray(raw)?raw:[]).map(line=>String(line).split(',').map(x=>searchClean(x)).filter(Boolean)).filter(g=>g.length>=2);
+  }
+  return _synGroups;
+}
+function queryVariants(full){
+  const out = [full], groups = synonymGroups();
+  if(!groups.length) return out;
+  const tokens = full.split(' ');
+  groups.forEach(g=>{
+    g.forEach((phrase,pi)=>{
+      let build = null;
+      if((' '+full+' ').includes(' '+phrase+' ')) build = (other)=>(' '+full+' ').replace(' '+phrase+' ', ' '+other+' ').trim();
+      else if(!phrase.includes(' ')){
+        const t = tokens.find(x=>x.length>=4 && phrase.startsWith(x));
+        if(t) build = (other)=>tokens.map(x=>x===t?other:x).join(' ');
+      }
+      if(!build) return;
+      g.forEach((other,oi)=>{ if(oi!==pi){ const v = build(other); if(v && !out.includes(v)) out.push(v); } });
+    });
+  });
+  return out.slice(0, 8);
+}
+function searchProducts(q, pool){
+  const full = searchClean(q);
+  const tokens = full.split(' ').filter(Boolean);
+  const list = pool || state.products;
+  if(!tokens.length) return list;
+  const variants = queryVariants(full).map(v=>({v, toks:v.split(' ').filter(Boolean)}));
+  const out = [];
+  list.forEach((p,i)=>{
+    let best = -1;
+    variants.forEach((x,vi)=>{
+      const sc = productSearchScore(p, x.toks, x.v);
+      if(sc>=0){ const adj = vi===0 ? sc : sc-0.5; if(adj>best) best = adj; }
+    });
+    if(best>=0) out.push({p, sc:best, i});
+  });
+  out.sort((a,b)=> b.sc-a.sc || a.i-b.i);
+  return out.map(x=>x.p);
+}
+// Texto libre (clientes, pedidos, mensajes…): todas las palabras escritas deben aparecer, sin importar acentos ni orden.
+function tolMatch(q, ...fields){
+  const toks = searchClean(q).split(' ').filter(Boolean);
+  if(!toks.length) return true;
+  const hay = ' ' + fields.map(searchClean).join(' ') + ' ';
+  const hayDigits = fields.map(f=>String(f==null?'':f).replace(/\D/g,'')).join(' ');
+  return toks.every(t=> hay.includes(t) || (/^\d{3,}$/.test(t) && hayDigits.includes(t)) || (t.length>=5 && hay.split(' ').some(w=>w.length>=4 && (withinOneEdit(w,t)||withinOneEdit(w.slice(0,t.length),t)))));
+}
 function posSearchMatches(q){
-  q = (q||'').trim().toLowerCase(); if(!q) return [];
-  return state.products.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  q = (q||'').trim(); if(!q) return [];
+  return searchProducts(q);
 }
 function renderCatalogModal(){
   const cats = ["Todos", ...state.categories];
@@ -2048,7 +2155,7 @@ function renderCatalogModal(){
     list = frequentIds.map(id=>byId[id]).filter(Boolean);
   } else list = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
   const q = (state.catSearch||'').trim().toLowerCase();
-  if(q) list = list.filter(p=>(p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  if(q) list = searchProducts(q, list);
   return `
   <div class="modal-overlay" onclick="closeCatalog()">
     <div class="modal catalog-modal" onclick="event.stopPropagation()">
@@ -2124,7 +2231,7 @@ function renderPOS(){
   } else {
     filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
   }
-  if(state.search.trim()) filtered = filtered.filter(p=>p.name.toLowerCase().includes(state.search.trim().toLowerCase()));
+  if(state.search.trim()) filtered = searchProducts(state.search, filtered);
   const desk = posDesktop();
   const cartCol = state.cartCollapsed && !desk;
   const entries = Object.entries(state.cart);

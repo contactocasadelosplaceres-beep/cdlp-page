@@ -1971,19 +1971,17 @@ function computeGlobalSearchResults(){
   const LIMIT = 8;
   const result = {q, products:[], orders:[], customers:[]};
   if(canAccessTab('productos')){
-    result.products = state.products
-      .filter(p=>(p.name||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q))
-      .slice(0, LIMIT);
+    result.products = searchProducts(q, state.products).slice(0, LIMIT);
   }
   if(canAccessTab('pedidos')){
     result.orders = state.orders
-      .filter(o=> formatFolio(o.orderNumber).toLowerCase().includes(q) || (o.customer||'').toLowerCase().includes(q) || (o.customerName||'').toLowerCase().includes(q) || (o.phone||'').includes(q) || (o.customerPhone||'').includes(q))
+      .filter(o=> tolMatch(q, formatFolio(o.orderNumber), o.orderNumber, o.customer, o.customerName, o.phone, o.customerPhone))
       .sort((a,b)=> new Date(b.date) - new Date(a.date))
       .slice(0, LIMIT);
   }
   if(canAccessTab('clientes')){
     result.customers = computeCustomersList()
-      .filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q))
+      .filter(c=>tolMatch(q, c.name, c.phone, c.email))
       .slice(0, LIMIT);
   }
   return result;
@@ -2823,7 +2821,7 @@ function copyPromoPickList(){
 function renderPromoPickModal(){
   const list = state.products.filter(p=>p.promoCandidate);
   const q = (state.promoPickSearch||'').trim().toLowerCase();
-  const cands = q ? state.products.filter(p=>!p.promoCandidate && ((p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q)||(p.cat||'').toLowerCase().includes(q))).slice(0,30) : [];
+  const cands = q ? searchProducts(q, state.products.filter(p=>!p.promoCandidate)).slice(0,30) : [];
   const row = (p, inList)=>`
     <div class="list-row">
       ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
@@ -3208,6 +3206,113 @@ async function logStockMovement(productId, type, qtyChange, note, centerId){
 // Guarda un renglón en la bitácora de acciones del panel — pensada para cuando entre más
 // personal: quién cambió qué, y cuándo. targetName es lo que se ve en la lista sin tener que
 // ir a buscar el producto/pedido/persona por su ID.
+/* ============== BÚSQUEDA TOLERANTE (misma lógica que la tienda) ==============
+   Ignora acentos y mayúsculas, acepta las palabras en cualquier orden, entiende plurales y perdona
+   una letra mal escrita en palabras largas ("lubrikante"). Respeta los sinónimos de Configuración.
+   searchProducts(q, lista) devuelve las coincidencias con las mejores primero; tolMatch(q, ...textos)
+   sirve para clientes, pedidos, mensajes, etc. */
+function searchClean(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
+function searchStem(t){
+  if(t.length>4 && t.endsWith('es')) return t.slice(0,-2);
+  if(t.length>3 && t.endsWith('s')) return t.slice(0,-1);
+  return t;
+}
+function withinOneEdit(a,b){
+  if(a===b) return true;
+  const la=a.length, lb=b.length; if(Math.abs(la-lb)>1) return false;
+  let i=0, j=0, edits=0;
+  while(i<la && j<lb){
+    if(a[i]===b[j]){ i++; j++; continue; }
+    if(++edits>1) return false;
+    if(la>lb) i++; else if(lb>la) j++; else { i++; j++; }
+  }
+  return edits + (la-i) + (lb-j) <= 1;
+}
+const _searchIdx = new Map();
+function productSearchEntry(p){
+  const cats = ((p.categories&&p.categories.length)?p.categories:(p.cat?[p.cat]:[])).join(' ');
+  const vs = (p.variants||[]).map(v=>(v.sku||'')+' '+(v.name||'')+' '+Object.values(v.combo||{}).join(' ')).join(' ');
+  const sig = (p.name||'')+'|'+cats+'|'+(p.sku||'')+'|'+(p.barcode||'')+'|'+(p.location||'')+'|'+vs;
+  let e = _searchIdx.get(p.id);
+  if(e && e.sig===sig) return e;
+  const name = searchClean(p.name), catsN = searchClean(cats), loc = searchClean(p.location), code = searchClean((p.sku||'')+' '+(p.barcode||'')+' '+vs);
+  e = {sig, name, cats:catsN, loc, code, words:new Set((name+' '+catsN).split(' ').filter(w=>w.length>=3))};
+  _searchIdx.set(p.id, e);
+  return e;
+}
+function productSearchScore(p, tokens, full){
+  const e = productSearchEntry(p);
+  let score = 0;
+  if(e.name.includes(full)) score += 10;
+  if(e.name.startsWith(full)) score += 5;
+  for(const t of tokens){
+    const s = searchStem(t);
+    if(e.name.includes(s)) score += 4;
+    else if(e.cats.includes(s)) score += 3;
+    else if(e.code && e.code.includes(t)) score += 3;
+    else if(e.loc && e.loc.includes(s)) score += 2;
+    else if(s.length>=5){
+      let hit = false;
+      for(const w of e.words){ if(withinOneEdit(searchStem(w), s) || withinOneEdit(w, t) || withinOneEdit(w.slice(0,s.length), s) || withinOneEdit(w.slice(0,s.length+1), s)){ hit = true; break; } }
+      if(hit) score += 1.5; else return -1;
+    } else return -1;
+  }
+  return score;
+}
+let _synSig = '', _synGroups = [];
+function synonymGroups(){
+  const raw = state.settings && state.settings.searchSynonyms;
+  const sig = JSON.stringify(raw||[]);
+  if(sig!==_synSig){
+    _synSig = sig;
+    _synGroups = (Array.isArray(raw)?raw:[]).map(line=>String(line).split(',').map(x=>searchClean(x)).filter(Boolean)).filter(g=>g.length>=2);
+  }
+  return _synGroups;
+}
+function queryVariants(full){
+  const out = [full], groups = synonymGroups();
+  if(!groups.length) return out;
+  const tokens = full.split(' ');
+  groups.forEach(g=>{
+    g.forEach((phrase,pi)=>{
+      let build = null;
+      if((' '+full+' ').includes(' '+phrase+' ')) build = (other)=>(' '+full+' ').replace(' '+phrase+' ', ' '+other+' ').trim();
+      else if(!phrase.includes(' ')){
+        const t = tokens.find(x=>x.length>=4 && phrase.startsWith(x));
+        if(t) build = (other)=>tokens.map(x=>x===t?other:x).join(' ');
+      }
+      if(!build) return;
+      g.forEach((other,oi)=>{ if(oi!==pi){ const v = build(other); if(v && !out.includes(v)) out.push(v); } });
+    });
+  });
+  return out.slice(0, 8);
+}
+function searchProducts(q, pool){
+  const full = searchClean(q);
+  const tokens = full.split(' ').filter(Boolean);
+  const list = pool || state.products;
+  if(!tokens.length) return list;
+  const variants = queryVariants(full).map(v=>({v, toks:v.split(' ').filter(Boolean)}));
+  const out = [];
+  list.forEach((p,i)=>{
+    let best = -1;
+    variants.forEach((x,vi)=>{
+      const sc = productSearchScore(p, x.toks, x.v);
+      if(sc>=0){ const adj = vi===0 ? sc : sc-0.5; if(adj>best) best = adj; }
+    });
+    if(best>=0) out.push({p, sc:best, i});
+  });
+  out.sort((a,b)=> b.sc-a.sc || a.i-b.i);
+  return out.map(x=>x.p);
+}
+// Texto libre (clientes, pedidos, mensajes…): todas las palabras escritas deben aparecer, sin importar acentos ni orden.
+function tolMatch(q, ...fields){
+  const toks = searchClean(q).split(' ').filter(Boolean);
+  if(!toks.length) return true;
+  const hay = ' ' + fields.map(searchClean).join(' ') + ' ';
+  const hayDigits = fields.map(f=>String(f==null?'':f).replace(/\D/g,'')).join(' ');
+  return toks.every(t=> hay.includes(t) || (/^\d{3,}$/.test(t) && hayDigits.includes(t)) || (t.length>=5 && hay.split(' ').some(w=>w.length>=4 && (withinOneEdit(w,t)||withinOneEdit(w.slice(0,t.length),t)))));
+}
 async function logAdminAction(action, targetType, targetName, details, targetId){
   try{
     await db.collection('adminAuditLog').add({
@@ -4459,7 +4564,7 @@ function setFlashDuration(h){
 function renderFlashModal(){
   const f = state.flashModal;
   const q = (state.flashProductSearch||'').trim().toLowerCase();
-  const cands = q ? state.products.filter(p=>!p.isKit && (p.name||'').toLowerCase().includes(q)).slice(0,12) : [];
+  const cands = q ? searchProducts(q, state.products.filter(p=>!p.isKit)).slice(0,12) : [];
   const covered = flashProducts(f);
   const below = flashBelowCost(f);
   const picked = f.productIds.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
@@ -6326,7 +6431,7 @@ function renderTagAssignPanel(kind, value, label){
   // agregarlos). Ahora muestra cualquier producto que coincida con el nombre buscado, y
   // decide el botón según si ya la tiene o no — así desde la misma barra se puede agregar
   // o quitar, sin tener que bajar a buscarlo en la lista completa de abajo.
-  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,30) : [];
+  const candidates = q ? searchProducts(q, state.products).slice(0,30) : [];
   return `
     <div style="margin-bottom:10px;">
       <button class="btn-tertiary" onclick="state.${openKey}=!state.${openKey};render()">${icon('tag',14)} ${state[openKey]?'Listo':'Agregar o quitar productos de'} "${label}"</button>
@@ -6640,7 +6745,7 @@ function renderProductos(){
   const needFilter = state.productNeedFilter || 'Todas';
   const needsList = state.settings.needs || DEFAULT_NEEDS;
   let filtered = state.products;
-  if(q) filtered = filtered.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
+  if(q) filtered = searchProducts(q, filtered);
   if(catFilter!=='Todas') filtered = filtered.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
   if(needFilter!=='Todas') filtered = filtered.filter(p => (p.needs||[]).includes(needFilter));
   // Con una sola categoría filtrada (y sin buscar/filtrar por etiqueta) se muestra en el orden
@@ -6897,9 +7002,7 @@ function normName(s){
 
 function orderMatchesSearch(o, q){
   if(!q) return true;
-  const hay = [formatFolio(o.orderNumber), String(o.orderNumber||''), o.customer, o.customerName, o.phone, o.customerPhone, o.cashierName, o.address,
-    ...(o.items||[]).map(it=>it.name)].filter(Boolean).join(' ').toLowerCase();
-  return q.split(/\s+/).every(w=>hay.includes(w));
+  return tolMatch(q, formatFolio(o.orderNumber), String(o.orderNumber||''), o.customer, o.customerName, o.phone, o.customerPhone, o.cashierName, o.address, (o.items||[]).map(it=>it.name).join(' '));
 }
 function onOrderSearchInput(v){
   state.orderSearch = v;
@@ -7179,7 +7282,7 @@ function filteredStoreMessages(){
     list = list.filter(m=>(m.status||'nuevo')===state.messageStatusFilter);
   }
   const q = (state.messageSearch||'').trim().toLowerCase();
-  if(q) list = list.filter(m=> (m.name||'').toLowerCase().includes(q) || (m.message||'').toLowerCase().includes(q) || (m.phone||'').includes(q));
+  if(q) list = list.filter(m=> tolMatch(q, m.name, m.message, m.phone));
   return list;
 }
 function onMessageSearchInput(v){
@@ -7546,7 +7649,7 @@ function setKitComponentQty(idx, val){
 function renderKitEditor(p){
   const items = p.kitItems || [];
   const q = (state.kitProductSearch||'').trim().toLowerCase();
-  const candidates = q ? state.products.filter(x=>!x.isKit && x.id!==p.id && (x.name||'').toLowerCase().includes(q)).slice(0,10) : [];
+  const candidates = q ? searchProducts(q, state.products.filter(x=>!x.isKit && x.id!==p.id)).slice(0,10) : [];
   const previewStock = computeKitStock({...p, kitItems: items});
   return `
   <div class="panel" style="margin:4px 0 16px;background:var(--bg);">
@@ -7665,7 +7768,7 @@ function selectAllTransfer(){
   if(!state.transferFrom) return;
   const q = (state.transferProductSearch||'').trim().toLowerCase();
   state.products.flatMap(stockUnits)
-    .filter(u=>stockUnitAvail(u,state.transferFrom)>0 && (!q || u.label.toLowerCase().includes(q)))
+    .filter(u=>stockUnitAvail(u,state.transferFrom)>0 && (!q || tolMatch(q, u.label)))
     .forEach(u=>{ state.transferCart[u.key] = stockUnitAvail(u, state.transferFrom); });
   render();
 }
@@ -7733,7 +7836,7 @@ function computeCustomersList(){
 function filteredCustomers(){
   let list = computeCustomersList();
   const q = (state.customerSearch||'').trim().toLowerCase();
-  if(q) list = list.filter(c=>(c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q) || (c.email||'').toLowerCase().includes(q));
+  if(q) list = list.filter(c=>tolMatch(q, c.name, c.phone, c.email));
   const f = state.customerFilters;
   if(f.country!=='Todos') list = list.filter(c=>(c.country||'—')===f.country);
   if(f.state!=='Todos') list = list.filter(c=>(c.state||'—')===f.state);
@@ -7937,7 +8040,7 @@ async function registerShrinkage(){
 }
 function renderMermas(){
   const q = (state.shrinkSearch||'').trim().toLowerCase();
-  const results = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.sku||'').toLowerCase().includes(q)).slice(0,8) : [];
+  const results = q ? searchProducts(q, state.products).slice(0,8) : [];
   const p = state.products.find(x=>x.id===state.shrinkProductId);
   const centerId = state.shrinkCenterId || (state.centers.find(c=>c.isDefault)||state.centers[0]||{}).id || '';
   const shrinkVar = p && p.variants && p.variants.length ? p.variants.find(v=>v.id===state.shrinkVariantId) : null;
@@ -8552,7 +8655,7 @@ function getFilteredProducts(){
   const catFilter = state.productCatFilter || 'Todas';
   const needFilter = state.productNeedFilter || 'Todas';
   let f = state.products;
-  if(q) f = f.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
+  if(q) f = searchProducts(q, f);
   if(catFilter!=='Todas') f = f.filter(p => (p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(catFilter));
   if(needFilter!=='Todas') f = f.filter(p => (p.needs||[]).includes(needFilter));
   return f;
@@ -9481,7 +9584,7 @@ function renderMayoreo(){
 function renderWholesaleModal(){
   const t = state.wholesaleModal;
   const q = (state.wholesaleProductSearch||'').trim().toLowerCase();
-  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  const candidates = q ? searchProducts(q, state.products).slice(0,15) : [];
   const secBase = pmSection('wt_base','Tabla de precios',{icon:'package', body:`
       <div class="form-field"><label>Nombre</label><input id="wt-name" value="${t.name||''}" placeholder="Ej. Mayoristas chicos" oninput="state.wholesaleModal.name=this.value"></div>
       <div class="two-col-keep">
@@ -9652,7 +9755,7 @@ function renderCupones(){
 function renderCouponModal(){
   const c = state.couponModal;
   const q = (state.couponProductSearch||'').trim().toLowerCase();
-  const candidates = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  const candidates = q ? searchProducts(q, state.products).slice(0,15) : [];
   const secBase = pmSection('cp_base','Cupón',{icon:'tag', body:`
       <div class="two-col-keep">
         <div class="form-field"><label>Código</label><input id="cp-code" value="${c.code||''}" style="text-transform:uppercase;" placeholder="Ej. VERANO20" oninput="state.couponModal.code=this.value"></div>
@@ -9856,7 +9959,7 @@ function renderPromociones(){
 }
 function renderPromoScopePicker(p){
   const q = (state.promoProductSearch||'').trim().toLowerCase();
-  const candidates = q ? state.products.filter(x=>(x.name||'').toLowerCase().includes(q)).slice(0,15) : [];
+  const candidates = q ? searchProducts(q, state.products).slice(0,15) : [];
   return `
     <div class="form-field"><label>¿A qué productos aplica?</label>
       <select id="pr-scope" onchange="state.promoModal.scope=this.value;render()">
@@ -9939,7 +10042,7 @@ function renderPromoModal(){
         </div>
         ${(state.promoProductSearch||'').trim() ? `
           <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${state.products.filter(x=>(x.name||'').toLowerCase().includes(state.promoProductSearch.trim().toLowerCase())).slice(0,15).map(pr=>`
+            ${searchProducts(state.promoProductSearch, state.products).slice(0,15).map(pr=>`
               <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
                 <input type="radio" name="pr-gift-radio" ${p.giftProductId===pr.id?'checked':''} onchange="state.promoModal.giftProductId='${pr.id}'">
                 <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
@@ -9956,7 +10059,7 @@ function renderPromoModal(){
         </div>
         ${(state.promoProductSearch||'').trim() ? `
           <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${state.products.filter(x=>(x.name||'').toLowerCase().includes(state.promoProductSearch.trim().toLowerCase())).slice(0,10).map(pr=>`
+            ${searchProducts(state.promoProductSearch, state.products).slice(0,10).map(pr=>`
               <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
                 <input type="radio" name="pr-trigger-radio" ${p.triggerProductId===pr.id?'checked':''} onchange="state.promoModal.triggerProductId='${pr.id}'">
                 <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
@@ -9969,7 +10072,7 @@ function renderPromoModal(){
         </div>
         ${(state.promoProductSearch2||'').trim() ? `
           <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${state.products.filter(x=>(x.name||'').toLowerCase().includes(state.promoProductSearch2.trim().toLowerCase())).slice(0,10).map(pr=>`
+            ${searchProducts(state.promoProductSearch2, state.products).slice(0,10).map(pr=>`
               <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
                 <input type="radio" name="pr-discountprod-radio" ${p.discountProductId===pr.id?'checked':''} onchange="state.promoModal.discountProductId='${pr.id}'">
                 <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
@@ -10392,7 +10495,7 @@ async function markSupplierOrderDone(supplierId){
 }
 function renderReabasto(){
   const q = (state.restockAddSearch||'').trim().toLowerCase();
-  const searchResults = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q) && !state.restockItems.find(r=>r.productId===p.id)).slice(0,8) : [];
+  const searchResults = q ? searchProducts(q, state.products.filter(p=>!state.restockItems.find(r=>r.productId===p.id))).slice(0,8) : [];
   const groups = [...state.suppliers.map(s=>({id:s.id, name:s.name})), {id:'', name:'Sin proveedor asignado'}];
   // Inversión estimada: solo suma los productos que tienen costo registrado (Productos → editar
   // → "Costo"). Los que no lo tienen se cuentan aparte, para que sepas que ese total es parcial
@@ -10518,7 +10621,7 @@ function renderTransferencias(){
   const activeCenters = state.centers.filter(c=>c.active);
   const q = (state.transferProductSearch||'').trim().toLowerCase();
   const sourceProducts = state.transferFrom
-    ? state.products.flatMap(stockUnits).filter(u=>stockUnitAvail(u,state.transferFrom)>0 && (!q || u.label.toLowerCase().includes(q)))
+    ? state.products.flatMap(stockUnits).filter(u=>stockUnitAvail(u,state.transferFrom)>0 && (!q || tolMatch(q, u.label)))
     : [];
   const cartItems = Object.entries(state.transferCart).filter(([id,qty])=>qty>0);
   const totalPieces = cartItems.reduce((s,[,qty])=>s+qty,0);
@@ -10584,7 +10687,7 @@ function renderTransferencias(){
 
 function renderInventarioPorCentro(){
   const q = (state.productSearch||'').trim().toLowerCase();
-  const filtered = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)) : state.products;
+  const filtered = q ? searchProducts(q, state.products) : state.products;
   const activeCenters = state.centers.filter(c=>c.active);
   return `
     <div class="form-field" style="max-width:420px;">
@@ -10978,7 +11081,7 @@ function auditScopeProducts(){
   if(state.auditPlan && state.auditPlanOnly){ const set = new Set(state.auditPlan); list = list.filter(p=>set.has(p.id)); }
   if(state.auditCategory && state.auditCategory!=='Todas') list = list.filter(p=>(p.categories&&p.categories.length?p.categories:(p.cat?[p.cat]:[])).includes(state.auditCategory));
   const q = (state.auditSearch||'').trim().toLowerCase();
-  if(q) list = list.filter(p=>(p.name||'').toLowerCase().includes(q) || String(p.sku||'').toLowerCase().includes(q) || (p.variants||[]).some(v=>String(v.sku||'').toLowerCase().includes(q) || auditVarLabel(v).toLowerCase().includes(q)));
+  if(q) list = searchProducts(q, list);
   return list.sort((a,b)=> String(a.location||'~').localeCompare(String(b.location||'~'),'es') || String(a.name||'').localeCompare(String(b.name||''),'es'));
 }
 
@@ -11748,7 +11851,7 @@ function renderFeaturedSubpanel(){
   const ids = state.settings.featuredProductIds || [];
   const q = (state.featuredSearch||'').trim().toLowerCase();
   const featuredProducts = state.products.filter(p=>ids.includes(p.id));
-  const list = q ? state.products.filter(p=>(p.name||'').toLowerCase().includes(q)) : featuredProducts;
+  const list = q ? searchProducts(q, state.products) : featuredProducts;
   const autoIds = state.settings.bestSellerProductIds || [];
   const autoProducts = autoIds.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   const updatedAt = state.settings.bestSellersUpdatedAt;
@@ -11807,7 +11910,7 @@ function renderCheckoutReminderSubpanel(){
   const ids = state.settings.checkoutReminderProducts || [];
   const q = (state.checkoutReminderSearch||'').trim().toLowerCase();
   const chosen = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
-  const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q)).slice(0,30) : chosen;
+  const results = q ? searchProducts(q, state.products).slice(0,30) : chosen;
   return `
   <div class="panel">
     <div class="panel-title">Recordatorio al cobrar (Punto de Venta)</div>
@@ -11885,7 +11988,7 @@ function renderRepurchaseSubpanel(){
   const ids = state.settings.repurchaseProductIds || [];
   const q = (state.repurchaseProductSearch||'').trim().toLowerCase();
   const chosen = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
-  const results = q ? state.products.filter(p=>p.name.toLowerCase().includes(q)).slice(0,30) : chosen;
+  const results = q ? searchProducts(q, state.products).slice(0,30) : chosen;
   const candidates = computeRepurchaseCandidates();
   return `
   <div class="panel">
