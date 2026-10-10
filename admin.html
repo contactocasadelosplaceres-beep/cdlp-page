@@ -746,6 +746,124 @@ firebase.initializeApp(firebaseConfig);
     });
   }catch(e){ console.warn('Blindaje de texto no disponible', e); }
 })();
+/* ============== COSTOS PRIVADOS (QA-03) ==============
+   El costo de compra, su historial y el proveedor ya no viven en "products" (que cualquiera puede leer
+   porque la tienda la necesita), sino en "productCosts", que solo lee y escribe el personal.
+   Para no tocar las decenas de lugares del panel/POS que usan p.cost, aquí se hace en un solo punto:
+   - al LEER un producto, se le pegan sus datos privados (si el personal tiene permiso);
+   - al GUARDAR un producto, lo privado se separa solo y se escribe en productCosts, en la misma
+     operación, y se borra de products.
+   Solo separa si la lectura de productCosts funcionó (o sea, ya están publicadas las reglas nuevas);
+   si no, todo sigue como antes. */
+(function(){
+  const PRIV_KEYS = ['cost','costHistory','supplierId'];
+  const PRIV_COL = 'productCosts';
+  const cache = new Map();
+  const S = window.cdlpPrivate = {cache, loaded:false, ok:false, loading:null};
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch || !F.Query) return;
+  const colOf = ref => { try{ return ref && ref.parent && ref.parent.id; }catch(e){ return null; } };
+  const isPlain = o => o && typeof o==='object' && Object.getPrototypeOf(o)===Object.prototype;
+  function marginTier(price, cost){ price=Number(price); cost=Number(cost); if(!(price>0) || !(cost>0)) return null; const m=(price-cost)/price; return m>=0.6?3:m>=0.45?2:m>=0.3?1:0; }
+  function split(data, canDelete){
+    if(!isPlain(data)) return null;
+    const pub = {}, priv = {}; let has = false;
+    for(const k of Object.keys(data)){
+      if(PRIV_KEYS.includes(k)){ priv[k] = data[k]; has = true; if(canDelete) pub[k] = F.FieldValue.delete(); }
+      else if(k==='variants' && Array.isArray(data[k])){
+        const vc = {}; let any = false;
+        pub.variants = data[k].map(v=>{
+          if(isPlain(v) && Object.prototype.hasOwnProperty.call(v,'cost')){ const {cost, ...rest} = v; if(v.id!=null){ vc[v.id] = cost; any = true; } return rest; }
+          return v;
+        });
+        if(any){ priv.variantCosts = vc; has = true; }
+      } else pub[k] = data[k];
+    }
+    if(!has) return null;
+    const t = marginTier(data.price, priv.cost); if(t!==null) pub.mgTier = t;
+    return {pub, priv};
+  }
+  function remember(id, priv){
+    const c = cache.get(id) || {};
+    for(const k of Object.keys(priv)){
+      const val = priv[k];
+      if(k==='variantCosts') c.variantCosts = {...(c.variantCosts||{}), ...val};
+      else if(isPlain(val) || Array.isArray(val) || typeof val!=='object' || val===null) c[k] = val;
+    }
+    cache.set(id, c);
+  }
+  function merge(id, d){
+    const c = cache.get(id); if(!c || !d) return d;
+    for(const k of PRIV_KEYS) if(c[k]!==undefined) d[k] = c[k];
+    if(c.variantCosts && Array.isArray(d.variants)) d.variants = d.variants.map(v=> (v && v.id!=null && c.variantCosts[v.id]!==undefined) ? {...v, cost:c.variantCosts[v.id]} : v);
+    return d;
+  }
+  // ---- lectura ----
+  const qGet = F.Query.prototype.get, dGet = F.DocumentReference.prototype.get;
+  async function ensurePrivate(fs){
+    if(S.loaded) return; if(S.loading) return S.loading;
+    S.loading = (async ()=>{
+      try{
+        const snap = await qGet.call(fs.collection(PRIV_COL));
+        snap.docs.forEach(d=>{ const v = d.data(); if(v) cache.set(d.id, v); });
+        S.ok = true;
+      }catch(e){ S.ok = false; }
+      S.loaded = true;
+    })();
+    return S.loading;
+  }
+  window.cdlpEnsurePrivate = ()=>ensurePrivate(firebase.firestore());
+  F.Query.prototype.get = async function(o){ if(this.id==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return qGet.call(this, o); };
+  F.DocumentReference.prototype.get = async function(o){ if(colOf(this)==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return dGet.call(this, o); };
+  [F.DocumentSnapshot, F.QueryDocumentSnapshot].forEach(C=>{
+    if(!C || !C.prototype || Object.prototype.hasOwnProperty.call(C.prototype,'__cdlpPriv')) return;
+    const orig = C.prototype.data;
+    C.prototype.data = function(o){ const d = orig.call(this, o); try{ if(d && colOf(this.ref)==='products') merge(this.id, d); }catch(e){} return d; };
+    Object.defineProperty(C.prototype,'__cdlpPriv',{value:true});
+  });
+  // ---- escritura ----
+  const B = F.WriteBatch.prototype, bSet = B.set, bUpd = B.update, bDel = B.delete;
+  const DR = F.DocumentReference.prototype, rSet = DR.set, rUpd = DR.update, rDel = DR.delete;
+  const privRef = ref => ref.firestore.collection(PRIV_COL).doc(ref.id);
+  DR.set = function(data, opts){
+    if(S.ok && colOf(this)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bSet.call(b, this, sp.pub, opts||{}); bSet.call(b, privRef(this), sp.priv, {merge:true}); return b.commit(); } }
+    return rSet.call(this, data, opts);
+  };
+  DR.update = function(data, ...rest){
+    if(S.ok && !rest.length && colOf(this)==='products'){ const sp = split(data, true); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bUpd.call(b, this, sp.pub); bSet.call(b, privRef(this), sp.priv, {merge:true}); return b.commit(); } }
+    return rUpd.call(this, data, ...rest);
+  };
+  DR.delete = function(){
+    if(S.ok && colOf(this)==='products'){ cache.delete(this.id); const b = this.firestore.batch(); bDel.call(b, this); bDel.call(b, privRef(this)); return b.commit(); }
+    return rDel.call(this);
+  };
+  B.set = function(ref, data, opts){
+    if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); bSet.call(this, ref, sp.pub, opts||{}); bSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+    return bSet.call(this, ref, data, opts);
+  };
+  B.update = function(ref, data, ...rest){
+    if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); bUpd.call(this, ref, sp.pub); bSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+    return bUpd.call(this, ref, data, ...rest);
+  };
+  if(F.Transaction && F.Transaction.prototype){
+    const T = F.Transaction.prototype, tSet = T.set, tUpd = T.update;
+    T.set = function(ref, data, opts){
+      if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); tSet.call(this, ref, sp.pub, opts||{}); tSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+      return tSet.call(this, ref, data, opts);
+    };
+    T.update = function(ref, data, ...rest){
+      if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); tUpd.call(this, ref, sp.pub); tSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+      return tUpd.call(this, ref, data, ...rest);
+    };
+  }
+  if(F.CollectionReference && F.CollectionReference.prototype){
+    const cAdd = F.CollectionReference.prototype.add;
+    F.CollectionReference.prototype.add = function(data){
+      if(S.ok && this.id==='products' && split(data,false)){ const ref = this.doc(); return ref.set(data).then(()=>ref); }
+      return cAdd.call(this, data);
+    };
+  }
+})();
 
 const db = firebase.firestore();
 const auth = firebase.auth();
@@ -5462,6 +5580,7 @@ function computeTodayTasks(){
   if(auditHasDraft()) t.push({tone:'ambar', n:Object.keys(state.auditCounts).length, text:'producto'+(Object.keys(state.auditCounts).length===1?'':'s')+' contado'+(Object.keys(state.auditCounts).length===1?'':'s')+' en un conteo sin terminar — retómalo y finalízalo', go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='contar';render()"});
   else { const dc = defaultCenterId(); if(dc){ const cp = computeCountPlan(dc); if(cp.todayLeft>0 && cp.dueCount>0) t.push({tone: cp.overdueA?'ambar':'info', n:Math.min(cp.todayLeft, cp.dueCount), text:`producto${Math.min(cp.todayLeft,cp.dueCount)===1?'':'s'} te toca contar hoy (conteo cíclico)`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='calendario';render()"}); } }
   { const oa = computeAuditStats().open; if(oa) t.push({tone:'ambar', n:oa, text:`diferencia${oa===1?'':'s'} de inventario sin resolver`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='seguimiento';render()"}); }
+  if(catalogReviewDue()){ const n = catalogReviewPending(); t.push({tone:'info', n, text:`cosa${n===1?'':'s'} por corregir en productos — revisión semanal`, go:"goToCatalogReview()"}); }
   lyTodayTasks().forEach(x=>t.push(x));
   ckTodayTasks().forEach(x=>t.push(x));
   const m = computeMetrics();
@@ -5772,6 +5891,8 @@ function computeRestockSuggestions(){
 const HEALTH_CHECKS_DEF = [
   {key:'noPhoto', label:'Sin foto'},
   {key:'noDesc', label:'Sin descripción'},
+  {key:'textGlitch', label:'Texto con signos raros (?? o letras dañadas)'},
+  {key:'genericDesc', label:'Descripción genérica copiada de Tiendanube'},
   {key:'noSku', label:'Sin SKU'},
   {key:'noCategory', label:'Sin categoría'},
   {key:'noPrice', label:'Sin precio'},
@@ -5794,11 +5915,12 @@ function computePriceMismatches(){
   const byCat = {};
   state.products.forEach(p=>{ if(!(p.price>0)) return; const cat = p.cat||'Otros'; (byCat[cat]=byCat[cat]||[]).push(p); });
   const flagged = new Map();
+  const tokCache = new Map(); const tok = p => { if(!tokCache.has(p.id)) tokCache.set(p.id, normalizeNameTokens(p.name)); return tokCache.get(p.id); };
   Object.values(byCat).forEach(list=>{
     for(let i=0;i<list.length;i++){
       for(let j=i+1;j<list.length;j++){
         const a=list[i], b=list[j];
-        const tokensA = normalizeNameTokens(a.name), tokensB = normalizeNameTokens(b.name);
+        const tokensA = tok(a), tokensB = tok(b);
         if(!tokensA.length || !tokensB.length) continue;
         const shared = tokensA.filter(t=>tokensB.includes(t));
         if(shared.length < Math.min(2, tokensA.length, tokensB.length)) continue;
@@ -5821,12 +5943,63 @@ function productMarginPct(p){
   return (price-p.cost)/price*100;
 }
 function healthDismissKey(productId, checkKey){ return productId+'::'+checkKey; }
+// Texto dañado: "??" donde había emojis o letras que se perdieron al importar, o acentos rotos (Ã©, Â, �).
+const TEXT_GLITCH_RE = /\?\?|Ã[\u0080-\u00BF]|Â[\u0080-\u00BF ]|\uFFFD|ï¿½/;
+const GENERIC_DESC_RE = /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i;
+function textGlitchSnippet(p){
+  for(const [label, txt] of [['Nombre', p.name||''], ['Descripción', p.desc||'']]){
+    const m = TEXT_GLITCH_RE.exec(txt); if(!m) continue;
+    const a = Math.max(0, m.index-30), b = Math.min(txt.length, m.index+m[0].length+30);
+    return `${label}: ${a>0?'…':''}${txt.slice(a,b)}${b<txt.length?'…':''}`;
+  }
+  return '';
+}
+/* Revisión semanal de "Corregir en productos": una vez por semana aparece en "Qué hacer hoy" hasta que
+   marcas la revisión como hecha; lo que marques como "Ya lo revisé" ya no vuelve a aparecer. */
+function catalogReviewWeek(){ return ckPeriodKey('semanal'); }
+function catalogReviewPending(){ return computeCatalogHealth().reduce((a,c)=>a+c.list.length,0); }
+function catalogReviewDue(){ return state.settings.catalogReviewWeek !== catalogReviewWeek() && catalogReviewPending()>0; }
+async function markCatalogReviewDone(){
+  state.settings.catalogReviewWeek = catalogReviewWeek();
+  state.settings.catalogReviewAt = new Date().toISOString();
+  await saveSettings();
+  showToast('Revisión de esta semana marcada como hecha');
+  render();
+}
+async function dismissHealthCheckAll(checkKey){
+  const c = computeCatalogHealth().find(x=>x.key===checkKey); if(!c || !c.list.length) return;
+  if(!confirm(`¿Marcar los ${c.list.length} productos de "${c.label}" como revisados? Ya no te avisaré de ellos.`)) return;
+  if(!state.settings.dismissedHealthItems) state.settings.dismissedHealthItems = [];
+  const set = new Set(state.settings.dismissedHealthItems);
+  c.list.forEach(p=>set.add(healthDismissKey(p.id, checkKey)));
+  state.settings.dismissedHealthItems = [...set];
+  await saveSettings();
+  showToast('Listo, marcados como revisados');
+  render();
+}
+function goToCatalogReview(){
+  state.adminTab='estadísticas'; state.statsSubview='productos'; render();
+  setTimeout(()=>{ const e=document.getElementById('corregir-productos'); if(e) e.scrollIntoView({behavior:'smooth', block:'start'}); }, 60);
+}
+// Se calcula en muchas pantallas a la vez (Productos, Qué hacer hoy, Estadísticas): se guarda unos
+// segundos para no recalcular las comparaciones de precios en cada redibujado.
+let _catalogHealthMemo = null;
 function computeCatalogHealth(){
+  const k = state.products.length+'|'+(state.settings.dismissedHealthItems||[]).length+'|'+state.products.reduce((a,p)=>a+(p.name||'').length+(p.desc||'').length+(p.price||0),0);
+  if(_catalogHealthMemo && _catalogHealthMemo.k===k && Date.now()-_catalogHealthMemo.t<5000) return _catalogHealthMemo.v;
+  const v = computeCatalogHealthRaw();
+  _catalogHealthMemo = {k, t:Date.now(), v};
+  return v;
+}
+function computeCatalogHealthRaw(){
+  const priceMismatchList = computePriceMismatches();
   const skuCounts = {};
   state.products.forEach(p=>{ if(p.sku && p.sku.trim()) skuCounts[p.sku.trim()] = (skuCounts[p.sku.trim()]||0)+1; });
   const listByKey = {
     noPhoto: state.products.filter(p=>!(p.images&&p.images.length)),
     noDesc: state.products.filter(p=>!(p.desc&&p.desc.trim())),
+    textGlitch: state.products.filter(p=>TEXT_GLITCH_RE.test(p.name||'') || TEXT_GLITCH_RE.test(p.desc||'')),
+    genericDesc: state.products.filter(p=>p.desc && GENERIC_DESC_RE.test(p.desc.trim())),
     noSku: state.products.filter(p=>!(p.sku&&p.sku.trim())),
     noCategory: state.products.filter(p=>!((p.categories&&p.categories.length)||p.cat)),
     noPrice: state.products.filter(p=>!(p.price>0)),
@@ -5840,10 +6013,10 @@ function computeCatalogHealth(){
     expired: state.products.filter(p=>p.expirationDate && new Date(p.expirationDate+'T00:00:00') < new Date()),
     negativeMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m<=0; }),
     lowMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m>0 && m<20; }),
-    priceMismatch: computePriceMismatches().map(x=>x.product),
+    priceMismatch: priceMismatchList.map(x=>x.product),
   };
   const priceMismatchByProductId = {};
-  computePriceMismatches().forEach(x=>{ priceMismatchByProductId[x.product.id] = x; });
+  priceMismatchList.forEach(x=>{ priceMismatchByProductId[x.product.id] = x; });
   const dismissedSet = new Set(state.settings.dismissedHealthItems||[]);
   return HEALTH_CHECKS_DEF.map(c=>{
     const fullList = listByKey[c.key]||[];
@@ -5856,7 +6029,7 @@ async function dismissHealthItem(productId, checkKey){
   const k = healthDismissKey(productId, checkKey);
   if(!state.settings.dismissedHealthItems.includes(k)) state.settings.dismissedHealthItems.push(k);
   await saveSettings();
-  showToast('Marcado como leído para este producto');
+  showToast('Listo, ya no te avisaré de esto en este producto');
   render();
 }
 async function undismissHealthItem(productId, checkKey){
@@ -6333,9 +6506,14 @@ function renderStatsProductos(){
       ${renderShowMoreButton('restockShowMore', remaining)}
     </div>`;
     })() : ''}
-    <div class="panel">
-      <div class="panel-title">${icon('alert-triangle',15)} Salud del catálogo</div>
-      <div class="panel-sub">Datos incompletos que conviene revisar cuando haya tiempo. "Marcar como leído" es por producto — si otro más adelante tiene la misma falta, sí te avisa de ese.</div>
+    <div class="panel" id="corregir-productos">
+      <div class="panel-title">${icon('alert-triangle',15)} Corregir en productos</div>
+      <div class="panel-sub">Lo que conviene corregir en tus productos. Toca un grupo para ver cuáles son y abrirlos. "Ya lo revisé" es por producto: ese ya no vuelve a aparecer, pero si otro producto tiene la misma falta, sí te avisa.</div>
+      ${(()=>{ const pend = catalogReviewPending(); const done = state.settings.catalogReviewWeek===catalogReviewWeek();
+        return `<div class="note-box" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;">
+          <span style="flex:1 1 220px;"><b>Revisión semanal:</b> ${done ? `hecha esta semana${state.settings.catalogReviewAt?` (${new Date(state.settings.catalogReviewAt).toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'short'})})`:''}.` : pend ? `pendiente esta semana · ${pend} cosa${pend===1?'':'s'} por revisar.` : 'sin pendientes esta semana.'}</span>
+          ${!done && pend ? `<button class="btn-tertiary" onclick="markCatalogReviewDone()">${icon('check',13)} Terminé la revisión de esta semana</button>` : ''}
+        </div>`; })()}
       ${(()=>{
         const activeChecks = health.filter(c=>c.list.length>0);
         return `
@@ -6353,16 +6531,17 @@ function renderStatsProductos(){
             ${shown.map(p=>`
               <div class="list-row">
                 <div class="row-main" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>
-                  <div class="row-title">${p.name}</div><div class="row-sub">${p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}${check.key==='priceMismatch' && check.priceMismatchByProductId[p.id] ? ` · ${money(p.price)} vs. "${check.priceMismatchByProductId[p.id].other.name}" a ${money(check.priceMismatchByProductId[p.id].other.price)} — toca para revisar` : ''}</div>
+                  <div class="row-title">${p.name}</div><div class="row-sub">${check.key==='textGlitch' ? escDescHtml(textGlitchSnippet(p)) : p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}${check.key==='priceMismatch' && check.priceMismatchByProductId[p.id] ? ` · ${money(p.price)} vs. "${check.priceMismatchByProductId[p.id].other.name}" a ${money(check.priceMismatchByProductId[p.id].other.price)} — toca para revisar` : ''}</div>
                 </div>
-                <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Marcar como leído</button>
+                <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Ya lo revisé</button>
                 ${(check.key==='expired'||check.key==='expiringSoon') ? `<button class="btn-tertiary" title="Darlo de baja del inventario" onclick="openShrinkForProduct('${p.id}')">Registrar merma</button>` : ''}
                 ${check.key==='outOfStockVisible' ? `<button class="btn-tertiary" title="Ocultar de la tienda mientras se repone" onclick="if(confirm('¿Ocultar \\'${p.name.replace(/'/g,"\\\\'")}\\' de la tienda?'))quickHideProduct('${p.id}')">${icon('eye-off',13)} Ocultar</button>` : ''}
               </div>
             `).join('')}
             ${renderShowMoreButton('healthListShowMore', remaining)}
+            ${check.list.length>1 ? `<button class="btn-tertiary" style="margin-top:10px;margin-right:8px;" onclick="dismissHealthCheckAll('${check.key}')">${icon('check',13)} Ya revisé todos (${check.list.length})</button>` : ''}
             ${allForCheck.dismissedCount>0 ? `
-              <button class="btn-tertiary" style="margin-top:10px;" onclick="state.healthShowDismissed=!state.healthShowDismissed;render()">${state.healthShowDismissed?'Ocultar':'Ver'} los ${allForCheck.dismissedCount} ya marcados como leídos en "${check.label}"</button>
+              <button class="btn-tertiary" style="margin-top:10px;" onclick="state.healthShowDismissed=!state.healthShowDismissed;render()">${state.healthShowDismissed?'Ocultar':'Ver'} los ${allForCheck.dismissedCount} ya revisados en "${check.label}"</button>
               ${state.healthShowDismissed ? `
                 <div style="margin-top:8px;">
                   ${state.products.filter(p=>(state.settings.dismissedHealthItems||[]).includes(healthDismissKey(p.id, check.key))).map(p=>`
@@ -7032,6 +7211,7 @@ function renderProductos(){
       </div>
       <div class="prod-head-actions">
         <div class="row-more-wrap">
+          ${(()=>{ const n = catalogReviewPending(); return n ? `<button class="btn-tools" style="margin-right:6px;" onclick="goToCatalogReview()">${icon('alert-triangle',15)} Corregir (${n})</button>` : ''; })()}
           <button class="btn-tools" onclick="event.stopPropagation();state.productToolsOpen=!state.productToolsOpen;render()">${icon('sliders',15)} Herramientas</button>
           ${state.productToolsOpen ? `
           <div class="row-more-overlay" onclick="state.productToolsOpen=false;render()"></div>
