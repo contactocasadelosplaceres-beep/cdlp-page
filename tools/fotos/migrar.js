@@ -29,7 +29,8 @@ const env = process.env;
 let DRY_RUN = env.DRY_RUN !== '0';
 const AUTO = env.AUTO === '1';
 const AUTO_MAX = 20;
-const LIMIT = env.LIMIT ? Math.max(1, parseInt(env.LIMIT, 10) || 0) : 0;
+// 0, vacío o "todos" = sin límite
+const LIMIT = (() => { const n = parseInt(String(env.LIMIT || '').trim(), 10); return Number.isFinite(n) && n > 0 ? n : 0; })();
 const ONLY_IDS = (env.ONLY_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const CLEAN_ORPHANS = env.CLEAN_ORPHANS === '1';
 const SITE_URL = (env.SITE_URL || 'https://contactocasadelosplaceres-beep.github.io/cdlp-page/').replace(/\/?$/, '/');
