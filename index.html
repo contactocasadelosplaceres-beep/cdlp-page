@@ -159,7 +159,7 @@
   .card-image-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
   .card-image-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:38px;color:#fff;}
   .badge-row{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;}
-  .badge{font-size:9.5px;font-weight:700;padding:5px 9px;border-radius:7px;letter-spacing:0.02em;color:#fff;}
+  .badge{font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;letter-spacing:0.02em;color:#fff;}
   .badge-stock{background:#FFF0F0;color:#D32F2F;font-size:10px;font-weight:600;border:1px solid #F7D2D2;}
   .badge-best{background:var(--amber);color:#3a2200;}
   .card-add{margin-top:8px;width:100%;height:38px;border-radius:8px;background:var(--rose);color:#fff;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;text-align:center;transition:transform .12s ease;}
@@ -390,7 +390,7 @@
   .pay-badge{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;background:rgba(255,255,255,.1);color:#fff;font-size:11.5px;font-weight:600;}
   .pay-badge.seal{background:rgba(255,255,255,.18);}
   .foot-col a:hover{color:#fff;}
-  .foot-bottom{max-width:1160px;margin:24px auto 0;padding-top:18px;border-top:1px solid rgba(255,255,255,0.12);font-size:11.5px;color:#a97f9d;}
+  .foot-bottom{max-width:1160px;margin:24px auto 0;padding-top:18px;border-top:1px solid rgba(255,255,255,0.12);font-size:12px;color:#dcc4d4;}
   /* ===== FLUJO DE COMPRA: detalle, carrito, upsell, checkout, salida ===== */
   .detail-assure{margin-top:14px;border:1px solid var(--border);background:var(--surface-soft);border-radius:12px;padding:6px 14px;color:#2D2D2D;}
   .assure-row{display:flex;gap:12px;align-items:flex-start;padding:10px 0;font-size:13.5px;line-height:1.45;color:#2D2D2D;}
@@ -571,6 +571,29 @@
     .sk-grid{grid-template-columns:repeat(5,minmax(0,1fr));}
   }
   @media(min-width:1600px){ .hero h1{font-size:44px;} }
+  /* Accesibilidad y ajustes de la auditoría (QA-23 a QA-31) */
+  .skip-link{position:absolute;left:12px;top:-60px;z-index:200;background:#fff;color:var(--primary-deep);padding:10px 14px;border-radius:8px;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.2);}
+  .skip-link:focus{top:12px;}
+  .card-link{color:inherit;text-decoration:none;}
+  .card-link::after{content:'';}
+  .card-link:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px;}
+  .card:focus-within{box-shadow:0 0 0 2px var(--primary);}
+  button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+  .drawer-head h2:focus{outline:none;}
+  .btn-primary.btn-choose:disabled{background:#EFE3EA;color:var(--primary-deep);opacity:1;box-shadow:none;cursor:not-allowed;}
+  @media(max-width:359px){
+    .brand-name{white-space:normal;font-size:13px;line-height:1.1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+    .brand-sub{display:none;}
+  }
+  @media(max-width:480px){
+    /* QA-34: portada más compacta en celular para que el catálogo asome antes */
+    .hero{padding:14px 12px 12px;}
+    .hero-inner{padding:16px 14px;}
+    .hero h1{font-size:20px;}
+    .hero p{font-size:13px;line-height:1.45;margin-top:6px;}
+    .hero-actions{gap:6px;margin-top:12px;}
+    .hero-btn-outline,.hero-btn-wa{min-height:44px;}
+  }
 </style>
 </head>
 <body>
@@ -656,7 +679,10 @@ function catIcon(cat){ const i = state.settings.categories.indexOf(cat); return 
 // (los productos que las usan siguen existiendo y se pueden ver, solo no se muestra el filtro).
 function visibleCategories(){
   const hidden = state.settings.hiddenCategories||[];
-  return (state.settings.categories||[]).filter(c=>!hidden.includes(c));
+  let cats = (state.settings.categories||[]).filter(c=>!hidden.includes(c));
+  // QA-12: con el catálogo completo cargado, una categoría sin ningún producto visible no se muestra.
+  if(state.fullCatalogLoaded && state.products.length) cats = cats.filter(c=>state.products.some(p=>!p.hidden && productCats(p).includes(c)));
+  return cats;
 }
 
 const DEFAULT_SECTIONS = [
@@ -1053,7 +1079,7 @@ function submitCartAbandonSurvey(reason){
 function dismissCartAbandonSurvey(){ state.cartAbandonSurveyOpen = false; render(); }
 function renderCartAbandonSurveyDrawer(){
   return `
-    <div class="drawer-head"><h2>Antes de irte…</h2><button class="close-x" onclick="dismissCartAbandonSurvey()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Antes de irte…</h2><button class="close-x" aria-label="Cerrar" onclick="dismissCartAbandonSurvey()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="panel-sub" style="margin-bottom:14px;">Dejaste productos en tu carrito. ¿Nos dices por qué no completaste tu pedido? Nos ayuda a mejorar.</div>
       ${CART_ABANDON_REASONS.map(r=>`<button class="abandon-opt" onclick="submitCartAbandonSurvey('${r.replace(/'/g,"\\'")}')">${r}</button>`).join('')}
@@ -1422,7 +1448,7 @@ function renderCheckoutReminderDrawer(){
   // igual que en el resto de la tienda.
   const items = reminderProductsNotInCart();
   return `
-    <div class="drawer-head"><h2>¿Se te olvidó algo?</h2><button class="close-x" onclick="continueCheckoutWithoutReminder()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>¿Se te olvidó algo?</h2><button class="close-x" aria-label="Cerrar" onclick="continueCheckoutWithoutReminder()">${icon('x')}</button></div>
     <div class="drawer-body">
       <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;">Muchas veces un lubricante hace toda la diferencia — aquí tienes algunas opciones, por si quieres agregar una:</p>
       ${items.map(p=>`
@@ -1867,7 +1893,7 @@ function renderPrivacyPolicyDrawer(){
   const text = state.settings.privacyPolicyText || DEFAULT_SETTINGS.privacyPolicyText;
   const returnsText = state.settings.returnPolicyText || DEFAULT_SETTINGS.returnPolicyText;
   return `
-    <div class="drawer-head"><h2>Aviso de privacidad</h2><button class="close-x" onclick="state.privacyPolicyOpen=false;render()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Aviso de privacidad</h2><button class="close-x" aria-label="Cerrar" onclick="state.privacyPolicyOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;">${text}</div>
       <div style="height:1px;background:var(--border);margin:18px 0;"></div>
@@ -1942,7 +1968,7 @@ function renderProfileDrawer(){
   const p = state.profileDraft || (state.profileDraft = {...(loadCustomerProfile()||{})});
   const tier = activeWholesaleTier();
   return `
-    <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" onclick="closeProfile()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" aria-label="Cerrar" onclick="closeProfile()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">Guarda tus datos en este celular para que tus próximos pedidos sean más rápidos. No se comparten con nadie más, ni requieren contraseña — solo quedan en este dispositivo.</div>
       <div class="form-field"><label>Nombre completo</label><input id="pf-cli-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.name=this.value"></div>
@@ -1979,14 +2005,14 @@ function closeMessageDrawer(){ state.messageDrawerOpen=false; state.messageSent=
 function renderMessageDrawer(){
   if(state.messageSent){
     return `
-    <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" onclick="closeMessageDrawer()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" aria-label="Cerrar" onclick="closeMessageDrawer()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} ¡Gracias! Tu mensaje fue enviado, lo vamos a revisar pronto.</div>
     </div>
     <div class="drawer-foot"><button class="btn-primary" onclick="closeMessageDrawer()">Cerrar</button></div>`;
   }
   return `
-    <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" onclick="closeMessageDrawer()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" aria-label="Cerrar" onclick="closeMessageDrawer()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="note-box">¿Tienes una queja, sugerencia o pregunta para nosotros? Escríbenos aquí y te respondemos directo por WhatsApp.</div>
       <div class="form-field"><label>Tu nombre</label><input id="msg-name" type="text" placeholder="Tu nombre" value="${(state.messageDraft.name||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.name=this.value"></div>
@@ -2082,14 +2108,14 @@ function renderProductDetailDrawer(){
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><div style="display:flex;gap:6px;align-items:center;">
       ${isKioskMode() ? '' : `
-      <button class="close-x" aria-label="Agregar a favoritos" onclick="toggleWishlist('${p.id}')" style="color:var(--rose);">
+      <button class="close-x" aria-label="${isWishlisted(p.id)?'Quitar de favoritos':'Agregar a favoritos'}" aria-pressed="${isWishlisted(p.id)}" onclick="toggleWishlist('${p.id}')" style="color:var(--rose);">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
       </button>`}
       ${isKioskMode() ? '' : `
       <button class="close-x" aria-label="Comparar producto" title="${isComparing(p.id)?'Quitar de comparar':'Agregar a comparar (elige 2 o más para ver lado a lado)'}" onclick="toggleCompare('${p.id}')" style="${isComparing(p.id)?'color:var(--navy);':''}">
         ${icon('columns')}
       </button>`}
-      <button class="close-x" onclick="closeProductDetail()">${icon('x')}</button>
+      <button class="close-x" aria-label="Cerrar" onclick="closeProductDetail()">${icon('x')}</button>
     </div></div>
     <div class="drawer-body" style="padding:0;">
       <div class="detail-main-img-wrap" ontouchstart="detailTouchStart(event)" ontouchend="detailTouchEnd(event)">
@@ -2140,7 +2166,7 @@ function renderProductDetailDrawer(){
       ${isKioskMode() ? `
         <div class="note-box" style="margin:0;">Pregunta por este producto en el mostrador.</div>
       ` : needsSelection ? `
-        <button class="btn-primary" disabled style="opacity:.5">Elige ${p.variantGroups.map(g=>g.name).join(' y ')}</button>
+        <button class="btn-primary btn-choose" disabled>Elige ${p.variantGroups.map(g=>g.name).join(' y ')}</button>
       ` : qty>0 ? `
         <div class="detail-qty-row">
           <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
@@ -2198,7 +2224,8 @@ function renderAnnounceBar(){
    perdona una letra mal escrita en palabras largas ("lubrikante"). Las mejores coincidencias
    (nombre > categoría > descripción) salen primero. */
 const _searchIdx = new Map();
-function searchClean(s){ return normalizeSearchTerm(s).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
+// QA-11: "18cm" y "18 cm" se tratan igual (se separan números y letras pegados).
+function searchClean(s){ return normalizeSearchTerm(s).replace(/[^a-z0-9\s]/g,' ').replace(/(\d)([a-z])/g,'$1 $2').replace(/([a-z])(\d)/g,'$1 $2').replace(/\s+/g,' ').trim(); }
 function searchStem(t){
   if(t.length>4 && t.endsWith('es')) return t.slice(0,-2);
   if(t.length>3 && t.endsWith('s')) return t.slice(0,-1);
@@ -2279,7 +2306,8 @@ function searchProducts(q, pool){
   const full = searchClean(q);
   const tokens = full.split(' ').filter(Boolean);
   const list = pool || state.products;
-  if(!tokens.length) return list;
+  // QA-10: una búsqueda que solo trae emojis o signos ya no devuelve todo el catálogo.
+  if(!tokens.length) return String(q||'').trim() ? [] : list;
   const variants = queryVariants(full).map(v=>({v, toks:v.split(' ').filter(Boolean)}));
   const out = [];
   list.forEach((p,i)=>{
@@ -2741,7 +2769,7 @@ function applyQuizToCatalog(){
 }
 function renderQuizDrawer(){
   const step = state.quizStep, a = state.quizAnswers, steps = quizSteps(a);
-  const head = `<div class="drawer-head"><h2>Encuentra tu producto ideal</h2><button class="close-x" onclick="closeQuiz()">${icon('x')}</button></div>`;
+  const head = `<div class="drawer-head"><h2>Encuentra tu producto ideal</h2><button class="close-x" aria-label="Cerrar" onclick="closeQuiz()">${icon('x')}</button></div>`;
   const sel = (v)=>String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   if(step<steps.length){
     const field = steps[step], needs = state.settings.needs || DEFAULT_NEEDS;
@@ -2795,8 +2823,8 @@ function renderHeader(){
         </div>
       </button>
       <nav class="header-nav">
-        <a onclick="goToFeatured()">Más vendidos</a>
-        ${cats.slice(0,6).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
+        <a href="#" onclick="event.preventDefault();goToFeatured()">Más vendidos</a>
+        ${cats.slice(0,6).map(c=>`<a href="#" onclick="event.preventDefault();goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </nav>
       <div class="header-actions">
         ${isKioskMode() ? `<span class="badge badge-best" style="background:var(--navy);">Vitrina</span>` : `
@@ -2811,7 +2839,7 @@ function renderHeader(){
           <svg width="18" height="18" viewBox="0 0 24 24" fill="${loadWishlist().length?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
           ${loadWishlist().length>0?`<span class="cart-count">${loadWishlist().length}</span>`:''}
         </button>
-        <button class="cart-btn" onclick="state.cartOpen=true;render()" aria-label="Carrito">
+        <button class="cart-btn" onclick="state.cartOpen=true;render()" aria-label="Carrito${cartCount()?`, ${cartCount()} artículo${cartCount()===1?'':'s'}`:''}">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
           ${cartCount()>0?`<span class="cart-count">${cartCount()}</span>`:''}
         </button>
@@ -2821,7 +2849,7 @@ function renderHeader(){
     <div class="search-wrap">
       <div class="search-bar open" id="search-bar-mobile">
         <div class="search-bar-inner">
-          <input id="search-input" class="search-input" type="search" placeholder="Buscar productos…" autocomplete="off" value="${escHtml(state.searchQuery)}" oninput="onSearchInput(this.value)">
+          <input id="search-input" class="search-input" type="search" aria-label="Buscar productos" placeholder="Buscar productos…" autocomplete="off" value="${escHtml(state.searchQuery)}" oninput="onSearchInput(this.value)">
         </div>
       </div>
       ${renderSearchSuggest()}
@@ -2863,7 +2891,7 @@ function renderNeedsSection(){
   <div class="needs-block">
     <h2 class="section-heading">¿Qué estás buscando?</h2>
     <div class="section-sub" style="margin-bottom:14px;">Elige una opción y te mostramos productos pensados para eso.</div>
-    <div class="needs-row">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
+    <div class="needs-row">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" aria-pressed="${state.activeNeed===n.key}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
     <button class="quiz-cta" onclick="openQuiz()">✦ ¿No sabes por dónde empezar? Encuentra tu producto ideal</button>
   </div>`;
 }
@@ -2905,7 +2933,7 @@ function renderFirstTimeSection(){
 /* ============== CATEGORIES ============== */
 function renderCategoriesSection(){
   const cats = ["Todos", ...visibleCategories()];
-  return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c&&!state.searchQuery&&!state.activeNeed?'active':''}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>`;
+  return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c&&!state.searchQuery&&!state.activeNeed?'active':''}" aria-pressed="${state.activeCat===c&&!state.searchQuery&&!state.activeNeed}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>`;
 }
 
 /* ============== PROMO BANNER ============== */
@@ -3019,6 +3047,7 @@ function applyPriceFilterFromPanel(){
   const mn = (document.getElementById('price-min-input')||{}).value||'';
   const mx = (document.getElementById('price-max-input')||{}).value||'';
   state.priceMin = mn.replace(/[^0-9]/g,''); state.priceMax = mx.replace(/[^0-9]/g,'');
+  if(state.priceMin!=='' && state.priceMax!=='' && Number(state.priceMin)>Number(state.priceMax)){ const t=state.priceMin; state.priceMin=state.priceMax; state.priceMax=t; }
   state.priceFilterOpen = false; state.gridRenderLimit = 20; render();
 }
 function setPricePreset(mn, mx){
@@ -3039,7 +3068,7 @@ function renderPriceFilterRow(){
 }
 function renderPriceFilterDrawer(){
   return `
-  <div class="drawer-head"><h2>Filtrar por precio</h2><button class="close-x" onclick="state.priceFilterOpen=false;render()" aria-label="Cerrar">${icon('x')}</button></div>
+  <div class="drawer-head"><h2>Filtrar por precio</h2><button class="close-x" aria-label="Cerrar" onclick="state.priceFilterOpen=false;render()" aria-label="Cerrar">${icon('x')}</button></div>
   <div class="drawer-body">
     <div class="section-sub" style="margin:0 0 12px;">Se combina con la categoría o búsqueda que tengas activa.</div>
     <div class="price-presets">
@@ -3229,13 +3258,13 @@ function renderProductCard(p, forceBest){
             <div class="badge-row">${renderProductBadges(p, {isBest, hasPromo, wholesaleEligible, wholesaleUnlocked})}</div>
           </div>
           ${isKioskMode() ? '' : `
-          <button class="wishlist-fab" aria-label="Agregar a favoritos" onclick="event.stopPropagation();toggleWishlist('${p.id}')">
+          <button class="wishlist-fab" aria-label="${isWishlisted(p.id)?'Quitar de favoritos':'Agregar a favoritos'}: ${escHtml(p.name)}" aria-pressed="${isWishlisted(p.id)}" onclick="event.stopPropagation();toggleWishlist('${p.id}')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
           </button>`}
         </div>
         <div class="card-body">
           <div class="card-cat">${productCats(p).join(', ')}</div>
-          <h3 class="card-name">${p.name}</h3>
+          <h3 class="card-name"><a class="card-link" href="?producto=${p.id}" onclick="event.preventDefault()">${p.name}</a></h3>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
           <div class="card-price">${priceHtml(p,12)}</div>
           ${savingsLabel(p) ? `<div class="card-save">${savingsLabel(p)}</div>` : ''}
@@ -3311,10 +3340,12 @@ function renderNewsletterSection(){
 }
 
 /* ============== FOOTER ============== */
+// QA-32: 523317494004 → 33 1749 4004
+function fmtPhone(n){ const d = String(n||'').replace(/\D/g,''); const t = d.length===12 && d.startsWith('52') ? d.slice(2) : d; return t.length===10 ? `${t.slice(0,2)} ${t.slice(2,6)} ${t.slice(6)}` : String(n||''); }
 function renderFooterSection(){
   const s = state.settings;
   return `
-  <div class="site-foot">
+  <footer class="site-foot">
     <div class="site-foot-inner">
       <div>
         <div class="foot-brand-name">${s.storeName}</div>
@@ -3322,19 +3353,19 @@ function renderFooterSection(){
       </div>
       <div class="foot-col">
         <h4>Explora</h4>
-        <a onclick="goToFeatured()">Más vendidos</a>
-        <a onclick="goToCatalog('Todos')">Catálogo completo</a>
-        ${visibleCategories().slice(0,4).map(c=>`<a onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
+        <a href="#" onclick="event.preventDefault();goToFeatured()">Más vendidos</a>
+        <a href="#" onclick="event.preventDefault();goToCatalog('Todos')">Catálogo completo</a>
+        ${visibleCategories().slice(0,4).map(c=>`<a href="#" onclick="event.preventDefault();goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
       </div>
       <div class="foot-col">
         <h4>Contacto</h4>
-        <a href="${waLink('Hola, tengo una pregunta.')}" target="_blank">WhatsApp: ${s.whatsapp}</a>
+        <a href="${waLink('Hola, tengo una pregunta.')}" target="_blank" rel="noopener">WhatsApp: ${fmtPhone(s.whatsapp)}</a>
         <div>${s.schedule}</div>
         ${s.socialInstagram?`<div>Instagram: ${s.socialInstagram}</div>`:''}
         ${s.socialFacebook?`<div>Facebook: ${s.socialFacebook}</div>`:''}
         ${s.contactEmail?`<div>${s.contactEmail}</div>`:''}
-        <a onclick="state.messageDrawerOpen=true;render()">${icon('message-circle')} Buzón de sugerencias</a>
-        <a onclick="state.privacyPolicyOpen=true;render()">Aviso de privacidad</a>
+        <a href="#" onclick="event.preventDefault();state.messageDrawerOpen=true;render()">${icon('message-circle')} Buzón de sugerencias</a>
+        <a href="#" onclick="event.preventDefault();state.privacyPolicyOpen=true;render()">Aviso de privacidad</a>
       </div>
     </div>
     <div class="foot-pay">
@@ -3345,7 +3376,7 @@ function renderFooterSection(){
       <span class="pay-badge seal">${icon('lock',16)} Empaque 100% discreto</span>
     </div>
     <div class="foot-bottom">Pedidos por catálogo con entrega a domicilio y pago contra entrega.</div>
-  </div>`;
+  </footer>`;
 }
 
 function renderFlashSection(){
@@ -3388,7 +3419,7 @@ function renderWholesaleBanner(tier){
 function renderWishlistDrawer(){
   const products = wishlistProducts();
   return `
-    <div class="drawer-head"><h2>Mis favoritos</h2><button class="close-x" onclick="state.wishlistOpen=false;render()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Mis favoritos</h2><button class="close-x" aria-label="Cerrar" onclick="state.wishlistOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       ${products.length>0 && !isKioskMode() ? `<button class="hero-btn-outline" style="width:100%;margin-bottom:14px;gap:8px;" onclick="shareWishlist()">${icon('whatsapp',17)} Compartir mis favoritos por WhatsApp</button>` : ''}
       ${products.length===0 ? `<div class="empty-state">Aún no has guardado ningún favorito. Toca el corazón de un producto para guardarlo aquí.</div>` :
@@ -3451,7 +3482,7 @@ function renderCompareDrawer(){
   const products = compareProducts();
   if(!products.length) return '';
   return `
-    <div class="drawer-head"><h2>Comparar productos</h2><button class="close-x" onclick="state.compareOpen=false;render()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Comparar productos</h2><button class="close-x" aria-label="Cerrar" onclick="state.compareOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div style="display:flex;gap:10px;margin-bottom:6px;">
         ${products.map(p=>`
@@ -3503,7 +3534,7 @@ function renderCartDrawer(){
       ${gift ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('gift')} ¡Llevas de regalo: ${gift.product.name}!</div>` : ''}
       ${crossSellSuggestions().map(({promo,product})=>`
         <div class="cross-sell-card">
-          ${product.images&&product.images.length ? `<img class="cross-sell-swatch" src="${product.images[0]}">` : `<div class="cross-sell-swatch"></div>`}
+          ${product.images&&product.images.length ? `<img class="cross-sell-swatch" src="${product.images[0]}" alt="">` : `<div class="cross-sell-swatch"></div>`}
           <div class="cross-sell-info">También te puede interesar <b>${product.name}</b> — <b>${promo.discountPercent}% de descuento</b> por llevarlo junto.</div>
           <button class="cross-sell-add" onclick="addToCart('${product.id}')">Agregar</button>
         </div>
@@ -3514,7 +3545,7 @@ function renderCartDrawer(){
           <div class="cart-suggestions-row">
             ${genericCartSuggestions().map(p=>`
               <div class="suggestion-card" onclick="openProductDetail('${p.id}')">
-                ${p.images&&p.images.length ? `<img class="suggestion-swatch" src="${p.images[0]}">` : `<div class="suggestion-swatch" style="background:${catColor(p.cat)}"></div>`}
+                ${p.images&&p.images.length ? `<img class="suggestion-swatch" src="${p.images[0]}" alt="">` : `<div class="suggestion-swatch" style="background:${catColor(p.cat)}"></div>`}
                 <div class="suggestion-name">${p.name}</div>
                 <div class="suggestion-price">${money(automaticDiscountedPrice(p))}</div>
                 <button class="suggestion-add" onclick="event.stopPropagation();addToCart('${p.id}')">+ Agregar</button>
@@ -3616,6 +3647,7 @@ function renderSuccess(){
   </div></div>`;
 }
 
+function dlgAttrs(open, label){ return open ? `role="dialog" aria-modal="true" aria-label="${label}"` : 'inert aria-hidden="true"'; }
 function renderStore(){
   // El orden real de la tienda ahora sí sigue lo que se guardó en Diseño → Secciones (arrastrar
   // o usar las flechas) — antes ese orden solo servía para mostrar/ocultar, nunca para la
@@ -3661,13 +3693,14 @@ function renderStore(){
   const showBar = !isKioskMode() && cartCount()>0 && !state.cartOpen && !state.checkoutOpen;
   const showCompareBar = !isKioskMode() && state.compareIds.length>=2 && !state.compareOpen;
   return `
+  <a class="skip-link" href="#catalogo" onclick="event.preventDefault();scrollToId('catalogo');const g=document.getElementById('catalogo');if(g){g.setAttribute('tabindex','-1');g.focus({preventScroll:true});}">Saltar al catálogo</a>
   <div class="app">
     <div class="topbar">${renderAnnounceBar()}${renderHeader()}</div>
     <div class="topbar-spacer" id="topbar-spacer"></div>
     ${state.settings.storePaused ? `<div class="note-box" style="margin:14px 20px 0;background:#F6DDE3;color:#7A2E45;font-weight:600;">${icon('alert-triangle',15)} ${state.settings.storePausedMessage || 'La tienda está en pausa temporalmente y no podemos tomar pedidos.'}</div>` : ''}
     ${state.loadError ? `<div class="load-error-box"><strong>No pudimos cargar el catálogo</strong><span>Parece que la conexión está lenta o se cortó.</span><button onclick="state.loadError=false;state.loaded=false;render();loadData()">Reintentar</button></div>` : ''}
     ${state.catalogIncomplete ? `<div class="note-box" style="margin:14px 20px 0;">Puede que falten algunos productos por cargar. <button class="btn-tertiary" style="margin-left:4px;" onclick="state.catalogIncomplete=false;render();loadFullCatalogWithRetry();">Reintentar</button></div>` : ''}
-    ${body}
+    <main id="contenido">${body}</main>
     <div class="mobile-cart-spacer ${showBar||showCompareBar?'show':''}"></div>
   </div>
   ${showCompareBar ? `<div style="position:fixed;left:0;right:0;bottom:${showBar?'56px':'0'};z-index:39;">${renderCompareBar()}</div>` : ''}
@@ -3679,18 +3712,18 @@ function renderStore(){
     <button class="mobile-cart-bar-btn" onclick="state.cartOpen=true;render()">Ver carrito</button>
   </div>
   <div class="overlay ${state.cartOpen||state.checkoutOpen||state.detailProductId||state.profileOpen||state.messageDrawerOpen||state.checkoutReminderOpen||state.wishlistOpen||state.compareOpen||state.cartAbandonSurveyOpen||state.privacyPolicyOpen||state.priceFilterOpen||state.quizOpen?'open':''}" onclick="if(state.cartOpen){closeCartDrawer();}state.quizOpen=false;state.checkoutOpen=false;state.profileOpen=false;state.wishlistOpen=false;state.compareOpen=false;state.cartAbandonSurveyOpen=false;state.privacyPolicyOpen=false;closeMessageDrawer();closeProductDetail();"></div>
-  <div class="drawer ${state.cartOpen?'open':''}">${renderCartDrawer()}</div>
-  <div class="drawer ${state.checkoutOpen?'open':''}">${renderCheckoutDrawer()}</div>
-  <div class="drawer drawer-detail ${state.detailProductId?'open':''}">${state.detailProductId ? renderProductDetailDrawer() : ''}</div>
-  <div class="drawer ${state.profileOpen?'open':''}">${state.profileOpen ? renderProfileDrawer() : ''}</div>
-  <div class="drawer ${state.messageDrawerOpen?'open':''}">${state.messageDrawerOpen ? renderMessageDrawer() : ''}</div>
-  <div class="drawer ${state.checkoutReminderOpen?'open':''}">${state.checkoutReminderOpen ? renderCheckoutReminderDrawer() : ''}</div>
-  <div class="drawer ${state.wishlistOpen?'open':''}">${state.wishlistOpen ? renderWishlistDrawer() : ''}</div>
-  <div class="drawer ${state.compareOpen?'open':''}">${state.compareOpen ? renderCompareDrawer() : ''}</div>
-  <div class="drawer ${state.cartAbandonSurveyOpen?'open':''}">${state.cartAbandonSurveyOpen ? renderCartAbandonSurveyDrawer() : ''}</div>
-  <div class="drawer ${state.privacyPolicyOpen?'open':''}">${state.privacyPolicyOpen ? renderPrivacyPolicyDrawer() : ''}</div>
-  <div class="drawer ${state.priceFilterOpen?'open':''}">${state.priceFilterOpen ? renderPriceFilterDrawer() : ''}</div>
-  <div class="drawer ${state.quizOpen?'open':''}">${state.quizOpen ? renderQuizDrawer() : ''}</div>
+  <div class="drawer ${state.cartOpen?'open':''}" ${dlgAttrs(state.cartOpen,'Tu carrito')}>${renderCartDrawer()}</div>
+  <div class="drawer ${state.checkoutOpen?'open':''}" ${dlgAttrs(state.checkoutOpen,'Datos de entrega')}>${renderCheckoutDrawer()}</div>
+  <div class="drawer drawer-detail ${state.detailProductId?'open':''}" ${dlgAttrs(state.detailProductId,'Detalle del producto')}>${state.detailProductId ? renderProductDetailDrawer() : ''}</div>
+  <div class="drawer ${state.profileOpen?'open':''}" ${dlgAttrs(state.profileOpen,'Mis datos')}>${state.profileOpen ? renderProfileDrawer() : ''}</div>
+  <div class="drawer ${state.messageDrawerOpen?'open':''}" ${dlgAttrs(state.messageDrawerOpen,'Buzón de sugerencias')}>${state.messageDrawerOpen ? renderMessageDrawer() : ''}</div>
+  <div class="drawer ${state.checkoutReminderOpen?'open':''}" ${dlgAttrs(state.checkoutReminderOpen,'¿Se te olvidó algo?')}>${state.checkoutReminderOpen ? renderCheckoutReminderDrawer() : ''}</div>
+  <div class="drawer ${state.wishlistOpen?'open':''}" ${dlgAttrs(state.wishlistOpen,'Mis favoritos')}>${state.wishlistOpen ? renderWishlistDrawer() : ''}</div>
+  <div class="drawer ${state.compareOpen?'open':''}" ${dlgAttrs(state.compareOpen,'Comparar productos')}>${state.compareOpen ? renderCompareDrawer() : ''}</div>
+  <div class="drawer ${state.cartAbandonSurveyOpen?'open':''}" ${dlgAttrs(state.cartAbandonSurveyOpen,'Antes de irte')}>${state.cartAbandonSurveyOpen ? renderCartAbandonSurveyDrawer() : ''}</div>
+  <div class="drawer ${state.privacyPolicyOpen?'open':''}" ${dlgAttrs(state.privacyPolicyOpen,'Aviso de privacidad')}>${state.privacyPolicyOpen ? renderPrivacyPolicyDrawer() : ''}</div>
+  <div class="drawer ${state.priceFilterOpen?'open':''}" ${dlgAttrs(state.priceFilterOpen,'Filtrar por precio')}>${state.priceFilterOpen ? renderPriceFilterDrawer() : ''}</div>
+  <div class="drawer ${state.quizOpen?'open':''}" ${dlgAttrs(state.quizOpen,'Encuentra tu producto ideal')}>${state.quizOpen ? renderQuizDrawer() : ''}</div>
   ${state.zoomOpen && state.detailProductId ? renderZoomLightbox() : ''}
   `;
 }
@@ -3902,6 +3935,55 @@ function navLayers(){
 }
 
 { const _renderBase = render; render = function(){ _renderBase(); navSync(); }; }
+
+/* QA-20: el producto abierto queda en la dirección (?producto=ID), así se puede copiar el enlace y
+   recargar sin perderlo. Se usa replaceState para no crear pasos extra en el historial. */
+function syncProductUrl(){
+  try{
+    if(!state.loaded) return;
+    const u = new URL(location.href); const cur = u.searchParams.get('producto');
+    const want = state.detailProductId || null;
+    if((cur||null)===want) return;
+    if(want) u.searchParams.set('producto', want); else u.searchParams.delete('producto');
+    history.replaceState(history.state, '', u.toString());
+  }catch(e){}
+}
+
+/* ===== ACCESIBILIDAD DE LOS CAJONES (QA-23) =====
+   Al abrir un cajón, el foco entra a él; al cerrarlo, vuelve al botón que lo abrió. Escape cierra
+   el cajón de arriba. Los cajones cerrados quedan "inertes" (no reciben foco ni se leen). */
+const A11Y = {open:0, openerSig:null};
+function focusSig(el){ if(!el || el===document.body) return null; return {onclick: el.getAttribute && el.getAttribute('onclick'), href: el.getAttribute && el.getAttribute('href'), text:(el.textContent||'').trim().slice(0,40)}; }
+function findBySig(sig){
+  if(!sig) return null;
+  const cands = [...document.querySelectorAll('button,a')].filter(el=>!el.closest('[inert]') && (sig.onclick ? el.getAttribute('onclick')===sig.onclick : (sig.href && el.getAttribute('href')===sig.href)));
+  return cands.find(el=>(el.textContent||'').trim().slice(0,40)===sig.text) || cands[0] || null;
+}
+{ const _renderA11y = render; render = function(){
+    const before = document.activeElement;
+    _renderA11y();
+    syncProductUrl();
+    const open = document.querySelectorAll('.drawer.open').length + (state.zoomOpen?1:0);
+    if(open > A11Y.open){
+      if(!before || !before.closest || !before.closest('.drawer.open')) A11Y.openerSig = focusSig(before);
+      const top = [...document.querySelectorAll('.drawer.open')].pop();
+      const act = document.activeElement;
+      if(top && !(act && top.contains(act))){
+        const h = top.querySelector('.drawer-head h2');
+        if(h){ h.setAttribute('tabindex','-1'); try{ h.focus({preventScroll:true}); }catch(e){} }
+      }
+    } else if(open < A11Y.open && open===0){
+      const el = findBySig(A11Y.openerSig); A11Y.openerSig = null;
+      if(el){ try{ el.focus({preventScroll:true}); }catch(e){} }
+    }
+    A11Y.open = open;
+  };
+}
+document.addEventListener('keydown', (e)=>{
+  if(e.key!=='Escape' || state.zoomOpen) return;
+  if(!document.querySelector('.drawer.open')) return;
+  const L = navLayers(); if(L.length){ e.preventDefault(); try{ L[0](); }catch(_){} }
+});
 
 /* ===== AVISO ANTES DE PERDER LO ESCRITO =====
    Si alguien recarga o cierra la pestaña con el checkout (o un mensaje) a medias, el navegador
