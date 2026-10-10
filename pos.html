@@ -284,7 +284,9 @@ const db = firebase.firestore();
    Ver la nota completa en index.html — mismo mecanismo, guardando "pos" como origen. */
 let systemErrorsLoggedThisSession = 0;
 const SYSTEM_ERROR_LOG_LIMIT = 5;
+const SYSTEM_ERROR_NOISE = /^(Uncaught )?Script error\.?$|without an in-progress transaction|Cannot stop, scanner is not running|ResizeObserver loop|Non-Error promise rejection/i;   // ruido del navegador (Safari/IndexedDB, scripts de otros dominios, lector de códigos): no es un fallo del sistema
 function logSystemError(message, stack){
+  if(SYSTEM_ERROR_NOISE.test(String(message||''))) return;
   if(systemErrorsLoggedThisSession >= SYSTEM_ERROR_LOG_LIMIT) return;
   systemErrorsLoggedThisSession++;
   try{
@@ -805,7 +807,8 @@ function onBarcodeScanned(code){
 function closeBarcodeScanner(){
   state.barcodeScannerOpen = false;
   if(posScannerInstance){
-    posScannerInstance.stop().then(()=>{ posScannerInstance.clear(); posScannerInstance=null; }).catch(()=>{ posScannerInstance=null; });
+    const sc = posScannerInstance;
+    try{ Promise.resolve(sc.stop()).then(()=>{ try{ sc.clear(); }catch(e){} posScannerInstance=null; }).catch(()=>{ posScannerInstance=null; }); }catch(e){ posScannerInstance=null; }
   }
   render();
 }
