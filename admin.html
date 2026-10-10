@@ -929,7 +929,7 @@ let state = {
   groupMessagesByCustomer:false,
   heatMetric:'count', heatDays:90,
   loadWarnings:[],
-  expenses:[], expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
+  expenses:[], expenseEditId:null, expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
   shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, receiveGoodsVariants:{},
   restockRequests:[], notifyModalProductId:null,
   searchMisses:[], quizResponses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
@@ -7729,6 +7729,34 @@ async function toggleCenterActive(id){
   const c = state.centers.find(x=>x.id===id); if(!c) return;
   c.active = !c.active; await saveCenterDoc(c); render();
 }
+function centerPiecesLeft(id){
+  let n=0; const items=[];
+  state.products.forEach(p=>{
+    if(p.isKit) return;
+    const q = (p.variants&&p.variants.length) ? p.variants.reduce((a,v)=>a+vCenterStock(v,id),0) : centerStock(p,id);
+    if(q>0){ n+=q; items.push(p.name); }
+  });
+  return {n, items};
+}
+async function deleteCenter(id){
+  const c = state.centers.find(x=>x.id===id); if(!c) return;
+  if(c.isDefault){ showToast('El centro Principal no se puede eliminar'); return; }
+  const left = centerPiecesLeft(id);
+  if(left.n>0){
+    alert(`No se puede eliminar "${c.name}" porque todavía tiene ${left.n} pieza(s) en ${left.items.length} producto(s) (${left.items.slice(0,4).join(', ')}${left.items.length>4?'…':''}).\n\nPrimero pásalas a otro centro en Transferencias, o desactiva el centro con el botón ⏸ si solo quieres dejar de usarlo.`);
+    return;
+  }
+  if(!confirm(`¿Eliminar el centro "${c.name}"? Sus ventas y movimientos pasados conservan el nombre. Esto no se puede deshacer.`)) return;
+  try{
+    await db.collection('distributionCenters').doc(id).delete();
+    state.centers = state.centers.filter(x=>x.id!==id);
+    if(state.transferFrom===id) state.transferFrom='';
+    if(state.transferTo===id) state.transferTo='';
+    if(state.auditCenter===id && !auditHasDraft()) state.auditCenter=null;
+    logAdminAction('eliminacion_centro','centro',c.name);
+    state.centerModal=null; showToast('Centro eliminado'); render();
+  }catch(e){ console.error(e); showToast('No se pudo eliminar: '+(e.message||'error')); }
+}
 function openCenterModal(id){ const c = state.centers.find(x=>x.id===id); state.centerModal = {...c}; render(); }
 async function saveCenterModal(){
   const name = document.getElementById('center-name-input').value.trim();
@@ -7785,6 +7813,37 @@ async function commitTransfer(){
     state.transferCart = {}; state.transferNotes=''; state.transferProductSearch='';
     showToast('Transferencia realizada'); render();
   }catch(e){ console.error(e); showToast('No se pudo completar la transferencia'); }
+}
+async function revertTransfer(id){
+  const t = state.transfers.find(x=>x.id===id); if(!t) return;
+  if(t.reverted){ showToast('Esa transferencia ya se revirtió'); return; }
+  const problems=[];
+  (t.items||[]).forEach(it=>{
+    const p = state.products.find(x=>x.id===it.productId);
+    if(!p){ problems.push(`${it.name}: el producto ya no existe`); return; }
+    const sv = it.variantId ? (p.variants||[]).find(v=>v.id===it.variantId) : null;
+    if(it.variantId && !sv){ problems.push(`${it.name}: la variante ya no existe`); return; }
+    const have = sv ? vCenterStock(sv,t.toCenterId) : centerStock(p,t.toCenterId);
+    if(have<it.qty) problems.push(`${it.name}: en ${t.toCenterName} quedan ${have} de ${it.qty}`);
+  });
+  if(problems.length){ alert('No se puede revertir porque ya no están todas las piezas en el destino:\n\n'+problems.join('\n')); return; }
+  if(!confirm(`¿Revertir la transferencia ${t.fromCenterName} → ${t.toCenterName}? Las piezas regresan a ${t.fromCenterName}.`)) return;
+  try{
+    const batch = db.batch(); const touched=new Set();
+    (t.items||[]).forEach(it=>{
+      const p = state.products.find(x=>x.id===it.productId);
+      const sv = it.variantId ? p.variants.find(v=>v.id===it.variantId) : null;
+      if(sv){ vSetCenterStock(sv,t.toCenterId,vCenterStock(sv,t.toCenterId)-it.qty); vSetCenterStock(sv,t.fromCenterId,vCenterStock(sv,t.fromCenterId)+it.qty); touched.add(p.id); }
+      else{ if(!p.stockByCenter) p.stockByCenter={}; p.stockByCenter[t.toCenterId]=(p.stockByCenter[t.toCenterId]||0)-it.qty; p.stockByCenter[t.fromCenterId]=(p.stockByCenter[t.fromCenterId]||0)+it.qty; batch.update(db.collection('products').doc(p.id),{stockByCenter:p.stockByCenter}); }
+      logStockMovement(p.id,'transferencia_revertida',0,`Se revirtió la transferencia ${t.fromCenterName} → ${t.toCenterName}`,t.fromCenterId);
+    });
+    touched.forEach(pid=>{ const p=state.products.find(x=>x.id===pid); vProductSync(p); batch.update(db.collection('products').doc(pid),{variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock}); });
+    batch.update(db.collection('transfers').doc(id),{reverted:true, revertedAt:new Date().toISOString()});
+    await batch.commit();
+    t.reverted=true; t.revertedAt=new Date().toISOString();
+    logAdminAction('transferencia_revertida','transferencia',`${t.fromCenterName} → ${t.toCenterName}`);
+    showToast('Transferencia revertida'); render();
+  }catch(e){ console.error(e); showToast('No se pudo revertir'); }
 }
 function onTransferSearchInput(v){
   state.transferProductSearch = v;
@@ -7970,6 +8029,31 @@ async function addExpense(){
     render();
   }catch(e){ console.error('No se pudo guardar el gasto', e); showToast('No se pudo guardar el gasto'); }
 }
+function editExpense(id){
+  const e = state.expenses.find(x=>x.id===id); if(!e) return;
+  state.expenseEditId = id;
+  state.expenseDraftAmount = e.amount; state.expenseDraftNote = e.note||''; state.expenseDraftCategory = e.category;
+  state.expenseDraftDate = (e.date||'').slice(0,10);
+  render(); try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(_){}
+}
+function cancelExpenseEdit(){ state.expenseEditId=null; state.expenseDraftAmount=''; state.expenseDraftNote=''; render(); }
+async function saveExpenseEdit(){
+  const id = state.expenseEditId; const e = state.expenses.find(x=>x.id===id); if(!e) return cancelExpenseEdit();
+  const amount = Number((document.getElementById('exp-amount')||{}).value)||0;
+  const category = (document.getElementById('exp-cat')||{}).value || 'Otros';
+  const note = ((document.getElementById('exp-note')||{}).value||'').trim();
+  const dateStr = (document.getElementById('exp-date')||{}).value || localDateStr();
+  if(!(amount>0)){ showToast('Escribe el monto del gasto'); return; }
+  const upd = {date:new Date(dateStr+'T12:00:00').toISOString(), amount, category, note};
+  try{
+    await db.collection('expenses').doc(id).update(upd);
+    Object.assign(e, upd);
+    state.expenses.sort((a,b)=>new Date(b.date)-new Date(a.date));
+    logAdminAction('gasto_editado','gasto',category+(note?': '+note:''),money(amount));
+    state.expenseEditId=null; state.expenseDraftAmount=''; state.expenseDraftNote='';
+    showToast('Gasto actualizado'); render();
+  }catch(err){ console.error(err); showToast('No se pudo actualizar el gasto'); }
+}
 async function deleteExpense(id){
   const e = state.expenses.find(x=>x.id===id); if(!e) return;
   try{
@@ -8010,7 +8094,7 @@ function renderStatsGastos(){
     <label class="checkbox-row" style="margin:10px 0 2px;"><input type="checkbox" ${state.includeCashWithdrawals?'checked':''} onchange="state.includeCashWithdrawals=this.checked;render()"><span>Contar como gasto los retiros de caja del mes (${money(np.withdrawalsTotal)})</span></label>
     <div class="panel-sub" style="margin:0 0 14px;">Los retiros son lo que sacas de la caja (ej. "pago albañil"). Si además registras aquí ese mismo gasto, apaga esta casilla para no contarlo dos veces.</div>
     <div class="panel">
-      <div class="panel-title">Registrar un gasto</div>
+      <div class="panel-title">${state.expenseEditId?'Editar gasto':'Registrar un gasto'}</div>
       <div class="two-col">
         <div class="form-field"><label>Fecha</label><input id="exp-date" type="date" value="${draftDate}" onchange="state.expenseDraftDate=this.value"></div>
         <div class="form-field"><label>Monto</label><input id="exp-amount" type="number" min="0" step="0.01" placeholder="0.00" value="${state.expenseDraftAmount||''}" oninput="state.expenseDraftAmount=this.value"></div>
@@ -8019,7 +8103,7 @@ function renderStatsGastos(){
         <div class="form-field"><label>Categoría</label><select id="exp-cat" onchange="state.expenseDraftCategory=this.value">${EXPENSE_CATEGORIES.map(c=>`<option ${state.expenseDraftCategory===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div class="form-field"><label>Nota (opcional)</label><input id="exp-note" placeholder="Ej. Renta de octubre" value="${(state.expenseDraftNote||'').replace(/"/g,'&quot;')}" oninput="state.expenseDraftNote=this.value"></div>
       </div>
-      <button class="btn-primary" style="width:100%;" onclick="addExpense()">+ Agregar gasto</button>
+      ${state.expenseEditId ? `<div style="display:flex;gap:8px;"><button class="btn-cancel" style="flex:1;" onclick="cancelExpenseEdit()">Cancelar</button><button class="btn-primary" style="flex:2;" onclick="saveExpenseEdit()">Guardar cambios</button></div>` : `<button class="btn-primary" style="width:100%;" onclick="addExpense()">+ Agregar gasto</button>`}
     </div>
     ${catRows.length>0 ? `<div class="panel"><div class="panel-title">Gastos por categoría</div>${catRows.map(([c,v])=>`<div class="list-row"><div class="row-main"><div class="row-title">${c}</div></div><div style="font-weight:700;">${money(v)}</div></div>`).join('')}</div>` : ''}
     <div class="panel">
@@ -8028,7 +8112,8 @@ function renderStatsGastos(){
         <div class="list-row">
           <div class="row-main"><div class="row-title">${e.category}${e.note?` · ${e.note.replace(/</g,'&lt;')}`:''}</div><div class="row-sub">${new Date(e.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}${e.createdBy?` · ${e.createdBy}`:''}</div></div>
           <div style="font-weight:700;">${money(e.amount)}</div>
-          <button class="icon-btn danger" onclick="deleteExpense('${e.id}')">${icon('trash',14)}</button>
+          <button class="icon-btn" title="Editar gasto" aria-label="Editar gasto" onclick="editExpense('${e.id}')">${icon('edit',14)}</button>
+          <button class="icon-btn danger" title="Eliminar gasto" onclick="deleteExpense('${e.id}')">${icon('trash',14)}</button>
         </div>`).join('')}
       ${np.withdrawals.length>0 ? `<div class="panel-sub" style="margin-top:12px;"><strong>Retiros de caja del mes:</strong> ${np.withdrawals.map(w=>`${money(w.amount)}${w.note?` (${w.note.replace(/</g,'&lt;')})`:''}`).join(' · ')}</div>` : ''}
     </div>
@@ -8075,6 +8160,26 @@ async function registerShrinkage(){
     render();
   }catch(e){ console.error('No se pudo registrar la merma', e); showToast('No se pudo registrar la merma'); }
 }
+async function undoShrinkage(id){
+  const sh = state.shrinkage.find(x=>x.id===id); if(!sh) return;
+  const p = state.products.find(x=>x.id===sh.productId);
+  if(!p){ showToast('El producto ya no existe; solo se puede borrar el registro'); }
+  if(!confirm(`¿Deshacer la merma de ${sh.qty} × ${sh.productName}? ${p?`Las piezas regresan al inventario de ${sh.centerName||'su centro'}.`:'Se borrará el registro.'}`)) return;
+  try{
+    if(p){
+      const cid = sh.centerId || defaultCenterId();
+      const sv = sh.variantId ? (p.variants||[]).find(v=>v.id===sh.variantId) : null;
+      if(sh.variantId && !sv){ showToast('Esa variante ya no existe'); return; }
+      if(sv){ vSetCenterStock(sv, cid, vCenterStock(sv,cid)+sh.qty); vProductSync(p); await db.collection('products').doc(p.id).update({variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock}); }
+      else{ if(!p.stockByCenter) p.stockByCenter={}; p.stockByCenter[cid]=(p.stockByCenter[cid]||0)+sh.qty; p.stock=totalStock(p); await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock}); }
+      logStockMovement(p.id,'merma_deshecha',sh.qty,'Se deshizo una merma',cid);
+    }
+    await db.collection('shrinkage').doc(id).delete();
+    state.shrinkage = state.shrinkage.filter(x=>x.id!==id);
+    logAdminAction('merma_deshecha','producto',sh.productName,`${sh.qty} pza`,sh.productId);
+    showToast('Merma deshecha'); render();
+  }catch(e){ console.error(e); showToast('No se pudo deshacer la merma'); }
+}
 function renderMermas(){
   const q = (state.shrinkSearch||'').trim().toLowerCase();
   const results = q ? searchProducts(q, state.products).slice(0,8) : [];
@@ -8114,7 +8219,7 @@ function renderMermas(){
   <div class="panel">
     <div class="panel-title">Últimas mermas</div>
     ${state.shrinkage.length===0 ? `<div class="empty-state">Aún no hay mermas registradas.</div>` : state.shrinkage.slice(0,30).map(s=>`
-      <div class="list-row"><div class="row-main"><div class="row-title">${s.qty} × ${s.productName}</div><div class="row-sub">${s.reason}${s.note?` — ${s.note.replace(/</g,'&lt;')}`:''} · ${new Date(s.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${s.centerName||''}</div></div><div style="font-weight:700;">${money(s.totalCost||0)}</div></div>`).join('')}
+      <div class="list-row"><div class="row-main"><div class="row-title">${s.qty} × ${s.productName}</div><div class="row-sub">${s.reason}${s.note?` — ${s.note.replace(/</g,'&lt;')}`:''} · ${new Date(s.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${s.centerName||''}</div></div><div style="font-weight:700;">${money(s.totalCost||0)}</div><button class="icon-btn danger" title="Deshacer merma (regresa al inventario)" aria-label="Deshacer merma" onclick="undoShrinkage('${s.id}')">${icon('trash',14)}</button></div>`).join('')}
   </div>`;
 }
 
@@ -10369,6 +10474,13 @@ function renderCentros(){
    aparecer una vez en la lista (el ID del documento es el ID del producto) — agregarlo de
    nuevo solo actualiza el renglón que ya tenía, no lo duplica.
 */
+async function renameSupplier(id){
+  const sp = state.suppliers.find(x=>x.id===id); if(!sp) return;
+  const nn = (prompt('Nuevo nombre del proveedor:', sp.name)||'').trim();
+  if(!nn || nn===sp.name) return;
+  try{ await db.collection('suppliers').doc(id).update({name:nn}); sp.name=nn; showToast('Proveedor renombrado'); render(); }
+  catch(e){ console.error(e); showToast('No se pudo renombrar'); }
+}
 async function saveSupplierDoc(name){
   const clean = (name||'').trim();
   if(!clean) return;
@@ -10600,7 +10712,7 @@ function renderReabasto(){
       </div>
       ${state.suppliers.length===0 ? `<div class="row-sub">Aún no tienes proveedores registrados — agrega uno arriba.</div>` : `
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          ${state.suppliers.map(s=>`<span class="cat-manage-chip">${s.name}<button onclick="if(confirm('¿Eliminar a ${escDescHtml(s.name)}? Sus productos en la lista quedarán sin proveedor.'))deleteSupplierDoc('${s.id}')">${icon('x',11)}</button></span>`).join('')}
+          ${state.suppliers.map(s=>`<span class="cat-manage-chip"><span style="cursor:pointer;" title="Toca para renombrar" onclick="renameSupplier('${s.id}')">${s.name} ✎</span><button onclick="if(confirm('¿Eliminar a ${escDescHtml(s.name)}? Sus productos en la lista quedarán sin proveedor.'))deleteSupplierDoc('${s.id}')">${icon('x',11)}</button></span>`).join('')}
         </div>
       `}
     </div>
@@ -10671,7 +10783,8 @@ function renderCentrosList(){
         </div>
         <div class="row-actions">
           <button class="icon-btn" onclick="openCenterModal('${c.id}')">${icon('edit')}</button>
-          ${!c.isDefault ? `<button class="icon-btn" onclick="toggleCenterActive('${c.id}')">${c.active?'⏸':'▶'}</button>` : ''}
+          ${!c.isDefault ? `<button class="icon-btn" title="${c.active?'Desactivar':'Activar'}" onclick="toggleCenterActive('${c.id}')">${c.active?'⏸':'▶'}</button>` : ''}
+          ${!c.isDefault ? `<button class="icon-btn danger" title="Eliminar centro" aria-label="Eliminar centro" onclick="deleteCenter('${c.id}')">${icon('trash')}</button>` : ''}
         </div>
       </div>
     `).join('')}
@@ -10753,7 +10866,7 @@ function renderTransferencias(){
       ${state.transfers.length===0 ? `<div class="empty-state">Aún no se ha hecho ninguna transferencia.</div>` :
         state.transfers.map(t=>`
           <div class="list-row" style="flex-direction:column;align-items:stretch;">
-            <div class="row-title">${t.fromCenterName} → ${t.toCenterName}</div>
+            <div class="row-title" style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${t.fromCenterName} → ${t.toCenterName}${t.reverted?' <span class="status-badge" style="background:var(--navy);">Revertida</span>':''}</span>${t.reverted?'':`<button class="btn-tertiary" style="padding:4px 10px;" onclick="revertTransfer('${t.id}')">Revertir</button>`}</div>
             <div class="row-sub">${new Date(t.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${(t.items||[]).reduce((s,it)=>s+it.qty,0)} unidades${t.notes?` · ${t.notes}`:''}</div>
             <div class="order-detail" style="margin-top:8px;">
               ${(t.items||[]).map(it=>`<div><span>${it.name}</span><span>${it.qty} u.</span></div>`).join('')}
@@ -10905,6 +11018,12 @@ function auditScan(code, fromCamera){
     try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
   } else { render(); }
   return p;
+}
+async function deleteAuditRecord(id){
+  const a = state.audits.find(x=>x.id===id); if(!a) return;
+  if(!confirm(`¿Eliminar este registro de auditoría de ${a.centerName||'centro'}? ${a.applied?'Ojo: el inventario ya se ajustó y NO se revierte; solo se borra el registro.':'Solo se borra el registro.'}`)) return;
+  try{ await db.collection('audits').doc(id).delete(); state.audits = state.audits.filter(x=>x.id!==id); logAdminAction('auditoria_eliminada','auditoria',a.centerName||''); showToast('Registro eliminado'); render(); }
+  catch(e){ console.error(e); showToast('No se pudo eliminar'); }
 }
 function escapeHtmlAudit(s){ return String(s==null?'':s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function auditSearchEnter(v){
@@ -11417,7 +11536,7 @@ function renderAuditHistorial(){
           <div class="list-row" style="flex-direction:column;align-items:stretch;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div class="row-title">${escapeHtmlAudit(a.centerName)}</div>
-              <span class="status-badge" style="background:${a.applied?'var(--green)':'var(--navy)'};">${a.applied?'Inventario ajustado':'Solo registro'}</span>
+              <span style="display:flex;gap:6px;align-items:center;"><span class="status-badge" style="background:${a.applied?'var(--green)':'var(--navy)'};">${a.applied?'Inventario ajustado':'Solo registro'}</span><button class="icon-btn danger" title="Eliminar registro" aria-label="Eliminar registro" onclick="deleteAuditRecord('${a.id}')">${icon('trash',14)}</button></span>
             </div>
             <div class="row-sub">${new Date(a.date).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})} · ${(a.items||[]).length} productos contados · ${diffCount>0?`${diffCount} con diferencia`:'sin diferencias'}${a.notes?` · ${escapeHtmlAudit(a.notes)}`:''}</div>
             <div class="order-detail" style="margin-top:8px;">
