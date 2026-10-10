@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-claims",
+  "private": true,
+  "description": "Asigna custom claims (admin/staff) al personal segun la coleccion cashiers",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}
