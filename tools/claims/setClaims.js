@@ -11,8 +11,8 @@ const DRY_RUN = process.env.DRY_RUN !== '0';
 
 // Red de seguridad: estas cuentas SIEMPRE seran admin, pase lo que pase en cashiers.
 // Pon aqui tu(s) correo(s) de duenio para no bloquearte nunca.
-const contacto.casadelosplaceres@gmail.com = [
-  // 'tu-correo-de-la-tienda@ejemplo.com',
+const ALWAYS_ADMIN = [
+  'contacto.casadelosplaceres@gmail.com',
 ].map(e => e.trim().toLowerCase()).filter(Boolean);
 
 admin.initializeApp({
@@ -23,7 +23,7 @@ const db = admin.firestore();
 const auth = admin.auth();
 
 function desiredClaimFor(email, roster) {
-  if (contacto.casadelosplaceres@gmail.com.includes(email)) return { admin: true };
+  if (ALWAYS_ADMIN.includes(email)) return { admin: true };
   const r = roster.get(email);
   if (!r || !r.active) return null;
   if (r.role === 'administrador') return { admin: true };
