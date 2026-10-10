@@ -263,6 +263,7 @@
     .catalog-grid{flex:1;min-height:0;overflow-y:auto;align-content:start;}
     .catalog-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;margin-top:10px;border-top:1px solid var(--border);font-size:14px;}
   }
+.quick-phone{margin:0 0 8px;} .quick-phone input{width:100%;min-height:40px;font-size:14px;} .quick-phone-hint{font-size:11.5px;color:var(--ink-soft);min-height:0;margin-top:3px;}
 </style>
 </head>
 <body>
@@ -353,7 +354,7 @@ let state = {
   cashPanelOpen:false, movementModalOpen:false, movementType:"retiro", movementAmount:"", movementNote:"", movementError:"",
   closingOpen:false, closingLoading:false, closingSummary:null, closingCountedCash:"", closingNotes:"", closingError:"", closingDenomMode:false, closingDenoms:{},
   // Cliente, ajuste por envío y notas de la venta actual.
-  customers:[], activeCustomer:null, customerPickerOpen:false, customerSearchPOS:"",
+  customers:[], quickPhone:"", activeCustomer:null, customerPickerOpen:false, customerSearchPOS:"",
   newCustomerMode:false, newCustomerName:"", newCustomerPhone:"", newCustomerAddress:"",
   manualDiscount:null, discountModalOpen:false, discountType:"fixed", discountValueInput:"", discountCouponInput:"", discountReasonInput:"", discountError:"",
   saleNotes:"", notesModalOpen:false, notesDraft:"",
@@ -407,7 +408,8 @@ function computeKitStockAtCenter(p, centerId){
   items.forEach(ki=>{
     const comp = state.products.find(x=>x.id===ki.productId);
     const need = ki.qty||1;
-    const avail = comp ? Math.floor(((comp.stockByCenter&&comp.stockByCenter[centerId])||0)/need) : 0;
+    const kv = comp && ki.variantId ? (comp.variants||[]).find(x=>x.id===ki.variantId) : null;
+    const avail = comp ? Math.floor((ki.variantId ? (kv ? vCenterStock(kv, centerId) : 0) : ((comp.stockByCenter&&comp.stockByCenter[centerId])||0))/need) : 0;
     if(avail < min) min = avail;
   });
   return min===Infinity ? 0 : Math.max(0, min);
@@ -421,7 +423,8 @@ function computeKitStock(p){
   items.forEach(ki=>{
     const comp = state.products.find(x=>x.id===ki.productId);
     const need = ki.qty||1;
-    const avail = comp ? Math.floor(totalStock(comp)/need) : 0;
+    const kv = comp && ki.variantId ? (comp.variants||[]).find(x=>x.id===ki.variantId) : null;
+    const avail = comp ? Math.floor((ki.variantId ? (kv ? (kv.stock||0) : 0) : totalStock(comp))/need) : 0;
     if(avail < min) min = avail;
   });
   return min===Infinity ? 0 : Math.max(0, min);
@@ -897,7 +900,7 @@ async function posRestoreStock(sale){
   posSaleItemsNet(sale).forEach(it=>{
     if(!it.id || it.id==='promo_buyxpayy') return;
     const p = state.products.find(x=>x.id===it.id);
-    if(p && p.isKit){ (p.kitItems||[]).forEach(ki=>{ dget(ki.productId).center += (ki.qty||1)*it.qty; }); return; }
+    if(p && p.isKit){ (p.kitItems||[]).forEach(ki=>{ const d=dget(ki.productId); if(ki.variantId) d.variants.set(ki.variantId,(d.variants.get(ki.variantId)||0)+(ki.qty||1)*it.qty); else d.center += (ki.qty||1)*it.qty; }); return; }
     if(it.variantId){ const d = dget(it.id); d.variants.set(it.variantId, (d.variants.get(it.variantId)||0)+it.qty); return; }
     dget(it.id).center += it.qty;
   });
@@ -1513,8 +1516,8 @@ function cartHasReminderProduct(){
   const reminderIds = state.settings.checkoutReminderProducts || [];
   if(!reminderIds.length) return true; // sin lista configurada, no hay nada que recordar
   return Object.keys(state.cart).some(key=>{
-    const {p} = parseCartKey(key);
-    return p && reminderIds.includes(p.id);
+    const {p, v} = parseCartKey(key);
+    return p && (reminderIds.includes(p.id) || (v && reminderIds.includes(p.id+'::'+v.id)));
   });
 }
 function selectPayMethod(m){
@@ -1527,8 +1530,15 @@ function selectPayMethod(m){
   state.payMethod = m;
   render();
 }
-function addReminderProductAndContinue(id){
-  addToCart(id);
+function addReminderProductAndContinue(id, vid){
+  if(vid){
+    const p = state.products.find(x=>x.id===id), v = p && (p.variants||[]).find(x=>x.id===vid);
+    if(p && v){
+      const key = cartKey(id, vid);
+      if(itemStockPOS(p,v)<=(state.cart[key]||0)){ showToast('Sin existencias suficientes de esta variante'); return; }
+      state.cart[key] = (state.cart[key]||0)+1; state.cartPanelOpen=true; trackFrequent(id); savePosCart();
+    }
+  } else addToCart(id);
   closeCheckoutReminder(true);
 }
 function closeCheckoutReminder(applyPending){
@@ -1539,15 +1549,21 @@ function closeCheckoutReminder(applyPending){
   render();
 }
 function renderCheckoutReminderModal(){
-  const items = (state.settings.checkoutReminderProducts||[]).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const items = [];
+  (state.settings.checkoutReminderProducts||[]).forEach(ref=>{
+    const [pid, vid] = String(ref).split('::');
+    const p = state.products.find(x=>x.id===pid); if(!p) return;
+    if(vid){ const v=(p.variants||[]).find(x=>x.id===vid); if(!v) return; items.push({p, v}); }
+    else items.push({p, v:null});
+  });
   return `
   <div class="modal-overlay">
     <div class="modal" style="max-width:380px;">
       <h3>Antes de cobrar…</h3>
       <p style="font-size:13px;color:var(--ink-soft);margin:0 0 14px;">¿Ya le preguntaste si necesita algo más? A veces un lubricante hace toda la diferencia.</p>
-      ${items.map(p=>`
-        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="addReminderProductAndContinue('${p.id}')">
-          <span>${p.name}</span><span style="font-weight:800;">${money(effectivePrice(p))}</span>
+      ${items.map(({p,v})=>`
+        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="addReminderProductAndContinue('${p.id}'${v?`,'${v.id}'`:''})">
+          <span>${p.name}${v?` · ${variantLabel(v)}`:''}</span><span style="font-weight:800;">${money(v?itemPrice(p,v):effectivePrice(p))}</span>
         </button>`).join('')}
       <button class="btn-secondary" style="margin-top:6px;" onclick="closeCheckoutReminder(true)">Ya se lo ofrecí, continuar</button>
     </div>
@@ -1914,7 +1930,7 @@ async function reserveStockForSale(items, centerId){
     const p = state.products.find(x=>x.id===it.id);
     if(p && p.isKit){
       // El kit en sí no guarda existencias propias — se descuenta de sus componentes reales.
-      (p.kitItems||[]).forEach(ki=> addCenterDemand(ki.productId, (ki.qty||1)*it.qty));
+      (p.kitItems||[]).forEach(ki=>{ if(ki.variantId) addVariantDemand(ki.productId, ki.variantId, (ki.qty||1)*it.qty); else addCenterDemand(ki.productId, (ki.qty||1)*it.qty); });
       return;
     }
     if(it.variantId){ addVariantDemand(it.id, it.variantId, it.qty); return; }
@@ -1979,6 +1995,35 @@ async function reserveStockForSale(items, centerId){
     return map;
   });
 }
+/* WhatsApp rápido al cobrar: si el cajero captura un número (y no hay cliente elegido), se busca en la lista;
+   si existe se asocia solo y si no se crea el cliente al momento. Es opcional y nunca bloquea el cobro. */
+function quickPhoneDigits(){ return String(state.quickPhone||'').replace(/\D/g,''); }
+function findCustomerByPhonePOS(digits){
+  const k = digits.slice(-10); if(k.length<10) return null;
+  return state.customers.find(c=>{ const d=String(c.phone||'').replace(/\D/g,''); return d.slice(-10)===k || (c.altPhones||[]).some(a=>String(a).replace(/\D/g,'').slice(-10)===k); }) || null;
+}
+function escQuickAttr(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function onQuickPhoneInput(v){
+  state.quickPhone = String(v||'').replace(/[^0-9+\s-]/g,'').slice(0,18);
+  const m = findCustomerByPhonePOS(quickPhoneDigits());
+  if(m){ state.activeCustomer = m; state.quickPhone = ''; showToast('Cliente encontrado: '+m.name); render(); return; }
+  const hint = document.getElementById('quick-phone-hint');
+  if(hint) hint.textContent = quickPhoneDigits().length>=10 ? 'Se guardará como cliente nuevo al cobrar' : '';
+}
+async function ensureQuickCustomer(){
+  if(state.activeCustomer) return;
+  const digits = quickPhoneDigits(); if(digits.length<10) return;
+  const found = findCustomerByPhonePOS(digits);
+  if(found){ state.activeCustomer = found; return; }
+  const phone = digits.slice(-10);
+  const payload = {name:'Cliente '+phone.slice(-4), phone, email:'', address:'', city:'', state:'', country:'', notes:'Creado desde el cobro en el Punto de Venta', createdAt:new Date().toISOString(), source:'pos-rapido'};
+  const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  if(offline){ state.activeCustomer = {id:null, ...payload}; return; }
+  try{
+    const ref = await db.collection('customers').add(payload);
+    const c = {id:ref.id, ...payload}; state.customers.push(c); state.activeCustomer = c;
+  }catch(e){ console.error('No se pudo crear el cliente rápido', e); state.activeCustomer = {id:null, ...payload}; }
+}
 async function chargeSale(){
   if(cartCount()===0 || state.sending) return;
   if(!state.activeCashRegister){ showToast('Abre la caja antes de vender'); return; }
@@ -1989,6 +2034,7 @@ async function chargeSale(){
     if(splitRemaining() !== 0){ showToast('La suma de los pagos divididos debe ser igual al total'); return; }
   }
   state.sending = true; render();
+  await ensureQuickCustomer();
   const centerId = state.activeCenter.id;
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
@@ -2052,6 +2098,16 @@ async function chargeSale(){
         (p.kitItems||[]).forEach(ki=>{
           const comp = state.products.find(x=>x.id===ki.productId);
           if(!comp) return;
+          if(ki.variantId){
+            const kv = (comp.variants||[]).find(x=>x.id===ki.variantId);
+            if(kv){
+              vSetCenterStock(kv, centerId, vCenterStock(kv, centerId) - (ki.qty||1)*it.qty);
+              vProductSync(comp); touchedComponentIds.add(comp.id);
+              if(!isOffline) logStockMovement(comp.id, 'venta_pos_kit', -(ki.qty||1)*it.qty, `Componente de "${p.name}"`, centerId);
+              stockUpdates.push({id:comp.id, payload:{variants: comp.variants, stock: comp.stock, stockByCenter: comp.stockByCenter}});
+            }
+            return;
+          }
           if(!comp.stockByCenter) comp.stockByCenter = {};
           comp.stockByCenter[centerId] = Math.max(0, (comp.stockByCenter[centerId]||0) - (ki.qty||1)*it.qty);
           comp.stock = totalStock(comp);
@@ -2119,7 +2175,7 @@ async function chargeSale(){
       const clienteLine = state.activeCustomer ? `\nCliente: ${state.activeCustomer.name}${state.activeCustomer.phone?` (${state.activeCustomer.phone})`:''}` : '';
       sendSlackNotification(`💰 *Nueva venta* ${orderNumber?`#${orderNumber}`:''} — ${state.activeCenter.name}\nAtendió: ${state.activeCashier.name}\nProducto:\n${productLines}${clienteLine}\nTotal: ${money(total)}`);
     }
-    state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo';
+    state.manualDiscount = null; state.activeCustomer = null; state.quickPhone = ''; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo';
   }catch(e){
     console.error(e); showToast('No se pudo registrar la venta');
   }
@@ -2246,6 +2302,7 @@ function renderSaleFoot(entries){
           ${entries.length>0 ? `<button class="pill-btn" style="flex:1;background:var(--surface-soft);color:var(--ink-soft);justify-content:center;" onclick="holdCurrentSale()">${icon('pause',14)} Poner en espera</button>` : ''}
           ${state.heldSales.length>0 ? `<button class="pill-btn" style="flex:1;background:var(--primary-soft,var(--surface-soft));color:var(--primary-deep);justify-content:center;" onclick="state.heldOpen=true;render()">En espera (${state.heldSales.length})</button>` : ''}
         </div>` : ''}
+        ${!state.activeCustomer ? `<div class="quick-phone"><input id="quick-phone-input" class="field-input" type="tel" inputmode="tel" autocomplete="off" placeholder="WhatsApp del cliente (opcional)" value="${escQuickAttr(state.quickPhone)}" oninput="onQuickPhoneInput(this.value)"><div id="quick-phone-hint" class="quick-phone-hint">${quickPhoneDigits().length>=10?'Se guardará como cliente nuevo al cobrar':''}</div></div>` : ''}
         <div class="pay-row pay-methods">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
         ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
         <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>

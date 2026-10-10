@@ -181,6 +181,8 @@
   .filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;}
   .filter-btn{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 16px;border-radius:var(--radius-pill);background:var(--surface);border:1.5px solid var(--border);color:var(--ink);font-size:13.5px;font-weight:600;}
   .filter-btn.on{border-color:var(--primary);color:var(--primary);}
+  .sort-select{height:40px;padding:0 12px;border-radius:var(--radius-pill);background:var(--surface);border:1.5px solid var(--border);color:var(--ink);font-size:13.5px;font-weight:600;max-width:100%;}
+  .sort-select.on{border-color:var(--primary);color:var(--primary);}
   .filter-chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:var(--radius-pill);background:var(--surface-soft);border:1px solid var(--border);color:var(--primary-deep);font-size:13px;font-weight:600;}
   .price-presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
   .price-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
@@ -741,7 +743,7 @@ function saveCart(){
   try{ localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart)); }catch(e){ /* almacenamiento no disponible, se ignora */ }
 }
 
-let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart: loadStoredCart(), activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'', privacyPolicyOpen:false, priceFilterOpen:false, couponOpen:false, quizOpen:false, quizStep:0, quizAnswers:{need:null,cat:null,budget:null}, zoomOpen:false, zoomPct:100 };
+let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart: loadStoredCart(), activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'', sortBy:'', onlyAvailable:false, privacyPolicyOpen:false, priceFilterOpen:false, couponOpen:false, quizOpen:false, quizStep:0, quizAnswers:{need:null,cat:null,budget:null}, zoomOpen:false, zoomPct:100 };
 
 async function loadData(attempt){
   attempt = attempt || 1;
@@ -1327,7 +1329,7 @@ function genericCartSuggestions(){
   const cartCats = new Set();
   Object.keys(state.cart).forEach(key=>{ const {p}=parseCartKey(key); if(p) productCats(p).forEach(c=>cartCats.add(c)); });
   const pool = dailyShuffledProducts().filter(p=>!inCartIds.has(p.id) && !promoSuggestedIds.has(p.id) && p.stock>0);
-  const featuredIds = state.settings.featuredProductIds||[];
+  const featuredIds = [...featuredPidSet()];
   const sameCat = pool.filter(p=>productCats(p).some(c=>cartCats.has(c)));
   const featured = pool.filter(p=>featuredIds.includes(p.id) && !sameCat.includes(p));
   const rest = pool.filter(p=>!sameCat.includes(p) && !featured.includes(p));
@@ -1353,8 +1355,10 @@ function itemStock(p, v){ return v ? (v.stock||0) : (p ? p.stock : 0); }
 // producto, cuál ya lleva y cuál no, y solo se le sugiere algo DIFERENTE a lo que ya tiene.
 function reminderProductsNotInCart(){
   const reminderIds = state.settings.checkoutReminderProducts || [];
-  const inCartIds = new Set(Object.keys(state.cart).map(key=>parseCartKey(key).p).filter(Boolean).map(p=>p.id));
-  return reminderIds.filter(id=>!inCartIds.has(id)).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const inCartKeys = new Set(Object.keys(state.cart));
+  const inCartPids = new Set(Object.keys(state.cart).map(key=>parseCartKey(key).p).filter(Boolean).map(p=>p.id));
+  return reminderIds.filter(r=>{ const {pid,vid} = refParse(r); return vid ? !inCartKeys.has(cartKey(pid,vid)) : !inCartPids.has(pid); })
+    .map(r=>{ const d = refResolve(r); return d && d.stock>0 ? d : null; }).filter(Boolean);
 }
 function proceedToCheckout(){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); return; }
@@ -1365,8 +1369,8 @@ function proceedToCheckout(){
   }
   state.cartOpen=false; state.checkoutOpen=true; state.checkoutOpenedAt=Date.now(); trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
 }
-function addReminderProductToCart(id){
-  addToCart(id);
+function addReminderProductToCart(id, vid){
+  addToCart(id, vid||undefined);
   state.checkoutReminderShown = true;
   state.checkoutReminderOpen = false;
   render();
@@ -1389,13 +1393,32 @@ function renderCheckoutReminderDrawer(){
         <div class="reminder-row">
           ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${p.images[0]}" alt="${p.name}" loading="lazy">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)};display:flex;align-items:center;justify-content:center;">${catIcon(p.cat)}</div>`}
           <div class="r-name">${p.name}<div class="r-price">${money(effectivePrice(p))}</div></div>
-          <button class="reminder-add" onclick="addReminderProductToCart('${p.id}')">+ Agregar</button>
+          <button class="reminder-add" onclick="addReminderProductToCart('${p.id}'${p._fv?`,'${p._fv}'`:''})">+ Agregar</button>
         </div>`).join('')}
     </div>
     <div class="drawer-foot"><button class="btn-neutral" style="margin-top:0;" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button></div>
   `;
 }
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
+/* Referencias a productos elegidos a mano (destacados, recordatorio al pagar): "idProducto" para todo el
+   producto o "idProducto::idVariante" para una variante en particular. */
+function refParse(r){ const parts = String(r).split('::'); return {pid: parts[0], vid: parts[1]||null}; }
+function refPid(r){ return refParse(r).pid; }
+// Producto "de vitrina" para una variante: misma ficha, pero con la foto, el precio y la existencia de esa variante.
+function variantDisplayProduct(p, v){
+  const img = vImage(p, v);
+  const images = img ? [img, ...(p.images||[]).filter(x=>x!==img)] : (p.images||[]);
+  return {...p, name: p.name + ' (' + variantLabel(v) + ')', variants:[v], stock: v.stock||0, images, _fv: v.id};
+}
+function refResolve(r){
+  const {pid, vid} = refParse(r);
+  const p = state.products.find(x=>x.id===pid); if(!p) return null;
+  if(!vid) return p;
+  const v = (p.variants||[]).find(x=>x.id===vid); if(!v) return null;
+  return variantDisplayProduct(p, v);
+}
+function featuredRefsValid(){ return (state.settings.featuredProductIds||[]).filter(r=>refResolve(r)); }
+function featuredPidSet(){ return new Set((state.settings.featuredProductIds||[]).map(refPid)); }
 // Aplica los colores/tipografía/estilo elegidos en Diseño → Apariencia (admin.html). Se
 // escriben como propiedades inline en <html>, que siempre le ganan a cualquier valor de
 // :root del CSS sin importar el orden en que aparezcan — así no hace falta reordenar hojas
@@ -1487,7 +1510,14 @@ function goToFeatured(){
   render();
   requestAnimationFrame(()=>scrollToId('catalogo'));
 }
-function openProductDetail(id){ state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={}; trackEvent('product_view', {productId:id}); render(); }
+function openProductDetail(id, vid){
+  state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={};
+  if(vid){
+    const dp = state.products.find(x=>x.id===id); const v = dp ? (dp.variants||[]).find(x=>x.id===vid) : null;
+    if(v){ state.detailSelectedVariant = {...(v.combo||{})}; if(typeof v.imageIdx==='number' && dp.images && dp.images[v.imageIdx]) state.detailImageIndex = v.imageIdx; }
+  }
+  trackEvent('product_view', {productId:id}); render();
+}
 function closeProductDetail(){ state.detailProductId=null; render(); }
 function selectVariantOption(groupName, value){
   state.detailSelectedVariant[groupName] = value;
@@ -2236,6 +2266,14 @@ function cardAction(p, kind){
   const base = kind==='mini' ? 'rel-add' : 'card-add';
   const hasVariants = p.variantGroups && p.variantGroups.length>0;
   if(p.stock<=0) return `<button class="${base}" disabled>Agotado</button>`;
+  if(p._fv){
+    const vkey = cartKey(p.id, p._fv), vq = state.cart[vkey] || 0;
+    if(vq>0) return `<div class="qty-step ${kind==='mini'?'mini':''}" onclick="event.stopPropagation()">
+      <button aria-label="Quitar una pieza" onclick="event.stopPropagation();changeQty('${vkey}',-1)">−</button>
+      <span aria-live="polite">${vq} <small>en tu carrito</small></span>
+      <button aria-label="Agregar una pieza más" onclick="event.stopPropagation();addToCart('${p.id}','${p._fv}')">+</button></div>`;
+    return `<button class="${base}" onclick="event.stopPropagation();addToCart('${p.id}','${p._fv}')">Agregar</button>`;
+  }
   if(hasVariants) return `<button class="${base} alt" onclick="event.stopPropagation();openProductDetail('${p.id}')">Elegir opciones</button>`;
   const key = cartKey(p.id, null), qty = state.cart[key] || 0;
   if(qty>0) return `<div class="qty-step ${kind==='mini'?'mini':''}" onclick="event.stopPropagation()">
@@ -2247,9 +2285,9 @@ function cardAction(p, kind){
 
 /* ============== POPULARES Y TARJETAS CHICAS ============== */
 function popularProducts(n){
-  const manual = (state.settings.featuredProductIds||[]).filter(id=>state.products.some(p=>p.id===id));
+  const manual = featuredRefsValid();
   const ids = manual.length ? manual : (state.settings.bestSellerProductIds||[]);
-  const out = ids.map(id=>state.products.find(p=>p.id===id)).filter(p=>p && p.stock>0);
+  const out = ids.map(id=>refResolve(id)).filter(p=>p && p.stock>0);
   if(out.length < n){
     const have = new Set(out.map(p=>p.id));
     dailyShuffledProducts().forEach(p=>{ if(out.length<n && !have.has(p.id) && p.stock>0 && !p.isMysteryBox){ out.push(p); have.add(p.id); } });
@@ -2265,7 +2303,7 @@ function renderMiniCard(p, opts){
     ? `<img src="${p.images[0]}" alt="" loading="lazy">`
     : `<div class="rel-fallback" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>`;
   const pre = opts.close ? `state.${opts.close}=false;` : '';
-  const open = opts.fromDetail ? `openRelated('${p.id}')` : `openProductDetail('${p.id}')`;
+  const open = opts.fromDetail ? `openRelated('${p.id}')` : `openProductDetail('${p.id}'${p._fv?`,'${p._fv}'`:''})`;
   return `<div class="rel-card" onclick="${pre}${open}">
     <div class="rel-img">${img}</div>
     ${opts.tags&&opts.tags.length?`<div class="rel-tags">${opts.tags.map(t=>`<span>${t}</span>`).join('')}</div>`:''}
@@ -2752,11 +2790,11 @@ function renderFeaturedSection(){
   // verdad siguen existiendo. Un ID guardado de un producto ya eliminado (o de una prueba
   // vieja) antes dejaba toda la sección vacía en vez de usar la lista automática de "más
   // vendidos" — ahora, si lo marcado a mano ya no aplica a nada real, cae solo en automático.
-  const manualIds = (state.settings.featuredProductIds||[]).filter(id=>state.products.some(p=>p.id===id));
+  const manualIds = featuredRefsValid();
   // Si no eligió nada a mano, usa la lista automática de "más vendidos" (calculada sola en el
   // panel de administración a partir de las ventas reales, actualizada cada semana).
   const ids = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);
-  const items = state.products.filter(p=>ids.includes(p.id));
+  const items = ids.map(id=>refResolve(id)).filter(Boolean);
   if(!items.length) return '';
   return `
   <div class="section-block" id="destacados">
@@ -2876,6 +2914,22 @@ function setPriceFilter(which, val){
   const i = document.getElementById(id);
   if(i){ i.focus(); const pos = String(val).length; i.setSelectionRange(pos,pos); }
 }
+function setSortBy(v){ state.sortBy = v; state.gridRenderLimit = 20; render(); }
+function toggleOnlyAvailable(){ state.onlyAvailable = !state.onlyAvailable; state.gridRenderLimit = 20; render(); }
+// Ordena el catálogo según lo elegido (precio real que pagaría el cliente, novedades o nombre);
+// sin elección se conserva el orden mezclado del día. Los agotados siempre quedan al final.
+function applySortAndAvailability(list){
+  if(state.onlyAvailable) list = list.filter(p=>(p.stock||0)>0);
+  const k = state.sortBy; if(!k) return list;
+  const price = p=>{ const d = productDisplayPrice(p); return d && d.price!=null ? d.price : (p.price||0); };
+  const byName = (a,b)=>(a.name||'').localeCompare(b.name||'','es',{sensitivity:'base'});
+  const arr = [...list];
+  if(k==='precio-asc') arr.sort((a,b)=>price(a)-price(b)||byName(a,b));
+  else if(k==='precio-desc') arr.sort((a,b)=>price(b)-price(a)||byName(a,b));
+  else if(k==='nuevos') arr.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))||byName(a,b));
+  else if(k==='nombre') arr.sort(byName);
+  return arr;
+}
 function clearPriceFilter(){ state.priceMin=''; state.priceMax=''; state.gridRenderLimit=20; render(); }
 function applyPriceFilterFromPanel(){
   const mn = (document.getElementById('price-min-input')||{}).value||'';
@@ -2892,6 +2946,10 @@ function renderPriceFilterRow(){
   return `
   <div class="filter-row">
     <button class="filter-btn ${priceFilterActive()?'on':''}" onclick="state.priceFilterOpen=true;render()">${icon('sliders',16)} Filtrar</button>
+    <select class="sort-select ${state.sortBy?'on':''}" aria-label="Ordenar por" onchange="setSortBy(this.value)">
+      ${[['','Ordenar: sugeridos'],['precio-asc','Precio: menor a mayor'],['precio-desc','Precio: mayor a menor'],['nuevos','Novedades'],['nombre','Nombre (A-Z)']].map(o=>`<option value="${o[0]}" ${state.sortBy===o[0]?'selected':''}>${o[1]}</option>`).join('')}
+    </select>
+    <button class="filter-btn ${state.onlyAvailable?'on':''}" aria-pressed="${state.onlyAvailable?'true':'false'}" onclick="toggleOnlyAvailable()">${state.onlyAvailable?icon('check',16):''} Solo disponibles</button>
     ${label ? `<button class="filter-chip" onclick="clearPriceFilter()">${label} ${icon('x',13)}</button>` : ''}
   </div>`;
 }
@@ -2919,9 +2977,9 @@ function renderGridSection(){
   let showClearBtn = false;
   let emptyMsg = `No encontramos productos que coincidan. Prueba con otra búsqueda o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
   if(state.activeBestSellers){
-    const manualIds = (state.settings.featuredProductIds||[]).filter(id=>state.products.some(p=>p.id===id));
+    const manualIds = featuredRefsValid();
     const idsList = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);
-    filtered = idsList.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+    filtered = idsList.map(id=>refResolve(id)).filter(Boolean);
     heading = 'Más vendidos';
     showClearBtn = true;
     emptyMsg = `Todavía no tenemos suficientes ventas para armar esta lista. Mientras tanto, <a style="color:var(--primary);font-weight:700;" onclick="goToCatalog('Todos')">conoce el catálogo completo</a>.`;
@@ -2950,6 +3008,7 @@ function renderGridSection(){
   }
   // Los productos agotados se muestran hasta el final, sin alterar el orden entre sí.
   filtered = applyPriceFilter(filtered);
+  filtered = applySortAndAvailability(filtered);
   filtered = filtered
     .map((p,i)=>({p,i}))
     .sort((a,b)=> (a.p.stock<=0)-(b.p.stock<=0) || a.i-b.i)
@@ -3071,7 +3130,7 @@ function renderProductBadges(p, ctx){
   return candidates.sort((a,b)=>a.priority-b.priority).slice(0,2).map(c=>c.html).join('');
 }
 function renderProductCard(p, forceBest){
-  const isBest = forceBest || (state.settings.featuredProductIds||[]).includes(p.id);
+  const isBest = forceBest || featuredPidSet().has(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
   const hasVariants = p.variantGroups && p.variantGroups.length>0;
   const hasPromo = effectivePrice(p)<p.price;
@@ -3079,7 +3138,7 @@ function renderProductCard(p, forceBest){
   const wholesaleEligible = tier && isEligibleForTier(p, tier);
   const wholesaleUnlocked = wholesaleEligible && wholesaleCartProgress(tier).unlocked;
   return `
-      <div class="card" onclick="openProductDetail('${p.id}')">
+      <div class="card" onclick="openProductDetail('${p.id}'${p._fv?`,'${p._fv}'`:''})">
         <div class="card-media">
           <div class="card-image-wrap">
             ${productImageHtml(p)}

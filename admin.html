@@ -275,6 +275,14 @@
   .cost-history-row .ch-cost em{font-style:normal;font-size:11px;font-weight:700;}
   .cost-history-row .ch-cost em.up{color:var(--danger-ink,#b42318);} .cost-history-row .ch-cost em.down{color:var(--green,#3d7a1a);}
   .cost-history-row .ch-sup{grid-column:1/-1;min-width:0;overflow-wrap:anywhere;color:var(--ink-soft);font-size:12px;} .cost-history-row small{color:var(--ink-soft);}
+  .qcost{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap;} .qcost input{width:120px;max-width:100%;padding:8px 10px;border-radius:10px;border:1.5px solid var(--border);font-size:14px;}
+  .qvar-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .qvar{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:999px;padding:2px 4px;font-size:12px;background:var(--surface);max-width:100%;}
+  .qvar .qvar-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft);}
+  .qvar b{min-width:16px;text-align:center;}
+  .qvar b.qvar-out{color:#c0392b;}
+  .qvar button{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--primary-deep);font-size:14px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+  .qvar button:disabled{opacity:.4;}
   .qstock{display:inline-flex;align-items:center;gap:4px;}
   .qstock button{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--primary-deep);font-size:16px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;}
   .qstock button:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
@@ -788,6 +796,7 @@ const DEFAULT_SETTINGS = {
   promoBannerPresets:[], activePromoBannerId:"",
   bestSellerProductIds:[], bestSellersUpdatedAt:"",
   featuredProductIds:[],
+  recurringExpenses:[],
   testimonials:[],
   socialInstagram:"", socialFacebook:"", contactEmail:"",
   customCss:"",
@@ -930,7 +939,7 @@ let state = {
   heatMetric:'count', heatDays:90,
   loadWarnings:[],
   expenses:[], expenseEditId:null, expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
-  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, cancelModal:null, orderEditModal:null, custDupesOpen:false, custDupePrimary:{}, receiveGoodsVariants:{},
+  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, cancelModal:null, payEditModal:null, orderEditModal:null, custDupesOpen:false, custDupePrimary:{}, receiveGoodsVariants:{},
   restockRequests:[], notifyModalProductId:null,
   searchMisses:[], quizResponses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
@@ -1045,6 +1054,7 @@ async function loadData(attempt){
     }
     if(!state.settings.activePromoBannerId) state.settings.activePromoBannerId = "";
     if(!state.settings.featuredProductIds) state.settings.featuredProductIds = [];
+    if(!Array.isArray(state.settings.recurringExpenses)) state.settings.recurringExpenses = [];
     if(!state.settings.testimonials) state.settings.testimonials = [];
     if(!state.settings.wholesaleTiers) state.settings.wholesaleTiers = [];
     if(!state.settings.coupons) state.settings.coupons = [];
@@ -1139,6 +1149,7 @@ async function loadData(attempt){
   if(!state.lastOrderCheck) state.lastOrderCheck = new Date().toISOString();
   if(!state.lastMessageCheck) state.lastMessageCheck = new Date().toISOString();
   await refreshBestSellersIfStale();
+  try{ await generateRecurringExpenses(); }catch(e){ console.error('Gastos fijos', e); }
   // Punto de partida para la bitácora de cambios de configuración/diseño: a partir de aquí,
   // cualquier saveSettings() compara contra esta "foto" para saber qué campos cambiaron.
   _settingsAuditBaseline = JSON.stringify(state.settings);
@@ -1266,7 +1277,7 @@ const SETTINGS_FIELD_LABELS = {
   hiddenCategories:'Categorías ocultas', needs:'Necesidades/etiquetas', sections:'Secciones visibles',
   headerSubtitle:'Subtítulo del encabezado', showHeaderSubtitle:'Mostrar subtítulo del encabezado',
   promoBanner:'Banner promocional', promoBannerPresets:'Banners guardados', activePromoBannerId:'Banner activo',
-  featuredProductIds:'Productos destacados', testimonials:'Testimonios', socialInstagram:'Instagram',
+  featuredProductIds:'Productos destacados', recurringExpenses:'Gastos fijos mensuales', testimonials:'Testimonios', socialInstagram:'Instagram',
   socialFacebook:'Facebook', contactEmail:'Correo de contacto', customCss:'CSS personalizado',
   storeAddress:'Dirección de origen', deliveryWhatsapp:'WhatsApp del repartidor', slackWebhookUrl:'Webhook de notificaciones',
   shippingNote:'Nota de envío', wholesaleTiers:'Precios de mayoreo', coupons:'Cupones', promotions:'Promociones',
@@ -1600,16 +1611,18 @@ function salePayments(s){
   if(s.payments && s.payments.length) return s.payments;
   return [{method: s.paymentMethod || 'Efectivo', amount: s.total||0}];
 }
+// Las ventas importadas de otra plataforma traen "Otro" como método: en pantalla se llama "Sin dato".
+function payMethodName(m){ return m==='Otro' ? 'Sin dato' : m; }
 function paymentMethodLabel(o){
   const pays = salePayments(o);
-  if(pays.length>1) return 'Dividido: ' + pays.map(p=>`${p.method} ${money(p.amount)}`).join(' · ');
-  return pays[0].method;
+  if(pays.length>1) return 'Dividido: ' + pays.map(p=>`${payMethodName(p.method)} ${money(p.amount)}`).join(' · ');
+  return payMethodName(pays[0].method);
 }
 // Versión corta para espacios angostos (la pastilla de la tabla de pedidos): solo dice
 // "Dividido" en vez del desglose completo, que se sigue mostrando en el detalle del pedido.
 function paymentMethodShortLabel(o){
   const pays = salePayments(o);
-  return pays.length>1 ? 'Dividido' : pays[0].method;
+  return pays.length>1 ? 'Dividido' : payMethodName(pays[0].method);
 }
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : 'Sin folio'; }
 async function getNextOrderNumber(){
@@ -3445,6 +3458,38 @@ function renderOrderEditModal(){
   </div>`;
 }
 
+/* Cambiar el método de pago de una venta (útil para corregir una captura o para las importadas "Sin dato"). */
+function openPayEdit(id){ const o = state.orders.find(x=>x.id===id); if(!o) return; state.orderActionsMenu=null; const pays=salePayments(o); state.payEditModal={id, method: pays.length>1 ? '' : (pays[0].method==='Otro'?'':pays[0].method)}; render(); }
+function renderPayEditModal(){
+  const m = state.payEditModal; const o = state.orders.find(x=>x.id===m.id); if(!o) return '';
+  const split = salePayments(o).length>1;
+  const closed = o.cashRegisterId && (state.cashRegisters||[]).some(r=>r.id===o.cashRegisterId && r.status==='cerrada');
+  return `<div class="modal-overlay"><div class="modal" style="max-width:420px;">
+    <h3>Método de pago</h3>
+    <div class="panel-sub" style="margin:-8px 0 10px;">${formatFolio(o.orderNumber)} · ${money(o.total||0)} · ahora: ${escDescHtml(paymentMethodLabel(o))}</div>
+    ${split ? `<div class="note-box" style="margin-bottom:8px;">Esta venta se cobró dividida. Al elegir un método, todo el total quedará con ese método.</div>` : ''}
+    ${closed ? `<div class="note-box" style="margin-bottom:8px;">La caja de esta venta ya se cerró: el corte guardado no cambia, pero los reportes sí usarán el método nuevo.</div>` : ''}
+    <div class="pay-seg" style="margin-bottom:10px;flex-wrap:wrap;">${[...PAY_METHODS,'Sin dato'].map(x=>{ const v=x==='Sin dato'?'Otro':x; return `<button type="button" class="${m.method===v?'on':''}" onclick="state.payEditModal.method='${v}';render()">${x}</button>`; }).join('')}</div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="state.payEditModal=null;render()">Cancelar</button>
+      <button class="btn-primary" style="flex:1;" ${m.method?'':'disabled style="opacity:.5"'} onclick="savePayEdit()">Guardar</button>
+    </div>
+  </div></div>`;
+}
+async function savePayEdit(){
+  const m = state.payEditModal; if(!m || !m.method) return;
+  const o = state.orders.find(x=>x.id===m.id); state.payEditModal = null; if(!o){ render(); return; }
+  const prev = {paymentMethod:o.paymentMethod, payments:o.payments};
+  const upd = {paymentMethod:m.method};
+  if(o.source==='pos' || (o.payments && o.payments.length)) upd.payments = [{method:m.method, amount:o.total||0}];
+  try{
+    await db.collection(o.source==='pos'?'sales':'orders').doc(o.id).update(upd);
+    Object.assign(o, upd);
+    logAdminAction('cambio_metodo_pago', 'venta', formatFolio(o.orderNumber), `${payMethodName(prev.paymentMethod||'—')} → ${payMethodName(m.method)}`);
+    showToast('Método de pago actualizado');
+  }catch(e){ console.error(e); showToast('No se pudo cambiar el método de pago'); }
+  render();
+}
 const CANCEL_REASONS = ['El cliente canceló','No contestó / no se pudo contactar','Sin existencias','Pedido duplicado','Fuera de zona de entrega','Error al capturar','Otro'];
 function renderCancelModal(){
   const m = state.cancelModal; const o = state.orders.find(x=>x.id===m.id); if(!o) return '';
@@ -3533,6 +3578,18 @@ async function adjustStockForSale(sale, sign, opts){
       (p.kitItems||[]).forEach(ki=>{
         const comp = state.products.find(x=>x.id===ki.productId);
         if(!comp) return;
+        if(ki.variantId){
+          const kv = (comp.variants||[]).find(x=>x.id===ki.variantId);
+          const kcid = centerId || defaultCenterId();
+          if(kv){
+            if(sign<0 && vCenterStock(kv, kcid) + sign*(ki.qty||1)*it.qty < 0) short.push(comp.name);
+            vSetCenterStock(kv, kcid, vCenterStock(kv, kcid) + sign*(ki.qty||1)*it.qty);
+            vProductSync(comp);
+            touchedComponentIds.push(comp.id);
+            updates.push(db.collection('products').doc(comp.id).update({variants: comp.variants, stock: comp.stock, stockByCenter: comp.stockByCenter}));
+          }
+          return;
+        }
         if(!comp.stockByCenter) comp.stockByCenter = {};
         if(sign<0 && centerId && (comp.stockByCenter[centerId]||0) + sign*(ki.qty||1)*it.qty < 0) short.push(comp.name);
         if(centerId) comp.stockByCenter[centerId] = Math.max(0, (comp.stockByCenter[centerId]||0) + sign*(ki.qty||1)*it.qty);
@@ -4356,6 +4413,45 @@ function renderShowMoreButton(key, remaining, pageSize){
 function resetShowMore(key){ state[key] = SHOW_MORE_PAGE_SIZE; }
 
 /* ============== MÉTRICAS ============== */
+/* ---- Punto de reorden automático ----
+   Un producto se marca "por reabastecer" según lo que de verdad vende: si lo que queda alcanza para menos de
+   N días (por defecto 14, ajustable) al ritmo de venta de los últimos 90 días. Si tiene su propio mínimo
+   (lowStockThreshold en la ficha) se respeta ese. Lo que no se vende no estorba. En productos con variantes se revisa cada una. */
+const REORDER_WINDOW_DAYS = 90;
+function reorderDays(){ const n = Number(state.settings && state.settings.reorderDays); return n>0 ? n : 14; }
+function reorderVelocity(){
+  const since = Date.now() - REORDER_WINDOW_DAYS*86400000, byId = {}, byVar = {};
+  state.orders.forEach(o=>{
+    if(o.status==='Cancelado' || o.historical && !o.importedFrom) return;
+    const t = new Date(o.date).getTime(); if(isNaN(t) || t<since) return;
+    (o.items||[]).forEach(it=>{
+      if(!it.id) return; const q = Number(it.qty)||0;
+      byId[it.id] = (byId[it.id]||0)+q;
+      if(it.variantId){ const k = it.id+'::'+it.variantId; byVar[k] = (byVar[k]||0)+q; }
+    });
+  });
+  return {byId, byVar};
+}
+function reorderPointFor(units){ return units>0 ? Math.max(1, Math.ceil(units/REORDER_WINDOW_DAYS*reorderDays())) : 0; }
+function lowStockProducts(){
+  const vel = reorderVelocity();
+  return state.products.filter(p=>{
+    if(p.isKit) return false;
+    if(p.lowStockThreshold>0) return (p.stock||0)<=p.lowStockThreshold;
+    if((p.variants||[]).length){
+      return p.variants.some(v=>{ const pt = reorderPointFor(vel.byVar[p.id+'::'+v.id]||0); return pt>0 && (v.stock||0)<=pt; });
+    }
+    const pt = reorderPointFor(vel.byId[p.id]||0);
+    return pt>0 && (p.stock||0)<=pt;
+  });
+}
+function reorderNote(p){
+  const vel = reorderVelocity(), u = vel.byId[p.id]||0;
+  if(p.lowStockThreshold>0) return `Mínimo que fijaste: ${p.lowStockThreshold}`;
+  if(!u) return '';
+  const perWeek = u/REORDER_WINDOW_DAYS*7;
+  return `Vendes ~${perWeek<1?perWeek.toFixed(1):Math.round(perWeek)} por semana · reordenar con ${reorderPointFor(u)} o menos`;
+}
 function computeMetrics(){
   const valid = state.orders.filter(o=>o.status!=='Cancelado');
   const cancelled = state.orders.filter(o=>o.status==='Cancelado');
@@ -4366,7 +4462,7 @@ function computeMetrics(){
   const pendingPreparando = state.orders.filter(o=>o.status==='Preparando').length;
   const pendingCamino = state.orders.filter(o=>o.status==='En camino').length;
   const pending = pendingNuevo + pendingPreparando + pendingCamino;
-  const lowStock = state.products.filter(p=>p.stock<=(p.lowStockThreshold>0?p.lowStockThreshold:3));
+  const lowStock = lowStockProducts();
   const cancelRate = state.orders.length ? Math.round((cancelled.length/state.orders.length)*100) : 0;
 
   const byPhone = {};
@@ -4663,6 +4759,7 @@ function renderAdmin(){
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
   ${state.returnModal ? renderReturnModal() : ''}
   ${state.cancelModal ? renderCancelModal() : ''}
+  ${state.payEditModal ? renderPayEditModal() : ''}
   ${state.orderEditModal ? renderOrderEditModal() : ''}
   ${state.custDupesOpen ? renderCustDupesModal() : ''}
   ${state.recompressOpen ? renderRecompressModal() : ''}
@@ -5602,18 +5699,23 @@ function renderResumen(){
     <div class="panel"><div class="panel-title">Ingresos — últimos 7 días</div>${renderBarChart(m.dayRevenue)}</div>
     ${m.lowStock.length>0 ? `
     <div class="panel" id="resumen-reabasto">
-      <div class="panel-title">Reabastecer pronto</div>
-      ${m.lowStock.map(p=>`
+      <div class="panel-title">Reabastecer pronto (${m.lowStock.length})</div>
+      <div class="panel-sub">Según lo que vendes: te avisa cuando lo que queda alcanza para menos de <select onchange="state.settings.reorderDays=Number(this.value);saveSettings();render()" style="display:inline-block;width:auto;padding:2px 6px;">${[7,14,21,30].map(d=>`<option value="${d}" ${reorderDays()===d?'selected':''}>${d}</option>`).join('')}</select> días de ventas.</div>
+      ${showMoreSlice('lowStockShowMore', m.lowStock).shown.map(p=>`
         <div class="list-row row-wrap" style="row-gap:8px;">
           ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-          <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}</div></div>
+          <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat}${reorderNote(p)?' · '+reorderNote(p):''}</div></div>
           ${stockStatusBadge(p)}
-          ${state.restockItems.find(r=>r.productId===p.id)
+          ${(p.variants&&p.variants.length) ? p.variants.filter(v=>(v.stock||0)<=Math.max(lowStockLimit(p), reorderPointFor(reorderVelocity().byVar[p.id+'::'+v.id]||0))).map(v=>state.restockItems.find(r=>r.id===p.id+'__'+v.id)
+            ? `<span class="status-badge status-ok">${icon('check',11)} ${escapeHtmlAudit(varLabelOf(v))} en la lista</span>`
+            : `<button class="btn-tertiary" onclick="addProductToRestock('${p.id}', null, '${v.id}')">${icon('package',13)} ${escapeHtmlAudit(varLabelOf(v))} (${v.stock||0})</button>`).join('')
+          : state.restockItems.find(r=>r.productId===p.id)
             ? `<span class="status-badge status-ok">${icon('check',11)} En la lista</span>`
             : `<button class="btn-tertiary" onclick="addProductToRestock('${p.id}')">${icon('package',13)} Agregar a reabasto</button>`}
           ${p.stock<=0 && !p.hidden ? `<button class="btn-tertiary" title="Ocultar de la tienda mientras se repone" onclick="if(confirm('¿Ocultar \\'${p.name.replace(/'/g,"\\\\'")}\\' de la tienda?'))quickHideProduct('${p.id}')">${icon('eye-off',13)} Ocultar</button>` : ''}
         </div>
       `).join('')}
+      ${renderShowMoreButton('lowStockShowMore', showMoreSlice('lowStockShowMore', m.lowStock).remaining)}
       <div class="row-sub" style="margin-top:6px;">Los que agregues aparecen en Centros → Reabasto, listos para armar el pedido por proveedor.</div>
     </div>` : ''}
   `;
@@ -5702,10 +5804,25 @@ function computeProductAnalytics(){
 function computeRestockSuggestions(){
   const since = new Date(); since.setDate(since.getDate()-30);
   const valid = state.orders.filter(o=>o.status!=='Cancelado' && new Date(o.date)>=since);
-  const unitsById = {};
-  valid.forEach(o=>(o.items||[]).forEach(it=>{ if(!it.id || it.id==='promo_buyxpayy') return; unitsById[it.id]=(unitsById[it.id]||0)+it.qty; }));
+  const unitsById = {}, unitsByVar = {};
+  valid.forEach(o=>(o.items||[]).forEach(it=>{
+    if(!it.id || it.id==='promo_buyxpayy') return;
+    unitsById[it.id]=(unitsById[it.id]||0)+it.qty;
+    if(it.variantId){ const k=it.id+'::'+it.variantId; unitsByVar[k]=(unitsByVar[k]||0)+it.qty; }
+  }));
   const rows = [];
   state.products.forEach(p=>{
+    const vs = p.variants||[];
+    if(vs.length && !p.isKit){
+      // Con variantes se calcula POR VARIANTE: una agotada se nota aunque el total del producto alcance.
+      vs.forEach(v=>{
+        const u = unitsByVar[p.id+'::'+v.id]||0; if(u<=0) return;
+        const velocity = u/30, st = v.stock||0;
+        const daysLeft = st>0 ? st/velocity : 0;
+        if(daysLeft<15) rows.push({ id:p.id, vid:v.id, name:p.name+' — '+varLabelOf(v), cat:p.cat, stock:st, units30:u, daysLeft, suggested: Math.max(1, Math.ceil(velocity*30) - st) });
+      });
+      return;
+    }
     const units30 = unitsById[p.id]||0;
     if(units30<=0) return;
     const velocity = units30/30;
@@ -6278,9 +6395,9 @@ function renderStatsProductos(){
       ${shown.map(r=>`
         <div class="list-row">
           <div class="row-main"><div class="row-title">${r.name}</div><div class="row-sub">${r.units30} vendidos en 30 días · ${r.stock===0?'agotado':`${r.stock} en stock, ~${Math.floor(r.daysLeft)} día(s) de inventario`}</div></div>
-          ${state.restockItems.find(x=>x.productId===r.id)
+          ${state.restockItems.find(x=>x.id===(r.vid?r.id+'__'+r.vid:r.id))
             ? `<span class="status-badge status-ok">${icon('check',11)} En la lista</span>`
-            : `<button class="status-badge" style="background:${r.stock===0?'#8a6b78':'var(--amber)'};color:${r.stock===0?'#fff':'#2B1620'};" onclick="addProductToRestock('${r.id}', ${r.suggested})">Pedir ~${r.suggested}</button>`}
+            : `<button class="status-badge" style="background:${r.stock===0?'#8a6b78':'var(--amber)'};color:${r.stock===0?'#fff':'#2B1620'};" onclick="addProductToRestock('${r.id}', ${r.suggested}${r.vid?`, '${r.vid}'`:''})">Pedir ~${r.suggested}</button>`}
           ${r.stock<=0 ? `<button class="btn-tertiary" title="Ocultar de la tienda mientras se repone" onclick="if(confirm('¿Ocultar \\'${r.name.replace(/'/g,"\\\\'")}\\' de la tienda?'))quickHideProduct('${r.id}')">${icon('eye-off',13)} Ocultar</button>` : ''}
         </div>
       `).join('')}
@@ -6831,6 +6948,8 @@ const PRODUCT_STATUS_FILTERS = [
   {key:'todos', label:'Estado: todos'},
   {key:'agotados', label:'Agotados'},
   {key:'bajo', label:'Stock bajo'},
+  {key:'varagot', label:'Con variantes agotadas'},
+  {key:'sincosto', label:'Sin costo capturado'},
   {key:'ocultos', label:'Ocultos'},
   {key:'sinfoto', label:'Sin foto'},
   {key:'promo', label:'En promoción'},
@@ -6847,10 +6966,32 @@ const PRODUCT_SORTS = [
 ];
 function lowStockLimit(p){ return p.lowStockThreshold>0 ? p.lowStockThreshold : 3; }
 // Mismo criterio que la etiqueta de cada fila (stockStatusBadge): "bajo" no incluye agotados.
+function productHasNoCost(p){
+  if(p.isKit || p.isMysteryBox) return false;
+  if((p.variants||[]).length) return !p.variants.some(v=>Number(v.cost)>0) && !(Number(p.cost)>0);
+  return !(Number(p.cost)>0);
+}
+// Captura rápida del costo desde la lista (filtro "Sin costo capturado"): también lo guarda en el historial de costos.
+async function quickSaveCost(id){
+  const p = state.products.find(x=>x.id===id); const inp = document.getElementById('qcost-'+id);
+  const val = Math.round((Number(inp && inp.value)||0)*100)/100;
+  if(!p || !(val>0)){ showToast('Escribe el costo (mayor a 0)'); return; }
+  const hist = [...(p.costHistory||[]), {cost:val, date:new Date().toISOString(), source:'rapido'}];
+  const upd = {cost:val, costHistory:hist};
+  if((p.variants||[]).length){ upd.variants = p.variants.map(v=>Number(v.cost)>0 ? v : {...v, cost:val}); }
+  try{
+    await db.collection('products').doc(id).update(upd);
+    Object.assign(p, upd);
+    showToast(`Costo de "${p.name}" guardado`);
+  }catch(e){ console.error(e); showToast('No se pudo guardar el costo'); }
+  render();
+}
 function productMatchesStatus(p, key){
   const stock = p.stock||0;
   if(key==='agotados') return stock<=0;
   if(key==='bajo') return stock>0 && stock<=lowStockLimit(p);
+  if(key==='sincosto') return productHasNoCost(p);
+  if(key==='varagot') return !p.isKit && (p.variants||[]).some(v=>!((v.stock||0)>0));
   if(key==='ocultos') return !!p.hidden;
   if(key==='sinfoto') return !(p.images && p.images.length);
   if(key==='promo') return p.promoPrice>0 && p.promoPrice<(p.price||0);
@@ -6890,6 +7031,26 @@ function quickStockCenterId(p){
 }
 function canQuickAdjustStock(p){ return !p.isKit && !(p.variants && p.variants.length) && !!quickStockCenterId(p); }
 const quickStockBusy = {};
+// +/- de stock por variante desde la fila del producto (en el centro principal / donde ya vive el stock).
+async function quickAdjustVariantStock(pid, vid, delta){
+  const p = state.products.find(x=>x.id===pid); const v = p && (p.variants||[]).find(x=>x.id===vid);
+  const bk = pid+'::'+vid;
+  if(!v || quickStockBusy[bk]) return;
+  const cid = quickStockCenterId(v.stockByCenter?{stockByCenter:v.stockByCenter}:{stockByCenter:{}});
+  if(!cid){ showToast('Primero crea un centro de ventas'); return; }
+  const cur = vCenterStock(v, cid);
+  if(cur+delta<0){ showToast('No hay piezas que restar en ese centro'); return; }
+  const prevVariants = JSON.parse(JSON.stringify(p.variants)), prev = {stock:p.stock, stockByCenter:p.stockByCenter};
+  vSetCenterStock(v, cid, cur+delta); vProductSync(p);
+  quickStockBusy[bk] = true;
+  try{
+    await db.collection('products').doc(pid).update({variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock});
+    logStockMovement(pid, 'ajuste_manual', delta, `Ajuste rápido de la variante ${varLabelOf(v)}`, cid);
+    recomputeKitStocksFor([pid]);
+    showToast(`${p.name} · ${varLabelOf(v)}: ${v.stock} en stock`);
+  }catch(e){ console.error(e); p.variants = prevVariants; Object.assign(p, prev); showToast('No se pudo ajustar el stock'); }
+  finally{ delete quickStockBusy[bk]; render(); }
+}
 async function quickAdjustStock(id, delta){
   const p = state.products.find(x=>x.id===id); if(!p || quickStockBusy[id]) return;
   if(!canQuickAdjustStock(p)){ showToast('Este producto se ajusta desde su ficha'); return; }
@@ -6925,6 +7086,7 @@ function renderProductos(){
   const statusFilter = state.productStatusFilter || 'todos';
   const sortBy = state.productSort || 'auto';
   if(statusFilter!=='todos') filtered = filtered.filter(p=>productMatchesStatus(p, statusFilter));
+  if(statusFilter==='sincosto'){ const u = unitsSoldByProduct(3650); filtered = [...filtered].sort((a,b)=>(u[b.id]||0)-(u[a.id]||0)); }
   const canReorder = catFilter!=='Todas' && needFilter==='Todas' && !q && statusFilter==='todos' && sortBy==='auto';
   if(canReorder) filtered = sortByCategoryOrder(filtered, catFilter);
   else if(sortBy!=='auto') filtered = sortProductsBy(filtered, sortBy);
@@ -7052,6 +7214,8 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
               ${stockStatusBadge(p)}
               <button onclick="quickAdjustStock('${p.id}',1)" aria-label="Sumar uno">+</button>
             </span>` : stockStatusBadge(p)}${variantStockBadge(p)}${expirationBadge(p)}</div>
+          ${(state.productStatusFilter==='sincosto' && productHasNoCost(p)) ? `<div class="qcost"><input id="qcost-${p.id}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Costo $" onkeydown="if(event.key==='Enter')quickSaveCost('${p.id}')"><button class="btn-tertiary" onclick="quickSaveCost('${p.id}')">${icon('check',13)} Guardar</button></div>` : ''}
+          ${(!p.isKit && p.variants && p.variants.length) ? `<div class="qvar-wrap">${p.variants.map(v=>`<span class="qvar" title="Ajuste rápido de esta variante"><button onclick="quickAdjustVariantStock('${p.id}','${v.id}',-1)" ${(v.stock||0)<=0?'disabled':''} aria-label="Restar uno a ${escapeHtmlAudit(varLabelOf(v))}">−</button><span class="qvar-name">${escapeHtmlAudit(varLabelOf(v))}</span><b class="${(v.stock||0)<=0?'qvar-out':''}">${v.stock||0}</b><button onclick="quickAdjustVariantStock('${p.id}','${v.id}',1)" aria-label="Sumar uno a ${escapeHtmlAudit(varLabelOf(v))}">+</button></span>`).join('')}</div>` : ''}
         </div>
         <div class="row-actions">
           <div class="row-more-wrap">
@@ -7086,6 +7250,9 @@ function duplicateProduct(id){
   clone.categorySortOrder = {}; // el orden manual no se hereda, para no pelear posición con el original
   clone.createdAt = new Date().toISOString();
   clone.hidden = true; // se crea oculta por default, para revisarla antes de publicarla
+  // Las variantes se copian, pero sin existencias ni SKU propio: son piezas distintas de las del original.
+  if(Array.isArray(clone.variants)) clone.variants = clone.variants.map(v=>({...v, stock:0, stockByCenter:{}, sku:''}));
+  if(clone.variants && clone.variants.length){ clone.stock = 0; clone.stockByCenter = {}; }
   clone.costHistory = []; clone.promoSince = null; // el historial es del producto original, no se hereda
   state.productModal = clone;
   showToast('Producto duplicado — revisa y guarda para crearlo');
@@ -7384,6 +7551,7 @@ function renderOrderRow(o){
             ${!isPos ? `<button onclick="state.orderActionsMenu=null;sendToDelivery('${o.id}')">${icon('truck',14)} Enviar al repartidor</button>` : ''}
             ${!isPos && o.status!=='Cancelado' && o.status!=='Entregado' ? `<button onclick="openFailModal('${o.id}')">${icon('alert-triangle',14)} No se pudo entregar</button>` : ''}
             ${!isPos && orderPayState(o)!=='pagado' && o.status!=='Cancelado' ? `<button onclick="state.orderActionsMenu=null;setOrderPayment('${o.id}',{paymentStatus:'pagado'})">${icon('dollar-sign',14)} Marcar como pagado</button>` : ''}
+            <button onclick="openPayEdit('${o.id}')">${icon('dollar-sign',14)} Cambiar método de pago</button>
             ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
             <button onclick="state.orderActionsMenu=null;state.assignCommissionOrderId='${o.id}';render()">${icon('percent',14)} ${o.commissionAgentName?`Comisión: ${escDescHtml(o.commissionAgentName)}`:'Asignar comisionista'}</button>
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
@@ -7753,7 +7921,8 @@ function computeKitStock(p){
   items.forEach(ki=>{
     const comp = state.products.find(x=>x.id===ki.productId);
     const need = ki.qty||1;
-    const avail = comp ? Math.floor(totalStock(comp)/need) : 0;
+    const kv = comp && ki.variantId ? (comp.variants||[]).find(x=>x.id===ki.variantId) : null;
+    const avail = comp ? Math.floor((ki.variantId ? (kv ? (kv.stock||0) : 0) : totalStock(comp))/need) : 0;
     if(avail < min) min = avail;
   });
   return min===Infinity ? 0 : Math.max(0, min);
@@ -7822,11 +7991,13 @@ function toggleProductIsMysteryBox(checked){
   if(checked && !state.productModal.mysteryItemCount) state.productModal.mysteryItemCount = 3;
   render();
 }
-function addKitComponent(id){
+function addKitComponent(id, vid){
   if(id===state.productModal.id) { showToast('Un kit no puede contenerse a sí mismo'); return; }
   const items = state.productModal.kitItems || (state.productModal.kitItems=[]);
-  if(items.some(ki=>ki.productId===id)) return;
-  items.push({productId:id, qty:1});
+  const c = state.products.find(x=>x.id===id);
+  if(c && (c.variants||[]).length && !vid){ showToast('Elige una variante en específico'); return; }
+  if(items.some(ki=>ki.productId===id && (ki.variantId||null)===(vid||null))) return;
+  items.push(vid ? {productId:id, variantId:vid, qty:1} : {productId:id, qty:1});
   state.kitProductSearch=''; render();
 }
 function removeKitComponent(idx){ state.productModal.kitItems.splice(idx,1); render(); }
@@ -7845,7 +8016,7 @@ function renderKitEditor(p){
     ${items.length===0 ? `<div class="empty-state">Aún no has agregado ningún producto a este kit.</div>` :
       items.map((ki,idx)=>{ const comp = state.products.find(x=>x.id===ki.productId); return `
         <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-          <div style="flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:13px;">${comp?comp.name:'(producto no encontrado)'}<div class="row-sub">${comp?`Existencia: ${totalStock(comp)}`:''}</div></div>
+          <div style="flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word;font-size:13px;">${comp?escapeHtmlAudit(comp.name):'(producto no encontrado)'}${(()=>{ const kv = comp&&ki.variantId ? (comp.variants||[]).find(x=>x.id===ki.variantId) : null; return kv ? ' — '+escapeHtmlAudit(varLabelOf(kv)) : ''; })()}<div class="row-sub">${comp ? (ki.variantId ? (()=>{ const kv=(comp.variants||[]).find(x=>x.id===ki.variantId); return kv?`Existencia de esta variante: ${kv.stock||0}`:'⚠ Esa variante ya no existe — quítala'; })() : ((comp.variants||[]).length ? '⚠ Este producto tiene variantes: quítalo y agrega la variante en específico' : `Existencia: ${totalStock(comp)}`)) : ''}</div></div>
           <input type="number" min="1" value="${ki.qty}" style="width:64px;padding:8px;border-radius:8px;border:1px solid var(--border);text-align:center;flex-shrink:0;" onchange="setKitComponentQty(${idx}, this.value)">
           <button class="icon-btn danger" style="flex-shrink:0;" onclick="removeKitComponent(${idx})">${icon('trash',14)}</button>
         </div>`; }).join('')}
@@ -7854,7 +8025,10 @@ function renderKitEditor(p){
     </div>
     ${candidates.length>0 ? `
       <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-top:8px;">
-        ${candidates.map(c=>`
+        ${candidates.map(c=>(c.variants&&c.variants.length) ? c.variants.map(v=>`
+          <div class="list-row" style="margin:0;border-radius:0;cursor:pointer;" onclick="addKitComponent('${c.id}','${v.id}')">
+            <div class="row-main"><div class="row-title" style="font-size:13px;">${escapeHtmlAudit(c.name)} — ${escapeHtmlAudit(varLabelOf(v))}</div><div class="row-sub">Existencia de esta variante: ${v.stock||0}</div></div>
+          </div>`).join('') : `
           <div class="list-row" style="margin:0;border-radius:0;cursor:pointer;" onclick="addKitComponent('${c.id}')">
             <div class="row-main"><div class="row-title" style="font-size:13px;">${c.name}</div><div class="row-sub">Existencia: ${totalStock(c)}</div></div>
           </div>`).join('')}
@@ -8076,6 +8250,28 @@ function computeCustomersList(){
     if(new Date(o.date) > new Date(c.lastDate||0)){ c.lastDate = o.date; c.lastFolio = o.orderNumber; }
     c.totalSpent += (o.total||0); c.purchases.push(o);
   });
+  // 4) Ventas del Punto de Venta (o importadas) SIN cliente elegido pero con teléfono: también son clientes.
+  //    Se agrupan por teléfono y, si ya existe esa persona, se suman a ella. Los nombres genéricos se ignoran.
+  const GENERIC_NAME = /^(venta\s+(en\s+)?(tienda(\s+f[ií]sica)?|mostrador|f[ií]sica)|p[uú]blico\s+general|mostrador|cliente(\s+general)?|sin\s+nombre|n\/a|-+)$/i;
+  state.orders.filter(o=>o.source==='pos' && !o.customerId && (o.customerPhone||o.phone)).forEach(o=>{
+    const ph = o.customerPhone||o.phone;
+    let key = aliasKey[normalizePhone(ph)] || normalizePhone(ph);
+    if(!key || key.length<7) return;
+    // "341 123 4567" y "+52 341 123 4567" son la misma persona: se junta por los últimos 10 dígitos.
+    const l10 = key.slice(-10);
+    if(!byPhone[key]){ const hit = Object.keys(byPhone).find(k=>k.length>=10 && k.slice(-10)===l10 && !k.startsWith('manual_')); if(hit) key = hit; }
+    const rawName = (o.customerName||o.customer||'').trim();
+    const nm = GENERIC_NAME.test(rawName) ? '' : rawName;
+    if(!byPhone[key]){
+      byPhone[key] = { id:key, name:nm||'Cliente de mostrador', phone:ph, email:'', address:'', city:'', state:'', country:'', notes:'', tags:[],
+        createdAt:null, purchases:[], totalSpent:0, isManual:false, manualId:null, fromPos:true };
+    }
+    const c = byPhone[key];
+    if(nm && (!c.name || c.name==='Cliente de mostrador' || c.name==='Sin nombre')) c.name = nm;
+    else if(nm && c.fromPos && new Date(o.date) > new Date(c.lastDate||0)) c.name = nm;
+    if(new Date(o.date) > new Date(c.lastDate||0)){ c.lastDate = o.date; c.lastFolio = o.orderNumber; }
+    if(o.status!=='Cancelado'){ c.totalSpent += (o.total||0); c.purchases.push(o); }
+  });
   return Object.values(byPhone).map(c=>({
     ...c,
     purchaseCount: c.purchases.length,
@@ -8164,6 +8360,80 @@ function computeNetProfit(monthKey){
   const net = grossMargin - expensesTotal - (state.includeCashWithdrawals ? withdrawalsTotal : 0);
   return {revenue, cogs, grossMargin, expenses, expensesTotal, byCategory, withdrawals, withdrawalsTotal, net, soldWithoutCost};
 }
+/* ---- Gastos fijos mensuales ----
+   Renta, sueldos, internet… se registran una vez y el sistema crea solo el gasto de cada mes
+   (el día que elijas, o al abrir el panel si ya pasó). Nunca duplica: cada gasto lleva su recurringId + mes. */
+function recurringDueDate(item, monthKey){
+  const [y,m] = monthKey.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const day = Math.min(Math.max(1, Number(item.day)||1), last);
+  return new Date(y, m-1, day, 12, 0, 0);
+}
+async function generateRecurringExpenses(){
+  const items = (state.settings.recurringExpenses||[]).filter(r=>r.active!==false && Number(r.amount)>0);
+  if(!items.length) return 0;
+  const key = currentMonthKey(), now = new Date();
+  let made = 0;
+  for(const r of items){
+    const due = recurringDueDate(r, key);
+    if(due > now) continue;
+    if(r.lastMonth===key) continue;
+    if(state.expenses.some(e=>e.recurringId===r.id && String(e.date||'').slice(0,7)===key)){ r.lastMonth = key; continue; }
+    const payload = {date: due.toISOString(), amount:Number(r.amount), category:r.category||'Otros', note:(r.note||'')+(r.note?' ':'')+'(fijo mensual)', createdBy:'automático', recurringId:r.id};
+    try{
+      const ref = await db.collection('expenses').add(payload);
+      state.expenses.unshift({id:ref.id, ...payload}); r.lastMonth = key; made++;
+    }catch(e){ console.error('No se pudo crear el gasto fijo', e); }
+  }
+  if(made){ state.expenses.sort((a,b)=>new Date(b.date)-new Date(a.date)); await saveSettings(); }
+  else if(items.some(r=>r.lastMonth===key)) { /* nada que guardar */ }
+  return made;
+}
+async function addRecurringExpense(){
+  const amount = Number((document.getElementById('rec-amount')||{}).value)||0;
+  const category = (document.getElementById('rec-cat')||{}).value || 'Otros';
+  const note = ((document.getElementById('rec-note')||{}).value||'').trim().slice(0,80);
+  const day = Math.min(31, Math.max(1, Math.floor(Number((document.getElementById('rec-day')||{}).value)||1)));
+  if(!(amount>0)){ showToast('Escribe el monto mensual'); return; }
+  const list = state.settings.recurringExpenses = state.settings.recurringExpenses || [];
+  list.push({id: uid('rec_'), amount, category, note, day, active:true, createdAt:new Date().toISOString()});
+  await saveSettings();
+  const n = await generateRecurringExpenses();
+  showToast(n ? 'Gasto fijo guardado y registrado en este mes' : 'Gasto fijo guardado: se registrará solo el día '+day+' de cada mes');
+  render();
+}
+async function toggleRecurringExpense(id){
+  const r = (state.settings.recurringExpenses||[]).find(x=>x.id===id); if(!r) return;
+  r.active = r.active===false; await saveSettings(); render();
+}
+async function deleteRecurringExpense(id){
+  if(!confirm('¿Quitar este gasto fijo? Los gastos que ya se registraron se quedan.')) return;
+  state.settings.recurringExpenses = (state.settings.recurringExpenses||[]).filter(x=>x.id!==id);
+  await saveSettings(); render();
+}
+function renderRecurringExpensesPanel(){
+  const list = state.settings.recurringExpenses||[];
+  const total = list.filter(r=>r.active!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+  return `<div class="panel">
+    <div class="panel-title">Gastos fijos mensuales</div>
+    <div class="panel-sub">Regístralos una sola vez (renta, sueldos, internet…) y se agregan solos cada mes.${list.length?` Comprometido al mes: <strong>${money(total)}</strong>.`:''}</div>
+    ${list.map(r=>`<div class="list-row row-wrap" style="${r.active===false?'opacity:.5;':''}">
+      <div class="row-main"><div class="row-title">${escDescHtml(r.category)}${r.note?` · ${escDescHtml(r.note)}`:''}</div><div class="row-sub">Día ${r.day||1} de cada mes${r.active===false?' · en pausa':''}</div></div>
+      <div style="font-weight:700;">${money(r.amount)}</div>
+      <button class="btn-tertiary" onclick="toggleRecurringExpense('${r.id}')">${r.active===false?'Reanudar':'Pausar'}</button>
+      <button class="icon-btn danger" title="Quitar gasto fijo" aria-label="Quitar gasto fijo" onclick="deleteRecurringExpense('${r.id}')">${icon('trash',14)}</button>
+    </div>`).join('')}
+    <div class="two-col" style="margin-top:10px;">
+      <div class="form-field"><label>Categoría</label><select id="rec-cat">${EXPENSE_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Monto mensual</label><input id="rec-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="two-col">
+      <div class="form-field"><label>Día del mes</label><input id="rec-day" type="number" min="1" max="31" value="1"></div>
+      <div class="form-field"><label>Nota (opcional)</label><input id="rec-note" placeholder="Ej. Renta del local" maxlength="80"></div>
+    </div>
+    <button class="btn-primary" style="width:100%;" onclick="addRecurringExpense()">+ Agregar gasto fijo</button>
+  </div>`;
+}
 async function addExpense(){
   const amount = Number((document.getElementById('exp-amount')||{}).value)||0;
   const category = (document.getElementById('exp-cat')||{}).value || 'Otros';
@@ -8246,6 +8516,7 @@ function renderStatsGastos(){
     ${np.soldWithoutCost>0 ? `<div class="note-box">${np.soldWithoutCost} pieza(s) vendidas este mes no tienen costo capturado, así que el costo de lo vendido y la utilidad pueden verse mejor de lo que son. Agrega el costo en cada producto para afinar este número.</div>` : ''}
     <label class="checkbox-row" style="margin:10px 0 2px;"><input type="checkbox" ${state.includeCashWithdrawals?'checked':''} onchange="state.includeCashWithdrawals=this.checked;render()"><span>Contar como gasto los retiros de caja del mes (${money(np.withdrawalsTotal)})</span></label>
     <div class="panel-sub" style="margin:0 0 14px;">Los retiros son lo que sacas de la caja (ej. "pago albañil"). Si además registras aquí ese mismo gasto, apaga esta casilla para no contarlo dos veces.</div>
+    ${renderRecurringExpensesPanel()}
     <div class="panel">
       <div class="panel-title">${state.expenseEditId?'Editar gasto':'Registrar un gasto'}</div>
       <div class="two-col">
@@ -9030,7 +9301,27 @@ function computeMassPricePreview(){
       newPromo = roundPriceTo(p.promoPrice*factor, mode);
       if(newPromo >= newPrice) newPromo = Math.max(0, newPrice - step);
     }
-    return {id:p.id, name:p.name, oldPrice:p.price, newPrice, oldPromo:p.promoPrice||0, newPromo};
+    // Variantes con precio propio (priceOverride / promoPriceOverride) también se escalan.
+    const vitems = (p.variants||[]).filter(v=>Number(v.priceOverride)>0 || Number(v.promoPriceOverride)>0).map(v=>{
+      const oPO = Number(v.priceOverride)||0, oPP = Number(v.promoPriceOverride)||0;
+      const nPO = oPO>0 ? roundPriceTo(oPO*factor, mode) : 0;
+      let nPP = oPP;
+      if(state.massPriceIncludePromo && oPP>0){
+        nPP = roundPriceTo(oPP*factor, mode);
+        const list = nPO>0 ? nPO : newPrice;
+        if(nPP >= list) nPP = Math.max(0, list - step);
+      }
+      return {vid:v.id, oldPO:oPO, newPO:nPO, oldPP:oPP, newPP:nPP};
+    });
+    return {id:p.id, name:p.name, oldPrice:p.price, newPrice, oldPromo:p.promoPrice||0, newPromo, variants:vitems};
+  });
+}
+function applyVariantPriceItems(p, list, useNew){
+  if(!list || !list.length || !p.variants) return null;
+  const map = {}; list.forEach(x=>map[x.vid]=x);
+  return p.variants.map(v=>{
+    const x = map[v.id]; if(!x) return v;
+    return {...v, priceOverride: useNew ? x.newPO : x.oldPO, promoPriceOverride: useNew ? x.newPP : x.oldPP};
   });
 }
 function openMassPriceModal(){
@@ -9048,7 +9339,11 @@ async function applyMassPriceChange(){
       const chunk = preview.slice(i,i+200);
       const batch = db.batch();
       chunk.forEach(it=>{
-        batch.update(db.collection('products').doc(it.id), {price:it.newPrice, promoPrice:it.newPromo});
+        const upd = {price:it.newPrice, promoPrice:it.newPromo};
+        const pp = state.products.find(x=>x.id===it.id);
+        const nv = pp ? applyVariantPriceItems(pp, it.variants, true) : null;
+        if(nv) upd.variants = nv;
+        batch.update(db.collection('products').doc(it.id), upd);
         batch.set(db.collection('adminAuditLog').doc(), {
           action:'cambio_precio', targetType:'producto', targetName:it.name, targetId:it.id,
           details:`Precio: ${money(it.oldPrice)} → ${money(it.newPrice)} (cambio masivo ${pct>0?'+':''}${pct}%)`,
@@ -9056,7 +9351,7 @@ async function applyMassPriceChange(){
         });
       });
       await batch.commit();
-      chunk.forEach(it=>{ const p = state.products.find(x=>x.id===it.id); if(p){ p.price = it.newPrice; p.promoPrice = it.newPromo; } });
+      chunk.forEach(it=>{ const p = state.products.find(x=>x.id===it.id); if(p){ const nv = applyVariantPriceItems(p, it.variants, true); p.price = it.newPrice; p.promoPrice = it.newPromo; if(nv) p.variants = nv; } });
     }
     const rec = {date:new Date().toISOString(), percent:pct, rounding:state.massPriceRounding, includePromo:state.massPriceIncludePromo, undone:false, user: state.user ? state.user.email : '', items: preview};
     const ref = await db.collection('priceChangeBatches').add(rec);
@@ -9081,7 +9376,11 @@ async function undoLastMassPriceChange(){
       const chunk = todo.slice(i,i+200);
       const batch = db.batch();
       chunk.forEach(({it})=>{
-        batch.update(db.collection('products').doc(it.id), {price:it.oldPrice, promoPrice:it.oldPromo||0});
+        const upd = {price:it.oldPrice, promoPrice:it.oldPromo||0};
+        const pp = state.products.find(x=>x.id===it.id);
+        const ov = pp ? applyVariantPriceItems(pp, it.variants, false) : null;
+        if(ov) upd.variants = ov;
+        batch.update(db.collection('products').doc(it.id), upd);
         batch.set(db.collection('adminAuditLog').doc(), {
           action:'cambio_precio', targetType:'producto', targetName:it.name, targetId:it.id,
           details:`Precio: ${money(it.newPrice)} → ${money(it.oldPrice)} (se deshizo un cambio masivo)`,
@@ -9089,7 +9388,7 @@ async function undoLastMassPriceChange(){
         });
       });
       await batch.commit();
-      chunk.forEach(({it,p})=>{ p.price = it.oldPrice; p.promoPrice = it.oldPromo||0; reverted++; });
+      chunk.forEach(({it,p})=>{ const ov = applyVariantPriceItems(p, it.variants, false); p.price = it.oldPrice; p.promoPrice = it.oldPromo||0; if(ov) p.variants = ov; reverted++; });
     }
     await db.collection('priceChangeBatches').doc(b.id).set({undone:true, undoneAt:new Date().toISOString()}, {merge:true});
     b.undone = true;
@@ -11143,6 +11442,12 @@ function renderInventarioPorCentro(){
               ${activeCenters.map(c=>`<td>${centerStock(p,c.id)}</td>`).join('')}
               <td><strong>${totalStock(p)}</strong></td>
             </tr>
+            ${(p.variants||[]).map(v=>`
+            <tr class="inv-var-row">
+              <td style="padding-left:22px;color:var(--ink-soft);">↳ ${escapeHtmlAudit(varLabelOf(v))}</td>
+              ${activeCenters.map(c=>`<td>${vCenterStock(v,c.id)}</td>`).join('')}
+              <td>${v.stock||0}</td>
+            </tr>`).join('')}
           `).join('')}
         </tbody>
       </table>
@@ -12286,10 +12591,32 @@ function removePromoImage(){
   render();
 }
 
+
+/* Selector con variantes: cada producto con variantes muestra una fila por variante.
+   Referencias: "pid" = producto completo; "pid::vid" = esa variante en específico. */
+function refValid(ref){
+  const [pid, vid] = String(ref).split('::');
+  const p = state.products.find(x=>x.id===pid);
+  if(!p) return false;
+  return vid ? (p.variants||[]).some(v=>v.id===vid) : true;
+}
+function refPidsOf(ids){ return [...new Set((ids||[]).map(r=>String(r).split('::')[0]))]; }
+function renderRefPickerRows(p, ids, fn){
+  const vs = p.variants||[];
+  const row = (ref, label, sub)=>`
+    <label class="checkbox-row"${sub?' style="margin-left:22px;"':''}>
+      <input type="checkbox" ${ids.includes(ref)?'checked':''} onchange="${fn}('${ref}', this.checked)">
+      <span>${label}</span>
+    </label>`;
+  if(!vs.length) return row(p.id, escapeHtmlAudit(p.name));
+  return row(p.id, escapeHtmlAudit(p.name)+' <span style="color:var(--ink-soft);font-size:12px;">(todas las variantes)</span>')
+    + vs.map(v=>row(p.id+'::'+v.id, escapeHtmlAudit(varLabelOf(v))+(Number(v.stock)>0?'':' <span style="color:var(--danger,#c0392b);font-size:12px;">· agotada</span>'), true)).join('');
+}
 function renderFeaturedSubpanel(){
   const ids = state.settings.featuredProductIds || [];
   const q = (state.featuredSearch||'').trim().toLowerCase();
-  const featuredProducts = state.products.filter(p=>ids.includes(p.id));
+  const validIds = ids.filter(refValid);
+  const featuredProducts = refPidsOf(validIds).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   const list = q ? searchProducts(q, state.products) : featuredProducts;
   const autoIds = state.settings.bestSellerProductIds || [];
   const autoProducts = autoIds.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
@@ -12306,17 +12633,12 @@ function renderFeaturedSubpanel(){
   <div class="panel">
     <div class="panel-title">Productos destacados (elegidos a mano)</div>
     <div class="panel-sub">Opcional. Si eliges algunos aquí, estos reemplazan a los "más vendidos" automáticos en esa sección de tu tienda.</div>
-    ${ids.length > featuredProducts.length ? `<div class="note-box">${icon('alert-triangle',13)} Tienes ${ids.length-featuredProducts.length} producto(s) marcado(s) que ya no existen (seguramente de una prueba vieja o un producto que se eliminó) — por eso no se ven abajo. Tu tienda ya los ignora sola y usa la lista automática en su lugar, pero puedes limpiarlos del todo con el botón de abajo.</div>` : ''}
+    ${ids.length > validIds.length ? `<div class="note-box">${icon('alert-triangle',13)} Tienes ${ids.length-validIds.length} producto(s)/variante(s) marcado(s) que ya no existen (seguramente de una prueba vieja o un producto que se eliminó) — por eso no se ven abajo. Tu tienda ya los ignora sola y usa la lista automática en su lugar, pero puedes limpiarlos del todo con el botón de abajo.</div>` : ''}
     <input id="featured-search-input" placeholder="Buscar producto por nombre..." value="${state.featuredSearch||''}" oninput="state.featuredSearch=this.value;render()">
     <div style="margin-top:10px;">
       ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
         q && list.length===0 ? `<div class="empty-state">Sin resultados para "${state.featuredSearch}".</div>` :
-        list.map(p=>`
-          <label class="checkbox-row">
-            <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleFeatured('${p.id}', this.checked)">
-            <span>${p.name}</span>
-          </label>
-        `).join('')}
+        list.map(p=>renderRefPickerRows(p, ids, 'toggleFeatured')).join('')}
       ${!q && featuredProducts.length===0 ? `<div class="panel-sub">Busca arriba para encontrar productos y marcarlos como destacados.</div>` : ''}
     </div>
     ${ids.length>0 ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="clearManualFeatured()">Quitar toda la selección a mano (volver a usar solo lo automático)</button>` : ''}
@@ -12348,7 +12670,7 @@ function toggleCheckoutReminderProduct(id, checked){
 function renderCheckoutReminderSubpanel(){
   const ids = state.settings.checkoutReminderProducts || [];
   const q = (state.checkoutReminderSearch||'').trim().toLowerCase();
-  const chosen = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const chosen = refPidsOf(ids.filter(refValid)).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   const results = q ? searchProducts(q, state.products).slice(0,30) : chosen;
   return `
   <div class="panel">
@@ -12357,12 +12679,7 @@ function renderCheckoutReminderSubpanel(){
     <input id="checkout-reminder-search" placeholder="Buscar producto por nombre..." value="${state.checkoutReminderSearch||''}" oninput="state.checkoutReminderSearch=this.value;render()" style="margin:10px 0;">
     <div style="max-height:320px;overflow-y:auto;">
       ${results.length===0 ? `<div class="empty-state">${q?'Sin resultados.':'Aún no has agregado ninguno — busca arriba para empezar.'}</div>` :
-        results.map(p=>`
-          <label class="checkbox-row">
-            <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleCheckoutReminderProduct('${p.id}', this.checked)">
-            <span>${p.name}</span>
-          </label>
-        `).join('')}
+        results.map(p=>renderRefPickerRows(p, ids, 'toggleCheckoutReminderProduct')).join('')}
     </div>
   </div>`;
 }
@@ -12426,7 +12743,7 @@ async function sendRepurchaseReminder(phone, productId){
 function renderRepurchaseSubpanel(){
   const ids = state.settings.repurchaseProductIds || [];
   const q = (state.repurchaseProductSearch||'').trim().toLowerCase();
-  const chosen = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  const chosen = refPidsOf(ids.filter(refValid)).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   const results = q ? searchProducts(q, state.products).slice(0,30) : chosen;
   const candidates = computeRepurchaseCandidates();
   return `
@@ -13095,8 +13412,66 @@ function sendDeliverySurvey(id){
   logCustomerMessage(phone, o.customer||o.customerName||'', msg, 'encuesta');
 }
 
+/* ---- Corregir la hora de las ventas importadas ----
+   Tiendanube exportó las horas en UTC; aquí se recorren N horas (por defecto 6) para que coincidan con la hora local.
+   Reversible: cada venta guarda su fecha original (dateOriginal) y cuánto se movió (dateShiftedHours). */
+function importedSalesForShift(){ return state.orders.filter(o=>o.importedFrom==='tiendanube' && o.historical); }
+function renderImportShiftPanel(){
+  const all = importedSalesForShift();
+  const shifted = all.filter(o=>o.dateShiftedHours), pending = all.filter(o=>!o.dateShiftedHours);
+  const h = Number(state.importShiftHours===undefined?6:state.importShiftHours)||0;
+  const fmt = d=>new Date(d).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const sample = pending[0];
+  return `<div class="panel" style="margin-top:14px;">
+    <div class="panel-title">Corregir la hora de las ventas importadas</div>
+    <div class="panel-sub">Las ventas traídas de Tiendanube pueden verse con una hora distinta a la real (por ejemplo a las 3 a. m. en vez de las 9 a. m.). Aquí las recorres las horas necesarias; puedes deshacerlo.</div>
+    ${all.length===0 ? `<div class="empty-state">No hay ventas importadas de Tiendanube.</div>` : `
+      <div class="row-sub" style="margin-bottom:8px;">${all.length} importadas · ${pending.length} sin corregir · ${shifted.length} ya corregidas</div>
+      <div class="form-field" style="max-width:220px;"><label>Horas a sumar</label><input type="number" min="-12" max="12" step="1" value="${h}" oninput="state.importShiftHours=this.value;render()"></div>
+      ${sample ? `<div class="note-box" style="margin-bottom:8px;">Ejemplo: ${escDescHtml(fmt(sample.date))} → <strong>${escDescHtml(fmt(new Date(new Date(sample.date).getTime()+h*3600000)))}</strong></div>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn-primary" ${(!pending.length||!h)?'disabled style="opacity:.5"':''} onclick="applyImportedShift()">Aplicar a ${pending.length}</button>
+        <button class="btn-secondary" ${shifted.length?'':'disabled style="opacity:.5"'} onclick="undoImportedShift()">Deshacer (${shifted.length})</button>
+      </div>`}
+  </div>`;
+}
+async function commitSaleUpdates(list){
+  for(let i=0;i<list.length;i+=400){
+    const batch = db.batch();
+    list.slice(i,i+400).forEach(([id,upd])=>batch.update(db.collection('sales').doc(id), upd));
+    await batch.commit();
+  }
+}
+async function applyImportedShift(){
+  const h = Number(state.importShiftHours===undefined?6:state.importShiftHours)||0;
+  const pending = importedSalesForShift().filter(o=>!o.dateShiftedHours);
+  if(!pending.length || !h) return;
+  if(!confirm(`¿Sumar ${h} hora(s) a la fecha de ${pending.length} venta(s) importada(s)? Podrás deshacerlo.`)) return;
+  try{
+    const ups = pending.map(o=>[o.id, {date:new Date(new Date(o.date).getTime()+h*3600000).toISOString(), dateOriginal:o.date, dateShiftedHours:h}]);
+    await commitSaleUpdates(ups);
+    ups.forEach(([id,u])=>{ const o = state.orders.find(x=>x.id===id); if(o) Object.assign(o,u); });
+    logAdminAction('corregir_hora_importadas','ventas',`${ups.length} venta(s)`,`+${h} h`);
+    showToast(`Hora corregida en ${ups.length} venta(s)`);
+  }catch(e){ console.error(e); showToast('No se pudo completar; revisa y vuelve a intentar'); }
+  render();
+}
+async function undoImportedShift(){
+  const shifted = importedSalesForShift().filter(o=>o.dateShiftedHours && o.dateOriginal);
+  if(!shifted.length) return;
+  if(!confirm(`¿Regresar ${shifted.length} venta(s) a su fecha original?`)) return;
+  try{
+    const del = firebase.firestore.FieldValue.delete();
+    const ups = shifted.map(o=>[o.id, {date:o.dateOriginal, dateOriginal:del, dateShiftedHours:del}]);
+    await commitSaleUpdates(ups);
+    shifted.forEach(o=>{ o.date = o.dateOriginal; delete o.dateOriginal; delete o.dateShiftedHours; });
+    logAdminAction('deshacer_hora_importadas','ventas',`${shifted.length} venta(s)`,'');
+    showToast('Fechas originales restauradas');
+  }catch(e){ console.error(e); showToast('No se pudo deshacer'); }
+  render();
+}
 function renderHerramientasSubpanel(){
-  return `<div class="panel">${renderHistoricalImportPanel()}</div>`;
+  return `<div class="panel">${renderHistoricalImportPanel()}</div>${renderImportShiftPanel()}`;
 }
 function renderHistoricalImportPanel(){
   const r = state.histImportPreview;
@@ -13569,20 +13944,25 @@ function drawProductBarcode(){
   try{ JsBarcode('#pf-barcode-svg', state.productModal.sku, {format:'CODE128', displayValue:true, fontSize:13, height:44, margin:4}); }
   catch(e){ console.error('No se pudo generar el código de barras', e); }
 }
+// Etiquetas: un producto con variantes imprime una etiqueta POR VARIANTE (con su SKU y su precio).
+function labelEntriesFor(p){
+  const vs = p.variants||[];
+  if(!vs.length) return [{name:p.name||'', sku:p.sku||'', price:p.promoPrice>0?p.promoPrice:p.price}];
+  return vs.map(v=>({name:(p.name||'')+' — '+varLabelOf(v), sku:v.sku||p.sku||'', price:varUnitPrice(p,v)}));
+}
 function printProductLabel(id){
   const p = state.products.find(x=>x.id===id) || state.productModal;
-  if(!p || !p.sku){ showToast('Este producto no tiene SKU todavía'); return; }
+  const entries = p ? labelEntriesFor(p).filter(e=>e.sku) : [];
+  if(!p || !entries.length){ showToast('Este producto no tiene SKU todavía'); return; }
   const w = window.open('', '_blank', 'width=420,height=320');
   if(!w){ showToast('Tu navegador bloqueó la ventana de impresión — permite ventanas emergentes para este sitio'); return; }
   w.document.write(`<html><head><title>Etiqueta — ${(p.name||'').replace(/</g,'&lt;')}</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"><\/script>
-    <style>body{font-family:sans-serif;text-align:center;padding:16px;} .name{font-size:13px;font-weight:700;margin-bottom:4px;} .price{font-size:16px;font-weight:800;margin-top:6px;}</style>
+    <style>body{font-family:sans-serif;text-align:center;padding:16px;} .l{page-break-after:always;margin-bottom:12px;} .name{font-size:13px;font-weight:700;margin-bottom:4px;} .price{font-size:16px;font-weight:800;margin-top:6px;}</style>
     </head><body>
-    <div class="name">${(p.name||'').replace(/</g,'&lt;')}</div>
-    <svg id="lbl"></svg>
-    <div class="price">${money(p.promoPrice>0?p.promoPrice:p.price)}</div>
+    ${entries.map((e,i)=>`<div class="l"><div class="name">${e.name.replace(/</g,'&lt;')}</div><svg id="lbl${i}"></svg><div class="price">${money(e.price)}</div></div>`).join('')}
     <script>
-      JsBarcode("#lbl", ${JSON.stringify(p.sku)}, {format:"CODE128", displayValue:true, fontSize:12, height:42, margin:2});
+      ${entries.map((e,i)=>`JsBarcode("#lbl${i}", ${JSON.stringify(e.sku)}, {format:"CODE128", displayValue:true, fontSize:12, height:42, margin:2});`).join('\n')}
       window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };
     <\/script>
     </body></html>`);
@@ -13590,7 +13970,7 @@ function printProductLabel(id){
 }
 function printProductLabelsBulk(ids){
   const products = ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
-  const withSku = products.filter(p=>p.sku);
+  const withSku = products.flatMap(p=>labelEntriesFor(p).filter(e=>e.sku).map(e=>({...e, _pid:p.id})));
   if(!withSku.length){ showToast('Ninguno de los seleccionados tiene SKU todavía — genera SKU primero'); return; }
   const w = window.open('', '_blank');
   if(!w){ showToast('Tu navegador bloqueó la ventana de impresión — permite ventanas emergentes para este sitio'); return; }
@@ -13604,7 +13984,7 @@ function printProductLabelsBulk(ids){
       .price{font-size:13px;font-weight:800;margin-top:2px;}
     </style></head><body>
     <div class="sheet">
-      ${withSku.map((p,i)=>`<div class="label"><div class="name">${(p.name||'').replace(/</g,'&lt;')}</div><svg id="lbl${i}"></svg><div class="price">${money(p.promoPrice>0?p.promoPrice:p.price)}</div></div>`).join('')}
+      ${withSku.map((p,i)=>`<div class="label"><div class="name">${(p.name||'').replace(/</g,'&lt;')}</div><svg id="lbl${i}"></svg><div class="price">${money(p.price)}</div></div>`).join('')}
     </div>
     <script>
       ${withSku.map((p,i)=>`JsBarcode("#lbl${i}", ${JSON.stringify(p.sku)}, {format:"CODE128", displayValue:true, fontSize:10, height:32, margin:2, width:1.4});`).join('\n')}
@@ -13612,7 +13992,8 @@ function printProductLabelsBulk(ids){
     <\/script>
     </body></html>`);
   w.document.close();
-  if(withSku.length < products.length) showToast(`Se imprimieron ${withSku.length} de ${products.length} — a los demás les falta SKU`);
+  const printedPids = new Set(withSku.map(e=>e._pid));
+  if(printedPids.size < products.length) showToast(`Se imprimieron ${printedPids.size} de ${products.length} productos — a los demás les falta SKU`);
 }
 
 /* ---- Variantes ----
@@ -13838,6 +14219,18 @@ function handleSaveProduct(existingId){
   let stockByCenter = state.productModal.stockByCenter || {};
   let stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
   if((state.productModal.variants||[]).length){
+    // Validación de variantes para que nunca queden datos que rompan la tienda o el POS.
+    const vsv = state.productModal.variants, imgs = state.productModal.images||[];
+    const combos = new Set(), skus = new Set();
+    for(const v of vsv){
+      const key = JSON.stringify(Object.keys(v.combo||{}).sort().map(k=>[k, String(v.combo[k]).trim().toLowerCase()]));
+      if(combos.has(key)){ state.savingProduct=false; showToast(`Hay dos variantes iguales (${varLabelOf(v)}) — quita o cambia una`); render(); return; }
+      combos.add(key);
+      const vs = (v.sku||'').trim().toLowerCase();
+      if(vs){ if(skus.has(vs)){ state.savingProduct=false; showToast(`El SKU "${v.sku}" está repetido en las variantes`); render(); return; } skus.add(vs); }
+      v.stock = Math.max(0, Math.floor(Number(v.stock)||0));
+      if(typeof v.imageIdx==='number' && !imgs[v.imageIdx]) delete v.imageIdx;
+    }
     state.productModal.variants.forEach(vNormalize);
     const tmp = {variants: state.productModal.variants, stockByCenter}; vProductSync(tmp);
     stockByCenter = tmp.stockByCenter; stock = tmp.stock;
@@ -13986,7 +14379,7 @@ window.addEventListener('popstate', (e)=>{
 });
 
 const NAV_ADMIN_MODALS = [
-  ['returnModal', ()=>closeReturnModal()], ['cancelModal', null], ['orderEditModal', null], ['custDupesOpen', false],
+  ['returnModal', ()=>closeReturnModal()], ['cancelModal', null], ['payEditModal', null], ['orderEditModal', null], ['custDupesOpen', false],
   ['postModalProductId', ()=>closePostModal()], ['notifyModalProductId', null], ['massPriceModalOpen', ()=>closeMassPriceModal()],
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],
