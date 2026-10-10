@@ -14406,7 +14406,7 @@ async function lyLoad(force){
   try{
     const snap = await db.collection('layaways').orderBy('createdAt','desc').limit(400).get();
     state.lyList = snap.docs.map(d=>({id:d.id, ...d.data()})); state.lyLoaded = true;
-  }catch(e){ console.error('No se pudieron cargar los apartados', e); showToast('No se pudieron cargar los apartados'); }
+  }catch(e){ console.error('No se pudieron cargar los apartados', e); showToast(e && e.code==='permission-denied' ? 'Falta publicar las reglas de Firestore para la colección "layaways" (ver instrucciones)' : 'No se pudieron cargar los apartados'); }
   state.lyLoading = false; render();
 }
 async function lyNextFolio(){
