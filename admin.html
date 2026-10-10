@@ -903,7 +903,7 @@ let state = {
   statsSubview:"general", visitsPeriod:"hoy",
   lyList:[], lyLoaded:false, lyLoading:false, lyDetailId:null, lyFilter:'activos', lySearch:'', lyPay:null, lyCancel:null, lyReceipt:null, lyVoid:null, lyCust:null, lyContact:null, lyBulk:null, lyItems:null, lyNew:null, lyBusy:false, checklistsModal:null,
   adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", orderSearch:"", showArchived:false, loaded:false,
-  selectedOrders:[], selectedProducts:[],
+  selectedOrders:[], selectedProducts:[], selectedCustomers:[], r21:null, noteEditId:null, noteEditText:'',
   importOpen:false, importPreview:[], importText:"", importFileName:"", importResult:null, newCatInput:"",
   cashierModal:null, aiChatLog:[], aiChatInput:"", aiSending:false, cropOpen:false, productSearch:"",
   productCatFilter:"Todas", productNeedFilter:"Todas", productToolsOpen:false, adminNavOpen:false, productRowMenuOpenId:null,
@@ -4771,6 +4771,7 @@ function renderAdmin(){
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.catManageOpen ? renderOrganizeModal('cat') : ''}
   ${state.bulkTagModal ? renderBulkTagModal() : ''}
+  ${state.r21 ? r21Overlays() : ''}
   ${state.auditScannerOpen ? renderAuditScannerModal() : ''}
   ${state.trashOpen ? renderTrashModal() : ''}
   ${state.promoListOpen ? renderPromoListModal() : ''}
@@ -5638,9 +5639,10 @@ function renderDashboardNotesPanel(){
         <div class="list-row" style="align-items:flex-start;${n.done?'opacity:.55;':''}">
           <input type="checkbox" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" ${n.done?'checked':''} onchange="toggleDashboardNote('${n.id}')">
           <div class="row-main">
-            <div class="row-title" style="${n.done?'text-decoration:line-through;':''}">${escDescHtml(n.text)}</div>
+            ${state.noteEditId===n.id ? `<div style="display:flex;gap:6px;"><input id="note-edit-input" value="${escDescHtml(state.noteEditText||'')}" oninput="state.noteEditText=this.value" onkeydown="if(event.key==='Enter')r21SaveNoteEdit();if(event.key==='Escape'){state.noteEditId=null;render()}" style="flex:1;min-width:0;"><button class="btn-primary" style="width:auto;padding:0 12px;" onclick="r21SaveNoteEdit()">OK</button></div>` : `<div class="row-title" style="${n.done?'text-decoration:line-through;':''}">${escDescHtml(n.text)}</div>`}
             <div class="row-sub">${n.createdBy||''} · ${timeAgo(n.createdAt)}</div>
           </div>
+          <button class="btn-tertiary" title="Editar" aria-label="Editar nota" onclick="r21StartNoteEdit('${n.id}')">${icon('edit',13)}</button>
           <button class="btn-tertiary" title="Eliminar" onclick="if(confirm('¿Eliminar esta nota?'))deleteDashboardNote('${n.id}')">${icon('trash',13)}</button>
         </div>
       `).join('')}
@@ -7443,6 +7445,10 @@ function renderPedidos(){
           <option value="">Cambiar estado a...</option>
           ${STATUS_FLOW.map(s=>`<option value="${s}">${s}</option>`).join('')}
         </select>
+        <select onchange="if(this.value){bulkSetPayMethod(this.value);this.value='';}">
+          <option value="">Cambiar método de pago a...</option>
+          ${[...PAY_METHODS,'Sin dato'].map(x=>`<option value="${x==='Sin dato'?'Otro':x}">${x}</option>`).join('')}
+        </select>
         <button class="btn-tertiary" onclick="bulkArchiveOrders(${!state.showArchived})">${state.showArchived?'Restaurar':'Archivar'}</button>
         ${state.commissionAgents.length>0 ? `
         <select onchange="if(this.value){const ag=state.commissionAgents.find(a=>a.id===this.value); bulkAssignCommission(this.value, ag.defaultPct);this.value='';}">
@@ -7561,6 +7567,7 @@ function renderOrderRow(o){
             ${!isPos && o.status!=='Cancelado' && o.status!=='Entregado' ? `<button onclick="openFailModal('${o.id}')">${icon('alert-triangle',14)} No se pudo entregar</button>` : ''}
             ${!isPos && orderPayState(o)!=='pagado' && o.status!=='Cancelado' ? `<button onclick="state.orderActionsMenu=null;setOrderPayment('${o.id}',{paymentStatus:'pagado'})">${icon('dollar-sign',14)} Marcar como pagado</button>` : ''}
             <button onclick="openPayEdit('${o.id}')">${icon('dollar-sign',14)} Cambiar método de pago</button>
+            <button onclick="r21OpenDateEdit('${o.id}')">${icon('calendar',14)} Cambiar fecha de la venta</button>
             ${!o.orderNumber ? `<button onclick="state.orderActionsMenu=null;assignFolioToOrder('${o.id}','${o.source}')">Asignar folio</button>` : ''}
             <button onclick="state.orderActionsMenu=null;state.assignCommissionOrderId='${o.id}';render()">${icon('percent',14)} ${o.commissionAgentName?`Comisión: ${escDescHtml(o.commissionAgentName)}`:'Asignar comisionista'}</button>
             <button onclick="state.orderActionsMenu=null;toggleArchiveOrder('${o.id}',${!o.archived})">${o.archived?'Restaurar':'Archivar'}</button>
@@ -8652,7 +8659,7 @@ function renderMermas(){
   <div class="panel">
     <div class="panel-title">Últimas mermas</div>
     ${state.shrinkage.length===0 ? `<div class="empty-state">Aún no hay mermas registradas.</div>` : state.shrinkage.slice(0,30).map(s=>`
-      <div class="list-row"><div class="row-main"><div class="row-title">${s.qty} × ${s.productName}</div><div class="row-sub">${s.reason}${s.note?` — ${s.note.replace(/</g,'&lt;')}`:''} · ${new Date(s.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${s.centerName||''}</div></div><div style="font-weight:700;">${money(s.totalCost||0)}</div><button class="icon-btn danger" title="Deshacer merma (regresa al inventario)" aria-label="Deshacer merma" onclick="undoShrinkage('${s.id}')">${icon('trash',14)}</button></div>`).join('')}
+      <div class="list-row"><div class="row-main"><div class="row-title">${s.qty} × ${s.productName}</div><div class="row-sub">${s.reason}${s.note?` — ${s.note.replace(/</g,'&lt;')}`:''} · ${new Date(s.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${s.centerName||''}</div></div><div style="font-weight:700;">${money(s.totalCost||0)}</div><button class="icon-btn" title="Editar merma" aria-label="Editar merma" onclick="r21OpenShrEdit('${s.id}')">${icon('edit',14)}</button><button class="icon-btn danger" title="Deshacer merma (regresa al inventario)" aria-label="Deshacer merma" onclick="undoShrinkage('${s.id}')">${icon('trash',14)}</button></div>`).join('')}
   </div>`;
 }
 
@@ -10050,6 +10057,7 @@ function renderClientes(){
             <div class="tools-menu-label">Datos</div>
             <button onclick="state.customerToolsOpen=false;state.customerImportOpen=true;render()">${icon('download',15)} Importar clientes (CSV)</button>
             <button onclick="openCustDupes()">${icon('users',15)} Buscar clientes duplicados</button>
+            <button onclick="r21OpenTagMgr()">${icon('tag',15)} Administrar etiquetas</button>
             <button onclick="state.customerToolsOpen=false;exportCustomersCSV()">${icon('copy',15)} Exportar lista actual (CSV)</button>
           </div>` : ''}
         </div>
@@ -10069,9 +10077,11 @@ function renderClientes(){
       ${filterCount ? `<button class="prod-clear" onclick="resetCustomerFilters()">${icon('x',14)} Limpiar</button>` : ''}
     </div>
     <div class="prod-count">${filterCount ? `${list.length} de ${total} clientes` : `${list.length} cliente${list.length===1?'':'s'}`}${f.inactive?' · sin comprar en 60+ días':''}</div>
+    ${r21CustBar(list)}
     ${list.length===0 ? `<div class="empty-state">No hay clientes que coincidan con este filtro.</div>` :
       (()=>{ const {shown, remaining} = showMoreSlice('customersShowMore', list); return shown.map(c=>`
         <div class="list-row">
+          ${c.manualId ? `<input type="checkbox" aria-label="Seleccionar cliente" style="width:18px;height:18px;flex-shrink:0;" ${(state.selectedCustomers||[]).includes(c.manualId)?'checked':''} onchange="r21ToggleCust('${c.manualId}')">` : ''}
           <div class="cust-avatar ${c.isManual?'':'auto'}">${escDescHtml(customerInitials(c.name))}</div>
           <div class="row-main" style="cursor:pointer;" onclick="openCustomerModal('${c.manualId||''}')">
             <div class="row-title">${escDescHtml(c.name)}${c.isManual?'':' <span class="cust-auto">automático</span>'}</div>
@@ -10904,13 +10914,15 @@ function renderCajaDetailModal(){
           <div><span>Total de ventas</span><span>${money(r.totalSales||0)}</span></div>
           <div><span>Ingresos de caja</span><span>${money(r.cashIngresos||0)}</span></div>
           <div><span>Retiros de caja</span><span>-${money(r.cashRetiros||0)}</span></div>
+          ${r21CajaLyRows(r)}
           <div><span>Efectivo esperado</span><span>${money(r.expectedCash||0)}</span></div>
           <div><span>Efectivo contado</span><span>${money(r.countedCash||0)}</span></div>
           ${r.countedBreakdown ? `<div style="display:block;font-size:12px;color:var(--ink-soft);line-height:1.6;">Conteo: ${Object.entries(r.countedBreakdown).map(([k,n])=>{ const lab={b1000:'billete $1,000',b500:'billete $500',b200:'billete $200',b100:'billete $100',b50:'billete $50',b20:'billete $20',m20:'moneda $20',m10:'moneda $10',m5:'moneda $5',m2:'moneda $2',m1:'moneda $1',m050:'moneda 50¢'}[k]||k; return `${n} × ${lab}`; }).join(' · ')}</div>` : ''}
           <div style="font-weight:800;"><span>Diferencia</span><span style="color:${(r.difference||0)===0?'var(--green)':((r.difference||0)>0?'var(--amber)':'var(--rose)')}">${cashDiffLabel(r.difference)}</span></div>
           ${r.closingNotes?`<div><span>Notas</span><span style="text-align:right;">${r.closingNotes}</span></div>`:''}
-        ` : `<div style="color:var(--ink-soft);padding-top:4px;">Esta caja sigue abierta.</div>`}
+        ` : `<div style="color:var(--ink-soft);padding-top:4px;">Esta caja sigue abierta.</div>${r21CajaLyRows(r)}`}
       </div>
+      ${r21CajaButtons(r)}
       ${movs.length ? `
         <div class="row-title" style="margin-bottom:8px;">Movimientos (${movs.length})</div>
         <div style="max-height:150px;overflow-y:auto;margin-bottom:14px;">
@@ -10954,6 +10966,358 @@ async function adminForceCloseCash(id){
     Object.assign(r, payload);
     showToast('Caja cerrada'); render();
   }catch(e){ console.error(e); showToast('No se pudo cerrar la caja'); }
+}
+
+/* ============== RONDA 21 (ADMIN): correcciones y exportaciones ==============
+   Corregir un cierre de caja, editar notas fijadas, administrar etiquetas de clientes, selección múltiple de clientes,
+   cambio de método de pago en lote, cambiar fecha de una venta, editar mermas y transferencias, y CSV de gastos/cierres/apartados/mermas. */
+function r21J(t){ return JSON.stringify(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+function r21Close(){ state.r21 = null; render(); }
+function r21Money(n){ return money(n); }
+function r21Esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function r21Overlays(){
+  const m = state.r21; if(!m) return '';
+  if(m.kind==='cajaEdit') return r21CajaEditModal();
+  if(m.kind==='tagMgr') return r21TagMgrModal();
+  if(m.kind==='custBulk') return r21CustBulkModal();
+  if(m.kind==='dateEdit') return r21DateEditModal();
+  if(m.kind==='shrEdit') return r21ShrEditModal();
+  if(m.kind==='trEdit') return r21TrEditModal();
+  return '';
+}
+/* ---- Cierres de caja: corregir conteo/notas, imprimir y compartir ---- */
+function r21CajaLyBy(r){
+  if(r.layawayPayments) return r.layawayPayments;
+  const by = {Efectivo:0, Tarjeta:0, Transferencia:0};
+  (state.lyList||[]).forEach(l=>(l.payments||[]).forEach(p=>{ if(!p.voided && p.cashRegisterId===r.id){ const k = by.hasOwnProperty(p.method)?p.method:'Efectivo'; by[k] = Math.round((by[k]+(p.amount||0))*100)/100; } }));
+  return by;
+}
+function r21CajaLyRows(r){
+  const by = r21CajaLyBy(r); if(!(by.Efectivo||by.Tarjeta||by.Transferencia)) return '';
+  return `<div style="font-weight:700;"><span>Abonos de apartados</span><span></span></div>` + ['Efectivo','Tarjeta','Transferencia'].filter(k=>by[k]).map(k=>`<div><span>&nbsp;&nbsp;en ${k}${k==='Efectivo'?' (ya en ingresos)':''}</span><span>${money(by[k])}</span></div>`).join('');
+}
+function r21CajaButtons(r){
+  if(r.status!=='cerrada') return '';
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"><button class="btn-outline" onclick="r21OpenCajaEdit('${r.id}')">${icon('edit',14)} Corregir conteo / notas</button><button class="btn-outline" onclick="r21CajaPrint('${r.id}')">${icon('printer',14)} Imprimir</button><button class="btn-outline" onclick="r21CajaShare('${r.id}')">${icon('message-circle',14)} Compartir</button></div>${r.editedAt?`<div class="panel-sub" style="margin-bottom:10px;">Corregido el ${new Date(r.editedAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}${r.originalCounted!=null?` (conteo original ${money(r.originalCounted)})`:''}</div>`:''}`;
+}
+function r21OpenCajaEdit(id){
+  const r = state.cashRegisters.find(x=>x.id===id); if(!r) return;
+  state.r21 = {kind:'cajaEdit', id, counted:String(r.countedCash!=null?r.countedCash:''), notes:r.closingNotes||''}; render();
+}
+function r21CajaEditModal(){
+  const m = state.r21, r = state.cashRegisters.find(x=>x.id===m.id); if(!r) return '';
+  const diff = Math.round(((Number(m.counted)||0)-(r.expectedCash||0))*100)/100;
+  return `<div class="modal-overlay" style="z-index:80;"><div class="modal" style="max-width:420px;"><h3>Corregir cierre de caja</h3>
+    <div class="panel-sub" style="margin:-8px 0 10px;">${r21Esc(r.cashierName)} · ${r21Esc(r.centerName)} · efectivo esperado ${money(r.expectedCash||0)}</div>
+    <div class="form-field"><label>Efectivo contado</label><input type="number" inputmode="decimal" min="0" step="0.01" value="${r21Esc(m.counted)}" oninput="state.r21.counted=this.value;document.getElementById('r21-diff').textContent=cashDiffLabel(Math.round(((Number(this.value)||0)-${r.expectedCash||0})*100)/100)"></div>
+    <div class="panel-sub" style="margin-bottom:10px;">Diferencia: <b id="r21-diff">${cashDiffLabel(diff)}</b></div>
+    <div class="form-field"><label>Notas</label><input value="${r21Esc(m.notes)}" oninput="state.r21.notes=this.value"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="r21Close()">Cancelar</button><button class="btn-primary" style="flex:1;" onclick="r21SaveCajaEdit()">Guardar</button></div></div></div>`;
+}
+async function r21SaveCajaEdit(){
+  const m = state.r21; if(!m) return;
+  const r = state.cashRegisters.find(x=>x.id===m.id); if(!r) return;
+  const counted = Number(m.counted);
+  if(m.counted===''||isNaN(counted)||counted<0){ showToast('Escribe un monto válido'); return; }
+  const upd = {countedCash:counted, difference:Math.round((counted-(r.expectedCash||0))*100)/100, closingNotes:(m.notes||'').trim(), editedAt:new Date().toISOString(), editedBy:currentUserDisplayName()};
+  if(r.originalCounted==null) upd.originalCounted = r.countedCash;
+  const dropBreakdown = counted !== r.countedCash && r.countedBreakdown;
+  try{
+    const dbUpd = {...upd}; if(dropBreakdown) dbUpd.countedBreakdown = firebase.firestore.FieldValue.delete();
+    await db.collection('cashRegisters').doc(r.id).update(dbUpd);
+    Object.assign(r, upd); if(dropBreakdown) delete r.countedBreakdown;
+    logAdminAction('cierre_corregido','caja',`${r.cashierName} · ${r.centerName}`,`Contado ${money(upd.countedCash)}`);
+    state.r21 = null; showToast('Cierre corregido');
+  }catch(e){ console.error(e); showToast('No se pudo corregir el cierre'); }
+  render();
+}
+function r21CajaText(r){
+  const by = r21CajaLyBy(r);
+  const L = [`*Corte de caja — ${lyStore()}*`, `${r.cashierName} · ${r.centerName}`, `Apertura: ${new Date(r.openedAt).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}`];
+  if(r.closedAt) L.push(`Cierre: ${new Date(r.closedAt).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}`);
+  L.push('', `Fondo inicial: ${money(r.openingAmount||0)}`);
+  Object.keys(r.salesByPayment||{}).forEach(k=>L.push(`Ventas en ${k}: ${money(r.salesByPayment[k])}`));
+  L.push(`Total de ventas: ${money(r.totalSales||0)}`, `Ingresos de caja: ${money(r.cashIngresos||0)}`, `Retiros de caja: -${money(r.cashRetiros||0)}`);
+  ['Efectivo','Tarjeta','Transferencia'].forEach(k=>{ if(by[k]) L.push(`Abonos de apartados en ${k}: ${money(by[k])}`); });
+  L.push(`Efectivo esperado: ${money(r.expectedCash||0)}`, `Efectivo contado: ${money(r.countedCash||0)}`, `Diferencia: ${cashDiffLabel(r.difference)}`);
+  if(r.closingNotes) L.push('', `Notas: ${r.closingNotes}`);
+  return L.join('\n');
+}
+function r21CajaPrint(id){
+  const r = state.cashRegisters.find(x=>x.id===id); if(!r) return;
+  const w = window.open('', '_blank', 'width=420,height=640'); if(!w){ showToast('Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Corte de caja</title><style>@page{size:80mm auto;margin:4mm}body{font:12px/1.4 'Courier New',monospace;width:72mm;margin:0;color:#000}h1{font-size:15px;text-align:center;margin:0 0 4px}pre{white-space:pre-wrap;margin:0;font:inherit}</style></head><body><h1>${r21Esc(lyStore())}</h1><pre>${r21Esc(r21CajaText(r).replace(/\*/g,''))}</pre><script>window.onload=function(){window.print()}<\/script></body></html>`);
+  w.document.close();
+}
+function r21CajaShare(id){
+  const r = state.cashRegisters.find(x=>x.id===id); if(!r) return;
+  const text = r21CajaText(r);
+  if(navigator.share){ navigator.share({title:'Corte de caja', text}).catch(()=>{}); return; }
+  window.open('https://wa.me/?text='+encodeURIComponent(text), '_blank');
+}
+/* ---- Notas fijadas del Resumen: editar texto ---- */
+function r21StartNoteEdit(id){ const n = (state.settings.dashboardNotes||[]).find(x=>x.id===id); if(!n) return; state.noteEditId = id; state.noteEditText = n.text; render(); setTimeout(()=>{ const i = document.getElementById('note-edit-input'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 0); }
+async function r21SaveNoteEdit(){
+  const n = (state.settings.dashboardNotes||[]).find(x=>x.id===state.noteEditId); const t = (state.noteEditText||'').trim();
+  if(!n){ state.noteEditId = null; render(); return; }
+  if(!t){ showToast('La nota no puede quedar vacía'); return; }
+  if(t!==n.text){ n.text = t; n.editedAt = new Date().toISOString(); await saveSettings(); }
+  state.noteEditId = null; render();
+}
+/* ---- Etiquetas de clientes: renombrar / borrar en todos ---- */
+function r21TagCounts(){
+  const c = {}; (state.customers||[]).forEach(x=>(x.tags||[]).forEach(t=>{ c[t] = (c[t]||0)+1; })); return c;
+}
+function r21OpenTagMgr(){ state.customerToolsOpen = false; state.r21 = {kind:'tagMgr', edits:{}, busy:false}; render(); }
+function r21TagMgrModal(){
+  const m = state.r21, counts = r21TagCounts(), tags = Object.keys(counts).sort((a,b)=>a.localeCompare(b,'es'));
+  return `<div class="modal-overlay" style="z-index:80;"><div class="modal" style="max-width:460px;"><h3>Etiquetas de clientes</h3>
+    <div class="panel-sub" style="margin:-8px 0 10px;">Renombrar o borrar una etiqueta cambia a todos los clientes que la tienen. (Solo clientes con perfil guardado; los “automáticos” no tienen etiquetas.)</div>
+    ${tags.length===0 ? '<div class="empty-state">Todavía no hay etiquetas.</div>' : tags.map((t,i)=>`
+      <div class="list-row" style="gap:6px;flex-wrap:wrap;">
+        <input style="flex:1;min-width:120px;" value="${r21Esc(m.edits[t]!=null?m.edits[t]:t)}" oninput="state.r21.edits[${r21J(t)}]=this.value" aria-label="Nombre de la etiqueta">
+        <span class="row-sub" style="white-space:nowrap;">${counts[t]} cliente${counts[t]===1?'':'s'}</span>
+        <button class="btn-outline" onclick="r21RenameTag(${r21J(t)})">Renombrar</button>
+        <button class="icon-btn danger" aria-label="Borrar etiqueta" onclick="r21DeleteTag(${r21J(t)})">${icon('trash',14)}</button>
+      </div>`).join('')}
+    <div class="modal-actions"><button class="btn-cancel" onclick="r21Close()">Cerrar</button></div></div></div>`;
+}
+async function r21ApplyTags(fn, label){
+  const touched = (state.customers||[]).map(c=>({c, tags:fn(c.tags||[])})).filter(x=>JSON.stringify(x.tags)!==JSON.stringify(x.c.tags||[]));
+  if(!touched.length) return 0;
+  await Promise.all(touched.map(x=>db.collection('customers').doc(x.c.id).update({tags:x.tags})));
+  touched.forEach(x=>{ x.c.tags = x.tags; });
+  return touched.length;
+}
+async function r21RenameTag(old){
+  const nw = String((state.r21.edits[old]!=null?state.r21.edits[old]:old)).trim();
+  if(!nw){ showToast('Escribe el nuevo nombre'); return; }
+  if(nw===old) return;
+  try{
+    const n = await r21ApplyTags(tags=>[...new Set(tags.map(t=>t===old?nw:t))]);
+    delete state.r21.edits[old]; logAdminAction('etiqueta_renombrada','clientes',`${old} → ${nw}`,`${n} cliente(s)`);
+    showToast(`Etiqueta renombrada en ${n} cliente${n===1?'':'s'}`);
+  }catch(e){ console.error(e); showToast('No se pudo renombrar'); }
+  render();
+}
+async function r21DeleteTag(tag){
+  const cnt = r21TagCounts()[tag]||0;
+  if(!confirm(`¿Borrar la etiqueta "${tag}" de ${cnt} cliente${cnt===1?'':'s'}? Los clientes no se borran.`)) return;
+  try{
+    const n = await r21ApplyTags(tags=>tags.filter(t=>t!==tag));
+    if(state.customerFilters && state.customerFilters.tag===tag) state.customerFilters.tag = 'Todas';
+    logAdminAction('etiqueta_borrada','clientes',tag,`${n} cliente(s)`); showToast('Etiqueta borrada');
+  }catch(e){ console.error(e); showToast('No se pudo borrar'); }
+  render();
+}
+/* ---- Clientes: selección múltiple (etiquetar / quitar etiqueta / eliminar perfiles) ---- */
+function r21ToggleCust(id){ const s = state.selectedCustomers || (state.selectedCustomers=[]); const i = s.indexOf(id); if(i>=0) s.splice(i,1); else s.push(id); render(); }
+function r21SelectAllCust(checked){
+  const ids = filteredCustomers().filter(c=>c.manualId).map(c=>c.manualId);
+  state.selectedCustomers = checked ? [...new Set([...(state.selectedCustomers||[]), ...ids])] : (state.selectedCustomers||[]).filter(id=>!ids.includes(id));
+  render();
+}
+function r21CustBar(list){
+  const ids = (state.selectedCustomers||[]).filter(id=>state.customers.some(c=>c.id===id));
+  const manual = list.filter(c=>c.manualId), allSel = manual.length>0 && manual.every(c=>ids.includes(c.manualId));
+  if(!manual.length) return '';
+  return `<div class="bulk-actions-bar" style="margin-bottom:8px;"><label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" ${allSel?'checked':''} onchange="r21SelectAllCust(this.checked)"> ${ids.length?`${ids.length} seleccionado${ids.length===1?'':'s'}`:'Seleccionar'}</label>
+    ${ids.length ? `<button class="btn-tertiary" onclick="r21OpenCustBulk('add')">+ Etiqueta</button><button class="btn-tertiary" onclick="r21OpenCustBulk('remove')">− Etiqueta</button><button class="btn-danger-text" onclick="r21OpenCustBulk('delete')">${icon('trash',14)} Eliminar</button><button class="btn-tertiary" onclick="state.selectedCustomers=[];render()">Cancelar</button>` : ''}</div>`;
+}
+function r21OpenCustBulk(mode){ state.r21 = {kind:'custBulk', mode, tag:''}; render(); }
+function r21CustBulkModal(){
+  const m = state.r21, ids = state.selectedCustomers||[];
+  const allTags = Object.keys(r21TagCounts()).sort((a,b)=>a.localeCompare(b,'es'));
+  const selTags = [...new Set(state.customers.filter(c=>ids.includes(c.id)).flatMap(c=>c.tags||[]))].sort((a,b)=>a.localeCompare(b,'es'));
+  let body = '';
+  if(m.mode==='add') body = `<div class="form-field"><label>Etiqueta a agregar</label><input list="r21-tags" value="${r21Esc(m.tag)}" placeholder="Ej. mayorista" oninput="state.r21.tag=this.value"><datalist id="r21-tags">${allTags.map(t=>`<option value="${r21Esc(t)}">`).join('')}</datalist></div>`;
+  else if(m.mode==='remove') body = selTags.length ? `<div class="form-field"><label>Etiqueta a quitar</label><select onchange="state.r21.tag=this.value"><option value="">Elige…</option>${selTags.map(t=>`<option ${m.tag===t?'selected':''}>${r21Esc(t)}</option>`).join('')}</select></div>` : '<div class="empty-state">Los seleccionados no tienen etiquetas.</div>';
+  else body = `<div class="note-box" style="color:var(--rose);">Se eliminarán ${ids.length} perfil(es) de cliente. Su historial de compras no se borra. No se puede deshacer.</div>`;
+  const title = {add:'Agregar etiqueta',remove:'Quitar etiqueta',delete:'Eliminar clientes'}[m.mode];
+  return `<div class="modal-overlay" style="z-index:80;"><div class="modal" style="max-width:420px;"><h3>${title} · ${ids.length}</h3>${body}
+    <div class="modal-actions"><button class="btn-cancel" onclick="r21Close()">Cancelar</button><button class="${m.mode==='delete'?'btn-primary" style="flex:1;background:#BC355C;':'btn-primary" style="flex:1;'}" onclick="r21RunCustBulk()">${m.mode==='delete'?'Eliminar':'Aplicar'}</button></div></div></div>`;
+}
+async function r21RunCustBulk(){
+  const m = state.r21; if(!m) return;
+  const ids = (state.selectedCustomers||[]).filter(id=>state.customers.some(c=>c.id===id));
+  try{
+    if(m.mode==='delete'){
+      await Promise.all(ids.map(id=>db.collection('customers').doc(id).delete()));
+      state.customers = state.customers.filter(c=>!ids.includes(c.id));
+      logAdminAction('clientes_eliminados_lote','clientes',`${ids.length} perfil(es)`); showToast(`${ids.length} perfil(es) eliminado(s)`);
+    }else{
+      const tag = (m.tag||'').trim(); if(!tag){ showToast('Elige la etiqueta'); return; }
+      const targets = state.customers.filter(c=>ids.includes(c.id));
+      const ups = targets.map(c=>({c, tags: m.mode==='add' ? [...new Set([...(c.tags||[]), tag])] : (c.tags||[]).filter(t=>t!==tag)})).filter(x=>JSON.stringify(x.tags)!==JSON.stringify(x.c.tags||[]));
+      await Promise.all(ups.map(x=>db.collection('customers').doc(x.c.id).update({tags:x.tags})));
+      ups.forEach(x=>{ x.c.tags = x.tags; });
+      logAdminAction('etiqueta_lote','clientes',`${m.mode==='add'?'+':'−'} ${tag}`,`${ups.length} cliente(s)`); showToast(`Listo: ${ups.length} cliente(s) actualizado(s)`);
+    }
+    state.selectedCustomers = []; state.r21 = null;
+  }catch(e){ console.error(e); showToast('No se pudo completar la acción'); }
+  render();
+}
+/* ---- Ventas: método de pago en lote y cambiar fecha ---- */
+async function r21ApplyPayMethod(o, method){
+  const upd = {paymentMethod:method};
+  if(o.source==='pos' || (o.payments && o.payments.length)) upd.payments = [{method, amount:o.total||0}];
+  await db.collection(o.source==='pos'?'sales':'orders').doc(o.id).update(upd);
+  Object.assign(o, upd);
+}
+async function bulkSetPayMethod(method){
+  const ids = [...(state.selectedOrders||[])]; if(!ids.length || !method) return;
+  const label = method==='Otro' ? 'Sin dato' : method;
+  const split = ids.filter(id=>{ const o = state.orders.find(x=>x.id===id); return o && salePayments(o).length>1; }).length;
+  if(!confirm(`¿Cambiar el método de pago de ${ids.length} venta(s) a "${label}"?${split?`\n${split} se cobraron divididas y quedarán completas con ese método.`:''}`)) return;
+  let ok = 0;
+  for(const id of ids){
+    const o = state.orders.find(x=>x.id===id); if(!o) continue;
+    try{ await r21ApplyPayMethod(o, method); ok++; }catch(e){ console.error(e); }
+  }
+  logAdminAction('cambio_metodo_pago_lote','venta',label,`${ok} venta(s)`);
+  state.selectedOrders = []; showToast(`${ok} venta(s) con método ${label}`); render();
+}
+function r21LocalInput(iso){ const d = new Date(iso); if(isNaN(d)) return ''; const p = n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function r21OpenDateEdit(id){ const o = state.orders.find(x=>x.id===id); if(!o) return; state.orderActionsMenu = null; state.r21 = {kind:'dateEdit', id, value:r21LocalInput(o.date)}; render(); }
+function r21DateEditModal(){
+  const m = state.r21, o = state.orders.find(x=>x.id===m.id); if(!o) return '';
+  const closed = o.cashRegisterId && (state.cashRegisters||[]).some(r=>r.id===o.cashRegisterId && r.status==='cerrada');
+  return `<div class="modal-overlay" style="z-index:80;"><div class="modal" style="max-width:400px;"><h3>Fecha de la venta</h3>
+    <div class="panel-sub" style="margin:-8px 0 10px;">${formatFolio(o.orderNumber)} · ${money(o.total||0)}${o.dateOriginal?` · fecha original ${new Date(o.dateOriginal).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}`:''}</div>
+    ${closed ? '<div class="note-box" style="margin-bottom:8px;">La caja de esta venta ya se cerró: el corte guardado no cambia, pero los reportes usarán la fecha nueva.</div>' : ''}
+    <div class="form-field"><label>Fecha y hora</label><input type="datetime-local" value="${m.value}" max="${r21LocalInput(new Date().toISOString())}" oninput="state.r21.value=this.value"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="r21Close()">Cancelar</button><button class="btn-primary" style="flex:1;" onclick="r21SaveDateEdit()">Guardar</button></div></div></div>`;
+}
+async function r21SaveDateEdit(){
+  const m = state.r21, o = state.orders.find(x=>x.id===m.id); if(!o) return;
+  const d = new Date(m.value); if(!m.value || isNaN(d)){ showToast('Elige una fecha válida'); return; }
+  if(d.getTime() > Date.now()+60000){ showToast('La fecha no puede estar en el futuro'); return; }
+  const upd = {date:d.toISOString(), dateEditedAt:new Date().toISOString()}; if(!o.dateOriginal) upd.dateOriginal = o.date;
+  try{
+    await db.collection(o.source==='pos'?'sales':'orders').doc(o.id).update(upd);
+    const before = o.date; Object.assign(o, upd);
+    logAdminAction('fecha_venta_cambiada','venta',formatFolio(o.orderNumber),`${new Date(before).toLocaleDateString('es-MX')} → ${d.toLocaleDateString('es-MX')}`);
+    state.r21 = null; showToast('Fecha actualizada');
+  }catch(e){ console.error(e); showToast('No se pudo cambiar la fecha'); }
+  render();
+}
+/* ---- Mermas: editar piezas, motivo y nota ---- */
+function r21OpenShrEdit(id){ const s = state.shrinkage.find(x=>x.id===id); if(!s) return; state.r21 = {kind:'shrEdit', id, qty:String(s.qty), reason:s.reason||'Otro', note:s.note||''}; render(); }
+function r21ShrEditModal(){
+  const m = state.r21, s = state.shrinkage.find(x=>x.id===m.id); if(!s) return '';
+  return `<div class="modal-overlay" style="z-index:80;"><div class="modal" style="max-width:400px;"><h3>Editar merma</h3>
+    <div class="panel-sub" style="margin:-8px 0 10px;">${r21Esc(s.productName)} · ${r21Esc(s.centerName||'')}. Si cambias las piezas, el inventario se ajusta.</div>
+    <div class="form-field"><label>Piezas</label><input type="number" min="1" inputmode="numeric" value="${r21Esc(m.qty)}" oninput="state.r21.qty=this.value"></div>
+    <div class="form-field"><label>Motivo</label><select onchange="state.r21.reason=this.value">${SHRINK_REASONS.map(r=>`<option ${m.reason===r?'selected':''}>${r}</option>`).join('')}</select></div>
+    <div class="form-field"><label>Nota</label><input value="${r21Esc(m.note)}" oninput="state.r21.note=this.value"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="r21Close()">Cancelar</button><button class="btn-primary" style="flex:1;" onclick="r21SaveShrEdit()">Guardar</button></div></div></div>`;
+}
+async function r21SaveShrEdit(){
+  const m = state.r21, s = state.shrinkage.find(x=>x.id===m.id); if(!s) return;
+  const qty = Math.floor(Number(m.qty)||0); if(qty<=0){ showToast('Escribe cuántas piezas'); return; }
+  const delta = qty - s.qty;   // >0: se pierden más piezas (sale más stock)
+  const p = state.products.find(x=>x.id===s.productId);
+  try{
+    if(delta!==0){
+      if(!p){ showToast('El producto ya no existe: solo se puede cambiar motivo y nota'); return; }
+      const cid = s.centerId || defaultCenterId();
+      const sv = s.variantId ? (p.variants||[]).find(v=>v.id===s.variantId) : null;
+      if(s.variantId && !sv){ showToast('Esa variante ya no existe'); return; }
+      const have = sv ? vCenterStock(sv,cid) : ((p.stockByCenter&&p.stockByCenter[cid])||0);
+      if(delta>0 && delta>have){ showToast(`Solo hay ${have} pieza(s) más en ${s.centerName||'ese centro'}`); return; }
+      if(sv){ vSetCenterStock(sv,cid,have-delta); vProductSync(p); await db.collection('products').doc(p.id).update({variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock}); }
+      else{ if(!p.stockByCenter) p.stockByCenter={}; p.stockByCenter[cid]=have-delta; p.stock=totalStock(p); await db.collection('products').doc(p.id).update({stockByCenter:p.stockByCenter, stock:p.stock}); }
+      logStockMovement(p.id,'merma_editada',-delta,`Merma editada: ${s.qty} → ${qty} pza`,cid);
+    }
+    const unit = s.unitCost || 0;
+    const upd = {qty, reason:m.reason, note:(m.note||'').trim(), totalCost:unit*qty, editedAt:new Date().toISOString()};
+    await db.collection('shrinkage').doc(s.id).update(upd); Object.assign(s, upd);
+    logAdminAction('merma_editada','producto',s.productName,`${qty} pza · ${m.reason}`,s.productId);
+    state.r21 = null; showToast('Merma actualizada');
+  }catch(e){ console.error(e); showToast('No se pudo editar la merma'); }
+  render();
+}
+/* ---- Transferencias: corregir cantidades y notas ---- */
+function r21OpenTrEdit(id){
+  const t = state.transfers.find(x=>x.id===id); if(!t) return;
+  if(t.reverted){ showToast('Esa transferencia ya se revirtió'); return; }
+  state.r21 = {kind:'trEdit', id, notes:t.notes||'', qtys:(t.items||[]).map(i=>String(i.qty))}; render();
+}
+function r21TrEditModal(){
+  const m = state.r21, t = state.transfers.find(x=>x.id===m.id); if(!t) return '';
+  return `<div class="modal-overlay" style="z-index:80;"><div class="modal" style="max-width:440px;"><h3>Corregir transferencia</h3>
+    <div class="panel-sub" style="margin:-8px 0 10px;">${r21Esc(t.fromCenterName)} → ${r21Esc(t.toCenterName)}. Las piezas que cambies se mueven entre los dos centros. Con 0 se quita el producto.</div>
+    ${(t.items||[]).map((it,i)=>`<div class="list-row" style="gap:8px;"><div class="row-main"><div class="row-title" style="overflow-wrap:anywhere;">${r21Esc(it.name)}</div><div class="row-sub">Antes: ${it.qty}</div></div><input type="number" min="0" inputmode="numeric" style="width:76px;text-align:center;" value="${r21Esc(m.qtys[i])}" oninput="state.r21.qtys[${i}]=this.value"></div>`).join('')}
+    <div class="form-field" style="margin-top:10px;"><label>Notas</label><input value="${r21Esc(m.notes)}" oninput="state.r21.notes=this.value"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="r21Close()">Cancelar</button><button class="btn-primary" style="flex:1;" onclick="r21SaveTrEdit()">Guardar</button></div></div></div>`;
+}
+async function r21SaveTrEdit(){
+  const m = state.r21, t = state.transfers.find(x=>x.id===m.id); if(!t || t.reverted) return;
+  const items = t.items||[]; const newQ = m.qtys.map(q=>Math.max(0, Math.floor(Number(q)||0)));
+  if(newQ.every(q=>q===0)){ showToast('Si ya no va nada, usa “Revertir” en lugar de dejar todo en 0'); return; }
+  const problems = [], work = [];
+  items.forEach((it,i)=>{
+    const d = newQ[i]-it.qty; if(!d) return;
+    const p = state.products.find(x=>x.id===it.productId);
+    if(!p){ problems.push(`${it.name}: el producto ya no existe`); return; }
+    const sv = it.variantId ? (p.variants||[]).find(v=>v.id===it.variantId) : null;
+    if(it.variantId && !sv){ problems.push(`${it.name}: la variante ya no existe`); return; }
+    const src = d>0 ? t.fromCenterId : t.toCenterId;
+    const have = sv ? vCenterStock(sv,src) : centerStock(p,src);
+    if(have < Math.abs(d)) problems.push(`${it.name}: en ${d>0?t.fromCenterName:t.toCenterName} solo quedan ${have}`);
+    work.push({it,i,d,p,sv});
+  });
+  if(problems.length){ alert('No se puede corregir:\n\n'+problems.join('\n')); return; }
+  try{
+    const touched = new Set();
+    work.forEach(({it,d,p,sv})=>{
+      if(sv){ vSetCenterStock(sv,t.fromCenterId,vCenterStock(sv,t.fromCenterId)-d); vSetCenterStock(sv,t.toCenterId,vCenterStock(sv,t.toCenterId)+d); }
+      else{ if(!p.stockByCenter) p.stockByCenter={}; p.stockByCenter[t.fromCenterId]=(p.stockByCenter[t.fromCenterId]||0)-d; p.stockByCenter[t.toCenterId]=(p.stockByCenter[t.toCenterId]||0)+d; p.stock = totalStock(p); }
+      touched.add(p.id);
+      logStockMovement(p.id,'transferencia_editada',0,`Se corrigió la transferencia ${t.fromCenterName} → ${t.toCenterName}: ${it.qty} → ${it.qty+d}`,t.fromCenterId);
+    });
+    for(const pid of touched){
+      const p = state.products.find(x=>x.id===pid);
+      if((p.variants||[]).length){ vProductSync(p); await db.collection('products').doc(pid).update({variants:p.variants, stockByCenter:p.stockByCenter, stock:p.stock}); }
+      else await db.collection('products').doc(pid).update({stockByCenter:p.stockByCenter, stock:p.stock});
+    }
+    const newItems = items.map((it,i)=>({...it, qty:newQ[i]})).filter(it=>it.qty>0);
+    const upd = {items:newItems, notes:(m.notes||'').trim(), editedAt:new Date().toISOString()};
+    await db.collection('transfers').doc(t.id).update(upd); Object.assign(t, upd);
+    logAdminAction('transferencia_editada','transferencia',`${t.fromCenterName} → ${t.toCenterName}`,`${work.length} cambio(s)`);
+    state.r21 = null; showToast('Transferencia corregida');
+  }catch(e){ console.error(e); showToast('No se pudo corregir la transferencia'); }
+  render();
+}
+/* ---- Exportaciones CSV: gastos, cierres de caja, apartados, mermas ---- */
+function r21Date(iso){ const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('es-MX'); }
+function r21DateTime(iso){ const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('es-MX'); }
+function exportExpensesCSV(){
+  const rows = [['fecha','categoria','nota','monto','registrado_por']];
+  [...state.expenses].sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(e=>rows.push([r21Date(e.date), e.category||'', e.note||'', e.amount||0, e.createdBy||'']));
+  downloadCSV('gastos.csv', rows); logAdminAction('exportacion','gastos',`${state.expenses.length} gasto(s)`);
+}
+function exportCajaCSV(){
+  const rows = [['apertura','cierre','cajero','centro','estado','fondo_inicial','ventas_efectivo','ventas_tarjeta','ventas_transferencia','total_ventas','ingresos','retiros','abonos_apartados_efectivo','abonos_apartados_tarjeta','abonos_apartados_transferencia','efectivo_esperado','efectivo_contado','diferencia','notas']];
+  [...state.cashRegisters].sort((a,b)=>String(a.openedAt).localeCompare(String(b.openedAt))).forEach(r=>{
+    const sp = r.salesByPayment||{}, ly = r21CajaLyBy(r);
+    rows.push([r21DateTime(r.openedAt), r.closedAt?r21DateTime(r.closedAt):'', r.cashierName||'', r.centerName||'', r.status||'', r.openingAmount||0, sp.Efectivo||0, sp.Tarjeta||0, sp.Transferencia||0, r.totalSales||0, r.cashIngresos||0, r.cashRetiros||0, ly.Efectivo||0, ly.Tarjeta||0, ly.Transferencia||0, r.status==='cerrada'?(r.expectedCash||0):'', r.status==='cerrada'?(r.countedCash||0):'', r.status==='cerrada'?(r.difference||0):'', r.closingNotes||'']);
+  });
+  downloadCSV('cierres-de-caja.csv', rows); logAdminAction('exportacion','cierres de caja',`${state.cashRegisters.length} corte(s)`);
+}
+async function exportLayawaysCSV(){
+  if(!state.lyLoaded){ await lyLoad(true); }
+  const rows = [['folio','estado','creado','fecha_limite','cliente','telefono','referencia','telefono_referencia','domicilio','productos','total','abonado','saldo','abonos','entregado','cancelado','motivo_cancelacion','reembolsado','retenido','notas']];
+  [...(state.lyList||[])].sort((a,b)=>(a.folio||0)-(b.folio||0)).forEach(l=>{
+    const c = l.customer||{};
+    rows.push([lyFolio(l.folio), LY_STATUS[l.status]||l.status, r21Date(l.createdAt), l.dueDate||'', c.name||'', c.phone||'', c.refName||'', c.refPhone||'', c.address||'', (l.items||[]).map(i=>`${i.qty}x ${i.name}`).join(' | '), l.total||0, lyPaid(l), lyBalance(l), lyLive(l).map(p=>`${r21Date(p.date)} ${p.method} ${p.amount}`).join(' | '), l.deliveredAt?r21Date(l.deliveredAt):'', l.cancelledAt?r21Date(l.cancelledAt):'', l.cancelReason||'', l.refundAmount||0, l.retainedAmount||0, l.notes||'']);
+  });
+  downloadCSV('apartados.csv', rows); logAdminAction('exportacion','apartados',`${(state.lyList||[]).length} apartado(s)`);
+}
+function exportShrinkageCSV(){
+  const rows = [['fecha','producto','piezas','motivo','nota','centro','costo_unitario','costo_total','registrado_por']];
+  [...state.shrinkage].sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(s=>rows.push([r21Date(s.date), s.productName||'', s.qty||0, s.reason||'', s.note||'', s.centerName||'', s.unitCost||0, s.totalCost||0, s.user||'']));
+  downloadCSV('mermas.csv', rows); logAdminAction('exportacion','mermas',`${state.shrinkage.length} merma(s)`);
 }
 
 /* ============== RENDIMIENTO POR CENTRO DE DISTRIBUCIÓN ==============
@@ -11415,7 +11779,7 @@ function renderTransferencias(){
       ${state.transfers.length===0 ? `<div class="empty-state">Aún no se ha hecho ninguna transferencia.</div>` :
         state.transfers.map(t=>`
           <div class="list-row" style="flex-direction:column;align-items:stretch;">
-            <div class="row-title" style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${t.fromCenterName} → ${t.toCenterName}${t.reverted?' <span class="status-badge" style="background:var(--navy);">Revertida</span>':''}</span>${t.reverted?'':`<button class="btn-tertiary" style="padding:4px 10px;" onclick="revertTransfer('${t.id}')">Revertir</button>`}</div>
+            <div class="row-title" style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><span>${t.fromCenterName} → ${t.toCenterName}${t.reverted?' <span class="status-badge" style="background:var(--navy);">Revertida</span>':''}</span>${t.reverted?'':`<span style="display:flex;gap:4px;"><button class="btn-tertiary" style="padding:4px 10px;" onclick="r21OpenTrEdit('${t.id}')">Editar</button><button class="btn-tertiary" style="padding:4px 10px;" onclick="revertTransfer('${t.id}')">Revertir</button></span>`}</div>
             <div class="row-sub">${new Date(t.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${(t.items||[]).reduce((s,it)=>s+it.qty,0)} unidades${t.notes?` · ${t.notes}`:''}</div>
             <div class="order-detail" style="margin-top:8px;">
               ${(t.items||[]).map(it=>`<div><span>${it.name}</span><span>${it.qty} u.</span></div>`).join('')}
@@ -13105,6 +13469,10 @@ function renderExportSubpanel(){
       <button class="btn-outline" onclick="exportProductsCSV()">${icon('download',14)} Exportar productos (${state.products.length})</button>
       <button class="btn-outline" onclick="exportOrdersCSV()">${icon('download',14)} Exportar ventas y pedidos (${state.orders.length})</button>
       <button class="btn-outline" onclick="exportCustomersCSV()">${icon('download',14)} Exportar clientes (${state.customers.length})</button>
+      <button class="btn-outline" onclick="exportExpensesCSV()">${icon('download',14)} Exportar gastos (${state.expenses.length})</button>
+      <button class="btn-outline" onclick="exportCajaCSV()">${icon('download',14)} Exportar cierres de caja (${state.cashRegisters.length})</button>
+      <button class="btn-outline" onclick="exportLayawaysCSV()">${icon('download',14)} Exportar apartados${state.lyLoaded?` (${state.lyList.length})`:''}</button>
+      <button class="btn-outline" onclick="exportShrinkageCSV()">${icon('download',14)} Exportar mermas (${state.shrinkage.length})</button>
     </div>
     <div class="panel-title" style="margin-top:18px;">Catálogo en PDF</div>
     <div class="note-box">Genera una página con foto, nombre y precio de tu catálogo (todo o por categoría) para compartir por WhatsApp con quien no navega bien la tienda en línea. Se abre una ventana lista para "Guardar como PDF" desde el diálogo de impresión del navegador.</div>
@@ -15278,7 +15646,7 @@ const NAV_ADMIN_MODALS = [
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],
   ['promoModal', ()=>closePromoModal()], ['centerModal', null], ['cajaDetail', null], ['importOpen', false], ['customerImportOpen', false],
   ['catImportOpen', false], ['catAssignOpen', false], ['needAssignOpen', false], ['catalogMaintOpen', false], ['bgFixOpen', false],
-  ['adminNavOpen', false], ['lyPay', null], ['lyReceipt', null], ['lyCancel', null], ['lyVoid', null], ['lyCust', null], ['lyContact', null], ['lyBulk', null], ['lyItems', null], ['lyNew', null], ['checklistsModal', null],
+  ['adminNavOpen', false], ['lyPay', null], ['lyReceipt', null], ['lyCancel', null], ['r21', null], ['lyVoid', null], ['lyCust', null], ['lyContact', null], ['lyBulk', null], ['lyItems', null], ['lyNew', null], ['checklistsModal', null],
 ];
 function navLayers(){
   const s = state, L = [];
