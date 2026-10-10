@@ -2627,18 +2627,16 @@ function sendReceiptWhatsapp(){
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(receiptWhatsappMessage())}`, '_blank');
 }
 // "Enviar al repartidor" desde el punto de venta: mismo mensaje que el botón del detalle de
-// pedido en el admin (folio, origen, destino, teléfono, monto), con los productos incluidos
-// para que el repartidor sepa qué lleva. Usa el WhatsApp del repartidor y la dirección de origen
+// pedido en el admin (folio, origen, destino, teléfono, monto), sin nombre del cliente ni productos. Usa el WhatsApp del repartidor y la dirección de origen
 // de Configuración → Datos operativos.
 function buildSaleDeliveryMessage(v){
-  const origen = (state.settings && state.settings.storeAddress) || (state.activeCenter ? state.activeCenter.name : '');
-  const direccion = v.customerAddress || '(sin dirección: completar)';
+  const origen = (state.settings && state.settings.storeAddress) || '(configura tu dirección de origen en Configuración)';
+  const direccion = v.address || v.customerAddress || 'Retirado en Punto de Venta';
   const destino = [direccion, v.notes].filter(Boolean).join(' — ');
-  const productos = (v.items||[]).map(it=>`• ${it.qty}x ${it.name}`).join('\n');
-  return `*PEDIDO ${v.orderNumber ? formatFolio(v.orderNumber) : '(sin folio aún)'}*\n\n` +
+  const telefono = v.phone || v.customerPhone || '';
+  return `*PEDIDO ${v.orderNumber || ''}*\n\n` +
          `*De* ${origen}\n\n` +
-         `*A* ${v.customerName ? v.customerName+' — ' : ''}${destino}\n${v.customerPhone||''}\n\n` +
-         (productos ? `*Lleva*\n${productos}\n\n` : '') +
+         `*A* ${destino}\n${telefono}\n\n` +
          `*Producto* $${Math.round(v.total||0)}\n\n` +
          `*Cobrar al cliente* $`;
 }
