@@ -986,7 +986,7 @@ async function loadData(attempt){
       db.collection('sales').orderBy('date','desc').get(),
       db.collection('visits').orderBy('date','desc').limit(3000).get(),
       db.collection('cashiers').get(),
-      db.collection('settings').doc('ai').get(),
+      db.collection('settings').doc('ai').get().catch(()=>({exists:false, data:()=>({})})),   // solo con permiso de configuración (la clave de IA ya no es pública)
       db.collection('distributionCenters').get(),
       db.collection('transfers').orderBy('date','desc').limit(200).get(),
       db.collection('audits').orderBy('date','desc').limit(100).get(),
