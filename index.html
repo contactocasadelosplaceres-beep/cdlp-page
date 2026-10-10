@@ -572,6 +572,8 @@ const firebaseConfig = {
   appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
 };
 firebase.initializeApp(firebaseConfig);
+// Escapa texto para pintarlo dentro del HTML (QA-13: el buscador ya no interpreta etiquetas).
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 const db = firebase.firestore();
 
 /* ============== REGISTRO DE ERRORES DEL SISTEMA ==============
@@ -2739,7 +2741,7 @@ function renderHeader(){
     <div class="search-wrap">
       <div class="search-bar open" id="search-bar-mobile">
         <div class="search-bar-inner">
-          <input id="search-input" class="search-input" type="search" placeholder="Buscar productos…" autocomplete="off" value="${state.searchQuery.replace(/"/g,'&quot;')}" oninput="onSearchInput(this.value)">
+          <input id="search-input" class="search-input" type="search" placeholder="Buscar productos…" autocomplete="off" value="${escHtml(state.searchQuery)}" oninput="onSearchInput(this.value)">
         </div>
       </div>
       ${renderSearchSuggest()}
@@ -2987,7 +2989,7 @@ function renderGridSection(){
     emptyMsg = `Todavía no tenemos suficientes ventas para armar esta lista. Mientras tanto, <a style="color:var(--primary);font-weight:700;" onclick="goToCatalog('Todos')">conoce el catálogo completo</a>.`;
   } else if(state.searchQuery.trim()){
     filtered = searchProducts(state.searchQuery, filtered);
-    heading = `Resultados para "${state.searchQuery.trim()}"`;
+    heading = `Resultados para "${escHtml(state.searchQuery.trim())}"`;
   } else if(state.activeNeed){
     const need = (state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===state.activeNeed);
     filtered = filtered.filter(p=>(p.needs||[]).includes(state.activeNeed));

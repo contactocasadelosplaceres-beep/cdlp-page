@@ -278,6 +278,47 @@ const firebaseConfig = {
   appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
 };
 firebase.initializeApp(firebaseConfig);
+/* ============== BLINDAJE: TEXTO ESCRITO POR VISITANTES (QA-01) ==============
+   Pedidos, carritos abandonados, mensajes, avisos de reposición, búsquedas, encuestas, visitas y
+   errores los escribe cualquier persona desde la tienda, sin sesión. El panel y el POS los pintan
+   dentro de su HTML, así que un nombre o una nota con código podría ejecutarse con la sesión de
+   quien tiene el panel abierto. Aquí, en el momento en que Firestore entrega esos documentos, los
+   caracteres que sirven para meter código (< > " ' ` \ y las entidades &...;) se cambian por
+   caracteres que se ven casi igual pero no tienen efecto (‹ › ” ’ ˋ ∖ ＆). Cubre cualquier
+   pantalla, presente o futura, sin depender de escapar cada plantilla a mano. */
+(function(){
+  const PUBLIC_WRITE = new Set(['orders','abandonedCarts','analyticsEvents','cartAbandonSurveys','couponUsage','quizResponses','restockRequests','searchMisses','storeMessages','systemErrors','visits','customers','customerMessages']);
+  const MAP = {'<':'\u2039','>':'\u203A','"':'\u201D',"'":'\u2019','`':'\u02CB','\\':'\u2216'};
+  function cleanStr(s){ return s.replace(/[<>"'`\\]/g, c=>MAP[c]).replace(/&(?=[#a-zA-Z])/g,'\uFF06'); }
+  function clean(v, depth){
+    if(typeof v==='string') return /[<>"'`\\&]/.test(v) ? cleanStr(v) : v;
+    if(!v || typeof v!=='object' || depth>10) return v;
+    if(Array.isArray(v)){ for(let i=0;i<v.length;i++) v[i]=clean(v[i],depth+1); return v; }
+    if(Object.getPrototypeOf(v)!==Object.prototype) return v; // Timestamp, GeoPoint, etc.
+    for(const k of Object.keys(v)) v[k]=clean(v[k],depth+1);
+    return v;
+  }
+  window.neutralizePublicText = s => typeof s==='string' ? cleanStr(s) : s;
+  window.escHtml = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  try{
+    const F = firebase.firestore;
+    [F && F.DocumentSnapshot, F && F.QueryDocumentSnapshot].forEach(C=>{
+      if(!C || !C.prototype || typeof C.prototype.data!=='function' || Object.prototype.hasOwnProperty.call(C.prototype,'__cdlpSafe')) return;
+      const orig = C.prototype.data;
+      C.prototype.data = function(opts){
+        const d = orig.call(this, opts);
+        try{
+          const ref = this._delegate && this._delegate.ref;
+          const col = ref && ref.parent && ref.parent.id;
+          if(d && PUBLIC_WRITE.has(col)) clean(d, 0);
+        }catch(e){}
+        return d;
+      };
+      Object.defineProperty(C.prototype,'__cdlpSafe',{value:true});
+    });
+  }catch(e){ console.warn('Blindaje de texto no disponible', e); }
+})();
+
 const db = firebase.firestore();
 
 /* ============== REGISTRO DE ERRORES DEL SISTEMA ==============
@@ -1157,9 +1198,45 @@ function handleLogout(){
   state.activeCashRegister=null; state.cashRegisterChecked=false;
 }
 
-function selectCashier(c){ state.activeCashier = c; state.pinInput=''; state.pinError=''; state.pinConfirmed=false; render(); }
-function confirmCashierPin(){
-  if(state.pinInput === state.activeCashier.pin){
+function selectCashier(c){ if(typeof c==='string') c = state.cashiers.find(x=>x.id===c); if(!c) return; state.activeCashier = c; state.pinInput=''; state.pinError=''; state.pinConfirmed=false; render(); }
+/* PIN (QA-06): el panel guarda solo una huella SHA-256 con sal (pinHash + pinSalt), ya no el PIN en
+   texto, y el botón de cada cajero ya no lleva sus datos dentro de la página. Tras 5 intentos
+   fallidos seguidos se bloquea 1 minuto en este equipo. Si un cajero todavía tiene el PIN viejo en
+   texto (el panel no se ha abierto desde el cambio), se acepta y se convierte aquí mismo. */
+const PIN_LOCK_KEY = 'cdlp_pos_pin_lock';
+function pinLockState(){ try{ return JSON.parse(localStorage.getItem(PIN_LOCK_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function savePinLockState(v){ try{ localStorage.setItem(PIN_LOCK_KEY, JSON.stringify(v)); }catch(e){} }
+async function hashCashierPin(pin, salt){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(salt)+':'+String(pin)));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function cashierPinMatches(c, typed){
+  if(!c || !typed) return false;
+  if(c.pinHash) return (await hashCashierPin(typed, c.pinSalt||'')) === c.pinHash;
+  if(c.pin && typed === c.pin){
+    try{
+      const a=new Uint8Array(12); crypto.getRandomValues(a); const salt=[...a].map(b=>b.toString(16).padStart(2,'0')).join('');
+      const pinHash = await hashCashierPin(typed, salt);
+      await db.collection('cashiers').doc(c.id).update({pinHash, pinSalt:salt, pin:firebase.firestore.FieldValue.delete()});
+      c.pinHash = pinHash; c.pinSalt = salt; delete c.pin;
+    }catch(e){ /* sin permiso para escribir: el panel lo convierte al abrirse */ }
+    return true;
+  }
+  return false;
+}
+let pinChecking = false;
+async function confirmCashierPin(){
+  if(pinChecking || !state.activeCashier) return;
+  const lock = pinLockState();
+  if(lock.until && Date.now() < lock.until){
+    state.pinError = `Demasiados intentos. Espera ${Math.ceil((lock.until-Date.now())/1000)} s.`; state.pinInput=''; render(); return;
+  }
+  pinChecking = true;
+  let ok = false;
+  try{ ok = await cashierPinMatches(state.activeCashier, state.pinInput); }catch(e){ ok = false; }
+  pinChecking = false;
+  if(ok){
+    savePinLockState({});
     state.pinConfirmed=true; state.pinInput=''; state.pinError='';
     // El centro ya se restauró solo (si lo había) antes de llegar aquí, así que en este punto ya
     // se sabe cajero + centro: si una venta se quedó a medias por un refresh accidental, se
@@ -1167,7 +1244,12 @@ function confirmCashierPin(){
     restorePosCart();
     render();
   }
-  else{ state.pinError='PIN incorrecto'; state.pinInput=''; render(); }
+  else{
+    const fails = (lock.fails||0)+1;
+    if(fails>=5){ savePinLockState({fails:0, until:Date.now()+60000}); state.pinError='Demasiados intentos. Espera 60 s.'; }
+    else{ savePinLockState({fails}); state.pinError=`PIN incorrecto (${5-fails} intento${5-fails===1?'':'s'} más)`; }
+    state.pinInput=''; render();
+  }
 }
 /* ============== CARRITO DE VENTA: PERSISTENCIA ANTE UN REFRESH ACCIDENTAL ==============
    Antes, si la pantalla se recargaba a media venta (un refresh sin querer, se cerró la pestaña,
@@ -2328,7 +2410,7 @@ function renderCashierSelect(){
     <h2>¿Quién está atendiendo?</h2>
     <p>Selecciona tu nombre para comenzar</p>
     <div class="cashier-list">
-      ${state.cashiers.map(c=>`<button class="cashier-item" onclick='selectCashier(${JSON.stringify(c).replace(/'/g,"&apos;")})'><span>${c.name}</span>${icon('chevron-right',18)}</button>`).join('')}
+      ${state.cashiers.map(c=>`<button class="cashier-item" onclick="selectCashier('${c.id}')"><span>${c.name}</span>${icon('chevron-right',18)}</button>`).join('')}
     </div>
   </div></div>`;
 }
