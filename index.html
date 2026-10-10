@@ -143,6 +143,7 @@
   .cats{display:flex;gap:8px;overflow-x:auto;padding:26px 36px 6px 20px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
   .cats::-webkit-scrollbar{display:none;}
   .cat-chip{flex-shrink:0;padding:10px 16px;min-height:40px;display:inline-flex;align-items:center;border-radius:var(--radius-pill);background:var(--surface);border:1px solid var(--border);color:var(--ink-soft);font-size:13.5px;font-weight:600;white-space:nowrap;}
+  .cat-chip.chip-out{opacity:.65;} .cat-chip.chip-out small{font-size:10.5px;font-weight:600;}
   .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
 
   /* ===== PRODUCT GRID / CARD ===== */
@@ -962,7 +963,7 @@ function saveAbandonedCartDraft(){
     const items = Object.entries(state.cart).map(([key,qty])=>{
       const {p,v} = parseCartKey(key);
       if(!p) return null;
-      const price = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p);
+      const price = variantUnitPrice(p, v);
       return {id:p.id, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
     }).filter(Boolean);
     if(!items.length) return;
@@ -1282,7 +1283,7 @@ function cartSubtotalBeforeGift(){
   Object.entries(state.cart).forEach(([key,qty])=>{
     const {p,v} = parseCartKey(key);
     if(!p) return;
-    let price = v ? (v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p)) : automaticDiscountedPrice(p);
+    let price = variantUnitPrice(p, v);
     price = couponDiscountedPrice(p, price);
     s += price*qty;
   });
@@ -1436,7 +1437,7 @@ function cartTotal(){
   Object.entries(state.cart).forEach(([key,qty])=>{
     const {p,v} = parseCartKey(key);
     if(!p) return;
-    let price = v ? (v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p)) : automaticDiscountedPrice(p);
+    let price = variantUnitPrice(p, v);
     price = couponDiscountedPrice(p, price);
     total += price*qty;
   });
@@ -1494,6 +1495,12 @@ function selectVariantOption(groupName, value){
   const mv = dp ? findMatchingVariant(dp) : null;
   if(mv && typeof mv.imageIdx==='number' && dp.images && dp.images[mv.imageIdx]) state.detailImageIndex = mv.imageIdx;
   render();
+}
+// Una opción aparece "agotada" si ninguna variante con esa opción (y con lo demás ya elegido) tiene existencia.
+function variantOptionOut(p, gName, val){
+  const sel = state.detailSelectedVariant||{};
+  const vs = (p.variants||[]).filter(v=>v.combo && v.combo[gName]===val && (p.variantGroups||[]).every(g=>g.name===gName || !sel[g.name] || v.combo[g.name]===sel[g.name]));
+  return vs.length>0 && vs.every(v=>!(v.stock>0));
 }
 function findMatchingVariant(p){
   if(!p.variantGroups || !p.variantGroups.length) return null;
@@ -1624,7 +1631,7 @@ async function submitOrder(formData){
   }catch(e){ console.error('No se pudo verificar existencias', e); }
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
-    let price = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p);
+    let price = variantUnitPrice(p, v);
     price = couponDiscountedPrice(p, price);
     const line = {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
     if(p.isMysteryBox){
@@ -1932,7 +1939,7 @@ async function submitNotifyMe(productId, variantId){
   const docId = productId + (variantId ? '_'+variantId : '') + '_' + digits.slice(-10);
   try{
     await db.collection('restockRequests').doc(docId).set({
-      productId, productName: p.name + (v ? ` (${variantLabel(v)})` : ''), name: name.slice(0,80), phone: digits.slice(0,15),
+      productId, variantId: v ? v.id : null, variantLabel: v ? variantLabel(v) : '', productName: p.name + (v ? ` (${variantLabel(v)})` : ''), name: name.slice(0,80), phone: digits.slice(0,15),
       date: new Date().toISOString(), notified: false,
     });
     state.notifySent[sentKey] = true;
@@ -1953,7 +1960,8 @@ function renderProductDetailDrawer(){
   const key = cartKey(p.id, matchedVariant ? matchedVariant.id : null);
   const qty = state.cart[key] || 0;
   const stockLeft = itemStock(p, matchedVariant);
-  const price = matchedVariant && matchedVariant.priceOverride>0 ? matchedVariant.priceOverride : automaticDiscountedPrice(p);
+  const price = variantUnitPrice(p, matchedVariant);
+  const listShown = matchedVariant ? listPriceOf(p, matchedVariant) : p.price;
   const needsSelection = hasVariants && !matchedVariant;
   const stockStateClass = stockLeft<=0 ? 'out' : stockLeft<=3 ? 'low' : 'ok';
   const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible';
@@ -1987,8 +1995,8 @@ function renderProductDetailDrawer(){
       <div class="detail-info">
         <div class="detail-cat">${productCats(p).join(' · ')}</div>
         <h2 class="detail-name">${p.name}</h2>
-        <div class="detail-price">${effectivePrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(p.price)}</s>${money(price)}` : money(price)}</div>
-        ${(!matchedVariant || !(matchedVariant.priceOverride>0)) && savingsLabel(p) ? `<div class="detail-save">${savingsLabel(p)}</div>` : ''}
+        <div class="detail-price">${needsSelection && productDisplayPrice(p).from ? `<span style="font-size:13px;font-weight:600;color:var(--ink-soft);margin-right:4px;">Desde</span>${money(productDisplayPrice(p).price)}` : (price<listShown ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(listShown)}</s>${money(price)}` : money(price))}</div>
+        ${matchedVariant && (matchedVariant.priceOverride>0 || matchedVariant.promoPriceOverride>0) ? (price<listShown ? `<div class="detail-save">Ahorras ${moneyShort(listShown-price)} (−${Math.round((listShown-price)/listShown*100)}%)</div>` : '') : (savingsLabel(p) ? `<div class="detail-save">${savingsLabel(p)}</div>` : '')}
         ${renderPromoCountdownBadge(p) ? `<div style="margin-bottom:8px;">${renderPromoCountdownBadge(p)}</div>` : ''}
         ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
         ${hasVariants ? `
@@ -1997,7 +2005,7 @@ function renderProductDetailDrawer(){
               <div style="margin-bottom:10px;">
                 <div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;">${g.name}</div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                  ${g.values.map(v=>`<button class="cat-chip ${state.detailSelectedVariant[g.name]===v?'active':''}" onclick="selectVariantOption('${g.name.replace(/'/g,"\\'")}','${v.replace(/'/g,"\\'")}')">${v}</button>`).join('')}
+                  ${g.values.map(v=>{ const out = variantOptionOut(p, g.name, v); return `<button class="cat-chip ${state.detailSelectedVariant[g.name]===v?'active':''} ${out?'chip-out':''}" onclick="selectVariantOption('${g.name.replace(/'/g,"\\'")}','${v.replace(/'/g,"\\'")}')">${v}${out?' <small>· agotado</small>':''}</button>`; }).join('')}
                 </div>
               </div>
             `).join('')}
@@ -2177,12 +2185,37 @@ function searchProducts(q, pool){
    promociones automáticas, mayoreo y cupón). Solo es un aviso: no cambia ningún precio. */
 function moneyShort(n){ return '$' + Number(Math.round(n)).toLocaleString('es-MX'); }
 function listPriceOf(p, v){ return v && v.priceOverride>0 ? v.priceOverride : p.price; }
+// Precio por unidad de una variante (antes de cupón): su promoción propia si la tiene, luego su precio propio,
+// y si no tiene nada propio el del producto con sus promociones automáticas.
+function variantUnitPrice(p, v){
+  if(v){
+    const list = listPriceOf(p, v);
+    if(v.promoPriceOverride>0 && v.promoPriceOverride<list) return v.promoPriceOverride;
+    if(v.priceOverride>0) return v.priceOverride;
+  }
+  return automaticDiscountedPrice(p);
+}
+// Lo que se muestra en tarjetas: si las variantes tienen precios distintos, "Desde $X" (del más barato con existencia).
+function productDisplayPrice(p){
+  const vs = (p.variants||[]).filter(v=>v.stock>0), pool = vs.length ? vs : (p.variants||[]);
+  const custom = pool.some(v=>v.priceOverride>0 || v.promoPriceOverride>0);
+  if(!pool.length || !custom) { const pr = automaticDiscountedPrice(p); return {price:pr, was: pr<p.price ? p.price : 0, from:false}; }
+  const rows = pool.map(v=>({v, price:variantUnitPrice(p,v)}));
+  const min = rows.reduce((a,b)=>b.price<a.price?b:a);
+  const from = rows.some(r=>Math.round(r.price*100)!==Math.round(min.price*100));
+  const list = listPriceOf(p, min.v);
+  return {price:min.price, was: min.price<list ? list : 0, from};
+}
+function priceHtml(p, big){
+  const d = productDisplayPrice(p);
+  return `${d.was ? `<s style="color:var(--ink-soft);font-weight:500;font-size:${big||11}px;margin-right:4px;">${money(d.was)}</s>` : ''}${d.from ? '<span style="font-size:.78em;font-weight:600;color:var(--ink-soft);margin-right:3px;">Desde</span>' : ''}${money(d.price)}`;
+}
 function unitSavings(p){ const s = p.price - automaticDiscountedPrice(p); return s>=1 ? s : 0; }
 function cartSavings(){
   let total = 0;
   Object.entries(state.cart).forEach(([key,qty])=>{
     const {p,v} = parseCartKey(key); if(!p) return;
-    let price = v ? (v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p)) : automaticDiscountedPrice(p);
+    let price = variantUnitPrice(p, v);
     price = couponDiscountedPrice(p, price);
     const diff = listPriceOf(p,v) - price;
     if(diff>0) total += diff*qty;
@@ -2237,7 +2270,7 @@ function renderMiniCard(p, opts){
     <div class="rel-img">${img}</div>
     ${opts.tags&&opts.tags.length?`<div class="rel-tags">${opts.tags.map(t=>`<span>${t}</span>`).join('')}</div>`:''}
     <div class="rel-name">${p.name}</div>
-    <div class="rel-price">${automaticDiscountedPrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:500;font-size:11px;margin-right:4px;">${money(p.price)}</s>` : ''}${money(automaticDiscountedPrice(p))}</div>
+    <div class="rel-price">${priceHtml(p,11)}</div>
     ${isKioskMode() ? '' : cardAction(p,'mini')}
   </div>`;
 }
@@ -2254,7 +2287,7 @@ function suggestRow(p){
   const img = p.images && p.images.length
     ? `<img src="${p.images[0]}" alt="" loading="lazy">`
     : `<span class="sg-fb" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</span>`;
-  return `<button class="sg-row" onclick="pickSuggestion('${p.id}')">${img}<span class="sg-name">${p.name}</span><span class="sg-price">${money(automaticDiscountedPrice(p))}</span></button>`;
+  return `<button class="sg-row" onclick="pickSuggestion('${p.id}')">${img}<span class="sg-name">${p.name}</span><span class="sg-price">${productDisplayPrice(p).from?'Desde ':''}${money(productDisplayPrice(p).price)}</span></button>`;
 }
 function renderSearchSuggest(){
   if(!state.products.length) return '';
@@ -2431,8 +2464,8 @@ function quizPool(){ return dailyShuffledProducts().filter(p=>p.stock>0 && !p.is
 function quizBudgetOf(k){ return QUIZ_BUDGETS.find(x=>x.k===k); }
 function quizInBudget(p, b, slack){
   if(!b) return true;
-  const pr = automaticDiscountedPrice(p), lo = b.min==null?0:b.min, hi = b.max;
-  return pr >= lo*(1-(slack||0)) && (hi==null || pr <= hi*(1+(slack||0)));
+  const prs = (p.variants||[]).length ? (p.variants||[]).map(v=>variantUnitPrice(p,v)) : [automaticDiscountedPrice(p)], lo = b.min==null?0:b.min, hi = b.max;
+  return prs.some(pr=>pr >= lo*(1-(slack||0)) && (hi==null || pr <= hi*(1+(slack||0))));
 }
 function quizName(p){ return searchClean(p.name); }
 function quizDesc(p){ return searchClean(String(p.desc||'').replace(/<[^>]*>/g,' ')); }
@@ -2522,7 +2555,7 @@ function quizResults(){
   const pop = new Set(popularProducts(30).map(p=>p.id));
   const mid = b ? (b.max==null ? b.min*1.3 : (b.min+b.max)/2) : null;
   const score = p=>{
-    const pr = automaticDiscountedPrice(p);
+    const pr = productDisplayPrice(p).price;
     const margin = (p.cost>0 && pr>0) ? Math.max(0, Math.min(1, (pr-p.cost)/pr))*0.5 : 0;
     return (pop.has(p.id)?2:0) + ((p.images&&p.images.length)?1:0) - (mid?Math.abs(pr-mid)/mid:0) + margin;
   };
@@ -2553,7 +2586,7 @@ function quizTags(p, r){
   const d = a.extra ? quizExtraDef(a) : null, o = d && d.opts.find(x=>x.k===a.extra);
   if(o) tags.push(o.label);
   if(r.pop.has(p.id)) tags.push('Más vendido');
-  if(automaticDiscountedPrice(p)<p.price) tags.push('En promoción');
+  if(productDisplayPrice(p).was) tags.push('En promoción');
   return tags.slice(0,2);
 }
 function quizSummaryText(){
@@ -2829,7 +2862,7 @@ function applyPriceFilter(products){
   if(!priceFilterActive()) return products;
   const min = (state.priceMin!=='' && state.priceMin!=null) ? Number(state.priceMin) : -Infinity;
   const max = (state.priceMax!=='' && state.priceMax!=null) ? Number(state.priceMax) : Infinity;
-  return products.filter(p=>{ const price = automaticDiscountedPrice(p); return price>=min && price<=max; });
+  return products.filter(p=>{ const d = productDisplayPrice(p); const prices = (p.variants||[]).length ? (p.variants||[]).map(v=>variantUnitPrice(p,v)) : [d.price]; return prices.some(price=>price>=min && price<=max); });
 }
 // setPriceFilter fuerza un render() completo del catálogo en cada tecla (para reflejar el
 // filtro al instante), y ese render() reconstruye el input desde cero — eso le hacía perder el
@@ -3061,7 +3094,7 @@ function renderProductCard(p, forceBest){
           <div class="card-cat">${productCats(p).join(', ')}</div>
           <h3 class="card-name">${p.name}</h3>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
-          <div class="card-price">${automaticDiscountedPrice(p)<p.price ? `<s style="color:var(--ink-soft);font-weight:500;font-size:12px;margin-right:5px;">${money(p.price)}</s>${money(automaticDiscountedPrice(p))}` : money(p.price)}</div>
+          <div class="card-price">${priceHtml(p,12)}</div>
           ${savingsLabel(p) ? `<div class="card-save">${savingsLabel(p)}</div>` : ''}
           ${isKioskMode() ? '' : cardAction(p,'card')}
         </div>
