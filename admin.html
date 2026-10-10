@@ -2158,7 +2158,7 @@ function renderOrderDetailModal(){
         ${isPos?icon('receipt')+' Punto de venta':icon('bag')+' Tienda online'} · ${new Date(o.date).toLocaleString('es-MX',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
       </div>
 
-      ${!isPos ? riskTagHtml(o) : ''}
+      ${!isPos ? riskTagHtml(o)+priceCheckHtml(o) : ''}
       <div class="two-col" style="margin-bottom:14px;">
         <div><div class="row-sub">Estado</div><span class="status-badge" style="background:${STATUS_COLOR[o.status]||'#8a6b78'};color:${STATUS_TEXT_COLOR[o.status]||'#fff'}">${o.status||'—'}</span></div>
         <div><div class="row-sub">Total</div><strong style="font-size:16px;">${money(o.total)}</strong></div>
@@ -5391,6 +5391,30 @@ async function markOrderRiskReviewed(id, valid){
     });
   }catch(e){ console.error(e); showToast('No se pudo actualizar el pedido'); }
 }
+/* QA-18: la tienda arma precios y total en el celular de la clienta y así se guardan. Aquí se
+   revisan contra el catálogo actual antes de confirmar: total que no cuadra, cantidades raras o un
+   artículo cobrado a menos del 40 % de su precio (sin cupón). Solo avisa, no cambia nada. */
+function orderPriceIssues(o){
+  if(!o || o.source==='pos' || o.historical) return [];
+  const issues = [];
+  const lines = o.items||[];
+  const sum = lines.reduce((s,it)=>s+(Number(it&&it.price)||0)*(Number(it&&it.qty)||0),0);
+  const base = o.manualDiscount ? (o.subtotal!=null?o.subtotal:o.total) : o.total;
+  if(Math.abs(sum-(Number(base)||0))>1) issues.push(`El total (${money(base)}) no coincide con la suma de los artículos (${money(sum)}).`);
+  lines.forEach(it=>{
+    if(!it || String(it.id||'').startsWith('promo_') || /\(regalo\)$/.test(it.name||'')) return;
+    if(!(Number(it.qty)>0) || Number(it.qty)>50) issues.push(`Cantidad inusual en ${it.name}: ${it.qty}.`);
+    const p = state.products.find(x=>x.id===it.id); if(!p) return;
+    let list = Number(p.price)||0;
+    if(it.variantId){ const v=(p.variants||[]).find(x=>x.id===it.variantId); if(v && v.priceOverride>0) list = v.priceOverride; }
+    if(list>0 && Number(it.price) < list*0.4 && !o.couponCode) issues.push(`${it.name}: se cobró ${money(it.price)} y hoy cuesta ${money(list)}.`);
+  });
+  return issues;
+}
+function priceCheckHtml(o){
+  const is = orderPriceIssues(o);
+  return is.length ? `<div class="note-box" style="background:#FDECEC;color:#8A1C2B;margin-bottom:12px;">${icon('alert-triangle',14)} <b>Revisa los precios antes de confirmar:</b><br>${is.map(escDescHtml).join('<br>')}</div>` : '';
+}
 function riskTagHtml(o){
   if(o.riskReviewed || (o.status!=='Nuevo' && o.status!=='Preparando')) return '';
   const r = orderRiskReasons(o); if(!r.length) return '';
@@ -7431,7 +7455,7 @@ function renderOrderRow(o){
         })()}</div>
         <div class="order-source-tag">${isPos?`${icon('receipt')} Punto de venta · ${escDescHtml(o.cashierName||'')}`:icon('bag')+' Tienda en línea'}</div>
         ${(!isPos && o.campaign)?`<div class="order-camp-tag">Campaña: ${escDescHtml(o.campaign)}</div>`:''}
-        ${!isPos ? riskTagHtml(o) : ''}
+        ${!isPos ? riskTagHtml(o)+priceCheckHtml(o) : ''}
         ${!isPos ? failureTagHtml(o) : ''}
         ${shipSub ? `<div class="order-ship-sub" title="${escDescHtml(shipSub)}">${icon('map-pin',11)} ${escDescHtml(shipSub)}</div>` : ''}
       </td>
