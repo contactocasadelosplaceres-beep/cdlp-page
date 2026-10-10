@@ -366,7 +366,7 @@ let state = {
   scannerContext:'checkout',
   posSessionReported:false,
   posMoreMenuOpen:false,
-  lyList:[], lyLoaded:false, lyLoading:false, lyOpen:false, lyDetailId:null, lyFilter:'activos', lySearch:'', lyPay:null, lyCancel:null, lyReceipt:null, lyForm:null, lyBusy:false, drawerModalOpen:false,
+  lyList:[], lyLoaded:false, lyLoading:false, lyOpen:false, lyDetailId:null, lyFilter:'activos', lySearch:'', lyPay:null, lyCancel:null, lyReceipt:null, lyForm:null, lyVoid:null, lyCust:null, lyContact:null, lyBulk:null, lyItems:null, lyNew:null, lyBusy:false, drawerModalOpen:false,
   posOffline: (typeof navigator!=='undefined' && 'onLine' in navigator) ? !navigator.onLine : false,
 };
 state.offlineQueueCount = loadOfflineQueue().length;
@@ -2730,7 +2730,8 @@ function lyToday(){ const d = new Date(); return d.getFullYear()+'-'+String(d.ge
 function lyAddDays(days){ const d = new Date(); d.setDate(d.getDate()+days); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function lyDateLabel(iso){ if(!iso) return '—'; const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(iso+'T12:00:00') : new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}); }
 function lyDateTime(iso){ const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
-function lyPaid(l){ return lyR2((l.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0),0)); }
+function lyLive(l){ return (l.payments||[]).filter(p=>!p.voided); }
+function lyPaid(l){ return lyR2(lyLive(l).reduce((s,p)=>s+(Number(p.amount)||0),0)); }
 function lyBalance(l){ return lyR2((l.total||0) - lyPaid(l)); }
 function lyOverdue(l){ return l.status==='activo' && !!l.dueDate && l.dueDate < lyToday() && lyBalance(l)>0; }
 function lyMinPct(){ const n = Number(state.settings && state.settings.layawayMinPct); return n>0 && n<=100 ? n : 20; }
@@ -2824,7 +2825,7 @@ function lyItemsText(l){ return (l.items||[]).map(it=>`• ${it.qty}x ${it.name}
 function lyReceiptText(l, payId){
   const pays = (l.payments||[]);
   const p = payId ? pays.find(x=>x.id===payId) : null;
-  const hist = pays.map(x=>`${x.kind==='reembolso'?'↩ Reembolso':'#'+x.n+' Abono'} ${lyDateTime(x.date)} — ${lyM(Math.abs(x.amount))} (${x.method})`).join('\n');
+  const hist = pays.filter(x=>!x.voided).map(x=>`${x.kind==='reembolso'?'↩ Reembolso':'#'+x.n+' Abono'} ${lyDateTime(x.date)} — ${lyM(Math.abs(x.amount))} (${x.method})`).join('\n');
   const bal = lyBalance(l);
   return `*${p ? (p.kind==='reembolso'?'Comprobante de reembolso':'Comprobante de abono') : 'Estado de cuenta de apartado'}* — ${lyStore()}\n` +
     `Apartado ${lyFolio(l.folio)}\nCliente: ${l.customer && l.customer.name || ''}\n\n` +
@@ -2848,12 +2849,13 @@ function lyReminderWa(id){
   const phone = lyWaPhone(l.customer && l.customer.phone); if(!phone){ showToast('Sin WhatsApp del cliente'); return; }
   const msg = `Hola ${(l.customer&&l.customer.name||'').split(' ')[0]}, te escribimos de ${lyStore()}. Tu apartado ${lyFolio(l.folio)} tiene un saldo de ${lyM(lyBalance(l))}${l.dueDate?` y la fecha límite es el ${lyDateLabel(l.dueDate)}`:''}. ¿Cuándo pasas a abonar? 😊`;
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  lyLogContact(id, {kind:'whatsapp', text:'Recordatorio de saldo enviado por WhatsApp'}).catch(()=>{});
 }
 function lyPrint(id, payId){
   const l = state.lyList.find(x=>x.id===id); if(!l) return;
   const p = payId ? (l.payments||[]).find(x=>x.id===payId) : null;
   const rows = (l.items||[]).map(it=>`<tr><td>${it.qty}x ${lyEsc(it.name)}</td><td class="r">${lyM((it.price||0)*(it.qty||0))}</td></tr>`).join('');
-  const hist = (l.payments||[]).map(x=>`<tr><td>${x.kind==='reembolso'?'Reembolso':'Abono '+x.n} ${lyEsc(lyDateTime(x.date))}<br>${lyEsc(x.method)}</td><td class="r">${lyM(Math.abs(x.amount))}</td></tr>`).join('');
+  const hist = lyLive(l).map(x=>`<tr><td>${x.kind==='reembolso'?'Reembolso':'Abono '+x.n} ${lyEsc(lyDateTime(x.date))}<br>${lyEsc(x.method)}</td><td class="r">${lyM(Math.abs(x.amount))}</td></tr>`).join('');
   const st = state.settings || {};
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Comprobante</title><style>
     @page{size:80mm auto;margin:4mm;} body{font:12px/1.35 'Courier New',monospace;color:#000;margin:0;width:72mm;}
@@ -2891,7 +2893,7 @@ async function lyDeliver(id){
   state.lyBusy = true; render();
   try{
     const byM = {};
-    (l.payments||[]).forEach(p=>{ byM[p.method] = lyR2((byM[p.method]||0) + (Number(p.amount)||0)); });
+    lyLive(l).forEach(p=>{ byM[p.method] = lyR2((byM[p.method]||0) + (Number(p.amount)||0)); });
     const payments = Object.entries(byM).filter(([,a])=>a>0).map(([method,amount])=>({method, amount}));
     const orderNumber = await getNextOrderNumber();
     const subtotal = lyR2((l.total||0) + (l.discount||0));
@@ -2911,30 +2913,180 @@ async function lyDeliver(id){
   state.lyBusy = false; render();
 }
 function lyOpenCancel(id){ const l = state.lyList.find(x=>x.id===id); if(!l) return; state.lyCancel = {id, reason:LY_CANCEL_REASONS[0], refund:String(lyPaid(l)), method:'Efectivo', note:''}; render(); }
+async function lyDoCancel(l, m){
+  const paid = lyPaid(l); const refund = Math.min(paid, Math.max(0, lyR2(m.refund)));
+  const host = lyHost();
+  const ref = db.collection('layaways').doc(l.id);
+  const now = new Date().toISOString();
+  const payments = [...(l.payments||[])];
+  if(refund>0) payments.push({id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,4), n:payments.length+1, kind:'reembolso', date:now, amount:-refund, method:m.method, note:'Cancelación', cashier:host.cashier||'', cashRegisterId:host.register?host.register.id:null, centerId:host.centerId||l.centerId||null, from:host.isPOS?'pos':'admin'});
+  const upd = {status:'cancelado', cancelledAt:now, cancelReason:m.reason, cancelNote:(m.note||'').trim().slice(0,200), refundAmount:refund, retainedAmount:lyR2(paid-refund), payments, paid:lyR2(paid-refund), updatedAt:now};
+  await db.runTransaction(async tx=>{
+    const snap = await tx.get(ref); if(!snap.exists) throw new Error('No existe');
+    if(snap.data().status!=='activo' && snap.data().status!=='liquidado') throw new Error('Este apartado ya no se puede cancelar');
+    tx.update(ref, upd);
+  });
+  try{ await host.restore(l.items||[], l.centerId||host.centerId); }catch(e){ console.error('No se pudo regresar el stock', e); showToast('Apartado cancelado, pero revisa el stock manualmente'); }
+  if(refund>0 && m.method==='Efectivo' && host.cashMovement){
+    try{ await host.cashMovement({type:'retiro', amount:refund, note:'Reembolso apartado '+lyFolio(l.folio), date:now, layawayId:l.id}); }catch(e){ console.error(e); }
+  }
+  Object.assign(l, upd);
+}
 async function lyConfirmCancel(){
   const m = state.lyCancel; if(!m || state.lyBusy) return;
   const l = state.lyList.find(x=>x.id===m.id); if(!l) return;
-  const paid = lyPaid(l); const refund = Math.min(paid, Math.max(0, lyR2(m.refund)));
-  const host = lyHost();
+  state.lyBusy = true; render();
+  try{ await lyDoCancel(l, m); state.lyCancel = null; showToast('Apartado cancelado'); }
+  catch(e){ console.error(e); showToast(e&&e.message?e.message:'No se pudo cancelar'); }
+  state.lyBusy = false; render();
+}
+/* ---- Anular / corregir un abono ---- */
+const LY_VOID_REASONS = ['Error de captura','Monto equivocado','Método equivocado','Cliente no pagó','Otro'];
+function lyOpenVoid(id, payId){ const l = state.lyList.find(x=>x.id===id); if(!l) return; state.lyVoid = {id, payId, reason:LY_VOID_REASONS[0], note:'', thenPay:true}; render(); }
+async function lyConfirmVoid(){
+  const m = state.lyVoid; if(!m || state.lyBusy) return;
+  const host = lyHost(); state.lyBusy = true; render();
+  try{
+    const ref = db.collection('layaways').doc(m.id); const now = new Date().toISOString();
+    const out = await db.runTransaction(async tx=>{
+      const snap = await tx.get(ref); if(!snap.exists) throw new Error('No existe el apartado');
+      const l = snap.data();
+      if(l.status!=='activo' && l.status!=='liquidado') throw new Error('Este apartado ya no admite cambios en los abonos');
+      const payments = (l.payments||[]).map(p=>({...p}));
+      const p = payments.find(x=>x.id===m.payId); if(!p || p.voided || p.kind!=='abono') throw new Error('Ese abono ya no se puede anular');
+      p.voided = true; p.voidedAt = now; p.voidedBy = host.cashier||''; p.voidReason = m.reason + (m.note?(' · '+m.note.trim().slice(0,100)):'');
+      const paid = lyPaid({payments});
+      const upd = {payments, paid, status: lyR2((l.total||0)-paid)<=0.001 ? 'liquidado' : 'activo', updatedAt:now};
+      tx.update(ref, upd);
+      return {upd, p};
+    });
+    const l = state.lyList.find(x=>x.id===m.id); if(l) Object.assign(l, out.upd);
+    if(out.p.method==='Efectivo' && host.cashMovement){
+      try{ await host.cashMovement({type:'retiro', amount:Math.abs(out.p.amount), note:'Anulación de abono '+lyFolio(l&&l.folio), date:now, layawayId:m.id}); }catch(e){ console.error(e); showToast('Abono anulado, pero revisa el retiro en la caja'); }
+    } else if(out.p.method==='Efectivo'){ showToast('Abono anulado. Era en efectivo: ajusta la caja si ya se cerró'); }
+    state.lyVoid = null; showToast('Abono anulado');
+    if(m.thenPay) lyOpenPay(m.id);
+  }catch(e){ console.error(e); showToast(e&&e.message?e.message:'No se pudo anular el abono'); }
+  state.lyBusy = false; render();
+}
+function lyRenderVoidModal(){
+  const m = state.lyVoid; const l = m && state.lyList.find(x=>x.id===m.id); const p = l && (l.payments||[]).find(x=>x.id===m.payId); if(!p) return '';
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" style="max-width:420px !important;">
+    <h3>Anular abono</h3>
+    <div class="ly-sub" style="margin:-6px 0 10px;">${lyEsc(lyFolio(l.folio))} · Abono #${p.n} de ${lyM(p.amount)} (${lyEsc(p.method)}). El saldo del apartado sube de nuevo${p.method==='Efectivo'?' y, si estás en el POS, se anota un retiro en la caja':''}.</div>
+    <label class="ly-lab">Motivo<select class="ly-inp" onchange="state.lyVoid.reason=this.value">${LY_VOID_REASONS.map(x=>`<option ${m.reason===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label class="ly-lab" style="margin-top:8px;">Nota (opcional)<input class="ly-inp" maxlength="100" value="${lyEsc(m.note)}" oninput="state.lyVoid.note=this.value"></label>
+    <label class="checkbox-row" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;"><input type="checkbox" ${m.thenPay?'checked':''} onchange="state.lyVoid.thenPay=this.checked"><span>Registrar enseguida el abono correcto</span></label>
+    <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyVoid=null;render()">No anular</button><button class="btn-primary" style="flex:1;background:#BC355C;" ${state.lyBusy?'disabled':''} onclick="lyConfirmVoid()">${state.lyBusy?'Anulando…':'Anular abono'}</button></div>
+  </div></div>`;
+}
+/* ---- Editar datos del cliente ---- */
+function lyOpenCustEdit(id){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return; const c = l.customer||{};
+  state.lyCust = {id, name:c.name||'', phone:c.phone||'', phone2:c.phone2||'', refName:c.refName||'', refPhone:c.refPhone||'', address:c.address||'', idNote:c.idNote||'', notes:l.notes||''}; render();
+}
+async function lySaveCust(){
+  const f = state.lyCust; if(!f || state.lyBusy) return;
+  if(!String(f.name).trim()){ showToast('Escribe el nombre del cliente'); return; }
+  if(lyDigits(f.phone).length<10){ showToast('El WhatsApp debe tener 10 dígitos'); return; }
+  if(!String(f.refName).trim() || lyDigits(f.refPhone).length<10){ showToast('Falta la referencia (nombre y 10 dígitos)'); return; }
+  if(!String(f.address).trim()){ showToast('Falta el domicilio'); return; }
+  const l = state.lyList.find(x=>x.id===f.id); if(!l) return;
   state.lyBusy = true; render();
   try{
-    const ref = db.collection('layaways').doc(l.id);
-    const now = new Date().toISOString();
-    const payments = [...(l.payments||[])];
-    if(refund>0) payments.push({id:'r'+Date.now().toString(36), n:payments.length+1, kind:'reembolso', date:now, amount:-refund, method:m.method, note:'Cancelación', cashier:host.cashier||'', cashRegisterId:host.register?host.register.id:null, centerId:host.centerId||l.centerId||null, from:host.isPOS?'pos':'admin'});
-    const upd = {status:'cancelado', cancelledAt:now, cancelReason:m.reason, cancelNote:(m.note||'').trim().slice(0,200), refundAmount:refund, retainedAmount:lyR2(paid-refund), payments, paid:lyR2(paid-refund), updatedAt:now};
-    await db.runTransaction(async tx=>{
-      const snap = await tx.get(ref); if(!snap.exists) throw new Error('No existe');
-      if(snap.data().status!=='activo' && snap.data().status!=='liquidado') throw new Error('Este apartado ya no se puede cancelar');
-      tx.update(ref, upd);
-    });
-    try{ await host.restore(l.items||[], l.centerId||host.centerId); }catch(e){ console.error('No se pudo regresar el stock', e); showToast('Apartado cancelado, pero revisa el stock manualmente'); }
-    if(refund>0 && m.method==='Efectivo' && host.cashMovement){
-      try{ await host.cashMovement({type:'retiro', amount:refund, note:'Reembolso apartado '+lyFolio(l.folio), date:now, layawayId:l.id}); }catch(e){ console.error(e); }
-    }
-    Object.assign(l, upd); state.lyCancel = null; showToast('Apartado cancelado');
-  }catch(e){ console.error(e); showToast(e&&e.message?e.message:'No se pudo cancelar'); }
+    const customer = {name:f.name.trim(), phone:f.phone.trim(), phone2:f.phone2.trim(), refName:f.refName.trim(), refPhone:f.refPhone.trim(), address:f.address.trim(), idNote:f.idNote.trim()};
+    const upd = {customer, notes:String(f.notes||'').trim().slice(0,200), updatedAt:new Date().toISOString()};
+    await db.collection('layaways').doc(l.id).update(upd); Object.assign(l, upd);
+    if(l.customerId){ try{ await db.collection('customers').doc(l.customerId).update({address:customer.address, phone2:customer.phone2, reference:{name:customer.refName, phone:customer.refPhone}, idNote:customer.idNote}); }catch(e){ console.error(e); } }
+    state.lyCust = null; showToast('Datos actualizados');
+  }catch(e){ console.error(e); showToast('No se pudieron guardar los datos'); }
   state.lyBusy = false; render();
+}
+function lyRenderCustModal(){
+  const f = state.lyCust; if(!f) return '';
+  const inp = (k, label, extra)=>`<label class="ly-lab">${label}<input class="ly-inp" ${extra||''} value="${lyEsc(f[k])}" oninput="state.lyCust.${k}=this.value"></label>`;
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal">
+    <h3>Datos del cliente</h3><div class="ly-wrap">
+      ${inp('name','Nombre completo')}
+      <div class="ly-grid2">${inp('phone','WhatsApp','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono','type="tel" inputmode="tel"')}</div>
+      <div class="ly-grid2">${inp('refName','Contacto de referencia')}${inp('refPhone','Teléfono de la referencia','type="tel" inputmode="tel"')}</div>
+      ${inp('address','Domicilio')}${inp('idNote','Identificación (opcional)')}${inp('notes','Notas del apartado','maxlength="200"')}
+    </div>
+    <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyCust=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lySaveCust()">${state.lyBusy?'Guardando…':'Guardar'}</button></div>
+  </div></div>`;
+}
+/* ---- Bitácora de contactos (llamadas, WhatsApp, promesas de pago) ---- */
+const LY_CONTACT_KINDS = {llamada:'Llamada', whatsapp:'WhatsApp', visita:'Visita', otro:'Otro'};
+async function lyLogContact(id, c){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  const host = lyHost();
+  const entry = {id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,4), date:new Date().toISOString(), by:host.cashier||'', kind:c.kind||'otro', text:String(c.text||'').trim().slice(0,200), promiseDate:c.promiseDate||''};
+  const contacts = [...(l.contacts||[]), entry];
+  await db.collection('layaways').doc(id).update({contacts, updatedAt:new Date().toISOString()});
+  l.contacts = contacts; render();
+}
+function lyOpenContact(id){ state.lyContact = {id, kind:'llamada', text:'', promise:''}; render(); }
+async function lySaveContact(){
+  const m = state.lyContact; if(!m || state.lyBusy) return;
+  if(!m.text.trim() && !m.promise){ showToast('Anota qué pasó o la fecha que prometió'); return; }
+  state.lyBusy = true; render();
+  try{ await lyLogContact(m.id, {kind:m.kind, text:m.text, promiseDate:m.promise}); state.lyContact = null; showToast('Contacto registrado'); }
+  catch(e){ console.error(e); showToast('No se pudo guardar el contacto'); }
+  state.lyBusy = false; render();
+}
+function lyLastContact(l){ const c = l.contacts||[]; return c.length ? c[c.length-1] : null; }
+function lyRenderContactModal(){
+  const m = state.lyContact; const l = m && state.lyList.find(x=>x.id===m.id); if(!l) return '';
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" style="max-width:420px !important;">
+    <h3>Registrar contacto</h3><div class="ly-sub" style="margin:-6px 0 10px;">${lyEsc(lyFolio(l.folio))} · ${lyEsc(l.customer&&l.customer.name)}</div>
+    <label class="ly-lab">Cómo fue<select class="ly-inp" onchange="state.lyContact.kind=this.value">${Object.keys(LY_CONTACT_KINDS).map(k=>`<option value="${k}" ${m.kind===k?'selected':''}>${LY_CONTACT_KINDS[k]}</option>`).join('')}</select></label>
+    <label class="ly-lab" style="margin-top:8px;">Qué se habló<input class="ly-inp" maxlength="200" placeholder="Ej. Prometió abonar el viernes" value="${lyEsc(m.text)}" oninput="state.lyContact.text=this.value"></label>
+    <label class="ly-lab" style="margin-top:8px;">Fecha que prometió pagar (opcional)<input class="ly-inp" type="date" value="${lyEsc(m.promise)}" onchange="state.lyContact.promise=this.value"></label>
+    <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyContact=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lySaveContact()">${state.lyBusy?'Guardando…':'Guardar'}</button></div>
+  </div></div>`;
+}
+/* ---- Vencidos en lote: recordatorios y cancelación ---- */
+function lyOpenBulk(mode){
+  const ids = (state.lyList||[]).filter(lyOverdue).map(l=>l.id);
+  if(!ids.length){ showToast('No hay apartados vencidos'); return; }
+  state.lyBulk = {mode, sel:Object.fromEntries(ids.map(i=>[i,true])), refundMode:'retener', method:'Efectivo', note:'', done:{}}; render();
+}
+function lyBulkToggle(id, v){ state.lyBulk.sel[id] = !!v; render(); }
+function lyBulkRemind(id){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  lyReminderWa(id); state.lyBulk.done[id] = true; render();
+}
+async function lyBulkCancel(){
+  const b = state.lyBulk; if(!b || state.lyBusy) return;
+  const ids = Object.keys(b.sel).filter(k=>b.sel[k] && !b.done[k]);
+  if(!ids.length){ showToast('Selecciona al menos un apartado'); return; }
+  if(!confirm(`¿Cancelar ${ids.length} apartado(s) vencido(s)? El producto regresa al inventario${b.refundMode==='todo'?' y se reembolsa lo abonado':' y lo abonado queda retenido'}.`)) return;
+  state.lyBusy = true; render(); let ok = 0, bad = 0;
+  for(const id of ids){
+    const l = state.lyList.find(x=>x.id===id); if(!l){ bad++; continue; }
+    try{ await lyDoCancel(l, {reason:'No liquidó a tiempo', refund: b.refundMode==='todo' ? lyPaid(l) : 0, method:b.method, note:b.note}); b.done[id] = true; ok++; }
+    catch(e){ console.error(e); bad++; }
+  }
+  state.lyBusy = false; showToast(`${ok} cancelado(s)${bad?`, ${bad} con error`:''}`);
+  if(!(state.lyList||[]).some(lyOverdue)) state.lyBulk = null;
+  render();
+}
+function lyRenderBulkModal(){
+  const b = state.lyBulk; if(!b) return '';
+  const list = (state.lyList||[]).filter(l=>lyOverdue(l) || b.done[l.id]);
+  const row = l=>{ const c = lyLastContact(l); return `<div class="ly-box" style="gap:6px;">
+      <div class="ly-row-top"><div><div class="ly-name">${lyEsc(lyFolio(l.folio))} · ${lyEsc(l.customer&&l.customer.name)}</div><div class="ly-sub">Saldo ${lyM(lyBalance(l))} · venció ${lyDateLabel(l.dueDate)}${c?` · último contacto ${lyDateTime(c.date)}${c.promiseDate?` (prometió ${lyDateLabel(c.promiseDate)})`:''}`:''}</div></div>
+      ${b.mode==='cancel' ? (b.done[l.id] ? '<span class="ly-badge">Cancelado</span>' : `<input type="checkbox" aria-label="Seleccionar" ${b.sel[l.id]?'checked':''} onchange="lyBulkToggle('${l.id}',this.checked)" style="width:20px;height:20px;flex-shrink:0;">`) : `<button class="ly-chip ${b.done[l.id]?'on':''}" style="flex-shrink:0;" onclick="lyBulkRemind('${l.id}')">${b.done[l.id]?'Enviado ✓':'Enviar'}</button>`}</div></div>`; };
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;"><h3 style="margin:0;">${b.mode==='cancel'?'Cancelar vencidos':'Recordar a vencidos'}</h3><button class="icon-btn" aria-label="Cerrar" onclick="state.lyBulk=null;render()">${icon('x',18)}</button></div>
+    <div class="ly-sub" style="margin-bottom:8px;">${b.mode==='cancel' ? 'Marca los apartados que quieres cancelar. El producto regresa al inventario.' : 'Cada botón abre WhatsApp con el mensaje listo y deja anotado el contacto.'}</div>
+    <div class="ly-wrap">${list.map(row).join('') || '<div class="ly-sub">Sin apartados vencidos.</div>'}
+    ${b.mode==='cancel' ? `<div class="ly-grid2">
+      <label class="ly-lab">Lo abonado<select class="ly-inp" onchange="state.lyBulk.refundMode=this.value"><option value="retener" ${b.refundMode==='retener'?'selected':''}>Se queda en la tienda</option><option value="todo" ${b.refundMode==='todo'?'selected':''}>Se reembolsa todo</option></select></label>
+      <label class="ly-lab">Método del reembolso<select class="ly-inp" onchange="state.lyBulk.method=this.value">${LY_METHODS.map(x=>`<option ${b.method===x?'selected':''}>${x}</option>`).join('')}</select></label></div>
+      <button class="btn-primary" style="background:#BC355C;" ${state.lyBusy?'disabled':''} onclick="lyBulkCancel()">${state.lyBusy?'Cancelando…':'Cancelar seleccionados'}</button>` : ''}
+    </div>
+  </div></div>`;
 }
 /* ---- Pantallas ---- */
 function lyStatusBadge(l){
@@ -2972,12 +3124,14 @@ function lyRenderList(){
     </div>
     <input id="ly-search" class="ly-inp" type="search" placeholder="Buscar por folio, cliente, teléfono o producto…" value="${lyEsc(state.lySearch||'')}" oninput="lyOnSearch(this.value)">
     <div class="ly-chips">${Object.keys(lbl).map(k=>`<button class="ly-chip ${f===k?'on':''}" onclick="state.lyFilter='${k}';render()">${lbl[k]} (${cnt[k]})</button>`).join('')}</div>
+    ${f==='vencidos' && ven.length ? `<div class="ly-actions"><button class="btn-secondary" onclick="lyOpenBulk('remind')">Recordar a todos los vencidos…</button><button class="btn-secondary" style="color:var(--rose,#BC355C)" onclick="lyOpenBulk('cancel')">Cancelar vencidos…</button></div>` : ''}
     ${state.lyLoading && !state.lyLoaded ? `<div class="ly-sub">Cargando apartados…</div>` : list.length===0 ? `<div class="ly-sub" style="padding:14px 0;text-align:center;">No hay apartados en esta vista.</div>` :
       list.map(l=>{ const paid = lyPaid(l), pct = Math.max(0,Math.min(100,Math.round(paid/(l.total||1)*100))); return `
       <button class="ly-row" onclick="lyOpenDetail('${l.id}')">
         <div class="ly-row-top"><div><div class="ly-name">${lyEsc(lyFolio(l.folio))} · ${lyEsc(l.customer&&l.customer.name)}</div><div class="ly-sub">${lyEsc((l.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', '))}</div></div>${lyStatusBadge(l)}</div>
         <div class="ly-bar"><i style="width:${pct}%"></i></div>
         <div class="ly-sub">Abonado ${lyM(paid)} de ${lyM(l.total)} · <b>Saldo ${lyM(lyBalance(l))}</b>${l.status==='activo'&&l.dueDate?` · Límite ${lyDateLabel(l.dueDate)}`:''}</div>
+        ${(()=>{ const c = lyLastContact(l); return c && l.status==='activo' ? `<div class="ly-sub">Último contacto ${lyDateTime(c.date)}${c.promiseDate?` · <b>prometió ${lyDateLabel(c.promiseDate)}</b>`:''}</div>` : ''; })()}
       </button>`; }).join('')}
   </div>`;
 }
@@ -3007,6 +3161,8 @@ function lyRenderDetail(l){
       <button onclick="lyShareWa('${l.id}')">WhatsApp: estado de cuenta</button>
       <button onclick="lyPrint('${l.id}')">Imprimir estado de cuenta</button>
       ${open && bal>0 ? `<button onclick="lyReminderWa('${l.id}')">Recordar saldo por WhatsApp</button>` : ''}
+      <button onclick="lyOpenCustEdit('${l.id}')">Editar datos del cliente</button>
+      ${typeof lyEditItemsBtn==='function' ? lyEditItemsBtn(l) : ''}
     </div>
     <div class="ly-sec">Productos</div>
     <div class="ly-box">${(l.items||[]).map(i=>`<div class="ly-kv"><span>${i.qty}x ${lyEsc(i.name)}</span><span>${lyM((i.price||0)*(i.qty||0))}</span></div>`).join('')}${l.discount>0?`<div class="ly-kv"><span>Descuento</span><span>-${lyM(l.discount)}</span></div>`:''}</div>
@@ -3015,12 +3171,17 @@ function lyRenderDetail(l){
     <div class="ly-sec">Abonos y movimientos (${(l.payments||[]).length})</div>
     <div class="ly-box" style="padding:4px 12px;">
       ${(l.payments||[]).length===0 ? `<div class="ly-sub" style="padding:8px 0;">Sin abonos.</div>` : l.payments.map(p=>`
-        <div class="ly-pay">
-          <div class="ly-kv"><span>${p.kind==='reembolso'?'↩ Reembolso':'Abono #'+p.n} · ${lyDateTime(p.date)}</span><span style="color:${p.amount<0?'var(--rose,#BC355C)':'inherit'}">${p.amount<0?'-':''}${lyM(Math.abs(p.amount))}</span></div>
-          <div class="ly-sub">${lyEsc(p.method)}${p.cashier?` · ${lyEsc(p.cashier)}`:''}${p.from==='admin'?' · desde el administrador':''}${p.note?` · ${lyEsc(p.note)}`:''}</div>
-          <div class="ly-mini"><button onclick="lyShareWa('${l.id}','${p.id}')">Comprobante por WhatsApp</button><button onclick="lyPrint('${l.id}','${p.id}')">Imprimir</button></div>
+        <div class="ly-pay" ${p.voided?'style="opacity:.6;"':''}>
+          <div class="ly-kv"><span ${p.voided?'style="text-decoration:line-through;"':''}>${p.kind==='reembolso'?'↩ Reembolso':'Abono #'+p.n} · ${lyDateTime(p.date)}</span><span style="color:${p.amount<0?'var(--rose,#BC355C)':'inherit'};${p.voided?'text-decoration:line-through;':''}">${p.amount<0?'-':''}${lyM(Math.abs(p.amount))}</span></div>
+          <div class="ly-sub">${lyEsc(p.method)}${p.cashier?` · ${lyEsc(p.cashier)}`:''}${p.from==='admin'?' · desde el administrador':''}${p.note?` · ${lyEsc(p.note)}`:''}${p.voided?` · <b>ANULADO</b> (${lyEsc(p.voidReason||'')})`:''}</div>
+          ${p.voided ? '' : `<div class="ly-mini"><button onclick="lyShareWa('${l.id}','${p.id}')">Comprobante por WhatsApp</button><button onclick="lyPrint('${l.id}','${p.id}')">Imprimir</button>${(p.kind==='abono' && (l.status==='activo'||l.status==='liquidado')) ? `<button onclick="lyOpenVoid('${l.id}','${p.id}')">Anular / corregir</button>` : ''}</div>`}
         </div>`).join('')}
     </div>
+    <div class="ly-sec">Seguimiento (${(l.contacts||[]).length})</div>
+    <div class="ly-box" style="padding:4px 12px;">
+      ${(l.contacts||[]).length===0 ? `<div class="ly-sub" style="padding:8px 0;">Aún no hay contactos anotados.</div>` : (l.contacts||[]).slice().reverse().map(c=>`<div class="ly-pay"><div class="ly-kv"><span>${LY_CONTACT_KINDS[c.kind]||'Contacto'} · ${lyDateTime(c.date)}</span><span>${c.by?lyEsc(c.by):''}</span></div><div class="ly-sub">${lyEsc(c.text||'')}${c.promiseDate?` · <b>Prometió pagar el ${lyDateLabel(c.promiseDate)}</b>`:''}</div></div>`).join('')}
+    </div>
+    ${(l.status==='activo'||l.status==='liquidado') ? `<button class="btn-secondary" onclick="lyOpenContact('${l.id}')">+ Registrar contacto o promesa de pago</button>` : ''}
     ${l.status==='cancelado' ? `<div class="ly-box"><div class="ly-kv"><span>Motivo</span><span>${lyEsc(l.cancelReason||'')}</span></div>${kv('Nota',l.cancelNote)}<div class="ly-kv"><span>Reembolsado</span><span>${lyM(l.refundAmount||0)}</span></div><div class="ly-kv"><span>Retenido</span><span>${lyM(l.retainedAmount||0)}</span></div></div>` : ''}
     ${l.status==='entregado' ? `<div class="ly-box"><div class="ly-kv"><span>Entregado</span><span>${lyDateTime(l.deliveredAt)}${l.deliveredBy?` · ${lyEsc(l.deliveredBy)}`:''}</span></div>${l.saleNumber?`<div class="ly-kv"><span>Venta registrada</span><span>${lyEsc(formatFolio(l.saleNumber))}</span></div>`:''}</div>` : ''}
     ${(l.status==='activo'||l.status==='liquidado') ? `<button class="btn-secondary" style="color:var(--rose,#BC355C)" onclick="lyOpenCancel('${l.id}')">Cancelar apartado…</button>` : ''}
@@ -3074,7 +3235,7 @@ function lyRenderCancelModal(){
 }
 function lyCancelHint(){ const m = state.lyCancel; const l = m && state.lyList.find(x=>x.id===m.id); const el = document.getElementById('ly-cancel-hint'); if(l&&el){ const paid = lyPaid(l); el.innerHTML = `Retiene la tienda: <b>${lyM(lyR2(paid-Math.min(paid,Math.max(0,lyR2(m.refund)))))}</b>`; } }
 function lyRenderOverlays(){
-  return (state.lyPay ? lyRenderPayModal() : '') + (state.lyReceipt ? lyRenderReceiptModal() : '') + (state.lyCancel ? lyRenderCancelModal() : '');
+  return (state.lyPay ? lyRenderPayModal() : '') + (state.lyReceipt ? lyRenderReceiptModal() : '') + (state.lyCancel ? lyRenderCancelModal() : '') + (state.lyVoid ? lyRenderVoidModal() : '') + (state.lyCust ? lyRenderCustModal() : '') + (state.lyContact ? lyRenderContactModal() : '') + (state.lyBulk ? lyRenderBulkModal() : '') + (typeof lyRenderExtraOverlays==='function' ? lyRenderExtraOverlays() : '');
 }
 
 /* ============== APARTADOS: lado Punto de Venta ============== */
@@ -3368,6 +3529,12 @@ function navLayers(){
   if(!s.user || !s.loaded || !s.activeCashier || !s.pinConfirmed || !s.activeCenter || !s.activeCashRegister) return L;
   if(s.lyPay) L.push(()=>{ s.lyPay=null; render(); });
   if(s.lyCancel) L.push(()=>{ s.lyCancel=null; render(); });
+  if(s.lyVoid) L.push(()=>{ s.lyVoid=null; render(); });
+  if(s.lyCust) L.push(()=>{ s.lyCust=null; render(); });
+  if(s.lyContact) L.push(()=>{ s.lyContact=null; render(); });
+  if(s.lyBulk) L.push(()=>{ s.lyBulk=null; render(); });
+  if(s.lyItems) L.push(()=>{ s.lyItems=null; render(); });
+  if(s.lyNew) L.push(()=>{ s.lyNew=null; render(); });
   if(s.lyReceipt) L.push(()=>{ s.lyReceipt=null; render(); });
   if(s.drawerModalOpen) L.push(()=>{ s.drawerModalOpen=false; render(); });
   if(s.lyForm) L.push(()=>{ s.lyForm=null; render(); });
