@@ -343,6 +343,7 @@ let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   loaded:false, products:[], categories:[], coupons:[], cashiers:[], centers:[], activeCenter:null,
   settings:{},
+  heldSales:[], heldOpen:false, voidModal:null,
   activeCashier:null, pinConfirmed:false, pinInput:"", pinError:"",
   activeCat:"Todos", search:"", cart:{}, payMethod:"Efectivo", splitAmounts:{}, cartCollapsed:true,
   saleDone:false, lastSaleTotal:0, lastOrderNumber:null, lastPayments:[], sending:false, variantPickerProduct:null,
@@ -472,6 +473,9 @@ function icon(name, size){
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
     check:'<path d="M20 6 9 17l-5-5"/>',
+    printer:'<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+    pause:'<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
+    ban:'<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
     'map-pin':'<path d="M12 21s7-6.8 7-12a7 7 0 1 0-14 0c0 5.2 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4"/>',
     wallet:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/><path d="M6 10v4M18 10v4"/>',
     layers:'<path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 12l10 5 10-5"/>',
@@ -812,6 +816,205 @@ function renderBarcodeScannerModal(){
     </div>
   </div>`;
 }
+
+/* ============== VENTAS EN ESPERA ==============
+   Deja la venta actual guardada (productos, descuento, cliente, notas) para atender a otra persona
+   y retomarla después. Se guarda en este dispositivo, por centro. No reserva inventario: el stock
+   se valida al cobrar. */
+function heldStorageKey(){ return state.activeCenter ? `cdlp_pos_held_${state.activeCenter.id}` : null; }
+function loadHeldSales(){
+  const k = heldStorageKey(); state.heldSales = [];
+  if(!k) return;
+  try{ const raw = JSON.parse(localStorage.getItem(k)||'[]'); if(Array.isArray(raw)) state.heldSales = raw.filter(h=>h && h.cart && Object.keys(h.cart).length); }catch(e){}
+}
+function saveHeldSales(){
+  const k = heldStorageKey(); if(!k) return;
+  try{ if(state.heldSales.length) localStorage.setItem(k, JSON.stringify(state.heldSales)); else localStorage.removeItem(k); }catch(e){}
+}
+function holdCurrentSale(silent){
+  if(cartCount()===0){ if(!silent) showToast('Agrega productos antes de ponerla en espera'); return false; }
+  const n = state.heldSales.length + 1;
+  const label = state.activeCustomer ? state.activeCustomer.name : ('Venta en espera ' + n);
+  state.heldSales.push({
+    id: 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    label, date: new Date().toISOString(), by: state.activeCashier ? state.activeCashier.name : '',
+    cart: JSON.parse(JSON.stringify(state.cart)),
+    manualDiscount: state.manualDiscount ? JSON.parse(JSON.stringify(state.manualDiscount)) : null,
+    customer: state.activeCustomer ? JSON.parse(JSON.stringify(state.activeCustomer)) : null,
+    notes: state.saleNotes || '', payMethod: state.payMethod, splitAmounts: {...(state.splitAmounts||{})},
+    total: saleTotal(), count: cartCount(),
+  });
+  saveHeldSales();
+  state.cart = {}; state.manualDiscount = null; state.activeCustomer = null; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo';
+  savePosCart();
+  if(!silent) showToast('Venta puesta en espera. Ya puedes atender a otra persona');
+  render();
+  return true;
+}
+function resumeHeldSale(id){
+  const h = state.heldSales.find(x=>x.id===id); if(!h) return;
+  if(cartCount()>0) holdCurrentSale(true);
+  const h2 = state.heldSales.find(x=>x.id===id); if(!h2) return;
+  state.heldSales = state.heldSales.filter(x=>x.id!==id);
+  state.cart = h2.cart; state.manualDiscount = h2.manualDiscount || null; state.activeCustomer = h2.customer || null;
+  state.saleNotes = h2.notes || ''; state.payMethod = h2.payMethod || 'Efectivo'; state.splitAmounts = h2.splitAmounts || {};
+  saveHeldSales(); savePosCart();
+  state.heldOpen = false; showToast('Venta retomada'); render();
+}
+function discardHeldSale(id){
+  const h = state.heldSales.find(x=>x.id===id); if(!h) return;
+  if(!confirm(`¿Descartar "${h.label}"? Se pierde esa venta guardada.`)) return;
+  state.heldSales = state.heldSales.filter(x=>x.id!==id); saveHeldSales(); render();
+}
+function renderHeldModal(){
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
+      <h3>Ventas en espera</h3>
+      ${state.heldSales.length===0 ? `<div style="padding:18px 0;text-align:center;color:var(--ink-soft);">No hay ventas en espera.</div>` : state.heldSales.map(h=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <button class="cashier-item" style="flex:1;display:flex;justify-content:space-between;align-items:center;text-align:left;" onclick="resumeHeldSale('${h.id}')">
+            <span style="min-width:0;"><strong>${String(h.label).replace(/</g,'&lt;')}</strong><br><span style="font-size:12px;color:var(--ink-soft);">${h.count} pieza(s) · ${new Date(h.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}${h.by?' · '+String(h.by).replace(/</g,'&lt;'):''}</span></span>
+            <span style="font-weight:800;">${money(h.total)}</span>
+          </button>
+          <button class="pill-btn" style="background:var(--surface-soft);color:var(--rose);" aria-label="Descartar" onclick="discardHeldSale('${h.id}')">${icon('x',14)}</button>
+        </div>`).join('')}
+      <button class="btn-secondary" onclick="state.heldOpen=false;render()">Cerrar</button>
+    </div>
+  </div>`;
+}
+
+/* ============== ANULAR UNA VENTA DESDE EL POS ============== */
+const VOID_REASONS = ['Error al capturar','El cliente se arrepintió','Producto defectuoso','Cobro duplicado','Otro'];
+function posSaleItemsNet(sale){
+  const ret = {}; (sale.returns||[]).forEach(r=>(r.items||[]).forEach(i=>{ ret[i.idx] = (ret[i.idx]||0) + (i.qty||0); }));
+  return (sale.items||[]).map((it,idx)=>({...it, qty: Math.max(0,(it.qty||0)-(ret[idx]||0))})).filter(it=>it.qty>0);
+}
+async function posRestoreStock(sale){
+  const centerId = sale.centerId || (state.activeCenter && state.activeCenter.id);
+  const demand = new Map();
+  const dget = (id)=>{ let d = demand.get(id); if(!d){ d = {center:0, variants:new Map()}; demand.set(id,d); } return d; };
+  posSaleItemsNet(sale).forEach(it=>{
+    if(!it.id || it.id==='promo_buyxpayy') return;
+    const p = state.products.find(x=>x.id===it.id);
+    if(p && p.isKit){ (p.kitItems||[]).forEach(ki=>{ dget(ki.productId).center += (ki.qty||1)*it.qty; }); return; }
+    if(it.variantId){ const d = dget(it.id); d.variants.set(it.variantId, (d.variants.get(it.variantId)||0)+it.qty); return; }
+    dget(it.id).center += it.qty;
+  });
+  const ids = Array.from(demand.keys());
+  if(!ids.length) return [];
+  return await db.runTransaction(async (tx)=>{
+    const refs = ids.map(id=>db.collection('products').doc(id));
+    const snaps = await Promise.all(refs.map(r=>tx.get(r)));
+    const done = [];
+    snaps.forEach((snap, i)=>{
+      if(!snap.exists) return;
+      const d = demand.get(ids[i]), data = snap.data(), payload = {};
+      if(d.center>0){
+        const sbc = {...(data.stockByCenter||{})};
+        sbc[centerId] = (sbc[centerId]||0) + d.center;
+        payload.stockByCenter = sbc; payload.stock = Object.values(sbc).reduce((a,n)=>a+(n||0),0);
+      }
+      if(d.variants.size){
+        const variants = (data.variants||[]).map(v=>({...v}));
+        d.variants.forEach((qty,vid)=>{ const v = variants.find(x=>x.id===vid); if(v){ if(v.stockByCenter) v.stockByCenter = {...v.stockByCenter}; vSetCenterStock(v, centerId, vCenterStock(v,centerId)+qty); } });
+        const tmp = {variants, stockByCenter: payload.stockByCenter || data.stockByCenter}; vProductSync(tmp);
+        payload.variants = variants; payload.stock = tmp.stock; payload.stockByCenter = tmp.stockByCenter;
+      }
+      tx.update(refs[i], payload);
+      done.push({id:ids[i], payload});
+    });
+    return done;
+  });
+}
+function openVoidSale(id){
+  const v = state.salesListItems.find(x=>x.id===id); if(!v) return;
+  if(v.status==='Cancelado'){ showToast('Esa venta ya está cancelada'); return; }
+  if(v.cashRegisterId !== (state.activeCashRegister && state.activeCashRegister.id)){
+    alert('Esa venta pertenece a una caja que ya se cerró, así que no se puede anular desde aquí (cambiaría el corte). Anúlala desde el panel de administración.');
+    return;
+  }
+  state.voidModal = {id, reason:VOID_REASONS[0], note:'', busy:false};
+  render();
+}
+async function confirmVoidSale(){
+  const m = state.voidModal; if(!m || m.busy) return;
+  const v = state.salesListItems.find(x=>x.id===m.id); if(!v) return;
+  if(!navigator.onLine){ showToast('Necesitas conexión para anular una venta'); return; }
+  m.busy = true; render();
+  try{
+    const restored = await posRestoreStock(v);
+    restored.forEach(r=>{ const p = state.products.find(x=>x.id===r.id); if(p) Object.assign(p, r.payload); });
+    posSaleItemsNet(v).forEach(it=>{ if(it.id && it.id!=='promo_buyxpayy') logStockMovement(it.id, 'cancelacion_pos', it.qty, `Venta ${v.orderNumber?formatFolio(v.orderNumber):''} anulada desde el POS: ${m.reason}`, v.centerId || state.activeCenter.id); });
+    const upd = {status:'Cancelado', cancelReason:m.reason, cancelNote:(m.note||'').trim().slice(0,200), cancelledBy: state.activeCashier ? state.activeCashier.name : '', cancelledAt:new Date().toISOString(), cancelledFrom:'pos'};
+    await db.collection('sales').doc(v.id).update(upd);
+    Object.assign(v, upd);
+    state.voidModal = null; showToast('Venta anulada y el inventario regresó al centro'); render();
+  }catch(e){ console.error(e); m.busy = false; showToast('No se pudo anular la venta'); render(); }
+}
+function renderVoidModal(){
+  const m = state.voidModal; const v = state.salesListItems.find(x=>x.id===m.id) || {};
+  return `
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:380px;">
+      <h3>Anular venta ${v.orderNumber?formatFolio(v.orderNumber):''}</h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:-6px;">Se cancela la venta de ${money(v.total||0)} y las piezas regresan al inventario de ${v.centerName||'este centro'}. Si ya devolviste el dinero, queda fuera del corte de caja.</p>
+      <div class="form-field"><label>Motivo</label><select onchange="state.voidModal.reason=this.value">${VOID_REASONS.map(r=>`<option ${m.reason===r?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Nota (opcional)</label><input maxlength="200" value="${(m.note||'').replace(/"/g,'&quot;')}" oninput="state.voidModal.note=this.value"></div>
+      <button class="btn-primary" ${m.busy?'disabled style="opacity:.5"':''} onclick="confirmVoidSale()">${m.busy?'Anulando…':'Sí, anular venta'}</button>
+      <button class="btn-secondary" onclick="state.voidModal=null;render()">No, regresar</button>
+    </div>
+  </div>`;
+}
+
+/* ============== TICKET IMPRESO Y RECIBO REENVIABLE ============== */
+function escTicket(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function printSaleTicket(sale){
+  if(!sale){ showToast('No se encontró la venta'); return; }
+  const st = state.settings || {};
+  const storeName = st.storeName || 'La Casa de los Placeres';
+  const pays = (typeof salePayments==='function') ? salePayments(sale) : [];
+  const dt = new Date(sale.date || Date.now());
+  const rows = (sale.items||[]).map(it=>`<tr><td>${it.qty}x ${escTicket(it.name)}</td><td class="r">${money((it.price||0)*(it.qty||0))}</td></tr>`).join('');
+  const disc = sale.subtotal!=null && sale.total!=null && sale.subtotal>sale.total ? `<tr><td>Descuento</td><td class="r">-${money(sale.subtotal-sale.total)}</td></tr>` : '';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Ticket</title><style>
+    @page{size:80mm auto;margin:4mm;} body{font:12px/1.35 'Courier New',monospace;color:#000;margin:0;width:72mm;}
+    h1{font-size:15px;text-align:center;margin:0 0 2px;} .c{text-align:center;} .r{text-align:right;white-space:nowrap;padding-left:8px;}
+    table{width:100%;border-collapse:collapse;} td{padding:2px 0;vertical-align:top;} hr{border:0;border-top:1px dashed #000;margin:6px 0;}
+    .t td{font-weight:bold;font-size:14px;} .s{font-size:11px;}
+  </style></head><body>
+    <h1>${escTicket(storeName)}</h1>
+    ${st.storeAddress?`<div class="c s">${escTicket(st.storeAddress)}</div>`:''}
+    <hr><div class="s">${sale.orderNumber?'Venta '+escTicket(formatFolio(sale.orderNumber)):'Venta'}<br>${dt.toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}${sale.cashierName?'<br>Atendió: '+escTicket(sale.cashierName):''}${sale.customerName?'<br>Cliente: '+escTicket(sale.customerName):''}</div>
+    <hr><table>${rows}</table><hr>
+    <table>${disc}<tr class="t"><td>TOTAL</td><td class="r">${money(sale.total||0)}</td></tr>
+    ${pays.map(p=>`<tr><td>${escTicket(p.method)}</td><td class="r">${money(p.amount)}</td></tr>`).join('')}</table>
+    <hr><div class="c">¡Gracias por tu compra!<br>Empaque discreto 💕</div>
+  </body></html>`;
+  try{
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(f);
+    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ showToast('No se pudo abrir la impresión'); } setTimeout(()=>f.remove(), 4000); }, 250);
+  }catch(e){ console.error(e); showToast('No se pudo abrir la impresión'); }
+}
+function saleReceiptText(sale){
+  const lines = (sale.items||[]).map(it=>`• ${it.qty}x ${it.name} — ${money((it.price||0)*(it.qty||0))}`).join('\n');
+  const storeName = (state.settings && state.settings.storeName) || 'La Casa de los Placeres';
+  return `¡Gracias por tu compra en ${storeName}!${sale.orderNumber?` Venta ${formatFolio(sale.orderNumber)}`:''}\n\n${lines}\n\nTotal: ${money(sale.total||0)}\n\n¡Que lo disfrutes!`;
+}
+function sendSaleReceiptWhatsapp(sale){
+  if(!sale){ showToast('No se encontró la venta'); return; }
+  let phone = normalizePhone(sale.customerPhone);
+  if(!phone){
+    const typed = prompt('WhatsApp del cliente (10 dígitos):', '');
+    phone = normalizePhone(typed||'');
+    if(!phone){ showToast('Escribe un número válido de 10 dígitos'); return; }
+  }
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(saleReceiptText(sale))}`, '_blank');
+}
+
 /* ---- Lista de ventas del día, sin salir del Punto de Venta ---- */
 function openSalesList(){
   state.salesListOpen = true; state.salesListLoading = true; state.salesListItems = []; state.salesListDetailId = null;
@@ -830,7 +1033,7 @@ async function loadSalesList(){
 }
 function closeSalesList(){ state.salesListOpen = false; state.salesListDetailId = null; render(); }
 function renderSalesListModal(){
-  const total = state.salesListItems.reduce((s,v)=>s+(v.total||0),0);
+  const total = state.salesListItems.filter(v=>v.status!=='Cancelado').reduce((s,v)=>s+(v.total||0),0);
   const detail = state.salesListDetailId ? state.salesListItems.find(v=>v.id===state.salesListDetailId) : null;
   return `
   <div class="modal-overlay">
@@ -845,17 +1048,21 @@ function renderSalesListModal(){
           <span>Total (${detail.paymentMethod||''})</span><span>${money(detail.total)}</span>
         </div>
         ${detail.customerName ? `<div class="panel-sub" style="margin-top:8px;">Cliente: ${detail.customerName}</div>` : ''}
-        <button class="btn-secondary" style="margin-top:14px;" onclick="sendSaleToDelivery(state.salesListItems.find(v=>v.id===state.salesListDetailId))">${icon('truck',15)} Enviar al repartidor</button>
+        ${detail.status==='Cancelado' ? `<div class="note-box" style="margin-top:12px;color:var(--rose);font-weight:700;">${icon('ban',14)} Venta cancelada${detail.cancelReason?': '+String(detail.cancelReason).replace(/</g,'&lt;'):''}${detail.cancelledBy?' · '+String(detail.cancelledBy).replace(/</g,'&lt;'):''}</div>` : ''}
+        <button class="btn-secondary" style="margin-top:14px;" onclick="printSaleTicket(state.salesListItems.find(v=>v.id===state.salesListDetailId))">${icon('printer',15)} Imprimir ticket</button>
+        <button class="btn-secondary" style="color:var(--green);" onclick="sendSaleReceiptWhatsapp(state.salesListItems.find(v=>v.id===state.salesListDetailId))">${icon('message-circle',15)} Enviar recibo por WhatsApp</button>
+        <button class="btn-secondary" onclick="sendSaleToDelivery(state.salesListItems.find(v=>v.id===state.salesListDetailId))">${icon('truck',15)} Enviar al repartidor</button>
+        ${detail.status!=='Cancelado' ? `<button class="btn-secondary" style="color:var(--rose);" onclick="openVoidSale('${detail.id}')">${icon('ban',15)} Anular venta</button>` : ''}
         <button class="btn-secondary" style="margin-top:8px;" onclick="state.salesListDetailId=null;render()">← Volver a la lista</button>
       ` : `
         <h3>Ventas de hoy</h3>
         ${state.salesListLoading ? `<div style="padding:20px 0;text-align:center;color:var(--ink-soft);">Cargando…</div>` :
           state.salesListItems.length===0 ? `<div style="padding:20px 0;text-align:center;color:var(--ink-soft);">Todavía no hay ventas hoy en ${state.activeCenter.name}.</div>` : `
-          <div class="panel-sub" style="margin-bottom:10px;">${state.salesListItems.length} venta(s) · Total: ${money(total)}</div>
+          <div class="panel-sub" style="margin-bottom:10px;">${state.salesListItems.filter(v=>v.status!=='Cancelado').length} venta(s) · Total: ${money(total)}</div>
           ${state.salesListItems.map(v=>`
             <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;text-align:left;" onclick="state.salesListDetailId='${v.id}';render()">
-              <span>${v.orderNumber?'#'+String(v.orderNumber).padStart(4,'0'):''} · ${new Date(v.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}${v.cashierName?' · '+v.cashierName:''}</span>
-              <span style="font-weight:800;">${money(v.total)}</span>
+              <span>${v.orderNumber?'#'+String(v.orderNumber).padStart(4,'0'):''} · ${new Date(v.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}${v.cashierName?' · '+v.cashierName:''}${v.status==='Cancelado'?' · <b style="color:var(--rose);">Cancelada</b>':''}</span>
+              <span style="font-weight:800;${v.status==='Cancelado'?'text-decoration:line-through;opacity:.5;':''}">${money(v.total)}</span>
             </button>`).join('')}
         `}
       `}
@@ -928,6 +1135,7 @@ function savePosCart(){
   }catch(e){ /* almacenamiento no disponible, se ignora */ }
 }
 function restorePosCart(){
+  loadHeldSales();
   const key = posCartStorageKey(); if(!key) return;
   try{
     const raw = localStorage.getItem(key);
@@ -1195,7 +1403,7 @@ async function openCashClose(){
   state.closingLoading = true; render();
   try{
     const snap = await db.collection('sales').where('cashRegisterId','==', state.activeCashRegister.id).get();
-    const sales = snap.docs.map(d=>d.data());
+    const sales = snap.docs.map(d=>d.data()).filter(x=>x.status!=='Cancelado');
     const byPayment = {};
     PAY_METHODS.forEach(m=>byPayment[m]=0);
     let total=0;
@@ -2034,6 +2242,10 @@ function renderSaleFoot(entries){
           <div class="total-row" style="font-size:12.5px;font-weight:600;color:var(--rose);margin-bottom:6px;"><span>${state.manualDiscount.type==='coupon'?`Cupón ${state.manualDiscount.coupon.code}`:`Descuento${state.manualDiscount.type==='percent'?` (${state.manualDiscount.value}%)`:''}`}</span><span>-${money(currentDiscountAmount())}</span></div>
         ` : ''}
         <div class="total-row"><span>Total</span><span>${money(saleTotal())}</span></div>
+        ${(entries.length>0 || state.heldSales.length>0) ? `<div style="display:flex;gap:8px;margin:2px 0 10px;">
+          ${entries.length>0 ? `<button class="pill-btn" style="flex:1;background:var(--surface-soft);color:var(--ink-soft);justify-content:center;" onclick="holdCurrentSale()">${icon('pause',14)} Poner en espera</button>` : ''}
+          ${state.heldSales.length>0 ? `<button class="pill-btn" style="flex:1;background:var(--primary-soft,var(--surface-soft));color:var(--primary-deep);justify-content:center;" onclick="state.heldOpen=true;render()">En espera (${state.heldSales.length})</button>` : ''}
+        </div>` : ''}
         <div class="pay-row pay-methods">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
         ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
         <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
@@ -2386,6 +2598,7 @@ function renderReceipt(){
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : `<div style="font-weight:700;color:var(--amber);font-size:13px;margin:6px 0 -6px;">${icon('alert-triangle',13)} Guardada sin conexión — el folio se asigna al sincronizar</div>`}
     <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>${(state.lastPayments&&state.lastPayments.length>1) ? `Pago dividido: ${state.lastPayments.map(p=>`${p.method} ${money(p.amount)}`).join(' · ')}` : `Método: ${(state.lastPayments&&state.lastPayments[0]&&state.lastPayments[0].method)||state.payMethod}`}<br>Atendió: ${state.activeCashier.name}</p>
     ${state.lastCustomerPhone ? `<button class="btn-secondary" style="color:var(--green);margin-bottom:8px;" onclick="sendReceiptWhatsapp()">${icon('message-circle',15)} Enviar recibo por WhatsApp a ${state.lastCustomerName||'cliente'}</button>` : ''}
+    <button class="btn-secondary" style="margin-bottom:8px;" onclick="printSaleTicket(state.lastSale)">${icon('printer',15)} Imprimir ticket</button>
     <button class="btn-secondary" style="margin-bottom:8px;" onclick="sendSaleToDelivery(state.lastSale)">${icon('truck',15)} Enviar al repartidor</button>
     <button class="btn-primary" onclick="newSale()">Nueva venta</button>
   </div></div>`;
@@ -2464,6 +2677,8 @@ function render(){
     if(state.notesModalOpen) html += renderNotesModal();
     if(state.barcodeScannerOpen) html += renderBarcodeScannerModal();
     if(state.salesListOpen) html += renderSalesListModal();
+    if(state.voidModal) html += renderVoidModal();
+    if(state.heldOpen) html += renderHeldModal();
     if(state.exchangeModalOpen) html += renderExchangeModal();
     if(state.checkoutReminderOpen) html += renderCheckoutReminderModal();
     if(state.warehouseOpen) html += renderWarehouseModal();
@@ -2518,6 +2733,8 @@ function navLayers(){
   if(s.checkoutReminderOpen) L.push(()=>closeCheckoutReminder(false));
   if(s.warehouseOpen) L.push(()=>closeWarehouseView());
   if(s.exchangeModalOpen) L.push(()=>closeExchangeModal());
+  if(s.voidModal) L.push(()=>{ s.voidModal=null; render(); });
+  if(s.heldOpen) L.push(()=>{ s.heldOpen=false; render(); });
   if(s.salesListOpen) L.push(()=>closeSalesList());
   if(s.barcodeScannerOpen) L.push(()=>closeBarcodeScanner());
   if(s.notesModalOpen) L.push(()=>{ s.notesModalOpen=false; render(); });

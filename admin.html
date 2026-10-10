@@ -930,7 +930,7 @@ let state = {
   heatMetric:'count', heatDays:90,
   loadWarnings:[],
   expenses:[], expenseEditId:null, expenseMonth:'', expenseDraftDate:'', expenseDraftAmount:'', expenseDraftCategory:'Renta', expenseDraftNote:'', includeCashWithdrawals:true,
-  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, receiveGoodsVariants:{},
+  shrinkage:[], shrinkSearch:'', shrinkProductId:null, shrinkCenterId:'', shrinkVariantId:'', varPhotoPick:null, returnModal:null, cancelModal:null, orderEditModal:null, custDupesOpen:false, custDupePrimary:{}, receiveGoodsVariants:{},
   restockRequests:[], notifyModalProductId:null,
   searchMisses:[], quizResponses:[], searchMissDays:30, cartAbandonSurveys:[], productExchanges:[], productExchangeDays:30,
   massPriceModalOpen:false, massPricePercent:'', massPriceRounding:'0', massPriceIncludePromo:true, priceChangeBatches:[],
@@ -2068,7 +2068,7 @@ function normalizePhoneDigits(phone){ return (phone||'').replace(/\D/g,''); }
 function findCustomerByPhone(phone){
   const digits = normalizePhoneDigits(phone).slice(-10);
   if(digits.length<8) return null;
-  return state.customers.find(c=>normalizePhoneDigits(c.phone).slice(-10)===digits) || null;
+  return state.customers.find(c=>normalizePhoneDigits(c.phone).slice(-10)===digits || (c.altPhones||[]).some(a=>normalizePhoneDigits(a).slice(-10)===digits)) || null;
 }
 function openCustomerModalFromOrderMismatch(customerId, orderId){
   const o = state.orders.find(x=>x.id===orderId);
@@ -2140,6 +2140,7 @@ function renderOrderDetailModal(){
         ` : `<button class="btn-outline" style="width:100%;" onclick="startEditOrderDiscount('${o.id}')">+ Agregar descuento</button>`)}
       </div>
 
+      ${o.status==='Cancelado' && o.cancelReason ? `<div class="note-box" style="margin-bottom:14px;color:var(--rose);">${icon('alert-triangle',14)} <strong>Cancelado:</strong> ${escDescHtml(o.cancelReason)}${o.cancelNote?' — '+escDescHtml(o.cancelNote):''}${o.cancelledBy?`<div class="row-sub">${escDescHtml(o.cancelledBy)}${o.cancelledAt?' · '+new Date(o.cancelledAt).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div>`:''}</div>` : ''}
       ${(o.returns||[]).length ? `<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
         <div class="row-title" style="margin-bottom:6px;">Devoluciones</div>
         ${o.returns.map(r=>`<div class="row-sub" style="margin-bottom:6px;">${new Date(r.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} · ${(r.items||[]).map(i=>`${i.qty}× ${escDescHtml(i.name)}`).join(', ')} · ${r.condition==='merma'?'a merma':'regresó al inventario'}${r.refund?` · reembolso ${money(r.refund)} (${escDescHtml(r.method||'')})`:''}${r.reason?` · ${escDescHtml(r.reason)}`:''}</div>`).join('')}
@@ -2188,6 +2189,7 @@ function renderOrderDetailModal(){
           Enviar al repartidor
         </button>
         ${!isPos && o.status!=='Cancelado' && o.status!=='Entregado' ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;color:#8e1f3b;border-color:#e3a3b2;" onclick="openFailModal('${o.id}')">${icon('alert-triangle',16)} No se pudo entregar (rechazó / no estaba)</button>` : ''}
+        ${orderCanEdit(o) ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openOrderEdit('${o.id}')">${icon('edit',16)} Editar productos del pedido</button>` : ''}
         ${orderCanReturn(o) ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="openReturnModal('${o.id}')">${icon('refresh-cw',16)} Registrar devolución</button>` : ''}
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printPackingSlip('${o.id}')">${icon('printer',16)} Imprimir hoja de preparación</button>
         <button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="printOrderReceipt('${o.id}')">${icon('receipt',16)} Recibo en PDF / Imprimir</button>
@@ -3334,8 +3336,154 @@ async function logAdminAction(action, targetType, targetName, details, targetId)
     });
   }catch(e){ console.error('No se pudo registrar en la bitácora', e); }
 }
+
+/* ============== EDITAR LOS PRODUCTOS DE UN PEDIDO (tienda) ==============
+   Solo pedidos de la tienda que todavía no se entregan ni cancelan y cuyo inventario aún no se
+   descontó (si ya se descontó, primero regresa el pedido a "Nuevo" o "Preparando"). Recalcula
+   subtotal, descuento y total, y deja la edición anotada en el pedido. */
+function orderCanEdit(o){ return !!o && o.source!=='pos' && o.status!=='Cancelado' && o.status!=='Entregado' && !o.stockDeducted && !(o.returns||[]).length; }
+function openOrderEdit(id){
+  const o = state.orders.find(x=>x.id===id); if(!o) return;
+  if(!orderCanEdit(o)){ showToast(o.stockDeducted ? 'A este pedido ya se le descontó inventario: regrésalo a Nuevo/Preparando para editarlo' : 'Este pedido ya no se puede editar'); return; }
+  state.orderEditModal = {id, items: JSON.parse(JSON.stringify(o.items||[])), search:'', pickProductId:null};
+  render();
+}
+function editOrderRealItems(m){ return m.items.map((it,i)=>({it,i})).filter(x=>x.it.id!=='promo_buyxpayy'); }
+function setEditOrderQty(i, q){
+  const m = state.orderEditModal; if(!m||!m.items[i]) return;
+  q = Math.floor(Number(q)||0); if(q<=0){ m.items.splice(i,1); } else m.items[i].qty = q;
+  render();
+}
+function setEditOrderPrice(i, v){
+  const m = state.orderEditModal; if(!m||!m.items[i]) return;
+  const n = Number(v); if(!(n>=0)) return; m.items[i].price = n; render();
+}
+function editOrderSearch(v){ const m = state.orderEditModal; m.search = v; m.pickProductId = null; render(); const el = document.getElementById('oe-search'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); } }
+function editOrderPick(pid){
+  const m = state.orderEditModal; const p = state.products.find(x=>x.id===pid); if(!p) return;
+  if((p.variants||[]).length){ m.pickProductId = pid; render(); return; }
+  editOrderAdd(pid, null);
+}
+function editOrderAdd(pid, vid){
+  const m = state.orderEditModal; const p = state.products.find(x=>x.id===pid); if(!p) return;
+  const v = vid ? (p.variants||[]).find(x=>x.id===vid) : null;
+  const price = v ? varUnitPrice(p,v) : ((p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price);
+  const name = p.name + (v ? ` (${varLabelOf(v)})` : '');
+  const ex = m.items.find(it=>it.id===pid && (it.variantId||null)===(v?v.id:null));
+  if(ex) ex.qty += 1; else m.items.push({id:pid, variantId: v?v.id:null, name, price:Number(price)||0, qty:1});
+  m.search=''; m.pickProductId=null; render();
+}
+function editOrderTotals(o, items){
+  const subtotal = items.reduce((s,it)=>s+(Number(it.price)||0)*(it.qty||0),0);
+  let md = o.manualDiscount ? {...o.manualDiscount} : null;
+  if(md){
+    if(md.type==='percent') md.amount = Math.round(subtotal*((Number(md.value)||0)/100));
+    else md.amount = Math.min(Number(md.amount)||0, subtotal);
+  }
+  const total = Math.max(0, subtotal - (md ? md.amount : 0));
+  return {subtotal, manualDiscount: md, total};
+}
+async function saveOrderEdit(){
+  const m = state.orderEditModal; if(!m) return;
+  const o = state.orders.find(x=>x.id===m.id); if(!o) return;
+  if(m.items.filter(it=>it.id!=='promo_buyxpayy').length===0){ showToast('El pedido necesita al menos un producto (si no va, cancélalo)'); return; }
+  if(!orderCanEdit(o)){ showToast('Este pedido cambió y ya no se puede editar'); state.orderEditModal=null; render(); return; }
+  const t = editOrderTotals(o, m.items);
+  const payload = {items:m.items, subtotal:t.subtotal, total:t.total};
+  if(t.manualDiscount) payload.manualDiscount = t.manualDiscount;
+  const editsLog = (o.editsLog||[]).concat([{date:new Date().toISOString(), by: state.user?state.user.email:'', before:o.total, after:t.total}]).slice(-20);
+  payload.editsLog = editsLog;
+  const snap = {items: JSON.parse(JSON.stringify(o.items||[])), subtotal:o.subtotal, total:o.total, manualDiscount:o.manualDiscount?JSON.parse(JSON.stringify(o.manualDiscount)):undefined, editsLog:o.editsLog};
+  try{
+    await db.collection('orders').doc(o.id).update(payload);
+    Object.assign(o, payload);
+    logAdminAction('pedido_editado','pedido',formatFolio(o.orderNumber),`${money(snap.total)} → ${money(t.total)}`);
+    state.orderEditModal = null; render();
+    showUndo(`Pedido ${formatFolio(o.orderNumber)} actualizado: ${money(t.total)}`, async()=>{
+      const del = firebase.firestore.FieldValue.delete();
+      const back = {items:snap.items, total:snap.total, subtotal: snap.subtotal===undefined?del:snap.subtotal, manualDiscount: snap.manualDiscount===undefined?del:snap.manualDiscount, editsLog: snap.editsLog===undefined?del:snap.editsLog};
+      await db.collection('orders').doc(o.id).update(back);
+      o.items = snap.items; o.total = snap.total;
+      ['subtotal','manualDiscount','editsLog'].forEach(k=>{ if(snap[k]===undefined) delete o[k]; else o[k]=snap[k]; });
+      showToast('Edición deshecha'); render();
+    });
+  }catch(e){ console.error(e); showToast('No se pudo guardar el pedido'); }
+}
+function renderOrderEditModal(){
+  const m = state.orderEditModal; const o = state.orders.find(x=>x.id===m.id); if(!o) return '';
+  const t = editOrderTotals(o, m.items);
+  const q = (m.search||'').trim();
+  const results = q.length>=2 ? searchProducts(q, state.products.filter(p=>!p.deletedAt && !p.isKit)).slice(0,6) : [];
+  const pick = m.pickProductId ? state.products.find(x=>x.id===m.pickProductId) : null;
+  return `
+  <div class="modal-overlay" style="z-index:72;">
+    <div class="modal" style="max-width:560px;">
+      <h3>Editar pedido ${formatFolio(o.orderNumber)}</h3>
+      <div class="panel-sub" style="margin:-8px 0 12px;">Cambia cantidades, quita o agrega productos. El total se recalcula.</div>
+      ${m.items.map((it,i)=> it.id==='promo_buyxpayy' ? `<div class="list-row"><div class="row-main"><div class="row-title">${escDescHtml(it.name)}</div><div class="row-sub">Se conserva tal cual</div></div><strong>${money(it.price)}</strong></div>` : `
+        <div class="list-row" style="align-items:center;flex-wrap:wrap;gap:8px;">
+          <div class="row-main" style="min-width:140px;"><div class="row-title">${escDescHtml(it.name)}</div>
+            <div class="row-sub"><input type="number" min="0" step="0.01" inputmode="decimal" value="${Number(it.price)||0}" style="width:84px;padding:4px 6px;" onchange="setEditOrderPrice(${i},this.value)"> c/u</div></div>
+          <div style="display:flex;align-items:center;gap:6px;"><button class="icon-btn" onclick="setEditOrderQty(${i},${it.qty-1})">−</button><strong style="min-width:22px;text-align:center;">${it.qty}</strong><button class="icon-btn" onclick="setEditOrderQty(${i},${it.qty+1})">+</button></div>
+          <strong style="min-width:70px;text-align:right;">${money((Number(it.price)||0)*it.qty)}</strong>
+          <button class="icon-btn danger" aria-label="Quitar" onclick="setEditOrderQty(${i},0)">${icon('trash',14)}</button>
+        </div>`).join('')}
+      <div class="form-field" style="margin-top:12px;"><label>Agregar producto</label>
+        <input id="oe-search" placeholder="Buscar por nombre o SKU…" value="${escDescHtml(m.search||'')}" oninput="editOrderSearch(this.value)"></div>
+      ${pick ? `<div class="panel" style="padding:8px;"><div class="row-sub" style="margin-bottom:6px;">Elige la variante de ${escDescHtml(pick.name)}:</div>${pick.variants.map(v=>`<button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="editOrderAdd('${pick.id}','${v.id}')">${escDescHtml(varLabelOf(v))} · ${money(varUnitPrice(pick,v))} <span class="row-sub">(${v.stock||0} en stock)</span></button>`).join('')}</div>` :
+        results.map(p=>`<button class="cashier-item" style="width:100%;text-align:left;margin-bottom:6px;" onclick="editOrderPick('${p.id}')">${escDescHtml(p.name)} <span class="row-sub">· ${money((p.promoPrice>0&&p.promoPrice<p.price)?p.promoPrice:p.price)} · ${totalStock(p)} en stock</span></button>`).join('')}
+      <div class="order-detail" style="margin-top:12px;">
+        <div><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
+        ${t.manualDiscount ? `<div><span>Descuento${t.manualDiscount.type==='percent'?` (${t.manualDiscount.value}%)`:''}</span><span>-${money(t.manualDiscount.amount)}</span></div>` : ''}
+        <div style="font-weight:800;"><span>Total nuevo</span><span>${money(t.total)}${t.total!==o.total?` <span class="row-sub">(antes ${money(o.total)})</span>`:''}</span></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.orderEditModal=null;render()">Cancelar</button>
+        <button class="btn-primary" onclick="saveOrderEdit()">Guardar cambios</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+const CANCEL_REASONS = ['El cliente canceló','No contestó / no se pudo contactar','Sin existencias','Pedido duplicado','Fuera de zona de entrega','Error al capturar','Otro'];
+function renderCancelModal(){
+  const m = state.cancelModal; const o = state.orders.find(x=>x.id===m.id); if(!o) return '';
+  return `
+  <div class="modal-overlay" style="z-index:75;">
+    <div class="modal" style="max-width:420px;">
+      <h3>Cancelar ${o.source==='pos'?'venta':'pedido'} ${formatFolio(o.orderNumber)}</h3>
+      <div class="panel-sub" style="margin:-8px 0 12px;">${o.source==='pos'?'Las piezas regresan al inventario.':'Si ya se había descontado inventario, se devuelve.'} El motivo queda guardado para tus estadísticas.</div>
+      <div class="form-field"><label>Motivo</label><select onchange="state.cancelModal.reason=this.value">${CANCEL_REASONS.map(r=>`<option ${m.reason===r?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Nota (opcional)</label><input maxlength="200" value="${escDescHtml(m.note||'')}" oninput="state.cancelModal.note=this.value"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="state.cancelModal=null;render()">No cancelar</button>
+        <button class="btn-primary" style="background:var(--rose);" onclick="confirmCancelOrder()">Sí, cancelar</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function confirmCancelOrder(){
+  const m = state.cancelModal; if(!m) return;
+  const o = state.orders.find(x=>x.id===m.id); state.cancelModal = null; if(!o){ render(); return; }
+  const prev = o.status;
+  const upd = {cancelReason:m.reason, cancelNote:(m.note||'').trim().slice(0,200), cancelledBy: state.user ? state.user.email : '', cancelledAt:new Date().toISOString()};
+  try{ await db.collection(o.source==='pos'?'sales':'orders').doc(o.id).update(upd); Object.assign(o, upd); }catch(e){ console.error(e); showToast('No se pudo guardar el motivo'); }
+  await updateOrderStatus(o.id, 'Cancelado', true);
+  showUndo(`${o.source==='pos'?'Venta':'Pedido'} ${formatFolio(o.orderNumber)} cancelado`, ()=>updateOrderStatus(o.id, prev, true));
+}
+function cancelReasonStats(days){
+  const since = Date.now() - days*864e5; const by = {};
+  state.orders.filter(o=>o.status==='Cancelado' && new Date(o.cancelledAt||o.date).getTime()>=since).forEach(o=>{ const r = o.cancelReason || 'Sin motivo registrado'; by[r] = by[r] || {n:0,total:0}; by[r].n++; by[r].total += o.total||0; });
+  return Object.entries(by).sort((a,b)=>b[1].n-a[1].n);
+}
+function renderCancelReasonsPanel(){
+  const days = state.productExchangeDays || 30; const rows = cancelReasonStats(days);
+  return `<div class="panel" style="margin-top:16px;"><div class="panel-title">Motivos de cancelación</div>
+    ${rows.length===0 ? `<div class="empty-state">Sin cancelaciones en este periodo.</div>` : rows.map(([r,v])=>`<div class="list-row"><div class="row-main"><div class="row-title">${escDescHtml(r)}</div></div><div style="text-align:right;"><strong>${v.n}</strong> · <span class="row-sub">${money(v.total)}</span></div></div>`).join('')}</div>`;
+}
 async function updateOrderStatus(id,status,fromUndo){
   const o=state.orders.find(x=>x.id===id); if(!o) return;
+  if(status==='Cancelado' && o.status!=='Cancelado' && !fromUndo){ state.cancelModal = {id, reason:CANCEL_REASONS[0], note:''}; state.orderActionsMenu=null; render(); return; }
   const prevStatus = o.status;
   o.status=status;
   await saveOrdersStatus(id,status,o.source);
@@ -4514,6 +4662,9 @@ function renderAdmin(){
   ${state.cropOpen ? renderCropModal() : ''}
   ${state.orderDetailModal ? renderOrderDetailModal() : ''}
   ${state.returnModal ? renderReturnModal() : ''}
+  ${state.cancelModal ? renderCancelModal() : ''}
+  ${state.orderEditModal ? renderOrderEditModal() : ''}
+  ${state.custDupesOpen ? renderCustDupesModal() : ''}
   ${state.recompressOpen ? renderRecompressModal() : ''}
   ${state.catManageOpen ? renderOrganizeModal('cat') : ''}
   ${state.bulkTagModal ? renderBulkTagModal() : ''}
@@ -7879,9 +8030,11 @@ function setTransferFrom(centerId){
 function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
 function computeCustomersList(){
   const byPhone = {};
+  const aliasKey = {};
+  state.customers.forEach(m=>{ if(m.phone && (m.altPhones||[]).length){ const pk = normalizePhone(m.phone); m.altPhones.forEach(a=>{ aliasKey[normalizePhone(a)] = pk; }); } });
   // 1) Se arman automáticamente a partir de los pedidos de la tienda (index.html).
   state.orders.filter(o=>o.source!=='pos' && o.phone).forEach(o=>{
-    const key = normalizePhone(o.phone);
+    const key = aliasKey[normalizePhone(o.phone)] || normalizePhone(o.phone);
     if(!key) return;
     if(!byPhone[key]){
       byPhone[key] = { id:key, name:o.customer||'Sin nombre', phone:o.phone, email:'', address:'', city:'', state:'', country:'', notes:'', tags:[],
@@ -7908,7 +8061,7 @@ function computeCustomersList(){
   // cliente de la lista (seleccionado desde pos.html), buscando su perfil por el
   // mismo id de "customers" con el que ya se armó el punto 2.
   const byManualId = {};
-  Object.entries(byPhone).forEach(([key,c])=>{ if(c.manualId) byManualId[c.manualId] = key; });
+  Object.entries(byPhone).forEach(([key,c])=>{ if(c.manualId){ byManualId[c.manualId] = key; const prof = state.customers.find(x=>x.id===c.manualId); if(prof) (prof.mergedIds||[]).forEach(mid=>{ byManualId[mid] = key; }); } });
   state.orders.filter(o=>o.source==='pos' && o.customerId).forEach(o=>{
     let key = byManualId[o.customerId];
     if(!key){
@@ -8548,6 +8701,9 @@ function computeProductExchangeStats(days){
 }
 function renderStatsCambiosProducto(){
   const days = state.productExchangeDays || 30;
+  return renderStatsCambiosProductoBase(days) + renderCancelReasonsPanel();
+}
+function renderStatsCambiosProductoBase(days){
   const { total, extraCharged, refunded, recent, returns, toShrink } = computeProductExchangeStats(days);
   return `
     <div class="panel-title" style="margin-bottom:4px;">Devoluciones y cambios</div>
@@ -9477,6 +9633,90 @@ function customerInitials(name){
   const w=(name||'?').trim().split(/\s+/).filter(Boolean);
   return ((w[0]||'?')[0] + (w.length>1?w[1][0]:'')).toUpperCase();
 }
+
+/* ============== FUSIONAR CLIENTES DUPLICADOS ==============
+   Detecta clientes que parecen la misma persona (mismo teléfono en distinto formato, mismo correo
+   o mismo nombre) y los junta en un solo perfil. El perfil principal conserva sus datos, completa lo
+   que le falte con el otro, suma etiquetas y notas, y recuerda los teléfonos y perfiles fusionados
+   (altPhones / mergedIds) para que el historial de compras de todos siga contando. */
+function custKeyPhone(p){ const d = normalizePhone(p||''); return d.length>=8 ? d.slice(-10) : ''; }
+function computeCustomerDupGroups(){
+  const list = computeCustomersList();
+  const parent = list.map((_,i)=>i);
+  const find = x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const uni = (a,b)=>{ a=find(a); b=find(b); if(a!==b) parent[b]=a; };
+  const seen = {};
+  const mark = (k,i)=>{ if(!k) return; if(seen[k]!==undefined) uni(seen[k], i); else seen[k]=i; };
+  list.forEach((c,i)=>{
+    { const pk = custKeyPhone(c.phone); if(pk) mark('p:'+pk, i); }
+    if(c.email) mark('e:'+String(c.email).trim().toLowerCase(), i);
+    const nm = searchClean(c.name||''); if(nm.length>=5 && nm.split(' ').length>=2) mark('n:'+nm, i);
+  });
+  const groups = {};
+  list.forEach((c,i)=>{ const r = find(i); (groups[r]=groups[r]||[]).push(c); });
+  return Object.values(groups).filter(g=>g.length>1).map(g=>g.sort((a,b)=>(b.isManual-a.isManual)||(b.totalSpent-a.totalSpent)));
+}
+function openCustDupes(){ state.customerToolsOpen=false; state.custDupePrimary={}; state.custDupesOpen=true; render(); }
+function renderCustDupesModal(){
+  const groups = computeCustomerDupGroups();
+  return `
+  <div class="modal-overlay" style="z-index:72;">
+    <div class="modal" style="max-width:600px;max-height:85vh;overflow-y:auto;">
+      <h3>Clientes duplicados</h3>
+      <div class="panel-sub" style="margin:-8px 0 12px;">Parecen la misma persona (mismo teléfono, correo o nombre). Elige cuál queda como principal y fusiona; el historial de compras se suma.</div>
+      ${groups.length===0 ? `<div class="empty-state">No encontré clientes duplicados 🎉</div>` : groups.map((g,gi)=>{
+        const sel = state.custDupePrimary[gi]!==undefined ? state.custDupePrimary[gi] : 0;
+        return `<div class="panel" style="margin-bottom:10px;">
+          ${g.map((c,ci)=>`<label class="checkbox-row" style="align-items:flex-start;margin-bottom:6px;"><input type="radio" name="dupg${gi}" ${sel===ci?'checked':''} onchange="state.custDupePrimary[${gi}]=${ci};render()"><span><strong>${escDescHtml(c.name)}</strong>${c.isManual?'':' <span class="cust-auto">automático</span>'}<br><span class="row-sub">${escDescHtml(c.phone||'sin teléfono')}${c.email?' · '+escDescHtml(c.email):''} · ${c.purchaseCount} compra(s) · ${money(c.totalSpent)}</span></span></label>`).join('')}
+          <button class="btn-primary" style="width:100%;margin-top:6px;" onclick="mergeCustomerGroup(${gi})">Fusionar en "${escDescHtml(g[sel].name)}"</button>
+        </div>`; }).join('')}
+      <div class="modal-actions"><button class="btn-cancel" onclick="state.custDupesOpen=false;render()">Cerrar</button></div>
+    </div>
+  </div>`;
+}
+async function mergeCustomerGroup(gi){
+  const groups = computeCustomerDupGroups(); const g = groups[gi]; if(!g) return;
+  const sel = state.custDupePrimary[gi]!==undefined ? state.custDupePrimary[gi] : 0;
+  const primary = g[sel]; const others = g.filter((_,i)=>i!==sel);
+  if(!primary.phone && !primary.isManual){ showToast('El principal necesita un teléfono'); return; }
+  if(!confirm(`¿Fusionar ${others.length} cliente(s) en "${primary.name}"? Los perfiles duplicados se eliminan (puedes deshacerlo justo después).`)) return;
+  try{
+    const profOf = c=> c.manualId ? state.customers.find(x=>x.id===c.manualId) : null;
+    let pProf = profOf(primary);
+    const backups = [];
+    if(!pProf){
+      const base = {name:primary.name, phone:primary.phone||'', email:primary.email||'', address:primary.address||'', city:primary.city||'', state:primary.state||'', country:primary.country||'', notes:primary.notes||'', tags:primary.tags||[], notesLog:[], createdAt:new Date().toISOString()};
+      const ref = await db.collection('customers').add(base); pProf = {id:ref.id, ...base}; state.customers.push(pProf);
+      backups.push({created:ref.id});
+    }
+    const before = JSON.parse(JSON.stringify(pProf)); delete before.id;
+    const altPhones = new Set(pProf.altPhones||[]), mergedIds = new Set(pProf.mergedIds||[]);
+    const tags = new Set(pProf.tags||[]); const notesLog = [...(pProf.notesLog||[])];
+    const fill = {};
+    others.forEach(c=>{
+      const prof = profOf(c);
+      [c.phone, ...(prof&&prof.altPhones||[])].forEach(ph=>{ const d = normalizePhone(ph||''); if(d && d!==normalizePhone(pProf.phone||'')) altPhones.add(d); });
+      if(prof){ mergedIds.add(prof.id); (prof.mergedIds||[]).forEach(x=>mergedIds.add(x)); (prof.notesLog||[]).forEach(n=>notesLog.push(n)); }
+      (c.tags||[]).forEach(t=>tags.add(t));
+      ['email','address','city','state','country'].forEach(k=>{ if(!pProf[k] && !fill[k] && c[k]) fill[k]=c[k]; });
+      if(c.notes && !String(pProf.notes||'').includes(c.notes)) fill.notes = (fill.notes||pProf.notes||'') + ((fill.notes||pProf.notes)?'\n':'') + c.notes;
+    });
+    const upd = {...fill, tags:[...tags], notesLog, altPhones:[...altPhones], mergedIds:[...mergedIds]};
+    await db.collection('customers').doc(pProf.id).set(upd, {merge:true});
+    Object.assign(pProf, upd);
+    for(const c of others){ const prof = profOf(c); if(prof){ const b = {...prof}; delete b.id; backups.push({id:prof.id, data:b}); await db.collection('customers').doc(prof.id).delete(); state.customers = state.customers.filter(x=>x.id!==prof.id); } }
+    logAdminAction('clientes_fusionados','cliente',primary.name,`${others.length} fusionado(s)`);
+    render();
+    showUndo(`${others.length} cliente(s) fusionado(s) en ${primary.name}`, async()=>{
+      for(const b of backups){ if(b.id) { await db.collection('customers').doc(b.id).set(b.data); state.customers.push({id:b.id, ...b.data}); } }
+      await db.collection('customers').doc(pProf.id).set(before);
+      Object.keys(pProf).forEach(k=>{ if(k!=='id') delete pProf[k]; }); Object.assign(pProf, before);
+      if(backups.find(b=>b.created)){ await db.collection('customers').doc(pProf.id).delete(); state.customers = state.customers.filter(x=>x.id!==pProf.id); }
+      showToast('Fusión deshecha'); render();
+    }, 12000);
+  }catch(e){ console.error(e); showToast('No se pudo fusionar'); }
+}
+
 function renderClientes(){
   const list = filteredCustomers();
   const f = state.customerFilters;
@@ -9501,6 +9741,7 @@ function renderClientes(){
           <div class="row-more-menu tools-menu" onclick="event.stopPropagation()">
             <div class="tools-menu-label">Datos</div>
             <button onclick="state.customerToolsOpen=false;state.customerImportOpen=true;render()">${icon('download',15)} Importar clientes (CSV)</button>
+            <button onclick="openCustDupes()">${icon('users',15)} Buscar clientes duplicados</button>
             <button onclick="state.customerToolsOpen=false;exportCustomersCSV()">${icon('copy',15)} Exportar lista actual (CSV)</button>
           </div>` : ''}
         </div>
@@ -13745,7 +13986,7 @@ window.addEventListener('popstate', (e)=>{
 });
 
 const NAV_ADMIN_MODALS = [
-  ['returnModal', ()=>closeReturnModal()],
+  ['returnModal', ()=>closeReturnModal()], ['cancelModal', null], ['orderEditModal', null], ['custDupesOpen', false],
   ['postModalProductId', ()=>closePostModal()], ['notifyModalProductId', null], ['massPriceModalOpen', ()=>closeMassPriceModal()],
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],
