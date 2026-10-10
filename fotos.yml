@@ -1,0 +1,62 @@
+name: Fotos de productos a archivos webp
+# Convierte las fotos base64 guardadas en Firestore en archivos .webp de este repositorio.
+# Manual: Actions → "Fotos de productos a archivos webp" → Run workflow (primero con DRY_RUN=1).
+# Automático: cada hora convierte solo las fotos nuevas que se hayan subido desde el panel.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+      limit:
+        description: 'Máximo de productos en esta corrida (vacío = todos)'
+        default: '10'
+        required: false
+      only_ids:
+        description: 'Solo estos productos (ids separados por coma, opcional)'
+        default: ''
+        required: false
+      clean_orphans:
+        description: '1 = borrar archivos que ya ningún producto usa (solo corrida completa)'
+        default: '0'
+        required: false
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: fotos
+  cancel-in-progress: false
+jobs:
+  fotos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --prefix tools/fotos --no-audit --no-fund
+      - name: Convertir
+        run: node tools/fotos/migrar.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Corrida automática (cada hora): solo convierte fotos nuevas. Si hay más de 20 productos
+          # pendientes (la migración inicial aún no se hace) solo reporta. Manual: lo que se elija.
+          AUTO: ${{ github.event_name == 'schedule' && '1' || '0' }}
+          DRY_RUN: ${{ github.event_name == 'schedule' && '0' || inputs.dry_run }}
+          LIMIT: ${{ github.event_name == 'schedule' && '' || inputs.limit }}
+          ONLY_IDS: ${{ inputs.only_ids }}
+          CLEAN_ORPHANS: ${{ inputs.clean_orphans }}
+          BACKUP_DIR: ${{ runner.temp }}/respaldo-fotos
+      - name: Guardar respaldo de las fotos originales
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-fotos-${{ github.run_id }}
+          path: ${{ runner.temp }}/respaldo-fotos
+          if-no-files-found: ignore
+          retention-days: 90
