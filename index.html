@@ -316,6 +316,20 @@
      cortado fuera de la pantalla. Ahora van en su propia fila, siempre con su propio espacio. */
   .cart-item-bottom-row{display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:4px;}
   .cart-item-subtotal{font-size:13px;font-weight:800;color:var(--primary-deep);}
+  .ck-err{color:#A3263F;font-size:12.5px;font-weight:600;margin-top:5px;}
+  .form-field [aria-invalid="true"]{border-color:#A3263F;box-shadow:0 0 0 3px rgba(163,38,63,.12);}
+  .ck-save-note{font-size:12px;line-height:1.45;color:var(--ink-soft);margin:-4px 0 12px;}
+  .ck-summary{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:0 0 14px;background:#fff;}
+  .ck-summary summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--primary-deep);display:flex;justify-content:space-between;align-items:center;list-style:none;min-height:28px;}
+  .ck-summary summary::-webkit-details-marker{display:none;}
+  .ck-summary summary span{font-weight:600;color:var(--primary);text-decoration:underline;text-underline-offset:3px;}
+  .ck-summary[open] summary span{visibility:hidden;}
+  .ck-summary ul{list-style:none;margin:8px 0 0;padding:0;}
+  .ck-summary li{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid var(--border);}
+  .ck-summary li span{min-width:0;overflow-wrap:anywhere;}
+  .cart-stock-note{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:4px;}
+  .qty-btn:disabled{opacity:.35;cursor:not-allowed;}
+  button.remove-link{background:none;border:0;cursor:pointer;font-family:inherit;min-height:44px;}
   .remove-link{font-size:11.5px;color:var(--rose);font-weight:600;padding:8px 0 8px 10px;flex-shrink:0;}
   .drawer-foot{position:relative;z-index:5;background:var(--surface);padding:14px 20px calc(18px + env(safe-area-inset-bottom));border-top:1px solid var(--border);box-shadow:0 -8px 18px -14px rgba(0,0,0,.25);}
   .total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:800;margin-bottom:12px;color:var(--primary-deep);}
@@ -862,7 +876,7 @@ async function loadSavedCartProducts(){
       if(data.hidden || data.deletedAt) return;
       if(!state.products.some(p=>p.id===d.id)){ state.products.push({id:d.id, ...data}); added++; }
     });
-    if(added) render();
+    if(added){ clampCartToStock(); render(); }
   }catch(e){ console.error('No se pudieron traer los productos del carrito', e); }
 }
 // Cuando ya está el catálogo completo, lo que siga en el carrito sin existir (se ocultó o se
@@ -882,6 +896,7 @@ async function loadFullCatalogWithRetry(attempt){
     state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
     state.catalogIncomplete = false; state.fullCatalogLoaded = true;
     pruneUnavailableCartItems();
+    clampCartToStock();
     render();
   }catch(e){
     console.error(`No se pudo completar el catálogo en segundo plano (intento ${attempt})`, e);
@@ -953,6 +968,19 @@ function trackEvent(type, extra){
    verlo en Pedidos → "Carritos abandonados" y escribirle por WhatsApp. Todo silencioso: nunca debe
    interrumpir el checkout si falla. */
 let abandonedCartTimer = null;
+// El borrador se guarda con un identificador al azar de este celular, no con el teléfono: así nadie
+// puede sobrescribir ni borrar el carrito de otra persona sabiendo su número.
+const ABANDONED_ID_KEY = 'cdlp_abandoned_id';
+function abandonedCartId(){
+  let id = null;
+  try{ id = localStorage.getItem(ABANDONED_ID_KEY); }catch(e){}
+  if(!id || !/^ac_[a-z0-9]{16,}$/.test(id)){
+    const a = new Uint8Array(12); crypto.getRandomValues(a);
+    id = 'ac_' + [...a].map(b=>b.toString(36).padStart(2,'0')).join('').slice(0,20);
+    try{ localStorage.setItem(ABANDONED_ID_KEY, id); }catch(e){}
+  }
+  return id;
+}
 function scheduleAbandonedCartSave(){
   clearTimeout(abandonedCartTimer);
   abandonedCartTimer = setTimeout(saveAbandonedCartDraft, 1500);
@@ -973,7 +1001,7 @@ function saveAbandonedCartDraft(){
       return {id:p.id, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
     }).filter(Boolean);
     if(!items.length) return;
-    db.collection('abandonedCarts').doc(phoneDigits).set({
+    db.collection('abandonedCarts').doc(abandonedCartId()).set({
       name, phone, address, notes, items, total: cartTotal(),
       updatedAt: new Date().toISOString(), completed:false
     });
@@ -981,8 +1009,12 @@ function saveAbandonedCartDraft(){
 }
 function clearAbandonedCartDraft(phone){
   try{
+    const id = (()=>{ try{ return localStorage.getItem(ABANDONED_ID_KEY); }catch(e){ return null; } })();
+    if(id) db.collection('abandonedCarts').doc(id).delete().catch(()=>{});
+    // borradores viejos (antes se guardaban con el teléfono como identificador)
     const phoneDigits = (phone||'').replace(/\D/g,'');
-    if(phoneDigits) db.collection('abandonedCarts').doc(phoneDigits).delete();
+    if(phoneDigits) db.collection('abandonedCarts').doc(phoneDigits).delete().catch(()=>{});
+    try{ localStorage.removeItem(ABANDONED_ID_KEY); }catch(e){}
   }catch(e){ /* silencioso */ }
 }
 
@@ -1139,7 +1171,7 @@ function finalPrice(p){
   const base = effectivePrice(p);
   if(tier && isEligibleForTier(p, tier)){
     const progress = wholesaleCartProgress(tier);
-    if(progress.unlocked) return Math.round(p.price*(1-tier.discountPercent/100)*100)/100;
+    if(progress.unlocked) return Math.min(base, Math.round(p.price*(1-tier.discountPercent/100)*100)/100);
   }
   return base;
 }
@@ -1400,7 +1432,7 @@ function renderCheckoutReminderDrawer(){
           <button class="reminder-add" onclick="addReminderProductToCart('${p.id}'${p._fv?`,'${p._fv}'`:''})">+ Agregar</button>
         </div>`).join('')}
     </div>
-    <div class="drawer-foot"><button class="btn-neutral" style="margin-top:0;" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button></div>
+    <div class="drawer-foot"><button class="btn-neutral" style="margin-top:0;" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button><button class="btn-link" onclick="state.checkoutReminderOpen=false;render()">Volver al carrito</button></div>
   `;
 }
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
@@ -1445,6 +1477,9 @@ function applyThemeVars(){
 function toastStack(){
   let s=document.getElementById('toast-stack');
   if(!s){ s=document.createElement('div'); s.id='toast-stack'; s.className='toast-stack'; s.setAttribute('role','status'); s.setAttribute('aria-live','polite'); document.body.appendChild(s); }
+  // QA-22: con un cajón abierto, los avisos suben por encima de su pie para no tapar el botón principal.
+  const foot = document.querySelector('.drawer.open .drawer-foot');
+  s.style.bottom = foot ? (Math.round(foot.getBoundingClientRect().height) + 12) + 'px' : '';
   return s;
 }
 function showToast(msg){
@@ -1501,7 +1536,31 @@ function addToCart(id, variantId){
   if(available<=0 || available<=(state.cart[key]||0)){ showToast('Sin existencias'); return; }
   state.cart[key]=(state.cart[key]||0)+1; saveCart(); showToast('Agregado al carrito'); trackEvent('add_to_cart', {productId:id}); render();
 }
-function changeQty(key,delta){ const cur=state.cart[key]||0; const next=cur+delta; if(next<=0) delete state.cart[key]; else state.cart[key]=next; saveCart(); render(); }
+// QA-07: el "+" del carrito ya no deja pasar de las piezas disponibles.
+function changeQty(key,delta){
+  const cur=state.cart[key]||0; let next=cur+delta;
+  if(delta>0){
+    const {p,v} = parseCartKey(key);
+    if(p){
+      const max = itemStock(p, v);
+      if(next>max){ showToast(max>0 ? (max===1 ? 'Solo queda 1 pieza' : `Solo quedan ${max} piezas`) : 'Sin existencias'); if(cur<=max) return; next = Math.max(0, max); }
+    }
+  }
+  if(next<=0) delete state.cart[key]; else state.cart[key]=next; saveCart(); render();
+}
+// Al recargar o al terminar de bajar el catálogo, el carrito guardado se ajusta a las piezas que
+// hay hoy: lo agotado se quita y lo que pasa del stock se recorta, con un solo aviso.
+function clampCartToStock(){
+  let changed = 0;
+  Object.entries(state.cart).forEach(([key,qty])=>{
+    const {p,v} = parseCartKey(key); if(!p) return;
+    const max = itemStock(p, v);
+    if(max<=0){ delete state.cart[key]; changed++; }
+    else if(qty>max){ state.cart[key]=max; changed++; }
+  });
+  if(changed){ saveCart(); showToast('Ajustamos tu carrito a las piezas disponibles'); }
+  return changed;
+}
 function removeFromCart(key){ delete state.cart[key]; saveCart(); render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
@@ -1662,7 +1721,12 @@ async function submitOrder(formData){
       saveCart(); state.submittingOrder=false; state.checkoutOpen=!!Object.keys(state.cart).length; state.cartOpen=!state.checkoutOpen&&!!Object.keys(state.cart).length;
       showToast(`Se agotaron piezas de: ${adjusted.slice(0,2).join(', ')}${adjusted.length>2?'…':''}. Revisamos tu carrito, confirma de nuevo.`); render(); return;
     }
-  }catch(e){ console.error('No se pudo verificar existencias', e); }
+  }catch(e){
+    console.error('No se pudo verificar existencias', e);
+    state.submittingOrder=false; render();
+    showToast('No pudimos confirmar las existencias por la conexión. Intenta de nuevo.');
+    return;
+  }
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
     let price = variantUnitPrice(p, v);
@@ -1696,14 +1760,17 @@ async function submitOrder(formData){
   if(couponCode){
     try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString(), phone: (formData.phone||'').replace(/\D/g,'')}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
   }
-  state.cart = {}; saveCart(); state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; render();
-
-  // Mensaje de confirmación de compra: se abre solo, listo para que el cliente lo mande por
-  // WhatsApp al número de la tienda (state.settings.whatsapp, configurable en Configuración).
+  // Mensaje de confirmación de compra, listo para que la clienta lo mande por WhatsApp al número
+  // de la tienda. Lleva folio y nombre para ubicar el pedido (QA-08). Se guarda para el botón de la
+  // pantalla de éxito: algunos navegadores (Safari en iPhone, el de Instagram) bloquean la ventana
+  // que se abre sola después de esperar al servidor, y sin ese botón no había cómo enviarlo.
   const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
-  const msg = `Hola, me gustaria confirmar mi compra:\nProducto: \n${productLines}\nDirección: ${formData.address}\nTotal: ${money(order.total)} (el total no incluye el costo del envío)\n\n¡Gracias!`;
+  const folioTxt = orderNumber ? ` ${formatFolio(orderNumber)}` : '';
+  const msg = `Hola, soy ${formData.name}. Quiero confirmar mi pedido${folioTxt}:\n${productLines}\nDirección: ${formData.address}\nTotal: ${money(order.total)} (el total no incluye el costo del envío)\n\n¡Gracias!`;
+  state.lastOrderWaMsg = state.settings.whatsapp ? msg : '';
+  state.cart = {}; saveCart(); state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; state.ckErrors={}; state.ckDraft=null; render();
   if(state.settings.whatsapp){
-    window.open(waLink(msg), '_blank');
+    try{ window.open(waLink(msg), '_blank'); }catch(e){}
   }
   // Aviso interno a Slack (en paralelo, no en lugar del de WhatsApp) — ver Configuración → Datos operativos.
   sendSlackNotification(`🛒 *Nuevo pedido* ${orderNumber?`#${orderNumber}`:''}\nCliente: ${formData.name} (${formData.phone})\nProducto:\n${productLines}\nDirección: ${formData.address}\nTotal: ${money(order.total)} (no incluye envío)`);
@@ -1720,11 +1787,24 @@ function handleCheckoutSubmit(){
   const address = document.getElementById('ck-address').value.trim();
   const notes = document.getElementById('ck-notes').value.trim();
   const remember = document.getElementById('ck-remember').checked;
-  if(!name || !phone || !address){ showToast('Completa nombre, teléfono y dirección'); return; }
-  if(phone.replace(/\D/g,'').length < 10){ showToast('Escribe tu WhatsApp con 10 dígitos para poder contactarte'); return; }
+  // QA-16: cada error se muestra bajo su campo y se queda hasta corregirlo; el foco va al primero.
+  const errs = {};
+  if(!name) errs.name = 'Escribe tu nombre.';
+  const phoneDigits = phone.replace(/\D/g,'');
+  if(!phone) errs.phone = 'Escribe tu WhatsApp para poder contactarte.';
+  else if(phoneDigits.length < 10) errs.phone = 'Tu WhatsApp debe tener 10 dígitos.';
+  if(!address) errs.address = 'Escribe la dirección de entrega.';
   if(needsTermsAcceptance()){
     const termsEl = document.getElementById('ck-terms');
-    if(!termsEl || !termsEl.checked){ showToast('Debes aceptar el aviso de privacidad para continuar'); return; }
+    if(!termsEl || !termsEl.checked) errs.terms = 'Acepta el aviso de privacidad para continuar.';
+  }
+  state.ckErrors = errs;
+  if(Object.keys(errs).length){
+    const first = ['name','phone','address','terms'].find(k=>errs[k]);
+    render();
+    const el = document.getElementById(first==='terms' ? 'ck-terms' : 'ck-'+first);
+    if(el){ try{ el.focus(); el.scrollIntoView({block:'center'}); }catch(e){} }
+    return;
   }
   if(needsTermsAcceptance()) markTermsAccepted();
   if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
@@ -3397,25 +3477,26 @@ function renderCartDrawer(){
   const buyXPayYSavings = buyXPayYAdjustment();
   const gift = activeGift();
   return `
-    <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" onclick="closeCartDrawer()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" aria-label="Cerrar carrito" onclick="closeCartDrawer()">${icon('x')}</button></div>
     <div class="drawer-body">
       ${tier ? renderWholesaleBanner(tier) : ''}
       ${entries.length===0 ? `<div class="empty-state" style="padding:30px 20px 6px;">Tu carrito está vacío.</div>${isKioskMode() ? '' : `<div class="rel-block"><h3 class="rel-title">Lo más vendido</h3><div class="rel-grid">${popularProducts(4).map(x=>renderMiniCard(x,{close:'cartOpen'})).join('')}</div></div>`}` :
-        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return state.fullCatalogLoaded ? '' : `<div class="cart-item cart-item-loading"><div class="cart-item-swatch"></div><div class="cart-item-info"><div class="cart-item-name">Cargando producto…</div><div class="cart-item-price">${qty} pza</div></div></div>`; const basePrice = v && v.priceOverride>0 ? v.priceOverride : automaticDiscountedPrice(p); const price = couponDiscountedPrice(p, basePrice); return `
+        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return state.fullCatalogLoaded ? '' : `<div class="cart-item cart-item-loading"><div class="cart-item-swatch"></div><div class="cart-item-info"><div class="cart-item-name">Cargando producto…</div><div class="cart-item-price">${qty} pza</div></div></div>`; const basePrice = variantUnitPrice(p, v); const price = couponDiscountedPrice(p, basePrice); const maxQ = itemStock(p, v); const atMax = qty>=maxQ; const nm = escHtml(p.name + (v?` (${variantLabel(v)})`:'')); return `
           <div class="cart-item">
-            ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${vImage(p,v)||p.images[0]}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
+            ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${vImage(p,v)||p.images[0]}" alt="">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="cart-item-info">
               <div class="cart-item-name">${p.name}${v?` <span style="color:var(--ink-soft);font-weight:600;">(${variantLabel(v)})</span>`:''}</div>
               <div class="cart-item-price">${price<basePrice?`<s style="color:var(--ink-soft);">${money(basePrice)}</s> `:''}${money(price)} c/u</div>
               <div class="qty-row">
-                <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
-                <div class="qty-val">${qty}</div>
-                <button class="qty-btn" onclick="changeQty('${key}',1)">+</button>
+                <button class="qty-btn" aria-label="Quitar una pieza de ${nm}" onclick="changeQty('${key}',-1)">−</button>
+                <div class="qty-val" aria-label="Cantidad">${qty}</div>
+                <button class="qty-btn" aria-label="Agregar una pieza de ${nm}" ${atMax?'disabled':''} onclick="changeQty('${key}',1)">+</button>
                 <div class="cart-item-bottom-row">
                   <span class="cart-item-subtotal">${money(price*qty)}</span>
-                  <a class="remove-link" onclick="removeFromCart('${key}')">Quitar</a>
+                  <button type="button" class="remove-link" aria-label="Quitar ${nm} del carrito" onclick="removeFromCart('${key}')">Quitar</button>
                 </div>
               </div>
+              ${atMax && maxQ<=5 ? `<div class="cart-stock-note">${maxQ===1?'Solo queda 1 pieza':`Solo quedan ${maxQ} piezas`}</div>` : ''}
             </div>
           </div>`;}).join('')}
       ${buyXPayYSavings>0 ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Promoción aplicada: ahorras ${money(buyXPayYSavings)}</div>` : ''}
@@ -3468,30 +3549,53 @@ function renderCartDrawer(){
     </div>`;
 }
 
+function ckErr(k){ return (state.ckErrors||{})[k] || ''; }
+function ckErrHtml(k){ const m = ckErr(k); return m ? `<div class="ck-err" id="ck-${k}-err" role="alert">${m}</div>` : ''; }
+function ckDraft(){ if(!state.ckDraft){ const p = loadCustomerProfile() || {}; state.ckDraft = {name:p.name||'', phone:p.phone||'', address:p.address||'', notes:p.notes||'', remember:p.remember!==false, terms:false}; } return state.ckDraft; }
+function ckFieldInput(k){
+  const f0 = document.getElementById('ck-'+k);
+  if(f0) ckDraft()[k] = (f0.type==='checkbox') ? f0.checked : f0.value;
+  if(k!=='terms' && k!=='remember') scheduleAbandonedCartSave();
+  if(ckErr(k)){
+    delete state.ckErrors[k];
+    const el = document.getElementById('ck-'+k+'-err'); if(el) el.remove();
+    const f = document.getElementById('ck-'+k); if(f){ f.removeAttribute('aria-invalid'); f.removeAttribute('aria-describedby'); }
+  }
+}
+// QA-21: qué se está comprando, a la vista en el último paso (plegable para no alargar el formulario).
+function renderCheckoutSummary(){
+  const lines = Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return p ? {name: p.name + (v?` (${variantLabel(v)})`:''), qty, price: couponDiscountedPrice(p, variantUnitPrice(p, v))} : null; }).filter(Boolean);
+  if(!lines.length) return '';
+  const count = lines.reduce((a,l)=>a+l.qty,0);
+  return `<details class="ck-summary"><summary>${count} artículo${count===1?'':'s'} en tu pedido <span>Ver</span></summary>
+    <ul>${lines.map(l=>`<li><span>${l.qty} × ${escHtml(l.name)}</span><b>${money(l.price*l.qty)}</b></li>`).join('')}</ul></details>`;
+}
 function renderCheckoutDrawer(){
-  const p = loadCustomerProfile() || {};
+  const p = ckDraft();
   return `
-    <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" onclick="state.checkoutOpen=false;render()">${icon('x')}</button></div>
+    <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" aria-label="Cerrar" onclick="state.checkoutOpen=false;render()">${icon('x')}</button></div>
     <div class="drawer-body">
       <div class="ck-pills">
         <div class="ck-pill"><span class="ic">${icon('banknote',16)}</span><span><b>Pago contra entrega.</b> Empaque neutro, sin ningún logo visible.</span></div>
         ${state.settings.shippingNote ? `<div class="ck-pill"><span class="ic">${icon('truck',16)}</span><span>${state.settings.shippingNote}</span></div>` : ''}
         <div class="ck-pill"><span class="ic">${icon('credit-card',16)}</span><span>Tarjeta o transferencia: lo coordinamos por WhatsApp.</span></div>
       </div>
-      <div class="form-field"><label>Nombre completo</label><input id="ck-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="ck-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="scheduleAbandonedCartSave()"></div>
-      <div class="form-field"><label>Dirección de entrega</label><textarea id="ck-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="scheduleAbandonedCartSave()">${p.address||''}</textarea></div>
-      <div class="form-field"><label>Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="scheduleAbandonedCartSave()">${p.notes||''}</textarea></div>
+      ${renderCheckoutSummary()}
+      <div class="form-field"><label for="ck-name">Nombre completo</label><input id="ck-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${escHtml(p.name||'')}" oninput="ckFieldInput('name')" ${ckErr('name')?'aria-invalid="true" aria-describedby="ck-name-err"':''}>${ckErrHtml('name')}</div>
+      <div class="form-field"><label for="ck-phone">WhatsApp / Teléfono</label><input id="ck-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${escHtml(p.phone||'')}" oninput="ckFieldInput('phone')" ${ckErr('phone')?'aria-invalid="true" aria-describedby="ck-phone-err"':''}>${ckErrHtml('phone')}</div>
+      <div class="form-field"><label for="ck-address">Dirección de entrega</label><textarea id="ck-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="ckFieldInput('address')" ${ckErr('address')?'aria-invalid="true" aria-describedby="ck-address-err"':''}>${escHtml(p.address||'')}</textarea>${ckErrHtml('address')}</div>
+      <div class="form-field"><label for="ck-notes">Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="ckFieldInput('notes')">${escHtml(p.notes||'')}</textarea></div>
+      <p class="ck-save-note">Guardamos estos datos en nuestro sistema para ayudarte a terminar tu pedido si se interrumpe. Solo los usamos para contactarte sobre esta compra.</p>
       <div class="ck-hp" aria-hidden="true"><label>Sitio web de tu empresa (déjalo vacío)<input id="ck-company-site" type="text" name="company_site" tabindex="-1" autocomplete="off"></label></div>
       <label class="ck-check" style="color:var(--ink-soft);margin-top:-2px;">
-        <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''}>
+        <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''} onchange="ckFieldInput('remember')">
         <span>Recordar mis datos en este celular para la próxima compra</span>
       </label>
       ${needsTermsAcceptance() ? `
       <label class="ck-check">
-        <input id="ck-terms" type="checkbox" required>
+        <input id="ck-terms" type="checkbox" required ${p.terms?'checked':''} onchange="ckFieldInput('terms')" ${ckErr('terms')?'aria-invalid="true" aria-describedby="ck-terms-err"':''}>
         <span>Acepto las políticas de envío discreto y privacidad. <a onclick="event.preventDefault();event.stopPropagation();state.privacyPolicyOpen=true;render()" href="#" style="color:var(--primary);font-weight:700;">Ver aviso completo</a></span>
-      </label>` : ''}
+      </label>${ckErrHtml('terms')}` : ''}
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
@@ -3505,8 +3609,10 @@ function renderSuccess(){
     <div class="mark">${icon('check',26)}</div>
     <h2>¡Pedido recibido!</h2>
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin-bottom:4px;">Pedido ${formatFolio(state.lastOrderNumber)}</div>` : ''}
-    <p>Te contactaremos por WhatsApp para confirmar tu pedido y coordinar la entrega. Pago contra entrega, empaque discreto.</p>
-    <button class="btn-primary" style="width:auto;display:inline-block;padding:13px 22px;" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>
+    ${state.lastOrderWaMsg ? `<p>Último paso: envíanos tu confirmación por WhatsApp para coordinar la entrega. Pago contra entrega, empaque discreto.</p>
+    <a class="btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:10px;" href="${waLink(state.lastOrderWaMsg)}" target="_blank" rel="noopener">${icon('whatsapp',18)} Enviar confirmación por WhatsApp</a>
+    <button class="btn-link" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>` : `<p>Te contactaremos por WhatsApp para confirmar tu pedido y coordinar la entrega. Pago contra entrega, empaque discreto.</p>
+    <button class="btn-primary" style="width:auto;display:inline-block;padding:13px 22px;" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>`}
   </div></div>`;
 }
 
@@ -3787,7 +3893,7 @@ function navLayers(){
   if(s.wishlistOpen) L.push(()=>{ s.wishlistOpen=false; render(); });
   if(s.messageDrawerOpen) L.push(()=>closeMessageDrawer());
   if(s.profileOpen) L.push(()=>closeProfile());
-  if(s.checkoutOpen) L.push(()=>{ s.checkoutOpen=false; render(); });
+  if(s.checkoutOpen) L.push(()=>{ s.checkoutOpen=false; if(Object.keys(s.cart).length) s.cartOpen=true; render(); });
   if(s.cartOpen) L.push(()=>{ s.cartOpen=false; render(); });
   if(s.detailProductId) L.push(()=>{ s.detailProductId=null; render(); });
   if(s.orderPlaced) L.push(()=>{ s.orderPlaced=false; render(); });
