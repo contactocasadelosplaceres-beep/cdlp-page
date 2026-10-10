@@ -1952,6 +1952,7 @@ function openProfile(){
 }
 function closeProfile(){ state.profileOpen = false; state.profileDraft = null; render(); }
 function handleSaveProfile(){
+  state.ckDraft = null; // el checkout toma los datos recién guardados
   const name = (state.profileDraft.name||'').trim();
   const phone = (state.profileDraft.phone||'').trim();
   const address = (state.profileDraft.address||'').trim();
@@ -1961,6 +1962,7 @@ function handleSaveProfile(){
   closeProfile();
 }
 function handleForgetProfile(){
+  state.ckDraft = null;
   clearCustomerProfile();
   state.profileDraft = {};
   showToast('Se borraron tus datos guardados');
