@@ -1,0 +1,24 @@
+name: Asignar accesos (custom claims)
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte · 0 = aplicar'
+        default: '1'
+        required: true
+permissions:
+  contents: read
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: tools/claims }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --prefix tools/claims --no-audit --no-fund
+      - run: node tools/claims/setClaims.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
