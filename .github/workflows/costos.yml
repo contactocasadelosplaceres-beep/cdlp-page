@@ -1,0 +1,45 @@
+name: Costos a colección privada
+# Mueve costo, historial de costo y proveedor de "products" (público) a "productCosts" (solo personal).
+# Solo se lanza a mano: Actions → "Costos a colección privada" → Run workflow (primero con DRY_RUN=1).
+# Antes de aplicar: publicar las reglas nuevas de Firestore.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+      limit:
+        description: 'Máximo de productos en esta corrida (0 = todos)'
+        default: '0'
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: costos
+  cancel-in-progress: false
+jobs:
+  costos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, sparse-checkout: tools/costos }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --prefix tools/costos --no-audit --no-fund
+      - name: Mover costos
+        run: node tools/costos/migrar.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          LIMIT: ${{ inputs.limit }}
+          BACKUP_DIR: ${{ runner.temp }}/respaldo-costos
+      - name: Guardar respaldo de los costos movidos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-costos-${{ github.run_id }}
+          path: ${{ runner.temp }}/respaldo-costos
+          if-no-files-found: ignore
+          retention-days: 90

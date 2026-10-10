@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-costos",
+  "private": true,
+  "description": "Mueve costo, historial de costo y proveedor de products a productCosts (solo personal)",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}

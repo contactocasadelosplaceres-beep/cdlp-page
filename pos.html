@@ -318,6 +318,124 @@ firebase.initializeApp(firebaseConfig);
     });
   }catch(e){ console.warn('Blindaje de texto no disponible', e); }
 })();
+/* ============== COSTOS PRIVADOS (QA-03) ==============
+   El costo de compra, su historial y el proveedor ya no viven en "products" (que cualquiera puede leer
+   porque la tienda la necesita), sino en "productCosts", que solo lee y escribe el personal.
+   Para no tocar las decenas de lugares del panel/POS que usan p.cost, aquí se hace en un solo punto:
+   - al LEER un producto, se le pegan sus datos privados (si el personal tiene permiso);
+   - al GUARDAR un producto, lo privado se separa solo y se escribe en productCosts, en la misma
+     operación, y se borra de products.
+   Solo separa si la lectura de productCosts funcionó (o sea, ya están publicadas las reglas nuevas);
+   si no, todo sigue como antes. */
+(function(){
+  const PRIV_KEYS = ['cost','costHistory','supplierId'];
+  const PRIV_COL = 'productCosts';
+  const cache = new Map();
+  const S = window.cdlpPrivate = {cache, loaded:false, ok:false, loading:null};
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch || !F.Query) return;
+  const colOf = ref => { try{ return ref && ref.parent && ref.parent.id; }catch(e){ return null; } };
+  const isPlain = o => o && typeof o==='object' && Object.getPrototypeOf(o)===Object.prototype;
+  function marginTier(price, cost){ price=Number(price); cost=Number(cost); if(!(price>0) || !(cost>0)) return null; const m=(price-cost)/price; return m>=0.6?3:m>=0.45?2:m>=0.3?1:0; }
+  function split(data, canDelete){
+    if(!isPlain(data)) return null;
+    const pub = {}, priv = {}; let has = false;
+    for(const k of Object.keys(data)){
+      if(PRIV_KEYS.includes(k)){ priv[k] = data[k]; has = true; if(canDelete) pub[k] = F.FieldValue.delete(); }
+      else if(k==='variants' && Array.isArray(data[k])){
+        const vc = {}; let any = false;
+        pub.variants = data[k].map(v=>{
+          if(isPlain(v) && Object.prototype.hasOwnProperty.call(v,'cost')){ const {cost, ...rest} = v; if(v.id!=null){ vc[v.id] = cost; any = true; } return rest; }
+          return v;
+        });
+        if(any){ priv.variantCosts = vc; has = true; }
+      } else pub[k] = data[k];
+    }
+    if(!has) return null;
+    const t = marginTier(data.price, priv.cost); if(t!==null) pub.mgTier = t;
+    return {pub, priv};
+  }
+  function remember(id, priv){
+    const c = cache.get(id) || {};
+    for(const k of Object.keys(priv)){
+      const val = priv[k];
+      if(k==='variantCosts') c.variantCosts = {...(c.variantCosts||{}), ...val};
+      else if(isPlain(val) || Array.isArray(val) || typeof val!=='object' || val===null) c[k] = val;
+    }
+    cache.set(id, c);
+  }
+  function merge(id, d){
+    const c = cache.get(id); if(!c || !d) return d;
+    for(const k of PRIV_KEYS) if(c[k]!==undefined) d[k] = c[k];
+    if(c.variantCosts && Array.isArray(d.variants)) d.variants = d.variants.map(v=> (v && v.id!=null && c.variantCosts[v.id]!==undefined) ? {...v, cost:c.variantCosts[v.id]} : v);
+    return d;
+  }
+  // ---- lectura ----
+  const qGet = F.Query.prototype.get, dGet = F.DocumentReference.prototype.get;
+  async function ensurePrivate(fs){
+    if(S.loaded) return; if(S.loading) return S.loading;
+    S.loading = (async ()=>{
+      try{
+        const snap = await qGet.call(fs.collection(PRIV_COL));
+        snap.docs.forEach(d=>{ const v = d.data(); if(v) cache.set(d.id, v); });
+        S.ok = true;
+      }catch(e){ S.ok = false; }
+      S.loaded = true;
+    })();
+    return S.loading;
+  }
+  window.cdlpEnsurePrivate = ()=>ensurePrivate(firebase.firestore());
+  F.Query.prototype.get = async function(o){ if(this.id==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return qGet.call(this, o); };
+  F.DocumentReference.prototype.get = async function(o){ if(colOf(this)==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return dGet.call(this, o); };
+  [F.DocumentSnapshot, F.QueryDocumentSnapshot].forEach(C=>{
+    if(!C || !C.prototype || Object.prototype.hasOwnProperty.call(C.prototype,'__cdlpPriv')) return;
+    const orig = C.prototype.data;
+    C.prototype.data = function(o){ const d = orig.call(this, o); try{ if(d && colOf(this.ref)==='products') merge(this.id, d); }catch(e){} return d; };
+    Object.defineProperty(C.prototype,'__cdlpPriv',{value:true});
+  });
+  // ---- escritura ----
+  const B = F.WriteBatch.prototype, bSet = B.set, bUpd = B.update, bDel = B.delete;
+  const DR = F.DocumentReference.prototype, rSet = DR.set, rUpd = DR.update, rDel = DR.delete;
+  const privRef = ref => ref.firestore.collection(PRIV_COL).doc(ref.id);
+  DR.set = function(data, opts){
+    if(S.ok && colOf(this)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bSet.call(b, this, sp.pub, opts||{}); bSet.call(b, privRef(this), sp.priv, {merge:true}); return b.commit(); } }
+    return rSet.call(this, data, opts);
+  };
+  DR.update = function(data, ...rest){
+    if(S.ok && !rest.length && colOf(this)==='products'){ const sp = split(data, true); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bUpd.call(b, this, sp.pub); bSet.call(b, privRef(this), sp.priv, {merge:true}); return b.commit(); } }
+    return rUpd.call(this, data, ...rest);
+  };
+  DR.delete = function(){
+    if(S.ok && colOf(this)==='products'){ cache.delete(this.id); const b = this.firestore.batch(); bDel.call(b, this); bDel.call(b, privRef(this)); return b.commit(); }
+    return rDel.call(this);
+  };
+  B.set = function(ref, data, opts){
+    if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); bSet.call(this, ref, sp.pub, opts||{}); bSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+    return bSet.call(this, ref, data, opts);
+  };
+  B.update = function(ref, data, ...rest){
+    if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); bUpd.call(this, ref, sp.pub); bSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+    return bUpd.call(this, ref, data, ...rest);
+  };
+  if(F.Transaction && F.Transaction.prototype){
+    const T = F.Transaction.prototype, tSet = T.set, tUpd = T.update;
+    T.set = function(ref, data, opts){
+      if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); tSet.call(this, ref, sp.pub, opts||{}); tSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+      return tSet.call(this, ref, data, opts);
+    };
+    T.update = function(ref, data, ...rest){
+      if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); tUpd.call(this, ref, sp.pub); tSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+      return tUpd.call(this, ref, data, ...rest);
+    };
+  }
+  if(F.CollectionReference && F.CollectionReference.prototype){
+    const cAdd = F.CollectionReference.prototype.add;
+    F.CollectionReference.prototype.add = function(data){
+      if(S.ok && this.id==='products' && split(data,false)){ const ref = this.doc(); return ref.set(data).then(()=>ref); }
+      return cAdd.call(this, data);
+    };
+  }
+})();
 
 const db = firebase.firestore();
 
