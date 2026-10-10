@@ -12643,6 +12643,7 @@ function renderFeaturedSubpanel(){
     <div class="panel-title">Productos destacados (elegidos a mano)</div>
     <div class="panel-sub">Opcional. Si eliges algunos aquí, estos reemplazan a los "más vendidos" automáticos en esa sección de tu tienda.</div>
     ${ids.length > validIds.length ? `<div class="note-box">${icon('alert-triangle',13)} Tienes ${ids.length-validIds.length} producto(s)/variante(s) marcado(s) que ya no existen (seguramente de una prueba vieja o un producto que se eliminó) — por eso no se ven abajo. Tu tienda ya los ignora sola y usa la lista automática en su lugar, pero puedes limpiarlos del todo con el botón de abajo.</div>` : ''}
+    ${validIds.length>0 ? renderFeaturedOrderList(validIds) : ''}
     <input id="featured-search-input" placeholder="Buscar producto por nombre..." value="${state.featuredSearch||''}" oninput="state.featuredSearch=this.value;render()">
     <div style="margin-top:10px;">
       ${state.products.length===0 ? `<div class="empty-state">Aún no tienes productos cargados.</div>` :
@@ -12652,6 +12653,39 @@ function renderFeaturedSubpanel(){
     </div>
     ${ids.length>0 ? `<button class="btn-tertiary" style="margin-top:10px;" onclick="clearManualFeatured()">Quitar toda la selección a mano (volver a usar solo lo automático)</button>` : ''}
   </div>`;
+}
+function featuredRefLabel(ref){
+  const [pid, vid] = String(ref).split('::');
+  const p = state.products.find(x=>x.id===pid); if(!p) return {name:'(producto eliminado)', sub:''};
+  const v = vid ? (p.variants||[]).find(x=>x.id===vid) : null;
+  return {name:p.name, sub: v ? varLabelOf(v) : '', img:(v && v.imageIdx!=null && (p.images||[])[v.imageIdx]) || (p.images||[])[0] || ''};
+}
+function renderFeaturedOrderList(validIds){
+  lyAdminCss();
+  return `<div class="feat-order">
+    <div class="panel-title" style="font-size:14px;margin:12px 0 2px;">Orden en la tienda</div>
+    <div class="panel-sub" style="margin:0 0 8px;">Así se muestran, de primero a último. Usa las flechas para cambiar el orden${validIds.length>1?'':' (con dos o más productos)'}.</div>
+    ${validIds.map((ref,i)=>{ const l = featuredRefLabel(ref); return `
+      <div class="feat-row">
+        <span class="feat-pos">${i+1}</span>
+        ${l.img?`<img class="feat-img" src="${l.img}" alt="" loading="lazy">`:'<span class="feat-img"></span>'}
+        <div class="feat-name"><div>${escapeHtmlAudit(l.name)}</div>${l.sub?`<div class="row-sub">${escapeHtmlAudit(l.sub)}</div>`:''}</div>
+        <div class="feat-btns">
+          <button type="button" class="icon-btn" aria-label="Poner de primero" title="Al inicio" ${i===0?'disabled':''} onclick="moveFeatured(${i},'top')">${icon('arrow-up',14)}<span class="feat-top">1º</span></button>
+          <button type="button" class="icon-btn" aria-label="Subir" ${i===0?'disabled':''} onclick="moveFeatured(${i},-1)">${icon('arrow-up',14)}</button>
+          <button type="button" class="icon-btn" aria-label="Bajar" ${i===validIds.length-1?'disabled':''} onclick="moveFeatured(${i},1)">${icon('arrow-down',14)}</button>
+        </div>
+      </div>`; }).join('')}
+  </div>`;
+}
+function moveFeatured(i, dir){
+  const all = state.settings.featuredProductIds || [];
+  const valid = all.filter(refValid), invalid = all.filter(r=>!refValid(r));
+  if(i<0 || i>=valid.length) return;
+  if(dir==='top'){ const [x] = valid.splice(i,1); valid.unshift(x); }
+  else { const j = i+dir; if(j<0||j>=valid.length) return; [valid[i], valid[j]] = [valid[j], valid[i]]; }
+  state.settings.featuredProductIds = valid.concat(invalid);
+  saveSettings(); render();
 }
 async function clearManualFeatured(){
   state.settings.featuredProductIds = [];
@@ -14859,6 +14893,11 @@ function lyAdminCss(){
   st.textContent = `.btn-secondary{background:var(--surface,#fff);border:1.5px solid var(--border,#e6d9de);color:var(--ink,#2B1620);border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;font-family:inherit;font-size:14px;}
   .ck-list{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border,#e6d9de);padding-top:12px;margin-top:12px;} .ck-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;} .ck-head>div{min-width:0;}
   .ck-count{font-weight:800;font-size:15px;flex-shrink:0;} .ck-item{display:flex;gap:10px;align-items:flex-start;padding:8px 2px;font-size:14px;cursor:pointer;min-width:0;} .ck-item input{margin-top:3px;flex-shrink:0;width:18px;height:18px;} .ck-item span{min-width:0;overflow-wrap:anywhere;} .ck-item.done span{text-decoration:line-through;color:var(--ink-soft,#7a6671);}
+  .feat-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#e6d9de);min-width:0;} .feat-row:last-child{border-bottom:0;}
+  .feat-pos{width:22px;text-align:center;font-weight:800;font-size:13px;color:var(--ink-soft,#7a6671);flex-shrink:0;}
+  .feat-img{width:36px;height:36px;border-radius:8px;object-fit:cover;background:var(--surface-soft,#f1e6ea);flex-shrink:0;}
+  .feat-name{flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow-wrap:anywhere;} .feat-btns{display:flex;gap:4px;flex-shrink:0;}
+  .feat-btns .icon-btn{display:inline-flex;align-items:center;gap:2px;} .feat-btns .icon-btn[disabled]{opacity:.3;} .feat-top{font-size:10px;font-weight:800;}
   .ck-edit{display:flex;gap:6px;align-items:center;min-width:0;} .ck-edit .ly-inp{flex:1;min-width:0;} .ck-edit .icon-btn[disabled]{opacity:.3;}`;
   document.head.appendChild(st);
 }
