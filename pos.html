@@ -366,6 +366,7 @@ let state = {
   scannerContext:'checkout',
   posSessionReported:false,
   posMoreMenuOpen:false,
+  lyList:[], lyLoaded:false, lyLoading:false, lyOpen:false, lyDetailId:null, lyFilter:'activos', lySearch:'', lyPay:null, lyCancel:null, lyReceipt:null, lyForm:null, lyBusy:false, drawerModalOpen:false,
   posOffline: (typeof navigator!=='undefined' && 'onLine' in navigator) ? !navigator.onLine : false,
 };
 state.offlineQueueCount = loadOfflineQueue().length;
@@ -2168,6 +2169,7 @@ async function chargeSale(){
     clearPosCart();
     state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true; state.checkoutReminderShown = false;
     state.lastSale = {...saleFields, orderNumber};
+    try{ drawerAfterSale(state.lastSale); }catch(e){ console.error(e); }
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
     // Aviso interno a Slack (en paralelo, opcional) — ver Configuración → Datos operativos en el admin. Sin conexión no se puede mandar; se omite (no se reintenta al sincronizar).
     if(!isOffline){
@@ -2303,6 +2305,7 @@ function renderSaleFoot(entries){
           ${state.heldSales.length>0 ? `<button class="pill-btn" style="flex:1;background:var(--primary-soft,var(--surface-soft));color:var(--primary-deep);justify-content:center;" onclick="state.heldOpen=true;render()">En espera (${state.heldSales.length})</button>` : ''}
         </div>` : ''}
         ${!state.activeCustomer ? `<div class="quick-phone"><input id="quick-phone-input" class="field-input" type="tel" inputmode="tel" autocomplete="off" placeholder="WhatsApp del cliente (opcional)" value="${escQuickAttr(state.quickPhone)}" oninput="onQuickPhoneInput(this.value)"><div id="quick-phone-hint" class="quick-phone-hint">${quickPhoneDigits().length>=10?'Se guardará como cliente nuevo al cobrar':''}</div></div>` : ''}
+        ${entries.length>0 ? `<button class="pill-btn" style="width:100%;justify-content:center;background:var(--surface-soft);color:var(--ink-soft);margin:0 0 8px;" onclick="lyOpenForm()">Apartar con abonos</button>` : ''}
         <div class="pay-row pay-methods">${PAY_METHODS.concat(['Dividido']).map(m=>`<button class="pay-btn ${state.payMethod===m?'active':''}" onclick="selectPayMethod('${m}')">${m}</button>`).join('')}</div>
         ${state.payMethod==='Dividido' ? renderSplitPaymentInputs() : ''}
         <button class="btn-primary" ${entries.length===0||state.sending||(state.payMethod==='Dividido'&&splitRemaining()!==0)?'disabled style="opacity:.5"':''} onclick="chargeSale()">${state.sending?'Procesando…':'Cobrar '+money(saleTotal())}</button>
@@ -2539,6 +2542,8 @@ function renderPOS(){
           <div class="top-more-menu" onclick="event.stopPropagation()">
             <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Devolución o cambio</button>
             <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén</button>
+            <button onclick="state.posMoreMenuOpen=false;openLayaways()">${icon('wallet')} Apartados</button>
+            <button onclick="state.posMoreMenuOpen=false;state.drawerModalOpen=true;render()">${icon('wallet')} Cajón de dinero</button>
             <hr>
             <button onclick="state.posMoreMenuOpen=false;changeCenter()">Cambiar centro</button>
             <button onclick="state.posMoreMenuOpen=false;changeCashier()">Cambiar cajero</button>
@@ -2706,6 +2711,579 @@ function fitFloatingMenus(){
     if(dx) el.style.transform = `translateX(${Math.round(dx)}px)`;
   });
 }
+/* ============== APARTADOS CON ABONOS (núcleo compartido admin + POS) ==============
+   El cliente aparta productos y los va liquidando con abonos; el producto se ENTREGA hasta liquidar.
+   Colección "layaways": un documento por apartado con sus datos de cliente, productos, abonos (payments) y estado
+   (activo → liquidado → entregado, o cancelado). El stock se descuenta al apartar (queda reservado) y se
+   regresa si se cancela. Al entregar se crea la venta en "sales" (sin cashRegisterId, para no duplicar el efectivo
+   que ya entró como abono en su caja). Los abonos en efectivo se anotan como "ingreso" en la caja abierta. */
+const LY_STATUS = {activo:'Activo', liquidado:'Liquidado · por entregar', entregado:'Entregado', cancelado:'Cancelado'};
+const LY_METHODS = ['Efectivo','Tarjeta','Transferencia'];
+const LY_CANCEL_REASONS = ['El cliente ya no lo quiere','No liquidó a tiempo','Error al capturar','Producto no disponible','Otro'];
+function lyM(n){ n=Math.round((Number(n)||0)*100)/100; return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2})+' MXN'; }
+function lyR2(n){ return Math.round((Number(n)||0)*100)/100; }
+function lyEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function lyDigits(s){ return String(s||'').replace(/\D/g,''); }
+function lyWaPhone(p){ let d = lyDigits(p); if(d.length===10) d = '52'+d; return d; }
+function lyFolio(n){ return 'A-'+String(n||0).padStart(4,'0'); }
+function lyToday(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function lyAddDays(days){ const d = new Date(); d.setDate(d.getDate()+days); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function lyDateLabel(iso){ if(!iso) return '—'; const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(iso+'T12:00:00') : new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}); }
+function lyDateTime(iso){ const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
+function lyPaid(l){ return lyR2((l.payments||[]).reduce((s,p)=>s+(Number(p.amount)||0),0)); }
+function lyBalance(l){ return lyR2((l.total||0) - lyPaid(l)); }
+function lyOverdue(l){ return l.status==='activo' && !!l.dueDate && l.dueDate < lyToday() && lyBalance(l)>0; }
+function lyMinPct(){ const n = Number(state.settings && state.settings.layawayMinPct); return n>0 && n<=100 ? n : 20; }
+function lyDays(){ const n = Number(state.settings && state.settings.layawayDays); return n>0 ? n : 30; }
+function lyPolicy(){ return (state.settings && state.settings.layawayPolicy) || 'El producto se reserva y se entrega hasta liquidar el total. Si no se liquida en la fecha límite, el apartado se cancela.'; }
+function lyStore(){ return (state.settings && state.settings.storeName) || 'La Casa de los Placeres'; }
+function lyEnsureCss(){
+  if(typeof lyAdminCss==='function') lyAdminCss();
+  if(document.getElementById('ly-css')) return;
+  const st = document.createElement('style'); st.id = 'ly-css';
+  st.textContent = `
+  .ly-wrap{display:flex;flex-direction:column;gap:10px;min-width:0;}
+  .ly-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;}
+  .ly-stat{background:var(--surface-soft,#f7f0f3);border-radius:12px;padding:10px 12px;min-width:0;}
+  .ly-stat b{display:block;font-size:17px;overflow-wrap:anywhere;} .ly-stat span{font-size:11.5px;color:var(--ink-soft,#7a6671);}
+  .ly-chips{display:flex;gap:6px;flex-wrap:wrap;} .ly-chip{border:1.5px solid var(--border,#e6d9de);background:var(--surface,#fff);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;color:var(--ink,#2B1620);}
+  .ly-chip.on{border-color:var(--primary,#BC355C);color:var(--primary,#BC355C);background:var(--primary-soft,#fbe9ef);}
+  .ly-row{display:flex;flex-direction:column;gap:6px;border:1.5px solid var(--border,#e6d9de);border-radius:14px;padding:12px;background:var(--surface,#fff);cursor:pointer;text-align:left;width:100%;min-width:0;}
+  .ly-row-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;min-width:0;} .ly-row-top>*{min-width:0;}
+  .ly-name{font-weight:800;overflow-wrap:anywhere;} .ly-sub{font-size:12px;color:var(--ink-soft,#7a6671);overflow-wrap:anywhere;}
+  .ly-bar{height:8px;border-radius:99px;background:var(--surface-soft,#f1e6ea);overflow:hidden;} .ly-bar i{display:block;height:100%;background:var(--green,#2e9e6b);border-radius:99px;}
+  .ly-badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800;background:var(--surface-soft,#f1e6ea);color:var(--ink,#2B1620);white-space:nowrap;}
+  .ly-badge.red{background:#fde3e6;color:#a8233c;} .ly-badge.green{background:#dff3e8;color:#1d7a50;} .ly-badge.amber{background:#fff0d1;color:#8a5a00;}
+  .ly-box{border:1px solid var(--border,#e6d9de);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:13px;}
+  .ly-kv{display:flex;justify-content:space-between;gap:10px;} .ly-kv>span:last-child{text-align:right;overflow-wrap:anywhere;font-weight:600;}
+  .ly-pay{display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--border,#e6d9de);padding:8px 0;font-size:13px;} .ly-pay:last-child{border-bottom:0;}
+  .ly-actions{display:flex;gap:8px;flex-wrap:wrap;} .ly-actions button{flex:1 1 140px;}
+  .ly-mini{display:flex;gap:6px;flex-wrap:wrap;} .ly-mini button{border:1.5px solid var(--border,#e6d9de);background:var(--surface,#fff);border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700;color:var(--ink,#2B1620);}
+  .ly-modal{max-width:640px !important;width:100%;max-height:92vh;overflow-y:auto;}
+  .ly-sec{font-size:12px;font-weight:800;color:var(--ink-soft,#7a6671);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;}
+  .ly-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;} @media(max-width:420px){.ly-grid2{grid-template-columns:1fr;}}
+  .ly-inp{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border,#e6d9de);font-size:15px;background:var(--surface,#fff);color:var(--ink,#2B1620);font-family:inherit;box-sizing:border-box;}
+  .ly-lab{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:700;color:var(--ink-soft,#7a6671);min-width:0;}
+  `;
+  document.head.appendChild(st);
+}
+/* ---- Acceso a datos ---- */
+async function lyLoad(force){
+  if(state.lyLoading) return; if(state.lyLoaded && !force) return;
+  state.lyLoading = true; render();
+  try{
+    const snap = await db.collection('layaways').orderBy('createdAt','desc').limit(400).get();
+    state.lyList = snap.docs.map(d=>({id:d.id, ...d.data()})); state.lyLoaded = true;
+  }catch(e){ console.error('No se pudieron cargar los apartados', e); showToast('No se pudieron cargar los apartados'); }
+  state.lyLoading = false; render();
+}
+async function lyNextFolio(){
+  const ref = db.collection('counters').doc('layaways');
+  return await db.runTransaction(async tx=>{
+    const snap = await tx.get(ref); const cur = snap.exists ? (snap.data().next||1) : 1;
+    tx.set(ref, {next:cur+1}, {merge:true}); return cur;
+  });
+}
+function lyUpsertLocal(l){ const i = state.lyList.findIndex(x=>x.id===l.id); if(i>=0) state.lyList[i] = l; else state.lyList.unshift(l); }
+/* ---- Abonos ---- */
+function lyOpenPay(id){ const l = state.lyList.find(x=>x.id===id); if(!l) return; state.lyPay = {id, amount:'', method:'Efectivo', note:''}; render(); }
+async function lySavePay(){
+  const m = state.lyPay; if(!m || state.lyBusy) return;
+  const amount = lyR2(m.amount);
+  if(!(amount>0)){ showToast('Escribe el monto del abono'); return; }
+  const host = lyHost();
+  state.lyBusy = true; render();
+  try{
+    const ref = db.collection('layaways').doc(m.id);
+    const out = await db.runTransaction(async tx=>{
+      const snap = await tx.get(ref); if(!snap.exists) throw new Error('No existe el apartado');
+      const l = snap.data();
+      if(l.status!=='activo') throw new Error('Este apartado ya no admite abonos');
+      const paid = lyPaid(l), bal = lyR2((l.total||0)-paid);
+      if(amount > bal + 0.001) throw new Error('El abono ('+lyM(amount)+') es mayor al saldo ('+lyM(bal)+')');
+      const n = (l.payments||[]).length + 1;
+      const pay = {id:'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), n, kind:'abono', date:new Date().toISOString(), amount, method:m.method, note:(m.note||'').trim().slice(0,120),
+        cashier:host.cashier||'', cashRegisterId:host.register?host.register.id:null, centerId:host.centerId||l.centerId||null, from:host.isPOS?'pos':'admin'};
+      const payments = [...(l.payments||[]), pay];
+      const upd = {payments, paid:lyR2(paid+amount), status: lyR2(bal-amount)<=0.001 ? 'liquidado' : 'activo', updatedAt:new Date().toISOString()};
+      tx.update(ref, upd);
+      return {pay, upd};
+    });
+    const l = state.lyList.find(x=>x.id===m.id); if(l) Object.assign(l, out.upd);
+    if(m.method==='Efectivo' && host.cashMovement){
+      try{ await host.cashMovement({type:'ingreso', amount, note:'Abono apartado '+lyFolio(l&&l.folio), date:out.pay.date, layawayId:m.id}); }catch(e){ console.error('No se pudo anotar el ingreso en caja', e); showToast('Abono guardado, pero revisa el ingreso en la caja'); }
+    }
+    state.lyPay = null; state.lyReceipt = {id:m.id, payId:out.pay.id};
+    showToast(l && l.status==='liquidado' ? 'Apartado liquidado: ya se puede entregar' : 'Abono registrado');
+    if(typeof lyAfterPay==='function') lyAfterPay(out.pay);
+  }catch(e){ console.error(e); showToast(e && e.message ? e.message : 'No se pudo registrar el abono'); }
+  state.lyBusy = false; render();
+}
+/* ---- Comprobantes ---- */
+function lyItemsText(l){ return (l.items||[]).map(it=>`• ${it.qty}x ${it.name}`).join('\n'); }
+function lyReceiptText(l, payId){
+  const pays = (l.payments||[]);
+  const p = payId ? pays.find(x=>x.id===payId) : null;
+  const hist = pays.map(x=>`${x.kind==='reembolso'?'↩ Reembolso':'#'+x.n+' Abono'} ${lyDateTime(x.date)} — ${lyM(Math.abs(x.amount))} (${x.method})`).join('\n');
+  const bal = lyBalance(l);
+  return `*${p ? (p.kind==='reembolso'?'Comprobante de reembolso':'Comprobante de abono') : 'Estado de cuenta de apartado'}* — ${lyStore()}\n` +
+    `Apartado ${lyFolio(l.folio)}\nCliente: ${l.customer && l.customer.name || ''}\n\n` +
+    (p ? `*${p.kind==='reembolso'?'Reembolsado':'Abono'} #${p.n}:* ${lyM(Math.abs(p.amount))} (${p.method}) · ${lyDateTime(p.date)}\n\n` : '') +
+    `*Productos*\n${lyItemsText(l)}\n\n` +
+    `Total: ${lyM(l.total)}\nAbonado: ${lyM(lyPaid(l))}\n*Saldo: ${lyM(bal)}*\n` +
+    (l.status==='activo' && l.dueDate ? `Fecha límite: ${lyDateLabel(l.dueDate)}\n` : '') +
+    (l.status==='liquidado' ? `\n✅ Apartado liquidado. Ya puedes pasar por tu producto.\n` : '') +
+    (l.status==='entregado' ? `\n✅ Apartado liquidado y entregado. ¡Gracias!\n` : '') +
+    (l.status==='cancelado' ? `\nApartado cancelado.\n` : '') +
+    `\n*Historial*\n${hist||'Sin abonos'}\n\n_${lyPolicy()}_`;
+}
+function lyShareWa(id, payId){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  let phone = lyWaPhone(l.customer && l.customer.phone);
+  if(!phone){ showToast('Este apartado no tiene WhatsApp del cliente'); return; }
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lyReceiptText(l, payId))}`, '_blank');
+}
+function lyReminderWa(id){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  const phone = lyWaPhone(l.customer && l.customer.phone); if(!phone){ showToast('Sin WhatsApp del cliente'); return; }
+  const msg = `Hola ${(l.customer&&l.customer.name||'').split(' ')[0]}, te escribimos de ${lyStore()}. Tu apartado ${lyFolio(l.folio)} tiene un saldo de ${lyM(lyBalance(l))}${l.dueDate?` y la fecha límite es el ${lyDateLabel(l.dueDate)}`:''}. ¿Cuándo pasas a abonar? 😊`;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+function lyPrint(id, payId){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  const p = payId ? (l.payments||[]).find(x=>x.id===payId) : null;
+  const rows = (l.items||[]).map(it=>`<tr><td>${it.qty}x ${lyEsc(it.name)}</td><td class="r">${lyM((it.price||0)*(it.qty||0))}</td></tr>`).join('');
+  const hist = (l.payments||[]).map(x=>`<tr><td>${x.kind==='reembolso'?'Reembolso':'Abono '+x.n} ${lyEsc(lyDateTime(x.date))}<br>${lyEsc(x.method)}</td><td class="r">${lyM(Math.abs(x.amount))}</td></tr>`).join('');
+  const st = state.settings || {};
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Comprobante</title><style>
+    @page{size:80mm auto;margin:4mm;} body{font:12px/1.35 'Courier New',monospace;color:#000;margin:0;width:72mm;}
+    h1{font-size:15px;text-align:center;margin:0 0 2px;} .c{text-align:center;} .r{text-align:right;white-space:nowrap;padding-left:8px;}
+    table{width:100%;border-collapse:collapse;} td{padding:2px 0;vertical-align:top;} hr{border:0;border-top:1px dashed #000;margin:6px 0;} .t td{font-weight:bold;font-size:14px;} .s{font-size:10.5px;}
+  </style></head><body>
+    <h1>${lyEsc(lyStore())}</h1>${st.storeAddress?`<div class="c s">${lyEsc(st.storeAddress)}</div>`:''}
+    <hr><div class="c"><b>${p ? (p.kind==='reembolso'?'COMPROBANTE DE REEMBOLSO':'COMPROBANTE DE ABONO') : 'ESTADO DE CUENTA'}</b></div>
+    <div class="s">Apartado ${lyFolio(l.folio)}<br>Cliente: ${lyEsc(l.customer&&l.customer.name)}<br>${lyEsc(lyDateTime(p?p.date:new Date().toISOString()))}${p&&p.cashier?'<br>Atendió: '+lyEsc(p.cashier):''}</div>
+    ${p?`<hr><table><tr class="t"><td>${p.kind==='reembolso'?'REEMBOLSO':'ABONO'} #${p.n}</td><td class="r">${lyM(Math.abs(p.amount))}</td></tr><tr><td>${lyEsc(p.method)}</td><td></td></tr></table>`:''}
+    <hr><table>${rows}</table><hr>
+    <table><tr><td>Total</td><td class="r">${lyM(l.total)}</td></tr><tr><td>Abonado</td><td class="r">${lyM(lyPaid(l))}</td></tr><tr class="t"><td>SALDO</td><td class="r">${lyM(lyBalance(l))}</td></tr></table>
+    ${l.status==='activo'&&l.dueDate?`<div class="s">Fecha límite: ${lyEsc(lyDateLabel(l.dueDate))}</div>`:''}
+    <hr><div class="s">Historial</div><table>${hist}</table>
+    <hr><div class="c s">${lyEsc(lyPolicy())}</div><div class="c s" style="margin-top:6px">Conserva este comprobante.</div>
+  </body></html>`;
+  try{
+    const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(f); f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ showToast('No se pudo abrir la impresión'); } setTimeout(()=>f.remove(), 4000); }, 250);
+  }catch(e){ console.error(e); showToast('No se pudo abrir la impresión'); }
+}
+/* ---- Fecha límite, entrega y cancelación ---- */
+async function lySetDue(id){
+  const l = state.lyList.find(x=>x.id===id); const inp = document.getElementById('ly-due-edit'); if(!l || !inp || !inp.value) return;
+  try{ await db.collection('layaways').doc(id).update({dueDate:inp.value, updatedAt:new Date().toISOString()}); l.dueDate = inp.value; showToast('Fecha límite actualizada'); }
+  catch(e){ console.error(e); showToast('No se pudo actualizar la fecha'); }
+  render();
+}
+async function lyDeliver(id){
+  const l = state.lyList.find(x=>x.id===id); if(!l || state.lyBusy) return;
+  if(l.status!=='liquidado' || lyBalance(l)>0.001){ showToast('Solo se entrega un apartado liquidado'); return; }
+  if(!confirm(`¿Entregar el apartado ${lyFolio(l.folio)} a ${l.customer&&l.customer.name}? Se registrará como venta.`)) return;
+  const host = lyHost();
+  state.lyBusy = true; render();
+  try{
+    const byM = {};
+    (l.payments||[]).forEach(p=>{ byM[p.method] = lyR2((byM[p.method]||0) + (Number(p.amount)||0)); });
+    const payments = Object.entries(byM).filter(([,a])=>a>0).map(([method,amount])=>({method, amount}));
+    const orderNumber = await getNextOrderNumber();
+    const subtotal = lyR2((l.total||0) + (l.discount||0));
+    const sale = {
+      date:new Date().toISOString(), cashierName:host.cashier||'', centerId:l.centerId||host.centerId||null, centerName:l.centerName||host.centerName||'',
+      cashRegisterId:null, items:l.items||[], subtotal, total:l.total||0, paymentMethod: payments.length===1?payments[0].method:'Dividido', payments,
+      customerId:l.customerId||null, customerName:l.customer&&l.customer.name||null, customerPhone:l.customer&&l.customer.phone||null, customerAddress:l.customer&&l.customer.address||null,
+      notes:'Apartado '+lyFolio(l.folio), orderNumber, source:'pos', status:'Entregado', layawayId:id, fromLayaway:true,
+    };
+    if(l.discount>0) sale.manualDiscount = {type:'amount', amount:l.discount, reason:'Descuento del apartado'};
+    const ref = await db.collection('sales').add(sale);
+    if(typeof lyAfterDeliver==='function') lyAfterDeliver({id:ref.id, ...sale});
+    const upd = {status:'entregado', deliveredAt:new Date().toISOString(), deliveredBy:host.cashier||'', saleId:ref.id, saleNumber:orderNumber, updatedAt:new Date().toISOString()};
+    await db.collection('layaways').doc(id).update(upd); Object.assign(l, upd);
+    showToast('Apartado entregado y registrado como venta '+formatFolio(orderNumber));
+  }catch(e){ console.error(e); showToast('No se pudo registrar la entrega'); }
+  state.lyBusy = false; render();
+}
+function lyOpenCancel(id){ const l = state.lyList.find(x=>x.id===id); if(!l) return; state.lyCancel = {id, reason:LY_CANCEL_REASONS[0], refund:String(lyPaid(l)), method:'Efectivo', note:''}; render(); }
+async function lyConfirmCancel(){
+  const m = state.lyCancel; if(!m || state.lyBusy) return;
+  const l = state.lyList.find(x=>x.id===m.id); if(!l) return;
+  const paid = lyPaid(l); const refund = Math.min(paid, Math.max(0, lyR2(m.refund)));
+  const host = lyHost();
+  state.lyBusy = true; render();
+  try{
+    const ref = db.collection('layaways').doc(l.id);
+    const now = new Date().toISOString();
+    const payments = [...(l.payments||[])];
+    if(refund>0) payments.push({id:'r'+Date.now().toString(36), n:payments.length+1, kind:'reembolso', date:now, amount:-refund, method:m.method, note:'Cancelación', cashier:host.cashier||'', cashRegisterId:host.register?host.register.id:null, centerId:host.centerId||l.centerId||null, from:host.isPOS?'pos':'admin'});
+    const upd = {status:'cancelado', cancelledAt:now, cancelReason:m.reason, cancelNote:(m.note||'').trim().slice(0,200), refundAmount:refund, retainedAmount:lyR2(paid-refund), payments, paid:lyR2(paid-refund), updatedAt:now};
+    await db.runTransaction(async tx=>{
+      const snap = await tx.get(ref); if(!snap.exists) throw new Error('No existe');
+      if(snap.data().status!=='activo' && snap.data().status!=='liquidado') throw new Error('Este apartado ya no se puede cancelar');
+      tx.update(ref, upd);
+    });
+    try{ await host.restore(l.items||[], l.centerId||host.centerId); }catch(e){ console.error('No se pudo regresar el stock', e); showToast('Apartado cancelado, pero revisa el stock manualmente'); }
+    if(refund>0 && m.method==='Efectivo' && host.cashMovement){
+      try{ await host.cashMovement({type:'retiro', amount:refund, note:'Reembolso apartado '+lyFolio(l.folio), date:now, layawayId:l.id}); }catch(e){ console.error(e); }
+    }
+    Object.assign(l, upd); state.lyCancel = null; showToast('Apartado cancelado');
+  }catch(e){ console.error(e); showToast(e&&e.message?e.message:'No se pudo cancelar'); }
+  state.lyBusy = false; render();
+}
+/* ---- Pantallas ---- */
+function lyStatusBadge(l){
+  if(lyOverdue(l)) return `<span class="ly-badge red">Vencido</span>`;
+  const cls = l.status==='activo' ? 'amber' : (l.status==='liquidado'||l.status==='entregado') ? 'green' : '';
+  return `<span class="ly-badge ${cls}">${LY_STATUS[l.status]||l.status}</span>`;
+}
+function lyFiltered(){
+  const f = state.lyFilter||'activos', q = (state.lySearch||'').trim().toLowerCase();
+  let list = state.lyList||[];
+  if(f==='activos') list = list.filter(l=>l.status==='activo');
+  else if(f==='vencidos') list = list.filter(lyOverdue);
+  else if(f==='entregar') list = list.filter(l=>l.status==='liquidado');
+  else if(f==='entregados') list = list.filter(l=>l.status==='entregado');
+  else if(f==='cancelados') list = list.filter(l=>l.status==='cancelado');
+  if(q) list = list.filter(l=>`${lyFolio(l.folio)} ${l.customer&&l.customer.name} ${l.customer&&l.customer.phone} ${(l.items||[]).map(i=>i.name).join(' ')}`.toLowerCase().includes(q));
+  return list;
+}
+function lyRenderList(){
+  lyEnsureCss();
+  const all = state.lyList||[];
+  const act = all.filter(l=>l.status==='activo'), ven = all.filter(lyOverdue), ent = all.filter(l=>l.status==='liquidado');
+  const porCobrar = act.reduce((s,l)=>s+lyBalance(l),0);
+  const hoy = lyToday();
+  const abonosHoy = all.reduce((s,l)=>s+(l.payments||[]).filter(p=>String(p.date).slice(0,10)===hoy && p.amount>0).reduce((a,p)=>a+p.amount,0),0);
+  const cnt = {activos:act.length, vencidos:ven.length, entregar:ent.length, entregados:all.filter(l=>l.status==='entregado').length, cancelados:all.filter(l=>l.status==='cancelado').length, todos:all.length};
+  const lbl = {activos:'Activos', vencidos:'Vencidos', entregar:'Por entregar', entregados:'Entregados', cancelados:'Cancelados', todos:'Todos'};
+  const list = lyFiltered(); const f = state.lyFilter||'activos';
+  return `<div class="ly-wrap">
+    <div class="ly-stats">
+      <div class="ly-stat"><b>${lyM(porCobrar)}</b><span>Por cobrar (${act.length} activos)</span></div>
+      <div class="ly-stat"><b>${lyM(abonosHoy)}</b><span>Abonado hoy</span></div>
+      <div class="ly-stat"><b>${ven.length}</b><span>Vencidos</span></div>
+      <div class="ly-stat"><b>${ent.length}</b><span>Liquidados por entregar</span></div>
+    </div>
+    <input id="ly-search" class="ly-inp" type="search" placeholder="Buscar por folio, cliente, teléfono o producto…" value="${lyEsc(state.lySearch||'')}" oninput="lyOnSearch(this.value)">
+    <div class="ly-chips">${Object.keys(lbl).map(k=>`<button class="ly-chip ${f===k?'on':''}" onclick="state.lyFilter='${k}';render()">${lbl[k]} (${cnt[k]})</button>`).join('')}</div>
+    ${state.lyLoading && !state.lyLoaded ? `<div class="ly-sub">Cargando apartados…</div>` : list.length===0 ? `<div class="ly-sub" style="padding:14px 0;text-align:center;">No hay apartados en esta vista.</div>` :
+      list.map(l=>{ const paid = lyPaid(l), pct = Math.max(0,Math.min(100,Math.round(paid/(l.total||1)*100))); return `
+      <button class="ly-row" onclick="lyOpenDetail('${l.id}')">
+        <div class="ly-row-top"><div><div class="ly-name">${lyEsc(lyFolio(l.folio))} · ${lyEsc(l.customer&&l.customer.name)}</div><div class="ly-sub">${lyEsc((l.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', '))}</div></div>${lyStatusBadge(l)}</div>
+        <div class="ly-bar"><i style="width:${pct}%"></i></div>
+        <div class="ly-sub">Abonado ${lyM(paid)} de ${lyM(l.total)} · <b>Saldo ${lyM(lyBalance(l))}</b>${l.status==='activo'&&l.dueDate?` · Límite ${lyDateLabel(l.dueDate)}`:''}</div>
+      </button>`; }).join('')}
+  </div>`;
+}
+function lyOnSearch(v){ state.lySearch = v; render(); const i = document.getElementById('ly-search'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }
+function lyOpenDetail(id){ state.lyDetailId = id; render(); }
+function lyCloseDetail(){ state.lyDetailId = null; render(); }
+function lyRenderDetail(l){
+  lyEnsureCss();
+  const paid = lyPaid(l), bal = lyBalance(l), pct = Math.max(0,Math.min(100,Math.round(paid/(l.total||1)*100)));
+  const c = l.customer||{};
+  const kv = (k,v)=> v ? `<div class="ly-kv"><span>${k}</span><span>${lyEsc(v)}</span></div>` : '';
+  const open = l.status==='activo';
+  return `<div class="ly-wrap">
+    <div class="ly-row-top"><div><div class="ly-name" style="font-size:18px;">Apartado ${lyEsc(lyFolio(l.folio))}</div><div class="ly-sub">Creado ${lyDateTime(l.createdAt)}${l.cashierName?` · ${lyEsc(l.cashierName)}`:''}${l.centerName?` · ${lyEsc(l.centerName)}`:''}</div></div>${lyStatusBadge(l)}</div>
+    <div class="ly-box">
+      <div class="ly-kv"><span>Total</span><span>${lyM(l.total)}</span></div>
+      <div class="ly-kv"><span>Abonado</span><span style="color:var(--green,#2e9e6b)">${lyM(paid)}</span></div>
+      <div class="ly-kv"><span><b>Saldo</b></span><span style="font-size:16px;"><b>${lyM(bal)}</b></span></div>
+      <div class="ly-bar" style="margin-top:4px;"><i style="width:${pct}%"></i></div>
+      ${open ? `<div class="ly-kv" style="margin-top:6px;"><span>Fecha límite</span><span><input id="ly-due-edit" type="date" class="ly-inp" style="width:auto;padding:4px 8px;font-size:13px;" value="${lyEsc(l.dueDate||'')}"> <button class="ly-chip" onclick="lySetDue('${l.id}')">Guardar</button></span></div>` : (l.dueDate?`<div class="ly-kv"><span>Fecha límite</span><span>${lyDateLabel(l.dueDate)}</span></div>`:'')}
+    </div>
+    <div class="ly-actions">
+      ${open ? `<button class="btn-primary" onclick="lyOpenPay('${l.id}')">+ Registrar abono</button>` : ''}
+      ${l.status==='liquidado' ? `<button class="btn-primary" onclick="lyDeliver('${l.id}')" ${state.lyBusy?'disabled':''}>Entregar producto</button>` : ''}
+    </div>
+    <div class="ly-mini">
+      <button onclick="lyShareWa('${l.id}')">WhatsApp: estado de cuenta</button>
+      <button onclick="lyPrint('${l.id}')">Imprimir estado de cuenta</button>
+      ${open && bal>0 ? `<button onclick="lyReminderWa('${l.id}')">Recordar saldo por WhatsApp</button>` : ''}
+    </div>
+    <div class="ly-sec">Productos</div>
+    <div class="ly-box">${(l.items||[]).map(i=>`<div class="ly-kv"><span>${i.qty}x ${lyEsc(i.name)}</span><span>${lyM((i.price||0)*(i.qty||0))}</span></div>`).join('')}${l.discount>0?`<div class="ly-kv"><span>Descuento</span><span>-${lyM(l.discount)}</span></div>`:''}</div>
+    <div class="ly-sec">Cliente</div>
+    <div class="ly-box">${kv('Nombre',c.name)}${kv('WhatsApp',c.phone)}${kv('Otro teléfono',c.phone2)}${kv('Contacto de referencia',[c.refName,c.refPhone].filter(Boolean).join(' · '))}${kv('Domicilio',c.address)}${kv('Identificación',c.idNote)}${kv('Notas',l.notes)}</div>
+    <div class="ly-sec">Abonos y movimientos (${(l.payments||[]).length})</div>
+    <div class="ly-box" style="padding:4px 12px;">
+      ${(l.payments||[]).length===0 ? `<div class="ly-sub" style="padding:8px 0;">Sin abonos.</div>` : l.payments.map(p=>`
+        <div class="ly-pay">
+          <div class="ly-kv"><span>${p.kind==='reembolso'?'↩ Reembolso':'Abono #'+p.n} · ${lyDateTime(p.date)}</span><span style="color:${p.amount<0?'var(--rose,#BC355C)':'inherit'}">${p.amount<0?'-':''}${lyM(Math.abs(p.amount))}</span></div>
+          <div class="ly-sub">${lyEsc(p.method)}${p.cashier?` · ${lyEsc(p.cashier)}`:''}${p.from==='admin'?' · desde el administrador':''}${p.note?` · ${lyEsc(p.note)}`:''}</div>
+          <div class="ly-mini"><button onclick="lyShareWa('${l.id}','${p.id}')">Comprobante por WhatsApp</button><button onclick="lyPrint('${l.id}','${p.id}')">Imprimir</button></div>
+        </div>`).join('')}
+    </div>
+    ${l.status==='cancelado' ? `<div class="ly-box"><div class="ly-kv"><span>Motivo</span><span>${lyEsc(l.cancelReason||'')}</span></div>${kv('Nota',l.cancelNote)}<div class="ly-kv"><span>Reembolsado</span><span>${lyM(l.refundAmount||0)}</span></div><div class="ly-kv"><span>Retenido</span><span>${lyM(l.retainedAmount||0)}</span></div></div>` : ''}
+    ${l.status==='entregado' ? `<div class="ly-box"><div class="ly-kv"><span>Entregado</span><span>${lyDateTime(l.deliveredAt)}${l.deliveredBy?` · ${lyEsc(l.deliveredBy)}`:''}</span></div>${l.saleNumber?`<div class="ly-kv"><span>Venta registrada</span><span>${lyEsc(formatFolio(l.saleNumber))}</span></div>`:''}</div>` : ''}
+    ${(l.status==='activo'||l.status==='liquidado') ? `<button class="btn-secondary" style="color:var(--rose,#BC355C)" onclick="lyOpenCancel('${l.id}')">Cancelar apartado…</button>` : ''}
+  </div>`;
+}
+function lyRenderPayModal(){
+  const m = state.lyPay; const l = m && state.lyList.find(x=>x.id===m.id); if(!l) return '';
+  const bal = lyBalance(l), amt = lyR2(m.amount);
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" style="max-width:420px !important;">
+    <h3>Registrar abono</h3>
+    <div class="ly-sub" style="margin:-6px 0 10px;">${lyEsc(lyFolio(l.folio))} · ${lyEsc(l.customer&&l.customer.name)} · Saldo ${lyM(bal)}</div>
+    <label class="ly-lab">Monto del abono<input id="ly-pay-amount" class="ly-inp" type="number" inputmode="decimal" min="0" step="0.01" value="${lyEsc(m.amount)}" oninput="state.lyPay.amount=this.value;lyPayHint()"></label>
+    <div class="ly-mini" style="margin:8px 0;"><button onclick="state.lyPay.amount='${bal}';render()">Liquidar saldo (${lyM(bal)})</button>${[100,200,500].filter(x=>x<bal).map(x=>`<button onclick="state.lyPay.amount='${x}';render()">${lyM(x)}</button>`).join('')}</div>
+    <label class="ly-lab">Método<select class="ly-inp" onchange="state.lyPay.method=this.value">${LY_METHODS.map(x=>`<option ${m.method===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label class="ly-lab" style="margin-top:8px;">Nota (opcional)<input class="ly-inp" maxlength="120" value="${lyEsc(m.note)}" oninput="state.lyPay.note=this.value"></label>
+    <div id="ly-pay-hint" class="ly-sub" style="margin:10px 0;">${lyPayHintText(bal, amt)}</div>
+    <div class="modal-actions"><button class="btn-cancel btn-secondary" onclick="state.lyPay=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lySavePay()">${state.lyBusy?'Guardando…':'Guardar abono'}</button></div>
+  </div></div>`;
+}
+function lyPayHintText(bal, amt){ return amt>bal+0.001 ? `<span style="color:var(--rose,#BC355C)">El abono es mayor al saldo.</span>` : amt>0 ? `Quedará un saldo de <b>${lyM(lyR2(bal-amt))}</b>${lyR2(bal-amt)<=0.001?' · se liquida el apartado':''}.` : ''; }
+function lyPayHint(){ const m = state.lyPay; const l = m && state.lyList.find(x=>x.id===m.id); const el = document.getElementById('ly-pay-hint'); if(l && el) el.innerHTML = lyPayHintText(lyBalance(l), lyR2(m.amount)); }
+function lyRenderReceiptModal(){
+  const r = state.lyReceipt; const l = r && state.lyList.find(x=>x.id===r.id); if(!l) return '';
+  const p = (l.payments||[]).find(x=>x.id===r.payId);
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" style="max-width:400px !important;text-align:center;">
+    <h3>${p&&p.kind==='reembolso'?'Reembolso registrado':'Abono registrado'}</h3>
+    <div style="font-size:26px;font-weight:800;margin:4px 0;">${lyM(p?Math.abs(p.amount):0)}</div>
+    <div class="ly-sub">${lyEsc(lyFolio(l.folio))} · ${lyEsc(l.customer&&l.customer.name)}<br>Saldo: <b>${lyM(lyBalance(l))}</b>${l.status==='liquidado'?'<br>✅ Liquidado: listo para entregar':''}</div>
+    <div class="ly-actions" style="margin-top:14px;">
+      <button class="btn-primary" onclick="lyShareWa('${l.id}','${r.payId}')">Compartir comprobante (WhatsApp)</button>
+      <button class="btn-secondary" onclick="lyPrint('${l.id}','${r.payId}')">Imprimir comprobante</button>
+    </div>
+    <button class="btn-secondary" style="margin-top:8px;" onclick="state.lyReceipt=null;render()">Listo</button>
+  </div></div>`;
+}
+function lyRenderCancelModal(){
+  const m = state.lyCancel; const l = m && state.lyList.find(x=>x.id===m.id); if(!l) return '';
+  const paid = lyPaid(l); const refund = Math.min(paid, Math.max(0, lyR2(m.refund)));
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" style="max-width:440px !important;">
+    <h3>Cancelar apartado</h3>
+    <div class="ly-sub" style="margin:-6px 0 10px;">${lyEsc(lyFolio(l.folio))} · Abonado ${lyM(paid)}. El producto regresa al inventario.</div>
+    <label class="ly-lab">Motivo<select class="ly-inp" onchange="state.lyCancel.reason=this.value">${LY_CANCEL_REASONS.map(x=>`<option ${m.reason===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <div class="ly-grid2" style="margin-top:8px;">
+      <label class="ly-lab">Reembolsar al cliente<input class="ly-inp" type="number" inputmode="decimal" min="0" max="${paid}" step="0.01" value="${lyEsc(m.refund)}" oninput="state.lyCancel.refund=this.value;lyCancelHint()"></label>
+      <label class="ly-lab">Método del reembolso<select class="ly-inp" onchange="state.lyCancel.method=this.value">${LY_METHODS.map(x=>`<option ${m.method===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    </div>
+    <div id="ly-cancel-hint" class="ly-sub" style="margin:8px 0;">Retiene la tienda: <b>${lyM(lyR2(paid-refund))}</b></div>
+    <label class="ly-lab">Nota (opcional)<input class="ly-inp" maxlength="200" value="${lyEsc(m.note)}" oninput="state.lyCancel.note=this.value"></label>
+    <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyCancel=null;render()">No cancelar</button><button class="btn-primary" style="flex:1;background:#BC355C;" ${state.lyBusy?'disabled':''} onclick="lyConfirmCancel()">${state.lyBusy?'Cancelando…':'Cancelar apartado'}</button></div>
+  </div></div>`;
+}
+function lyCancelHint(){ const m = state.lyCancel; const l = m && state.lyList.find(x=>x.id===m.id); const el = document.getElementById('ly-cancel-hint'); if(l&&el){ const paid = lyPaid(l); el.innerHTML = `Retiene la tienda: <b>${lyM(lyR2(paid-Math.min(paid,Math.max(0,lyR2(m.refund)))))}</b>`; } }
+function lyRenderOverlays(){
+  return (state.lyPay ? lyRenderPayModal() : '') + (state.lyReceipt ? lyRenderReceiptModal() : '') + (state.lyCancel ? lyRenderCancelModal() : '');
+}
+
+/* ============== APARTADOS: lado Punto de Venta ============== */
+function lyHost(){
+  return {
+    isPOS:true, register:state.activeCashRegister||null, cashier:state.activeCashier?state.activeCashier.name:'',
+    centerId:state.activeCenter?state.activeCenter.id:null, centerName:state.activeCenter?state.activeCenter.name:'',
+    restore: async (items, centerId)=>{
+      const done = await posRestoreStock({items, centerId});
+      (done||[]).forEach(d=>{ const p = state.products.find(x=>x.id===d.id); if(p) Object.assign(p, d.payload); });
+      state.products.filter(k=>k.isKit).forEach(k=>{ k.stock = computeKitStock(k); });
+    },
+    cashMovement: async (mov)=>{
+      if(!state.activeCashRegister) return;
+      await db.collection('cashRegisters').doc(state.activeCashRegister.id).update({movements: firebase.firestore.FieldValue.arrayUnion(mov)});
+      if(!state.activeCashRegister.movements) state.activeCashRegister.movements = [];
+      state.activeCashRegister.movements.push(mov);
+    },
+  };
+}
+function lyAfterPay(pay){ if(pay && pay.method==='Efectivo') drawerPulse(); }
+function openLayaways(){ state.lyOpen = true; state.lyDetailId = null; render(); lyLoad(true); }
+function closeLayaways(){ state.lyOpen = false; state.lyDetailId = null; state.lyPay = null; state.lyCancel = null; state.lyReceipt = null; render(); }
+function renderLayawayScreen(){
+  lyEnsureCss();
+  const l = state.lyDetailId ? state.lyList.find(x=>x.id===state.lyDetailId) : null;
+  return `<div class="modal-overlay" style="z-index:1100;"><div class="modal ly-modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+      <h3 style="margin:0;">${l?'<button class="icon-btn" aria-label="Volver" onclick="lyCloseDetail()">←</button> ':''}Apartados</h3>
+      <button class="icon-btn" aria-label="Cerrar" onclick="closeLayaways()">${icon('x',18)}</button>
+    </div>
+    ${l ? lyRenderDetail(l) : lyRenderList()}
+  </div></div>`;
+}
+/* ---- Crear un apartado desde el carrito ---- */
+function lyOpenForm(){
+  if(cartCount()===0){ showToast('Agrega los productos al carrito primero'); return; }
+  if(typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine){ showToast('Apartar necesita conexión a internet'); return; }
+  const total = saleTotal(), c = state.activeCustomer || {};
+  const min = Math.min(total, Math.ceil(total*lyMinPct()/100));
+  state.lyForm = {name:c.name||'', phone:c.phone||state.quickPhone||'', phone2:'', refName:'', refPhone:'', address:c.address||'', idNote:'', dueDate:lyAddDays(lyDays()), initial:String(min), method:'Efectivo', notes:state.saleNotes||'', min, total};
+  render();
+}
+function lyFormSet(k, v){ state.lyForm[k] = v; }
+function lyRenderFormModal(){
+  const f = state.lyForm; if(!f) return '';
+  lyEnsureCss();
+  const inp = (k, label, ph, extra)=>`<label class="ly-lab">${label}<input class="ly-inp" ${extra||''} placeholder="${ph||''}" value="${lyEsc(f[k])}" oninput="lyFormSet('${k}',this.value)"></label>`;
+  const rest = lyR2(f.total - lyR2(f.initial));
+  return `<div class="modal-overlay" style="z-index:1250;"><div class="modal ly-modal">
+    <h3>Apartar con abonos</h3>
+    <div class="ly-sub" style="margin:-6px 0 10px;">Total ${lyM(f.total)}. El producto se entrega hasta liquidar. Abono inicial mínimo: ${lyM(f.min)} (${lyMinPct()}%).</div>
+    <div class="ly-wrap">
+      <div class="ly-sec">Datos del cliente (obligatorios)</div>
+      ${inp('name','Nombre completo','Nombre y apellidos')}
+      <div class="ly-grid2">${inp('phone','WhatsApp','10 dígitos','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono (opcional)','','type="tel" inputmode="tel"')}</div>
+      <div class="ly-grid2">${inp('refName','Contacto de referencia','Nombre (familiar o amigo)')}${inp('refPhone','Teléfono de la referencia','10 dígitos','type="tel" inputmode="tel"')}</div>
+      ${inp('address','Domicilio','Calle, número, colonia, ciudad')}
+      ${inp('idNote','Identificación (opcional)','Ej. INE, últimos 4 dígitos del folio')}
+      <div class="ly-sec">Condiciones</div>
+      <div class="ly-grid2">
+        <label class="ly-lab">Fecha límite para liquidar<input class="ly-inp" type="date" min="${lyToday()}" value="${lyEsc(f.dueDate)}" oninput="lyFormSet('dueDate',this.value)"></label>
+        <label class="ly-lab">Abono inicial<input id="ly-initial" class="ly-inp" type="number" inputmode="decimal" min="${f.min}" max="${f.total}" step="0.01" value="${lyEsc(f.initial)}" oninput="lyFormSet('initial',this.value);lyFormHint()"></label>
+      </div>
+      <label class="ly-lab">Método del abono<select class="ly-inp" onchange="lyFormSet('method',this.value)">${LY_METHODS.map(x=>`<option ${f.method===x?'selected':''}>${x}</option>`).join('')}</select></label>
+      ${inp('notes','Notas (opcional)','')}
+      <div id="ly-form-hint" class="ly-sub">${rest>=0?`Saldo restante: <b>${lyM(rest)}</b>`:''}</div>
+      <div class="ly-sub"><i>${lyEsc(lyPolicy())}</i></div>
+    </div>
+    <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyForm=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lyCreate()">${state.lyBusy?'Guardando…':'Crear apartado y cobrar abono'}</button></div>
+  </div></div>`;
+}
+function lyFormHint(){ const f = state.lyForm, el = document.getElementById('ly-form-hint'); if(f&&el) el.innerHTML = `Saldo restante: <b>${lyM(Math.max(0,lyR2(f.total-lyR2(f.initial))))}</b>`; }
+async function lyCreate(){
+  const f = state.lyForm; if(!f || state.lyBusy) return;
+  const need = (v,msg)=>{ if(!String(v||'').trim()){ showToast(msg); return false; } return true; };
+  if(!need(f.name,'Escribe el nombre del cliente')) return;
+  if(lyDigits(f.phone).length<10){ showToast('El WhatsApp debe tener 10 dígitos'); return; }
+  if(!need(f.refName,'Falta el contacto de referencia')) return;
+  if(lyDigits(f.refPhone).length<10){ showToast('El teléfono de la referencia debe tener 10 dígitos'); return; }
+  if(!need(f.address,'Falta el domicilio')) return;
+  if(!f.dueDate || f.dueDate < lyToday()){ showToast('Elige una fecha límite válida'); return; }
+  const initial = lyR2(f.initial);
+  if(!(initial>0) || initial < f.min - 0.001){ showToast('El abono inicial mínimo es '+lyM(f.min)); return; }
+  if(initial > f.total + 0.001){ showToast('El abono inicial no puede ser mayor al total'); return; }
+  state.lyBusy = true; render();
+  const centerId = state.activeCenter.id;
+  const items = Object.entries(state.cart).map(([key,qty])=>{ const {p,v} = parseCartKey(key); return {id:p.id, variantId:v?v.id:null, name:p.name+(v?` (${variantLabel(v)})`:''), price:itemPrice(p,v), qty}; });
+  const subtotal = items.reduce((s,it)=>s+it.price*it.qty,0), discount = currentDiscountAmount(), total = lyR2(subtotal-discount);
+  let reserved = null;
+  try{ reserved = await reserveStockForSale(items, centerId); }
+  catch(e){
+    if(e instanceof InsufficientStockError) showToast('Ya no alcanza el stock de: '+e.insufficientItems.map(i=>i.name).join(', '));
+    else { console.error(e); showToast('No se pudo apartar'); }
+    state.lyBusy = false; render(); return;
+  }
+  try{
+    Object.entries(reserved||{}).forEach(([id,pl])=>{ const p = state.products.find(x=>x.id===id); if(p) Object.assign(p, pl); });
+    state.products.filter(k=>k.isKit).forEach(k=>{ k.stock = computeKitStock(k); });
+    // Cliente en la lista (se crea si es nuevo) con los datos extra
+    let cust = state.customers.find(c=>{ const d = lyDigits(c.phone).slice(-10); return d && d===lyDigits(f.phone).slice(-10); });
+    const extra = {phone2:f.phone2.trim(), reference:{name:f.refName.trim(), phone:f.refPhone.trim()}, idNote:f.idNote.trim()};
+    try{
+      if(!cust){
+        const payload = {name:f.name.trim(), phone:lyDigits(f.phone).slice(-10), email:'', address:f.address.trim(), city:'', state:'', country:'', notes:'Cliente con apartado', createdAt:new Date().toISOString(), source:'apartado', ...extra};
+        const ref = await db.collection('customers').add(payload); cust = {id:ref.id, ...payload}; state.customers.push(cust);
+      } else { await db.collection('customers').doc(cust.id).update({address: cust.address||f.address.trim(), ...extra}); Object.assign(cust, extra); }
+    }catch(e){ console.error('No se pudo guardar el cliente', e); }
+    const folio = await lyNextFolio();
+    const now = new Date().toISOString();
+    const pay = {id:'p'+Date.now().toString(36), n:1, kind:'abono', date:now, amount:initial, method:f.method, note:'Abono inicial', cashier:state.activeCashier.name, cashRegisterId:state.activeCashRegister.id, centerId, from:'pos'};
+    const doc = {
+      folio, status: initial>=total-0.001 ? 'liquidado' : 'activo', createdAt:now, updatedAt:now, dueDate:f.dueDate,
+      centerId, centerName:state.activeCenter.name, cashierId:state.activeCashier.id, cashierName:state.activeCashier.name, registerId:state.activeCashRegister.id,
+      customerId:cust?cust.id:null,
+      customer:{name:f.name.trim(), phone:f.phone.trim(), phone2:f.phone2.trim(), refName:f.refName.trim(), refPhone:f.refPhone.trim(), address:f.address.trim(), idNote:f.idNote.trim()},
+      items, subtotal:lyR2(subtotal), discount:lyR2(discount), total, paid:initial, payments:[pay], notes:(f.notes||'').trim().slice(0,200), policy:lyPolicy(),
+    };
+    const ref = await db.collection('layaways').add(doc);
+    const saved = {id:ref.id, ...doc}; lyUpsertLocal(saved); state.lyLoaded = state.lyLoaded || false;
+    if(f.method==='Efectivo') { await lyHost().cashMovement({type:'ingreso', amount:initial, note:'Abono inicial apartado '+lyFolio(folio), date:now, layawayId:ref.id}).catch(e=>console.error(e)); drawerPulse(); }
+    clearPosCart(); state.cart = {}; state.manualDiscount = null; state.activeCustomer = null; state.quickPhone = ''; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo'; state.cartCollapsed = true;
+    state.lyForm = null; state.lyReceipt = {id:ref.id, payId:pay.id}; state.lyOpen = true; state.lyDetailId = ref.id;
+    if(!state.lyLoaded) lyLoad(true);
+    showToast('Apartado '+lyFolio(folio)+' creado');
+  }catch(e){
+    console.error(e); showToast('Se apartó el stock pero no se pudo guardar el apartado. Avisa al administrador.');
+    try{ await lyHost().restore(items, centerId); }catch(e2){ console.error(e2); }
+  }
+  state.lyBusy = false; render();
+}
+/* ============== CAJÓN DE DINERO ==============
+   La caja registradora se conecta a la impresora de tickets (cable RJ11) o por USB/serie.
+   Modos (se guardan en ESTE dispositivo): "ticket" imprime el ticket en cada venta y la impresora abre el cajón
+   (hay que activar "abrir cajón" en el controlador de la impresora); "serial" y "usb" mandan el pulso ESC/POS directo
+   desde el navegador (Chrome/Edge en computadora; requiere vincular el dispositivo una vez). */
+const DRAWER_KEY = 'cdlp_pos_drawer';
+const DRAWER_PULSE = new Uint8Array([0x1B,0x70,0x00,0x19,0xFA]);
+function drawerCfg(){ try{ return {mode:'off', onlyCash:false, ...JSON.parse(localStorage.getItem(DRAWER_KEY)||'{}')}; }catch(e){ return {mode:'off', onlyCash:false}; } }
+function drawerSaveCfg(c){ try{ localStorage.setItem(DRAWER_KEY, JSON.stringify(c)); }catch(e){} }
+function drawerSetMode(m){ const c = drawerCfg(); c.mode = m; drawerSaveCfg(c); render(); }
+function drawerSetOnlyCash(v){ const c = drawerCfg(); c.onlyCash = !!v; drawerSaveCfg(c); render(); }
+async function drawerPair(){
+  const c = drawerCfg();
+  try{
+    if(c.mode==='serial'){ if(!navigator.serial){ showToast('Este navegador no permite puerto serie (usa Chrome o Edge en computadora)'); return; } await navigator.serial.requestPort(); }
+    else if(c.mode==='usb'){ if(!navigator.usb){ showToast('Este navegador no permite USB directo (usa Chrome o Edge en computadora)'); return; } await navigator.usb.requestDevice({filters:[]}); }
+    else { showToast('Este modo no necesita vincular nada'); return; }
+    showToast('Dispositivo vinculado. Pulsa "Probar apertura"');
+  }catch(e){ if(e && e.name!=='NotFoundError') { console.error(e); showToast('No se pudo vincular el dispositivo'); } }
+  render();
+}
+async function drawerPulse(opts){
+  const c = drawerCfg(); opts = opts||{};
+  if(c.mode==='off' || c.mode==='ticket') return false;
+  try{
+    if(c.mode==='serial' && navigator.serial){
+      const ports = await navigator.serial.getPorts(); if(!ports.length) throw new Error('sin puerto vinculado');
+      const port = ports[0]; await port.open({baudRate:9600});
+      const w = port.writable.getWriter(); await w.write(DRAWER_PULSE); w.releaseLock(); await port.close(); return true;
+    }
+    if(c.mode==='usb' && navigator.usb){
+      const devs = await navigator.usb.getDevices(); if(!devs.length) throw new Error('sin dispositivo vinculado');
+      const d = devs[0]; await d.open(); if(!d.configuration) await d.selectConfiguration(1);
+      let target = null;
+      for(const itf of d.configuration.interfaces){ const alt = itf.alternates[0]; const ep = alt && alt.endpoints.find(e=>e.direction==='out' && e.type==='bulk'); if(ep){ target = {itf, ep}; break; } }
+      if(!target) throw new Error('sin salida USB');
+      await d.claimInterface(target.itf.interfaceNumber); await d.transferOut(target.ep.endpointNumber, DRAWER_PULSE);
+      try{ await d.releaseInterface(target.itf.interfaceNumber); }catch(_){} try{ await d.close(); }catch(_){}
+      return true;
+    }
+    throw new Error('modo no disponible en este navegador');
+  }catch(e){ console.error('Cajón', e); if(!opts.silent) showToast('No se pudo abrir el cajón: '+(e&&e.message?e.message:'revisa la conexión')); return false; }
+}
+function drawerAfterSale(sale){
+  const c = drawerCfg(); if(c.mode==='off') return;
+  const hasCash = salePayments(sale).some(p=>p.method==='Efectivo');
+  if(c.onlyCash && !hasCash) return;
+  if(c.mode==='ticket'){ try{ printSaleTicket(sale); }catch(e){ console.error(e); } return; }
+  drawerPulse();
+}
+async function drawerTest(){
+  const c = drawerCfg();
+  if(c.mode==='ticket'){ showToast('En modo ticket se imprime un ticket de prueba'); printSaleTicket({date:new Date().toISOString(), items:[{qty:1,name:'Prueba de cajón',price:0}], total:0, payments:[{method:'Efectivo',amount:0}], cashierName:state.activeCashier?state.activeCashier.name:''}); return; }
+  if(c.mode==='off'){ showToast('Primero elige un modo'); return; }
+  const ok = await drawerPulse(); if(ok) showToast('Pulso enviado: el cajón debería abrirse');
+}
+function renderDrawerModal(){
+  const c = drawerCfg();
+  const opt = (m, t, d)=>`<label class="ly-box" style="cursor:pointer;flex-direction:row;gap:10px;align-items:flex-start;border-color:${c.mode===m?'var(--primary)':'var(--border)'};"><input type="radio" name="drawer-mode" ${c.mode===m?'checked':''} onchange="drawerSetMode('${m}')" style="margin-top:3px;"><span><b>${t}</b><br><span class="ly-sub">${d}</span></span></label>`;
+  lyEnsureCss();
+  return `<div class="modal-overlay" style="z-index:1250;"><div class="modal ly-modal" style="max-width:480px !important;">
+    <h3>Cajón de dinero</h3>
+    <div class="ly-sub" style="margin:-6px 0 10px;">Se guarda solo en este dispositivo. Elige cómo se abre el cajón al cobrar.</div>
+    <div class="ly-wrap">
+      ${opt('off','No abrir automáticamente','El cajón se abre con su llave o botón.')}
+      ${opt('ticket','Con la impresora de tickets','Imprime el ticket en cada venta; la impresora manda la señal al cajón (activa "Abrir cajón" en el controlador). Para que no pregunte, abre Chrome con --kiosk-printing.')}
+      ${opt('serial','Puerto serie (Chrome/Edge)','Envía el pulso directo a la impresora/cajón por COM o USB-serie. Hay que vincularlo una vez.')}
+      ${opt('usb','USB directo (Chrome/Edge)','Envía el pulso por USB a la impresora térmica. Hay que vincularlo una vez.')}
+      <label class="checkbox-row" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" ${c.onlyCash?'checked':''} onchange="drawerSetOnlyCash(this.checked)"><span>Abrir solo cuando haya pago en efectivo</span></label>
+      <div class="ly-actions">
+        ${(c.mode==='serial'||c.mode==='usb') ? `<button class="btn-secondary" onclick="drawerPair()">Vincular dispositivo</button>` : ''}
+        <button class="btn-secondary" onclick="drawerTest()">Probar apertura</button>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:12px;" onclick="state.drawerModalOpen=false;render()">Listo</button>
+  </div></div>`;
+}
+
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
@@ -2737,6 +3315,10 @@ function render(){
     if(state.exchangeModalOpen) html += renderExchangeModal();
     if(state.checkoutReminderOpen) html += renderCheckoutReminderModal();
     if(state.warehouseOpen) html += renderWarehouseModal();
+    if(state.lyOpen) html += renderLayawayScreen();
+    if(state.lyForm) html += lyRenderFormModal();
+    html += lyRenderOverlays();
+    if(state.drawerModalOpen) html += renderDrawerModal();
     root.innerHTML = html;
   }
   toastStack();
@@ -2784,6 +3366,12 @@ window.addEventListener('popstate', (e)=>{
 function navLayers(){
   const s = state, L = [];
   if(!s.user || !s.loaded || !s.activeCashier || !s.pinConfirmed || !s.activeCenter || !s.activeCashRegister) return L;
+  if(s.lyPay) L.push(()=>{ s.lyPay=null; render(); });
+  if(s.lyCancel) L.push(()=>{ s.lyCancel=null; render(); });
+  if(s.lyReceipt) L.push(()=>{ s.lyReceipt=null; render(); });
+  if(s.drawerModalOpen) L.push(()=>{ s.drawerModalOpen=false; render(); });
+  if(s.lyForm) L.push(()=>{ s.lyForm=null; render(); });
+  if(s.lyOpen) L.push(()=>{ if(s.lyDetailId) s.lyDetailId=null; else s.lyOpen=false; render(); });
   if(s.posMoreMenuOpen) L.push(()=>{ s.posMoreMenuOpen=false; render(); });
   if(s.checkoutReminderOpen) L.push(()=>closeCheckoutReminder(false));
   if(s.warehouseOpen) L.push(()=>closeWarehouseView());
