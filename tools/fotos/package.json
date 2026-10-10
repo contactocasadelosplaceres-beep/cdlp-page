@@ -1,0 +1,10 @@
+{
+  "name": "cdlp-fotos",
+  "private": true,
+  "description": "Convierte las fotos base64 de los productos (Firestore) en archivos .webp servidos por GitHub Pages",
+  "type": "commonjs",
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "sharp": "^0.33.4"
+  }
+}
