@@ -120,7 +120,7 @@
   .cat-chip{flex-shrink:0;padding:8px 14px;min-height:44px;display:inline-flex;align-items:center;border-radius:var(--radius-sm);background:var(--surface);border:1.5px solid var(--border);color:var(--ink-soft);font-size:12.5px;font-weight:600;white-space:nowrap;transition:all .15s ease;}
   .cat-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 6px 14px -8px rgba(153,52,119,0.5);font-weight:700;}
   .layout{display:flex;flex:1;min-height:0;}
-  .prod-grid{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 100px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start;}
+  .prod-grid{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px 100px;display:grid;grid-template-columns:repeat(2,1fr);gap:10px;align-content:start;grid-auto-rows:max-content;}
   @media(min-width:600px){.prod-grid{grid-template-columns:repeat(3,1fr);}}
   @media(min-width:900px){.prod-grid{grid-template-columns:repeat(4,1fr);}}
   .prod-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-sm);transition:transform .12s ease,box-shadow .12s ease;}
@@ -264,6 +264,117 @@
     .catalog-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;margin-top:10px;border-top:1px solid var(--border);font-size:14px;}
   }
 .quick-phone{margin:0 0 8px;} .quick-phone input{width:100%;min-height:40px;font-size:14px;} .quick-phone-hint{font-size:11.5px;color:var(--ink-soft);min-height:0;margin-top:3px;}
+  /* ===== Pantalla de venta (rediseño oct 2026) ===== */
+  .v2-app{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+  .v2-banner{padding:8px 16px;font-size:12.5px;font-weight:600;display:flex;gap:8px;align-items:center;}
+  .v2-banner.warn{background:#FDEBD3;color:#8a5a1a;} .v2-banner.ok{background:#EAF3D8;color:#3d5c1a;}
+  .v2-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--navy);color:#fff;flex-shrink:0;}
+  .v2-who{display:flex;align-items:center;gap:10px;min-width:0;}
+  .v2-avatar{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;}
+  .v2-name{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .v2-sub{font-size:11.5px;opacity:.85;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;}
+  .v2-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#7CE38B;display:inline-block;} .v2-dot.warn{background:var(--amber);}
+  .v2-actions{display:flex;gap:4px;align-items:center;}
+  .v2-act{display:flex;flex-direction:column;align-items:center;gap:2px;color:#fff;padding:6px 8px;border-radius:10px;font-size:10.5px;font-weight:600;min-width:52px;}
+  .v2-act:hover,.v2-act:focus-visible{background:rgba(255,255,255,.12);}
+  .v2-body{flex:1;min-height:0;display:flex;}
+  .v2-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
+  .v2-search{display:flex;align-items:center;gap:8px;margin:12px 14px 8px;padding:0 6px 0 14px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);color:var(--ink-soft);}
+  .v2-search:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px rgba(153,52,119,.12);}
+  .v2-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px;padding:13px 0;color:var(--ink);}
+  .v2-search input::-webkit-search-cancel-button{display:none;}
+  .v2-clear{color:var(--ink-soft);padding:8px;border-radius:8px;}
+  .v2-scan{display:flex;align-items:center;gap:6px;background:var(--surface-soft);color:var(--primary-deep);padding:8px 12px;border-radius:10px;font-weight:700;font-size:13px;}
+  .v2-cats{display:flex;gap:6px;overflow-x:auto;padding:0 14px 10px;scrollbar-width:none;flex-shrink:0;}
+  .v2-cats::-webkit-scrollbar{display:none;}
+  .v2-chip{flex-shrink:0;display:flex;align-items:center;gap:5px;padding:8px 14px;border-radius:999px;background:var(--surface);border:1.5px solid var(--border);font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;}
+  .v2-chip.on{background:var(--primary-deep);border-color:var(--primary-deep);color:#fff;}
+  .v2-resinfo{padding:0 16px 6px;font-size:12.5px;color:var(--ink-soft);}
+  .v2-grid{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 14px 110px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:start;grid-auto-rows:max-content;}
+  @media(min-width:600px){.v2-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+  @media(min-width:900px){.v2-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));padding-bottom:24px;}}
+  .pt{position:relative;display:flex;flex-direction:column;text-align:left;padding:0;width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);overflow:hidden;min-width:0;transition:transform .08s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pt:hover{border-color:var(--primary);box-shadow:var(--shadow-sm);} .pt:active{transform:scale(.97);}
+  .pt.pt-in{border-color:var(--primary);}
+  .pt.pt-out{opacity:.55;cursor:not-allowed;}
+  .pt-img{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:3/2;background:var(--surface-soft);font-weight:800;font-size:22px;letter-spacing:.04em;}
+  .pt-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:var(--surface);}
+  .pt-badge{position:absolute;top:6px;right:6px;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:var(--primary);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);}
+  .pt-sale{position:absolute;left:6px;top:6px;background:var(--rose);color:#fff;font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:999px;}
+  .pt-name{padding:8px 10px 2px;font-size:13px;font-weight:600;line-height:1.25;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em;}
+  .pt-foot{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:4px 10px 10px;margin-top:auto;}
+  .pt-price{font-weight:800;color:var(--primary-deep);font-size:14px;line-height:1.2;}
+  .pt-price small{font-weight:600;font-size:10.5px;color:var(--ink-soft);} .pt-price s{font-weight:500;font-size:11px;color:var(--ink-soft);margin-left:4px;}
+  .pt-stock{font-size:11px;color:var(--ink-soft);white-space:nowrap;} .pt-stock.low{color:#9a5b00;font-weight:700;} .pt-stock.zero{color:var(--rose);font-weight:700;}
+  .v2-empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;color:var(--ink-soft);padding:40px 16px;font-size:13px;}
+  .v2-empty b{color:var(--ink);font-size:15px;} .v2-empty.small{padding:28px 12px;}
+  /* Ticket */
+  .v2-ticket{display:flex;flex-direction:column;min-height:0;background:var(--surface);}
+  .v2-body>.v2-ticket{width:380px;flex-shrink:0;border-left:1px solid var(--border);box-shadow:-16px 0 40px -28px rgba(43,22,32,.3);}
+  @media(min-width:1280px){.v2-body>.v2-ticket{width:420px;}}
+  .v2-ticket.sheet{position:absolute;left:0;right:0;bottom:0;max-height:88vh;border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--shadow-lg);}
+  .v2-ticket-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 16px 8px;}
+  .v2-ticket-head h2{font-size:19px;}
+  .v2-sub2{font-size:12px;color:var(--ink-soft);}
+  .v2-mini{display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:10px;background:var(--surface-soft);color:var(--ink);font-size:12.5px;font-weight:600;}
+  .v2-mini.danger{color:var(--rose);}
+  .v2-body .v2-close-sheet{display:none;}
+  .v2-ctx{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:0 16px 10px;}
+  .v2-ctxbtn{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 8px;border-radius:10px;border:1.5px dashed var(--border);font-size:12.5px;font-weight:600;color:var(--ink-soft);min-width:0;}
+  .v2-ctxbtn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .v2-ctxbtn.on{border-style:solid;border-color:var(--primary);background:var(--surface-soft);color:var(--primary-deep);}
+  .v2-lines{flex:1;min-height:80px;overflow-y:auto;padding:0 16px;border-top:1px solid var(--border);}
+  .v2-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);}
+  .v2-line-name{font-size:14px;font-weight:600;line-height:1.25;overflow-wrap:anywhere;}
+  .v2-line-var{display:inline-block;margin-left:6px;font-size:11.5px;font-weight:700;background:var(--surface-soft);color:var(--primary-deep);padding:1px 7px;border-radius:999px;}
+  .v2-line-unit{font-size:11.5px;color:var(--ink-soft);margin-top:2px;} .v2-line-unit s{opacity:.7;}
+  .v2-stepper{display:flex;align-items:center;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;}
+  .v2-stepper button{width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--primary-deep);}
+  .v2-stepper button:disabled{opacity:.3;} .v2-stepper span{min-width:24px;text-align:center;font-weight:800;}
+  .v2-line-total{min-width:78px;text-align:right;font-weight:800;font-size:14px;white-space:nowrap;}
+  .v2-totals{padding:12px 16px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--surface);}
+  .v2-row{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-soft);margin-bottom:4px;}
+  .v2-row.disc{color:var(--rose);font-weight:600;}
+  .v2-row.total{font-size:22px;font-weight:800;color:var(--ink);margin:4px 0 12px;font-family:'League Spartan',sans-serif;}
+  .v2-pay-actions{display:flex;gap:8px;}
+  .v2-secondary{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:14px 14px;border-radius:var(--radius-md);background:var(--surface-soft);color:var(--primary-deep);font-weight:700;font-size:14px;}
+  .v2-charge{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:15px 18px;border-radius:var(--radius-md);background:linear-gradient(135deg,var(--primary),var(--primary-deep));color:#fff;font-weight:800;font-size:16px;box-shadow:0 10px 20px -10px rgba(153,52,119,.55);}
+  .v2-charge:disabled{opacity:.4;box-shadow:none;cursor:not-allowed;}
+  .v2-charge.big{width:100%;margin-top:14px;padding:17px;font-size:17px;}
+  /* Barra inferior (celular) */
+  .v2-bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -10px 30px -16px rgba(43,22,32,.35);z-index:20;}
+  .v2-bar-sum{flex:1;display:flex;align-items:center;gap:10px;text-align:left;padding:6px 10px;border-radius:var(--radius-md);background:var(--surface-soft);color:var(--ink);min-width:0;}
+  .v2-bar-sum:disabled{opacity:.6;}
+  .v2-bar-sum small{display:block;font-size:11px;color:var(--ink-soft);} .v2-bar-sum b{font-size:16px;}
+  .v2-bar-n{min-width:30px;height:30px;border-radius:999px;background:var(--primary-deep);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;padding:0 8px;}
+  .v2-bar .v2-charge{flex:0 0 auto;min-width:130px;}
+  /* Hojas (cobro, variantes, ticket en celular) */
+  .v2-sheet-wrap{align-items:flex-end;}
+  @media(min-width:600px){.v2-sheet-wrap{align-items:center;}}
+  .v2-pay,.v2-varsheet{max-width:460px !important;width:100%;max-height:92vh;overflow-y:auto;}
+  .v2-pay-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+  .v2-pay-total{text-align:center;font-family:'League Spartan',sans-serif;font-size:38px;font-weight:800;color:var(--primary-deep);margin:4px 0 14px;line-height:1.1;}
+  .v2-pay-total small{display:block;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;color:var(--ink-soft);letter-spacing:.02em;}
+  .v2-methods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:14px;}
+  @media(max-width:380px){.v2-methods{grid-template-columns:repeat(2,minmax(0,1fr));}}
+  .v2-method{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;border-radius:var(--radius-md);border:1.5px solid var(--border);font-size:12.5px;font-weight:700;color:var(--ink);}
+  .v2-method.on{border-color:var(--primary);background:var(--surface-soft);color:var(--primary-deep);box-shadow:inset 0 0 0 1px var(--primary);}
+  .v2-lab{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;} .v2-lab small{font-weight:500;}
+  .v2-cash{width:100%;font-size:24px;font-weight:800;text-align:center;padding:12px;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg);color:var(--ink);}
+  .v2-cash:focus{outline:none;border-color:var(--primary);}
+  .v2-cash::-webkit-outer-spin-button,.v2-cash::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;} .v2-cash{-moz-appearance:textfield;}
+  .v2-quick{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+  .v2-quick button{flex:1 1 70px;padding:10px 6px;border-radius:10px;background:var(--surface-soft);font-weight:700;font-size:13px;color:var(--ink);}
+  .v2-change{text-align:center;font-size:14px;color:var(--ink-soft);padding:10px;border-radius:10px;background:var(--bg);}
+  .v2-change b{font-size:22px;color:var(--green);} .v2-change.bad{color:var(--rose);font-weight:700;}
+  .v2-note{font-size:13px;color:var(--ink-soft);text-align:center;padding:10px;background:var(--bg);border-radius:10px;}
+  .v2-vargrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .v2-var{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:12px;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--surface);min-width:0;}
+  .v2-var:hover{border-color:var(--primary);} .v2-var.off{opacity:.45;}
+  .v2-var img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;margin-bottom:4px;}
+  .v2-var b{font-size:14px;overflow-wrap:anywhere;} .v2-var span{font-weight:800;color:var(--primary-deep);font-size:13.5px;} .v2-var span s{font-weight:500;color:var(--ink-soft);}
+  .v2-var small{font-size:11.5px;color:var(--ink-soft);} .v2-var small.low{color:#9a5b00;font-weight:700;} .v2-var small.zero{color:var(--rose);font-weight:700;}
+  @media(max-width:420px){ .v2-act span{display:none;} .v2-act{min-width:40px;padding:8px;} .v2-scan span{display:none;} }
 </style>
 </head>
 <body>
@@ -657,6 +768,15 @@ function icon(name, size){
     'chevron-right':'<path d="m9 18 6-6-6-6"/>',
     camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>',
     receipt:'<path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 2Z"/><path d="M8 7h8M8 11h8M8 15h5"/>',
+    menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+    'chevron-up':'<path d="m18 15-6-6-6 6"/>',
+    'chevron-left':'<path d="m15 18-6-6 6-6"/>',
+    'credit-card':'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>',
+    smartphone:'<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
+    'dollar-sign':'<path d="M12 2v20"/><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    trash:'<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+    history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/>',
     'refresh-cw':'<path d="M21 12a9 9 0 0 1-15.5 6.3L3 15"/><path d="M3 12a9 9 0 0 1 15.5-6.3L21 9"/><path d="M21 3v6h-6"/><path d="M3 21v-6h6"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;display:inline-block" aria-hidden="true">${P[name]||''}</svg>`;
@@ -678,9 +798,18 @@ function handlePosSearchKeydown(e){
   if(e.key !== 'Enter') return;
   const raw = state.search.trim();
   if(!raw) return;
-  const match = state.products.find(p=>p.sku && p.sku.toLowerCase()===raw.toLowerCase());
-  if(!match){ showToast('Ningún producto tiene ese código'); return; }
-  addToCart(match.id);
+  const low = raw.toLowerCase();
+  let match = state.products.find(p=>(p.sku && p.sku.toLowerCase()===low) || (p.barcode && String(p.barcode).toLowerCase()===low));
+  let vmatch = null;
+  if(!match){ for(const p of state.products){ const v = (p.variants||[]).find(x=>(x.sku && String(x.sku).toLowerCase()===low) || (x.barcode && String(x.barcode).toLowerCase()===low)); if(v){ match = p; vmatch = v; break; } } }
+  if(!match){
+    // Sin código exacto: si la búsqueda deja un solo producto, Enter lo agrega.
+    const res = posFilteredProducts().filter(p=>posStockOf(p)>0);
+    if(res.length===1) match = res[0];
+    else { showToast(res.length ? 'Hay varios resultados: toca el que quieres' : 'Ningún producto tiene ese código'); return; }
+  }
+  if(vmatch){ state.variantPickerProduct = match.id; pickVariant(vmatch.id); }
+  else addToCart(match.id);
   state.search = ''; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render();
   const i = document.getElementById('pos-search-input');
   if(i) i.focus();
@@ -1951,6 +2080,7 @@ function closeCheckoutReminder(applyPending){
   state.checkoutReminderShown = true; // no volver a interrumpir en esta misma venta
   if(applyPending && state.pendingPayMethod){ state.payMethod = state.pendingPayMethod; }
   state.pendingPayMethod = null;
+  if(state.pendingPay){ state.pendingPay = false; if(cartCount()){ state.payOpen = true; state.cashReceived = ''; state.ticketOpen = false; } }
   render();
 }
 function renderCheckoutReminderModal(){
@@ -2620,7 +2750,7 @@ async function chargeSale(){
       }
     }
     clearPosCart();
-    state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.saleDone = true; state.checkoutReminderShown = false;
+    state.lastSaleTotal = total; state.lastOrderNumber = orderNumber; state.lastPayments = payments; state.cart = {}; state.cartCollapsed = true; state.ticketOpen = false; state.saleDone = true; state.checkoutReminderShown = false;
     state.lastSale = {...saleFields, orderNumber};
     try{ drawerAfterSale(state.lastSale); }catch(e){ console.error(e); }
     state.lastSaleItems = items; state.lastCustomerName = state.activeCustomer ? state.activeCustomer.name : ''; state.lastCustomerPhone = state.activeCustomer ? (state.activeCustomer.phone||'') : '';
@@ -2636,26 +2766,7 @@ async function chargeSale(){
   }
   state.sending = false; render();
 }
-function newSale(){ state.saleDone=false; state.checkoutReminderShown=false; render(); }
-function renderVariantPickerModal(){
-  const p = state.products.find(x=>x.id===state.variantPickerProduct);
-  if(!p) return '';
-  return `
-  <div class="modal-overlay">
-    <div class="modal" style="max-width:380px;">
-      <h3>${p.name}</h3>
-      <p style="font-size:12.5px;color:var(--ink-soft);margin-top:-8px;margin-bottom:12px;">Elige la variante</p>
-      ${(p.variants||[]).map(v=>`
-        <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" ${vCenterStock(v,state.activeCenter.id)<=0?'disabled':''} onclick="pickVariant('${v.id}')">
-          <span style="display:flex;align-items:center;gap:10px;min-width:0;">${vImage(p,v)?`<img src="${vImage(p,v)}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}<span style="overflow-wrap:anywhere;text-align:left;">${variantLabel(v)}</span></span>
-          <span style="font-size:12px;color:var(--ink-soft);text-align:right;line-height:1.3;">${(()=>{ const pr = itemPrice(p,v), ls = variantListPrice(p,v); return `<strong style="color:var(--ink);">${pr<ls?`<s style="font-weight:500;color:var(--ink-soft);">${money(ls)}</s> `:''}${money(pr)}</strong><br>`; })()}${vCenterStock(v,state.activeCenter.id)<=0?'Agotado':`Stock: ${vCenterStock(v,state.activeCenter.id)}`}</span>
-        </button>
-      `).join('')}
-      <button class="pill-btn" style="width:100%;background:var(--surface-soft);color:var(--ink-soft);margin-top:4px;" onclick="state.variantPickerProduct=null;render()">Cancelar</button>
-    </div>
-  </div>`;
-}
-
+function newSale(){ state.saleDone=false; state.checkoutReminderShown=false; state.lastChange=null; state.lastCashReceived=null; render(); setTimeout(()=>{ const i=document.getElementById("pos-search-input"); if(i && posDesktop()) i.focus(); },30); }
 function renderLogin(){
   return `
   <div class="login-screen"><div class="card">
@@ -2715,20 +2826,6 @@ function renderCenterSelect(){
 
 const FREQUENT_CAT = '__frecuentes__';
 
-function posProdCard(p){
-  const hasVariants = p.variantGroups && p.variantGroups.length>0;
-  const dp = posDisplayPrice(p);
-  const hasPromo = !!dp.was;
-  const stock = hasVariants ? (p.variants||[]).reduce((s,v)=>s+vCenterStock(v,state.activeCenter.id),0) : centerStock(p, state.activeCenter.id);
-  const outOfStock = stock<=0;
-  return `
-  <div class="prod-card ${outOfStock?'out-of-stock':''}" ${outOfStock?'':`onclick="addToCart('${p.id}')"`}>
-    ${p.images&&p.images.length ? `<img class="prod-swatch" src="${p.images[0]}" style="object-fit:cover;">` : `<div class="prod-swatch" style="background:${catColor(p.cat)}"></div>`}
-    <div class="prod-name">${p.name}${hasVariants?' '+icon('layers',13):''}</div>
-    <div class="prod-price">${hasPromo?`<s style="opacity:.6;font-size:11px;">${money(dp.was)}</s> `:''}${dp.from?'<span style="font-size:.78em;font-weight:600;">Desde</span> ':''}${money(dp.price)}</div>
-    <div class="prod-stock">${outOfStock?`<span class="stock-out-badge">Agotado</span>`:(hasVariants?`Elegir variante · ${stock} en ${state.activeCenter.name}`:`Stock en ${state.activeCenter.name}: ${stock}`)}</div>
-  </div>`;
-}
 function renderProdGrid(list){
   if(state.prodGridLimit==null) state.prodGridLimit=PROD_GRID_PAGE_SIZE;
   const visible = list.slice(0, state.prodGridLimit);
@@ -2966,87 +3063,284 @@ function renderDeskCart(entries){
     </div>`;
 }
 
-function renderPOS(){
-  const cats = ["Todos", ...state.categories];
+/* ================================================================
+   PANTALLA DE VENTA (rediseño oct 2026)
+   Una sola distribución para celular, tablet y computadora:
+   · Izquierda: buscador + categorías + productos (siempre visibles, sin abrir catálogos).
+   · Derecha (o abajo en celular): el ticket de la venta con cliente, descuento y notas.
+   · Cobrar abre un paso aparte con método de pago, efectivo recibido y cambio.
+   ================================================================ */
+function posThumb(src){ return (typeof src==='string' && src.startsWith('img/p/') && !src.startsWith('img/p/t/')) ? 'img/p/t/'+src.slice(6) : src; }
+function posInitials(name){ return String(name||'?').replace(/[^\p{L}\p{N} ]/gu,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'; }
+function posCartQtyOf(pid){ return Object.entries(state.cart).reduce((s,[k,q])=>s+(k===pid||k.indexOf(pid+'::')===0?q:0),0); }
+function posStockOf(p){ return (p.variants||[]).length ? (p.variants||[]).reduce((s,v)=>s+vCenterStock(v,state.activeCenter.id),0) : centerStock(p, state.activeCenter.id); }
+function posProdCard(p){
+  const hasVariants = (p.variants||[]).length>0 && p.variantGroups && p.variantGroups.length>0;
+  const dp = posDisplayPrice(p);
+  const stock = posStockOf(p), out = stock<=0, inCart = posCartQtyOf(p.id);
+  const img = p.images && p.images.length ? posThumb(p.images[0]) : '';
+  return `
+  <button type="button" class="pt ${out?'pt-out':''} ${inCart?'pt-in':''}" ${out?'disabled aria-disabled="true"':''} onclick="addToCart('${p.id}')" aria-label="${escHtml(p.name)}, ${money(dp.price)}${out?', agotado':''}">
+    <span class="pt-img" style="background:${catColor(p.cat)}1f;color:${catColor(p.cat)};"><span>${escHtml(posInitials(p.name))}</span>${img?`<img src="${escHtml(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
+      ${inCart?`<span class="pt-badge">${inCart}</span>`:''}
+      ${dp.was?`<span class="pt-sale">Oferta</span>`:''}
+    </span>
+    <span class="pt-name">${escHtml(p.name)}</span>
+    <span class="pt-foot">
+      <span class="pt-price">${dp.from?'<small>Desde</small> ':''}${money(dp.price)}${dp.was?` <s>${money(dp.was)}</s>`:''}</span>
+      <span class="pt-stock ${out?'zero':stock<=3?'low':''}">${out?'Agotado':hasVariants?`${(p.variants||[]).length} opciones`:`${stock} disp.`}</span>
+    </span>
+  </button>`;
+}
+function posFilteredProducts(){
   const frequentIds = getFrequentProductIds();
-  let filtered;
+  let list;
   if(state.activeCat===FREQUENT_CAT){
     const byId = {}; state.products.forEach(p=>byId[p.id]=p);
-    filtered = frequentIds.map(id=>byId[id]).filter(Boolean);
-  } else {
-    filtered = state.activeCat==="Todos" ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
-  }
-  if(state.search.trim()) filtered = searchProducts(state.search, filtered);
-  const desk = posDesktop();
-  const cartCol = state.cartCollapsed && !desk;
-  const entries = Object.entries(state.cart);
+    list = frequentIds.map(id=>byId[id]).filter(Boolean);
+  } else list = (!state.activeCat || state.activeCat==="Todos") ? state.products : state.products.filter(p=>(p.categories||[p.cat]).includes(state.activeCat));
+  if(state.search.trim()) list = searchProducts(state.search, state.activeCat===FREQUENT_CAT ? state.products : list);
+  // Disponibles primero
+  return list.slice().sort((a,b)=>(posStockOf(b)>0)-(posStockOf(a)>0));
+}
+function posSetCat(c){ state.activeCat = c; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render(); const g = document.querySelector('.v2-grid'); if(g) g.scrollTop = 0; }
+function renderPosHeader(){
+  const stale = state.cashRegisterStale;
   return `
-  <div class="app ${desk?'dk':''} ${desk&&state.cartPanelOpen===false?'dk-closed':''}">
-    ${state.posOffline ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;margin-bottom:10px;">${icon('alert-triangle',14)} Sin conexión — puedes seguir vendiendo, las ventas se guardan en este dispositivo y se suben solas cuando regrese el internet.</div>`
-      : state.offlineQueueCount>0 ? `<div class="note-box" style="background:#EAF3D8;color:#3d5c1a;margin-bottom:10px;">${icon('history',14)} Sincronizando ${state.offlineQueueCount} venta(s) pendiente(s) de cuando no había internet…</div>` : ''}
-    <div class="top">
-      <div style="flex:1 1 160px;min-width:0;"><div class="brand">${state.activeCashier.name}</div><div class="sub">Punto de venta · ${icon('map-pin')} ${state.activeCenter.name}</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;margin-left:auto;">
-        <button class="pill-btn" onclick="state.cashPanelOpen=true;render()">${icon('wallet')} Caja</button>
-        <button class="pill-btn" onclick="openSalesList()">${icon('receipt')} Ventas</button>
-        <div class="top-more-wrap">
-          <button class="pill-btn" onclick="event.stopPropagation();state.posMoreMenuOpen=!state.posMoreMenuOpen;render()" aria-label="Más opciones">⋮ Más</button>
-          ${state.posMoreMenuOpen ? `
-          <div class="top-more-overlay" onclick="state.posMoreMenuOpen=false;render()"></div>
-          <div class="top-more-menu" onclick="event.stopPropagation()">
-            <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Devolución o cambio</button>
-            <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén</button>
-            <button onclick="state.posMoreMenuOpen=false;openLayaways()">${icon('wallet')} Apartados</button>
-            <button onclick="state.posMoreMenuOpen=false;state.drawerModalOpen=true;render()">${icon('wallet')} Cajón de dinero</button>
-            <hr>
-            <button onclick="state.posMoreMenuOpen=false;changeCenter()">Cambiar centro</button>
-            <button onclick="state.posMoreMenuOpen=false;changeCashier()">Cambiar cajero</button>
-            <hr>
-            <button onclick="state.posMoreMenuOpen=false;handleLogout()">Salir</button>
-          </div>` : ''}
-        </div>
+  <header class="v2-top">
+    <div class="v2-who">
+      <div class="v2-avatar" aria-hidden="true">${escHtml(posInitials(state.activeCashier.name))}</div>
+      <div style="min-width:0;">
+        <div class="v2-name">${escHtml(state.activeCashier.name)}</div>
+        <div class="v2-sub">${icon('map-pin',12)} ${escHtml(state.activeCenter.name)} · <span class="v2-dot ${stale?'warn':''}"></span> ${stale?'Caja de otro día':'Caja abierta'}</div>
       </div>
     </div>
-    ${state.cashRegisterStale ? `
-    <div class="stale-cash-banner">
-      ${icon('alert-triangle',15)} Esta caja se abrió el ${new Date(state.activeCashRegister.openedAt).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} y sigue abierta — ¿se te olvidó cerrarla la última vez?
-      <button onclick="state.cashPanelOpen=true;render()">Ver caja</button>
-    </div>` : ''}
-    ${desk ? renderDeskMain() : `<div class="pos-body">
-      <div class="toolbar">
-        <div class="search-row">${icon('search',17)}<input id="pos-search-input" placeholder="Buscar o escanear código..." value="${state.search}" oninput="onPosSearchInput(this.value)" onkeydown="handlePosSearchKeydown(event)"><button class="icon-btn scan-btn" title="Escanear con la cámara" onclick="openBarcodeScanner()">${icon('camera',18)}</button></div>
-        <div class="cats">
-          ${frequentIds.length ? `<button class="cat-chip ${state.activeCat===FREQUENT_CAT?'active':''}" onclick="state.activeCat='${FREQUENT_CAT}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${icon('star',13)} Frecuentes</button>` : ''}
-          ${cats.map(c=>`<button class="cat-chip ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.prodGridLimit=PROD_GRID_PAGE_SIZE;render()">${c}</button>`).join('')}
-        </div>
+    <nav class="v2-actions" aria-label="Opciones del punto de venta">
+      <button class="v2-act" onclick="openSalesList()">${icon('receipt',18)}<span>Ventas</span></button>
+      <button class="v2-act" onclick="openLayaways()">${icon('wallet',18)}<span>Apartados</span></button>
+      <button class="v2-act" onclick="state.cashPanelOpen=true;render()">${icon('dollar-sign',18)}<span>Caja</span></button>
+      <div class="top-more-wrap">
+        <button class="v2-act" onclick="event.stopPropagation();state.posMoreMenuOpen=!state.posMoreMenuOpen;render()" aria-label="Más opciones" aria-expanded="${!!state.posMoreMenuOpen}">${icon('menu',18)}<span>Más</span></button>
+        ${state.posMoreMenuOpen ? `
+        <div class="top-more-overlay" onclick="state.posMoreMenuOpen=false;render()"></div>
+        <div class="top-more-menu" onclick="event.stopPropagation()">
+          <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Devolución o cambio</button>
+          <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén (ubicación de productos)</button>
+          <button onclick="state.posMoreMenuOpen=false;state.drawerModalOpen=true;render()">${icon('wallet')} Abrir cajón de dinero</button>
+          ${state.heldSales.length ? `<button onclick="state.posMoreMenuOpen=false;state.heldOpen=true;render()">${icon('pause')} Ventas en espera (${state.heldSales.length})</button>` : ''}
+          <hr>
+          <button onclick="state.posMoreMenuOpen=false;changeCenter()">Cambiar centro</button>
+          <button onclick="state.posMoreMenuOpen=false;changeCashier()">Cambiar cajero</button>
+          <hr>
+          <button onclick="state.posMoreMenuOpen=false;handleLogout()">Salir</button>
+        </div>` : ''}
       </div>
-      <div class="prod-grid">
-        ${renderProdGrid(filtered)}
-      </div>
-    </div>`}
-    ${desk ? renderDeskCart(entries) : `<div class="sale-panel ${cartCol?'collapsed':''}">
-      <div class="sale-head" onclick="if(!posDesktop()){state.cartCollapsed=!state.cartCollapsed;render()}" style="cursor:pointer;">
-        <h3>Venta actual (${cartCount()})</h3>
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${cartCol ? `<strong style="color:var(--primary-deep);font-size:15px;">${money(saleTotal())}</strong>` : ''}
-          <span class="sale-arrow" style="color:var(--ink-soft);font-size:13px;">${cartCol?'▾':'▴'}</span>
-        </div>
-      </div>
-      ${!cartCol ? `
-      <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;">
-        <button class="cat-chip ${state.activeCustomer?'active':''}" onclick="event.stopPropagation();openCustomerPicker()">${icon('user')} ${state.activeCustomer?state.activeCustomer.name:'Cliente'}</button>
-        <button class="cat-chip ${state.manualDiscount?'active':''}" onclick="event.stopPropagation();openDiscountModal()">${icon('percent')} ${state.manualDiscount?(state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('-'+money(currentDiscountAmount()))):'Descuento'}</button>
-        <button class="cat-chip ${state.saleNotes?'active':''}" onclick="event.stopPropagation();openNotesModal()">${icon('file-text')} ${state.saleNotes?'Notas '+icon('check',12):'Notas'}</button>
-      </div>
-      <div class="sale-items">
-        ${renderSaleItems(entries, `<div class="empty-cart">Toca un producto para agregarlo a la venta.</div>`)}
-      </div>
-      ${renderSaleFoot(entries)}
-      ` : ''}
-    </div>`}
+    </nav>
+  </header>
+  ${stale ? `<div class="stale-cash-banner">${icon('alert-triangle',15)} Esta caja se abrió el ${new Date(state.activeCashRegister.openedAt).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} y sigue abierta — ¿se te olvidó cerrarla? <button onclick="state.cashPanelOpen=true;render()">Ver caja</button></div>` : ''}`;
+}
+function renderPosCatalog(){
+  const list = posFilteredProducts();
+  const frequentIds = getFrequentProductIds();
+  const cats = ["Todos", ...state.categories];
+  const q = state.search.trim();
+  if(state.activeCat==null) state.activeCat = frequentIds.length ? FREQUENT_CAT : 'Todos';
+  return `
+  <section class="v2-main" aria-label="Productos">
+    <div class="v2-search">
+      ${icon('search',18)}
+      <input id="pos-search-input" type="search" enterkeyhint="search" autocomplete="off" placeholder="Buscar producto, SKU o escanear…" value="${escHtml(state.search)}" oninput="onPosSearchInput(this.value)" onkeydown="handlePosSearchKeydown(event)" aria-label="Buscar producto">
+      ${q ? `<button class="v2-clear" onclick="state.search='';render();document.getElementById('pos-search-input').focus()" aria-label="Borrar búsqueda">${icon('x',16)}</button>` : ''}
+      <button class="v2-scan" onclick="openBarcodeScanner()" aria-label="Escanear con la cámara">${icon('camera',18)}<span>Escanear</span></button>
+    </div>
+    <div class="v2-cats" role="tablist">
+      ${frequentIds.length ? `<button role="tab" aria-selected="${state.activeCat===FREQUENT_CAT}" class="v2-chip ${state.activeCat===FREQUENT_CAT?'on':''}" onclick="posSetCat('${FREQUENT_CAT}')">${icon('star',13)} Más vendidos aquí</button>` : ''}
+      ${cats.map(c=>`<button role="tab" aria-selected="${state.activeCat===c}" class="v2-chip ${state.activeCat===c?'on':''}" onclick="posSetCat('${c.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">${escHtml(c)}</button>`).join('')}
+    </div>
+    ${q ? `<div class="v2-resinfo">${list.length} resultado${list.length===1?'':'s'} para “${escHtml(q)}”${state.activeCat!=='Todos'&&state.activeCat!==FREQUENT_CAT?` en ${escHtml(state.activeCat)}`:''}</div>` : ''}
+    <div class="v2-grid">
+      ${list.length ? renderProdGrid(list) : `<div class="v2-empty">${icon('search',28)}<b>${q?'Ningún producto coincide':'No hay productos en esta categoría'}</b><span>${q?'Revisa cómo se escribe o busca por SKU.':'Elige otra categoría.'}</span></div>`}
+    </div>
+  </section>`;
+}
+function posLineHtml(key, qty){
+  const {p,v} = parseCartKey(key); if(!p) return '';
+  const price = itemPrice(p,v), list = v ? variantListPrice(p,v) : p.price;
+  const max = itemStockPOS(p,v);
+  return `
+  <div class="v2-line">
+    <div class="v2-line-main">
+      <div class="v2-line-name">${escHtml(p.name)}${v?`<span class="v2-line-var">${escHtml(variantLabel(v))}</span>`:''}</div>
+      <div class="v2-line-unit">${money(price)} c/u${price<list?` <s>${money(list)}</s>`:''}</div>
+    </div>
+    <div class="v2-stepper" role="group" aria-label="Cantidad de ${escHtml(p.name)}">
+      <button onclick="event.stopPropagation();changeQty('${key}',-1)" aria-label="${qty===1?'Quitar':'Una menos'}">${qty===1?icon('trash',15):'−'}</button>
+      <span aria-live="polite">${qty}</span>
+      <button onclick="event.stopPropagation();posIncQty('${key}')" ${qty>=max?'disabled':''} aria-label="Una más">+</button>
+    </div>
+    <div class="v2-line-total">${money(price*qty)}</div>
+  </div>`;
+}
+function posIncQty(key){
+  const {p,v} = parseCartKey(key); if(!p) return;
+  if((state.cart[key]||0) >= itemStockPOS(p,v)){ showToast('No hay más piezas disponibles en '+state.activeCenter.name); return; }
+  changeQty(key, 1);
+}
+function posClearSale(){
+  if(!cartCount()) return;
+  if(!confirm('¿Vaciar la venta actual? Se quitan todos los productos.')) return;
+  state.cart = {}; state.manualDiscount = null; state.saleNotes = ''; state.activeCustomer = null; state.quickPhone = ''; state.splitAmounts = {};
+  state.checkoutReminderShown = false; clearPosCart(); savePosCart(); render();
+}
+function renderPosTicket(){
+  const entries = Object.entries(state.cart);
+  const n = cartCount();
+  const disc = state.manualDiscount ? (state.manualDiscount.type==='coupon'?('Cupón '+state.manualDiscount.coupon.code):('−'+money(currentDiscountAmount()))) : '';
+  return `
+  <div class="v2-ticket-head">
+    <div><h2>Venta actual</h2><div class="v2-sub2">${n ? `${n} artículo${n===1?'':'s'}` : 'Sin productos'}</div></div>
+    <div style="display:flex;gap:6px;">
+      ${n ? `<button class="v2-mini" onclick="holdCurrentSale()" title="Guardar para después y atender a otra persona">${icon('pause',14)} Espera</button>` : (state.heldSales.length ? `<button class="v2-mini" onclick="state.heldOpen=true;render()">${icon('pause',14)} En espera (${state.heldSales.length})</button>` : '')}
+      ${n ? `<button class="v2-mini danger" onclick="posClearSale()" aria-label="Vaciar venta">${icon('trash',14)}</button>` : ''}
+      <button class="v2-mini v2-close-sheet" onclick="state.ticketOpen=false;render()" aria-label="Cerrar">${icon('x',16)}</button>
+    </div>
   </div>
-  ${desk && state.catalogOpen ? renderCatalogModal() : ''}
+  <div class="v2-ctx">
+    <button class="v2-ctxbtn ${state.activeCustomer?'on':''}" onclick="openCustomerPicker()">${icon('user',15)}<span>${state.activeCustomer?escHtml(state.activeCustomer.name):'Cliente'}</span></button>
+    <button class="v2-ctxbtn ${state.manualDiscount?'on':''}" onclick="openDiscountModal()">${icon('percent',15)}<span>${disc||'Descuento'}</span></button>
+    <button class="v2-ctxbtn ${state.saleNotes?'on':''}" onclick="openNotesModal()">${icon('file-text',15)}<span>${state.saleNotes?'Con nota':'Nota'}</span></button>
+  </div>
+  <div class="v2-lines">
+    ${entries.length ? entries.map(([k,q])=>posLineHtml(k,q)).join('') : `<div class="v2-empty small">${icon('receipt',30)}<b>Toca un producto para agregarlo</b><span>También puedes buscarlo o escanear su código.</span></div>`}
+  </div>
+  <div class="v2-totals">
+    ${state.manualDiscount ? `<div class="v2-row"><span>Subtotal</span><span>${money(cartTotal())}</span></div><div class="v2-row disc"><span>${state.manualDiscount.type==='coupon'?`Cupón ${escHtml(state.manualDiscount.coupon.code)}`:'Descuento'}</span><span>−${money(currentDiscountAmount())}</span></div>` : ''}
+    <div class="v2-row total"><span>Total</span><span>${money(saleTotal())}</span></div>
+    <div class="v2-pay-actions">
+      ${n ? `<button class="v2-secondary" onclick="lyOpenForm()">${icon('calendar',15)} Apartar</button>` : ''}
+      <button class="v2-charge" ${n&&!state.sending?'':'disabled'} onclick="openPay()">${state.sending?'Procesando…':`Cobrar ${money(saleTotal())}`}</button>
+    </div>
+  </div>`;
+}
+/* ---- Paso de cobro ---- */
+function openPay(){
+  if(!cartCount() || state.sending) return;
+  if(!state.checkoutReminderShown && !cartHasReminderProduct()){
+    state.pendingPay = true; state.checkoutReminderOpen = true; render(); return;
+  }
+  state.payOpen = true; state.cashReceived = ''; state.ticketOpen = false; render();
+  setTimeout(()=>{ const i = document.getElementById('pay-cash'); if(i && state.payMethod==='Efectivo' && posDesktop()) i.focus(); }, 30);
+}
+function closePay(){ state.payOpen = false; render(); }
+function posPaySet(m){ state.payMethod = m; render(); }
+function posCashSuggestions(total){
+  const out = new Set();
+  [50,100,200,500,1000].forEach(step=>{ const v = Math.ceil(total/step)*step; if(v>total) out.add(v); });
+  return [...out].sort((a,b)=>a-b).slice(0,4);
+}
+function posSetCash(v){ state.cashReceived = String(v); render(); }
+async function confirmPay(){
+  const total = saleTotal();
+  if(state.payMethod==='Efectivo'){
+    const rec = Number(state.cashReceived);
+    if(String(state.cashReceived).trim() && rec < total){ showToast('El efectivo recibido es menor al total'); return; }
+    state.lastCashReceived = String(state.cashReceived).trim() ? rec : null;
+    state.lastChange = String(state.cashReceived).trim() ? Math.max(0, Math.round((rec-total)*100)/100) : null;
+  } else { state.lastCashReceived = null; state.lastChange = null; }
+  await chargeSale();
+  if(state.saleDone){ state.payOpen = false; state.cashReceived = ''; render(); }
+}
+const PAY_ICONS = {Efectivo:'dollar-sign', Tarjeta:'credit-card', Transferencia:'smartphone', Dividido:'layers'};
+function renderPaySheet(){
+  const total = saleTotal();
+  const m = state.payMethod || 'Efectivo';
+  const rec = Number(state.cashReceived), hasRec = String(state.cashReceived||'').trim()!=='';
+  const change = hasRec ? Math.round((rec-total)*100)/100 : null;
+  const split = m==='Dividido';
+  const blocked = state.sending || (split && splitRemaining()!==0) || (m==='Efectivo' && hasRec && rec<total);
+  return `
+  <div class="modal-overlay v2-sheet-wrap" onclick="if(event.target===this)closePay()">
+    <div class="modal v2-pay" role="dialog" aria-label="Cobrar venta">
+      <div class="v2-pay-head">
+        <button class="v2-mini" onclick="closePay()" aria-label="Regresar a la venta">${icon('chevron-left',16)} Venta</button>
+        <span class="v2-sub2">${cartCount()} artículo${cartCount()===1?'':'s'}${state.activeCustomer?` · ${escHtml(state.activeCustomer.name)}`:''}</span>
+      </div>
+      <div class="v2-pay-total"><small>Total a cobrar</small>${money(total)}</div>
+      <div class="v2-methods" role="radiogroup" aria-label="Forma de pago">
+        ${PAY_METHODS.concat(['Dividido']).map(x=>`<button role="radio" aria-checked="${m===x}" class="v2-method ${m===x?'on':''}" onclick="posPaySet('${x}')">${icon(PAY_ICONS[x]||'dollar-sign',20)}<span>${x}</span></button>`).join('')}
+      </div>
+      ${m==='Efectivo' ? `
+        <label class="v2-lab" for="pay-cash">¿Con cuánto paga? <small>(opcional)</small></label>
+        <input id="pay-cash" class="v2-cash" type="number" inputmode="decimal" min="0" step="0.5" placeholder="${Math.round(total)}" value="${escHtml(state.cashReceived||'')}" oninput="state.cashReceived=this.value;posPayHint()" onkeydown="if(event.key==='Enter')confirmPay()">
+        <div class="v2-quick">
+          <button onclick="posSetCash(${total})">Exacto</button>
+          ${posCashSuggestions(total).map(v=>`<button onclick="posSetCash(${v})">$${Number(v).toLocaleString('es-MX')}</button>`).join('')}
+        </div>
+        <div id="pay-change" class="v2-change ${hasRec&&change<0?'bad':''}">${hasRec ? (change<0 ? `Faltan ${money(-change)}` : `Cambio: <b>${money(change)}</b>`) : 'Si te pagan con billete, escríbelo y te digo el cambio.'}</div>
+      ` : ''}
+      ${split ? renderSplitPaymentInputs() : ''}
+      ${m==='Tarjeta' ? `<div class="v2-note">Cobra en la terminal y confirma aquí cuando salga aprobado.</div>` : ''}
+      ${m==='Transferencia' ? `<div class="v2-note">Confirma cuando veas la transferencia reflejada.</div>` : ''}
+      ${!state.activeCustomer ? `<div class="quick-phone" style="margin-top:12px;"><label class="v2-lab" for="quick-phone-input">WhatsApp del cliente <small>(opcional, para enviarle su ticket)</small></label><input id="quick-phone-input" class="field-input" type="tel" inputmode="tel" autocomplete="off" placeholder="10 dígitos" value="${escQuickAttr(state.quickPhone)}" oninput="onQuickPhoneInput(this.value)"><div id="quick-phone-hint" class="quick-phone-hint"></div></div>` : ''}
+      <button class="v2-charge big" ${blocked?'disabled':''} onclick="confirmPay()">${state.sending?'Procesando…':`${icon('check',18)} Confirmar cobro`}</button>
+    </div>
+  </div>`;
+}
+function posPayHint(){
+  const el = document.getElementById('pay-change'); if(!el) return;
+  const total = saleTotal(), hasRec = String(state.cashReceived||'').trim()!=='', rec = Number(state.cashReceived);
+  const change = Math.round((rec-total)*100)/100;
+  el.className = 'v2-change' + (hasRec && change<0 ? ' bad' : '');
+  el.innerHTML = hasRec ? (change<0 ? `Faltan ${money(-change)}` : `Cambio: <b>${money(change)}</b>`) : 'Si te pagan con billete, escríbelo y te digo el cambio.';
+  const btn = document.querySelector('.v2-pay .v2-charge'); if(btn) btn.disabled = state.sending || (hasRec && rec<total);
+}
+function renderPOS(){
+  const desk = posDesktop();
+  const n = cartCount();
+  return `
+  <div class="v2-app">
+    ${state.posOffline ? `<div class="v2-banner warn">${icon('alert-triangle',14)} Sin conexión — puedes seguir vendiendo; las ventas se suben solas cuando regrese el internet.</div>`
+      : state.offlineQueueCount>0 ? `<div class="v2-banner ok">${icon('history',14)} Subiendo ${state.offlineQueueCount} venta(s) hechas sin internet…</div>` : ''}
+    ${renderPosHeader()}
+    <div class="v2-body">
+      ${renderPosCatalog()}
+      ${desk ? `<aside class="v2-ticket" aria-label="Venta actual">${renderPosTicket()}</aside>` : ''}
+    </div>
+    ${!desk ? `
+      <div class="v2-bar">
+        <button class="v2-bar-sum" onclick="state.ticketOpen=true;render()" ${n?'':'disabled'} aria-label="Ver venta actual">
+          <span class="v2-bar-n">${n}</span>
+          <span><small>${n?'Ver venta':'Venta vacía'}</small><b>${money(saleTotal())}</b></span>
+          ${n?icon('chevron-up',16):''}
+        </button>
+        <button class="v2-charge" ${n&&!state.sending?'':'disabled'} onclick="openPay()">Cobrar</button>
+      </div>
+      ${state.ticketOpen ? `<div class="modal-overlay v2-sheet-wrap" onclick="if(event.target===this){state.ticketOpen=false;render()}"><div class="v2-ticket sheet" role="dialog" aria-label="Venta actual">${renderPosTicket()}</div></div>` : ''}
+    ` : ''}
+  </div>
+  ${state.payOpen ? renderPaySheet() : ''}
   ${state.variantPickerProduct ? renderVariantPickerModal() : ''}`;
+}
+function renderVariantPickerModal(){
+  const p = state.products.find(x=>x.id===state.variantPickerProduct);
+  if(!p) return '';
+  return `
+  <div class="modal-overlay v2-sheet-wrap" onclick="if(event.target===this){state.variantPickerProduct=null;render()}">
+    <div class="modal v2-varsheet" role="dialog" aria-label="Elegir variante de ${escHtml(p.name)}">
+      <h3>${escHtml(p.name)}</h3>
+      <p class="v2-sub2" style="margin:2px 0 12px;">¿Cuál se lleva?</p>
+      <div class="v2-vargrid">
+      ${(p.variants||[]).map(v=>{ const st = vCenterStock(v,state.activeCenter.id), pr = itemPrice(p,v), ls = variantListPrice(p,v), img = vImage(p,v); const inC = state.cart[cartKey(p.id,v.id)]||0; return `
+        <button class="v2-var ${st<=0?'off':''}" ${st<=0?'disabled':''} onclick="pickVariant('${v.id}')">
+          ${img?`<img src="${escHtml(posThumb(img))}" alt="">`:''}
+          <b>${escHtml(variantLabel(v))}</b>
+          <span>${pr<ls?`<s>${money(ls)}</s> `:''}${money(pr)}</span>
+          <small class="${st<=0?'zero':st<=3?'low':''}">${st<=0?'Agotado':`${st} disp.`}${inC?` · ${inC} en la venta`:''}</small>
+        </button>`; }).join('')}
+      </div>
+      <button class="v2-secondary" style="width:100%;margin-top:12px;" onclick="state.variantPickerProduct=null;render()">Cancelar</button>
+    </div>
+  </div>`;
 }
 
 function renderSplitPaymentInputs(){
@@ -3110,6 +3404,7 @@ function renderReceipt(){
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin:6px 0 -6px;">Venta ${formatFolio(state.lastOrderNumber)}</div>` : `<div style="font-weight:700;color:var(--amber);font-size:13px;margin:6px 0 -6px;">${icon('alert-triangle',13)} Guardada sin conexión — el folio se asigna al sincronizar</div>`}
     <p style="color:var(--ink-soft);font-size:13.5px;margin:10px 0 18px;">Total cobrado: <strong>${money(state.lastSaleTotal)}</strong><br>${(state.lastPayments&&state.lastPayments.length>1) ? `Pago dividido: ${state.lastPayments.map(p=>`${p.method} ${money(p.amount)}`).join(' · ')}` : `Método: ${(state.lastPayments&&state.lastPayments[0]&&state.lastPayments[0].method)||state.payMethod}`}<br>Atendió: ${state.activeCashier.name}</p>
     ${state.lastCustomerPhone ? `<button class="btn-secondary" style="color:var(--green);margin-bottom:8px;" onclick="sendReceiptWhatsapp()">${icon('message-circle',15)} Enviar recibo por WhatsApp a ${state.lastCustomerName||'cliente'}</button>` : ''}
+    ${state.lastChange!=null && state.lastChange>0 ? `<div style="background:#EAF3D8;border-radius:14px;padding:12px;margin:-6px 0 14px;"><div style="font-size:12px;color:#3d5c1a;font-weight:700;">Recibido ${money(state.lastCashReceived)} · entrega de cambio</div><div style="font-size:30px;font-weight:800;color:#3d5c1a;">${money(state.lastChange)}</div></div>` : ''}
     <button class="btn-secondary" style="margin-bottom:8px;" onclick="printSaleTicket(state.lastSale)">${icon('printer',15)} Imprimir ticket</button>
     <button class="btn-secondary" style="margin-bottom:8px;" onclick="sendSaleToDelivery(state.lastSale)">${icon('truck',15)} Enviar al repartidor</button>
     <button class="btn-primary" onclick="newSale()">Nueva venta</button>
@@ -4071,10 +4366,11 @@ function navLayers(){
   if(s.movementModalOpen) L.push(()=>{ s.movementModalOpen=false; render(); });
   if(s.cashPanelOpen) L.push(()=>{ s.cashPanelOpen=false; render(); });
   if(s.variantPickerProduct) L.push(()=>{ s.variantPickerProduct=null; render(); });
+  if(s.payOpen) L.push(()=>closePay());
+  if(s.ticketOpen && !posDesktop()) L.push(()=>{ s.ticketOpen=false; render(); });
   if(s.catalogOpen && posDesktop()) L.push(()=>closeCatalog());
   if(s.closingOpen) L.push(()=>{ s.closingOpen=false; render(); });
   if(s.saleDone) L.push(()=>newSale());
-  else if(!s.closingOpen && s.cartCollapsed===false && !posDesktop()) L.push(()=>{ s.cartCollapsed=true; render(); });
   return L;
 }
 
