@@ -45,6 +45,8 @@ const norm = s => String(s == null ? '' : s).trim().toLowerCase();
     if (probs.length) issues.push({ id: doc.id, name: p.name, problems: probs });
   });
   console.log(`Productos con variantes: ${out.length} · con problemas: ${issues.length}`);
+  console.log('::notice::' + `Con variantes: ${out.length} · con problemas: ${issues.length}`);
+  issues.slice(0, 40).forEach(x => console.log('::warning::' + (x.name + ' (' + x.id + '): ' + x.problems.join(' | ')).slice(0, 900).replace(/%/g,'%25').replace(/\r?\n/g,' ')));
   issues.forEach(x => console.log(`- ${x.name} (${x.id}): ${x.problems.join(' | ')}`));
   const dir = path.join(process.cwd(), 'diag'); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'variantes.json'), JSON.stringify({ generatedAt: new Date().toISOString(), total: out.length, withIssues: issues.length, issues, products: out }, null, 1));
@@ -55,6 +57,7 @@ const norm = s => String(s == null ? '' : s).trim().toLowerCase();
   process.exit(0);
 })().catch(e => {
   console.error(e);
+  console.log('::error::' + String(e && (e.stack || e.message) || e).slice(0, 1500).replace(/%/g,'%25').replace(/\r?\n/g,'%0A'));
   // Sube el error a la rama para poder leerlo sin acceso a los registros de Actions.
   try{
     const dir = path.join(process.cwd(), 'diag'); fs.mkdirSync(dir, { recursive: true });
