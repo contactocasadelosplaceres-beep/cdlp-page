@@ -1302,9 +1302,20 @@ function showToast(msg){
   clearTimeout(t._t); t._t=setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),230); }, 2600);
 }
 
-auth.onAuthStateChanged(user=>{
+auth.onAuthStateChanged(async user=>{
   state.user = user; state.authChecked = true;
-  if(user && !state.loaded){ loadData(); } else { render(); }
+  if(!user){ render(); return; }
+  // Candado por claim: solo personal autorizado (admin o staff).
+  let _claims = {};
+  try { _claims = (await user.getIdTokenResult(true)).claims; }
+  catch(e){ try { _claims = (await user.getIdTokenResult(false)).claims; } catch(_){} }
+  if (_claims.admin !== true && _claims.staff !== true) {
+    await auth.signOut();
+    state.user = null; state.authChecked = true;
+    state.loginError = 'Esta cuenta no tiene acceso.';
+    render(); return;
+  }
+  if(!state.loaded){ loadData(); } else { render(); }
 });
 async function handleLogin(){
   state.loginError='';

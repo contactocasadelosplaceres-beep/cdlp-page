@@ -2824,6 +2824,18 @@ auth.onAuthStateChanged(async user=>{
   state.user = user; state.authChecked = true;
   state.totpRequired=false; state.totpVerified=false; state.totpSecretForChallenge=null; state.totpSetup=null; state.totpDisableCode='';
   if(!user){ render(); return; }
+  // Candado por claim: solo entra personal con claim admin o staff. getIdTokenResult(true)
+  // refresca el token para recoger claims recien asignados (ya no hace falta incognito).
+  let _claims = {};
+  try { _claims = (await user.getIdTokenResult(true)).claims; }
+  catch(e){ try { _claims = (await user.getIdTokenResult(false)).claims; } catch(_){} }
+  if (_claims.admin !== true && _claims.staff !== true) {
+    await auth.signOut();
+    state.user = null; state.authChecked = true;
+    state.loginError = 'Esta cuenta no tiene acceso al panel.';
+    render(); return;
+  }
+  state.isAdmin = _claims.admin === true;
   try{
     const doc = await db.collection('security_totp').doc(totpDocId(user.email)).get();
     if(doc.exists && doc.data().enabled){
