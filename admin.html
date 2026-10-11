@@ -541,6 +541,15 @@
   .two-col-keep{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .two-col-keep>*,.two-col>*{min-width:0;}
   .modal input[type=date]{min-width:0;max-width:100%;}
+  .spell-box{margin-top:4px;}
+  .spell-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 6px;font-size:13px;}
+  .spell-head .spell-all{width:auto;padding:8px 12px;font-size:12.5px;}
+  .spell-item{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;background:var(--surface);}
+  .spell-ctx{font-size:13.5px;line-height:1.5;margin:4px 0;overflow-wrap:anywhere;}
+  .spell-bad{background:#FDE2E4;color:#9B1C2C;border-radius:3px;padding:0 2px;text-decoration:underline wavy #D0464F;}
+  .spell-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .spell-rep{background:var(--primary);color:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;}
+  .spell-ign{background:transparent;color:var(--ink-soft);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;}
   .pm-switch{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;background:var(--surface-soft);cursor:pointer;margin-top:4px;}
   .pm-switch .pm-switch-txt{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:1.3;}
   .pm-switch .pm-switch-txt small{display:block;font-weight:400;color:var(--ink-soft);font-size:11.5px;margin-top:2px;}
@@ -1617,7 +1626,7 @@ const SETTINGS_FIELD_LABELS = {
 };
 // Campos que cambian solos (no por una edición manual de configuración/diseño) — se excluyen
 // de la bitácora para que no se llene de ruido cada vez que se recalculan más vendidos, etc.
-const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified','churnRiskNotified','dashboardNotes','checklists']);
+const SETTINGS_AUDIT_IGNORE = new Set(['dismissedHealthItems','spellIgnore','historicalOrderCountOffset','bestSellerProductIds','bestSellersUpdatedAt','repurchaseNotified','churnRiskNotified','dashboardNotes','checklists']);
 function renderLoadFailedScreen(){
   return `<div class="loading-screen" style="flex-direction:column;gap:14px;padding:24px;text-align:center;">
     <div style="font-size:18px;font-weight:700;">No se pudo conectar con la base de datos</div>
@@ -14578,6 +14587,134 @@ function pmSection(key, title, o){
   const open = pmOpen(key, !!o.open);
   return `<details class="fsec" ${open?'open':''} ontoggle="pmToggle('${key}',this.open)"><summary class="fsec-head">${head}<span class="fsec-chev">▾</span></summary><div class="fsec-body">${o.body}</div></details>`;
 }
+/* ---- Revisar ortografía del producto (nombre y descripción) ----
+   Usa el corrector gratuito de LanguageTool (api.languagetool.org, español): solo se le manda el
+   texto del nombre y la descripción, que de todos modos es público en la tienda. Además detecta
+   acentos rotos (Ã©, Â…) y los "??" de importaciones viejas. Las palabras que marques como
+   "Siempre ignorar" (marcas, modelos) se guardan en settings.spellIgnore. */
+const SPELL_FIELDS = [{key:'name', label:'Nombre'}, {key:'desc', label:'Descripción'}];
+function spellIgnoreSet(){ return new Set((state.settings.spellIgnore||[]).map(w=>String(w).toLowerCase())); }
+function spellFixMojibake(s){ try{ const f = decodeURIComponent(escape(s)); return f!==s ? f : null; }catch(e){ return null; } }
+function spellLocalIssues(field, text){
+  const out = [];
+  const re = /[ÃÂ][\u0080-¿]|Ã.|ï¿½|�/g; let m;
+  if(re.test(text)){
+    // Acentos rotos: se intenta reparar el texto completo de una vez.
+    const fixed = spellFixMojibake(text);
+    out.push({field, offset:0, length:text.length, bad:text, whole:true, kind:'Acentos rotos', msg:'Hay letras con acento o ñ que se ven como símbolos raros (por ejemplo «Ã©» en lugar de «é»).', reps: fixed ? [fixed] : []});
+  }
+  const q = /\S*\?\?+\S*/g;
+  while((m = q.exec(text))){
+    out.push({field, offset:m.index, length:m[0].length, bad:m[0], kind:'Signos ??', msg:'Los «??» suelen ser una letra con acento o una ñ que se perdió. Escríbela a mano.', reps:[]});
+  }
+  return out;
+}
+const SPELL_KIND = {TYPOS:'Ortografía', GRAMMAR:'Gramática', PUNCTUATION:'Puntuación', TYPOGRAPHY:'Puntuación', CASING:'Mayúsculas', CONFUSED_WORDS:'Palabra confundida', REDUNDANCY:'Repetición', STYLE:'Estilo', MISC:'Revisar'};
+async function spellCheckText(text){
+  const body = new URLSearchParams({text, language:'es', level:'default'});
+  const r = await fetch('https://api.languagetool.org/v2/check', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
+  if(r.status===429) throw new Error('limite');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return (await r.json()).matches || [];
+}
+async function spellCheckProduct(){
+  const m = state.productModal; if(!m) return;
+  state.spell = {modal:m, busy:true, issues:[], error:'', checked:false}; render();
+  const ignore = spellIgnoreSet(); const issues = [];
+  try{
+    for(const f of SPELL_FIELDS){
+      const text = String(m[f.key]||''); if(!text.trim()) continue;
+      const local = spellLocalIssues(f.key, text);
+      issues.push(...local);
+      if(local.some(x=>x.whole)) continue;   // con acentos rotos, primero se repara y luego se vuelve a revisar
+      const matches = await spellCheckText(text);
+      matches.forEach(x=>{
+        const bad = text.substr(x.offset, x.length);
+        if(!bad || ignore.has(bad.toLowerCase())) return;
+        if(/\?\?/.test(bad)) return;   // ya lo marca la revisión local
+        const cat = (x.rule && x.rule.category && x.rule.category.id) || 'MISC';
+        issues.push({field:f.key, offset:x.offset, length:x.length, bad, kind:SPELL_KIND[cat]||'Revisar', msg:x.message||x.shortMessage||'', reps:(x.replacements||[]).slice(0,4).map(r=>r.value)});
+      });
+    }
+  }catch(e){
+    console.error(e);
+    state.spell = {modal:m, busy:false, issues, checked:true, error: e.message==='limite' ? 'El corrector recibió muchas revisiones seguidas. Espera un minuto e intenta de nuevo.' : 'No se pudo conectar con el corrector. Revisa tu internet e intenta de nuevo.'};
+    render(); return;
+  }
+  state.spell = {modal:m, busy:false, issues, checked:true, error:''};
+  render();
+}
+function spellActive(){ return state.spell && state.spell.modal===state.productModal ? state.spell : null; }
+function spellReplace(i, value){
+  const s = spellActive(); if(!s) return false;
+  const it = s.issues[i]; if(!it) return false;
+  const m = state.productModal; const text = String(m[it.field]||'');
+  if(text.substr(it.offset, it.length)!==it.bad){ showToast('El texto cambió desde la revisión; revísalo de nuevo'); spellCheckProduct(); return false; }
+  m[it.field] = text.slice(0,it.offset) + value + text.slice(it.offset+it.length);
+  const delta = value.length - it.length;
+  s.issues.splice(i,1);
+  s.issues.forEach(x=>{ if(x.field===it.field && x.offset>it.offset) x.offset += delta; });
+  return !!it.whole;
+}
+function spellApply(i, r){
+  const s = spellActive(); if(!s || !s.issues[i]) return;
+  const whole = spellReplace(i, s.issues[i].reps[r]);
+  if(whole){ spellCheckProduct(); return; }   // tras reparar acentos, revisar ortografía del texto ya limpio
+  render();
+}
+function spellApplyAll(){
+  const s = spellActive(); if(!s) return;
+  let whole = false;
+  // de atrás hacia adelante para que las posiciones no se muevan
+  const order = s.issues.map((x,i)=>i).filter(i=>s.issues[i].reps.length).sort((a,b)=>s.issues[b].offset-s.issues[a].offset);
+  for(const i of order){ if(spellReplace(i, s.issues[i].reps[0])) whole = true; }
+  showToast('Correcciones aplicadas — revisa que todo quede bien antes de guardar');
+  if(whole){ spellCheckProduct(); return; }
+  render();
+}
+async function spellIgnore(i, always){
+  const s = spellActive(); if(!s || !s.issues[i]) return;
+  const it = s.issues[i]; s.issues.splice(i,1);
+  if(always && !it.whole){
+    const w = it.bad.trim(); const list = state.settings.spellIgnore||[];
+    if(w && !list.some(x=>String(x).toLowerCase()===w.toLowerCase())){
+      state.settings.spellIgnore = [...list, w].slice(-500);
+      try{ await saveSettings(); showToast('«'+w+'» ya no se marcará como error'); }catch(e){ console.error(e); }
+    }
+    s.issues = s.issues.filter(x=>x.bad.toLowerCase()!==w.toLowerCase());
+  }
+  render();
+}
+function renderSpellPanel(){
+  const s = spellActive();
+  const btn = `<button type="button" class="btn-outline" style="margin-top:10px;" ${s&&s.busy?'disabled':''} onclick="spellCheckProduct()">${icon('check',14)} ${s&&s.busy?'Revisando…':(s&&s.checked?'Revisar de nuevo':'Revisar ortografía')}</button>`;
+  if(!s || s.busy || !s.checked) return `<div class="spell-box">${btn}<div class="row-sub" style="margin-top:4px;">Revisa el nombre y la descripción.</div></div>`;
+  const ctx = it => {
+    const t = String(state.productModal[it.field]||'');
+    if(it.whole) return escDescHtml(t.length>90 ? t.slice(0,90)+'…' : t);
+    const a = Math.max(0, it.offset-30), b = Math.min(t.length, it.offset+it.length+30);
+    return (a>0?'…':'') + escDescHtml(t.slice(a,it.offset)) + '<mark class="spell-bad">'+escDescHtml(it.bad)+'</mark>' + escDescHtml(t.slice(it.offset+it.length,b)) + (b<t.length?'…':'');
+  };
+  const fieldLabel = k => (SPELL_FIELDS.find(f=>f.key===k)||{}).label||k;
+  const fixable = s.issues.filter(x=>x.reps.length).length;
+  return `<div class="spell-box">
+    ${s.error ? `<div class="login-error" role="alert">${s.error}</div>` : ''}
+    ${!s.error && !s.issues.length ? `<div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;margin:10px 0 0;">${icon('check')} Sin errores en el nombre ni en la descripción.</div>` : ''}
+    ${s.issues.length ? `<div class="spell-head"><strong>${s.issues.length} ${s.issues.length===1?'cosa por revisar':'cosas por revisar'}</strong>${fixable>1?`<button type="button" class="btn-primary spell-all" onclick="spellApplyAll()">Corregir todo (${fixable})</button>`:''}</div>` : ''}
+    ${s.issues.map((it,i)=>`
+      <div class="spell-item">
+        <div class="row-sub"><strong>${it.kind}</strong> · ${fieldLabel(it.field)}</div>
+        <div class="spell-ctx">${ctx(it)}</div>
+        ${it.msg?`<div class="row-sub">${escDescHtml(it.msg)}</div>`:''}
+        <div class="spell-actions">
+          ${it.reps.map((r,ri)=>`<button type="button" class="spell-rep" onclick="spellApply(${i},${ri})">${it.whole?'Reparar acentos':escDescHtml(r)}</button>`).join('')}
+          <button type="button" class="spell-ign" onclick="spellIgnore(${i},false)">Ignorar</button>
+          ${!it.whole && it.kind==='Ortografía' ? `<button type="button" class="spell-ign" onclick="spellIgnore(${i},true)">Siempre ignorar esta palabra</button>` : ''}
+        </div>
+      </div>`).join('')}
+    ${btn}
+  </div>`;
+}
 function renderProductModal(){
   const p = state.productModal; const isNew = !p.id;
   const price = Number(p.price)||0;
@@ -14608,7 +14745,7 @@ function renderProductModal(){
         </div>
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
       </div>
-      <div class="form-field"><label>Nombre del producto</label><input id="pf-name" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
+      <div class="form-field"><label>Nombre del producto</label><input id="pf-name" spellcheck="true" lang="es" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
       <label class="pm-switch">
         <span class="pm-switch-txt">Ocultar de la tienda<small>Sigue existiendo, solo no se muestra a tus clientes</small></span>
         <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''} onchange="state.productModal.hidden=this.checked">
@@ -14659,7 +14796,7 @@ function renderProductModal(){
         <div class="panel-sub" style="margin:8px 0 0;">El total se suma solo a partir de cada centro.</div>`});
 
   const secDesc = pmSection('desc','Descripción',{icon:'edit', hint:'Lo que tus clientes leen en la tienda', body:`
-      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea></div>`});
+      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" spellcheck="true" lang="es" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea>${renderSpellPanel()}</div>`});
 
   const secCats = pmSection('categorias','Categorías y público',{icon:'tag', hint:'Para que tus clientes lo encuentren', body:`
       <div class="form-field"><label>Categorías</label>
