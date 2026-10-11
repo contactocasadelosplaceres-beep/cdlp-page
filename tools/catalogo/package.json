@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-catalogo",
+  "private": true,
+  "description": "Genera catalogo.json (productos y ajustes públicos) para que la tienda no lea Firestore",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}

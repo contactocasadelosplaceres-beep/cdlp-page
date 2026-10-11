@@ -1235,8 +1235,11 @@ function openSalesList(){
 async function loadSalesList(){
   try{
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const snap = await db.collection('sales').where('centerId','==', state.activeCenter.id).get();
-    const items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(s=> new Date(s.date) >= todayStart);
+    // ANTES: traía TODAS las ventas del centro desde siempre y filtraba "hoy" en el navegador (miles de
+    // lecturas cada vez que se abría la lista). Ahora el servidor solo entrega lo de hoy (un solo campo,
+    // sin índice compuesto) y el centro se filtra aquí.
+    const snap = await db.collection('sales').where('date','>=', todayStart.toISOString()).get();
+    const items = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(s=> s.centerId===state.activeCenter.id && new Date(s.date) >= todayStart);
     items.sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.salesListItems = items;
   }catch(e){ console.error('No se pudo cargar la lista de ventas', e); state.salesListItems = []; }

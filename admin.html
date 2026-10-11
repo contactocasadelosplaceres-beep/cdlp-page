@@ -1110,6 +1110,145 @@ let state = {
   newDashboardNoteText:'', dashboardNotesShowDone:false,
 };
 
+/* ============== AHORRO DE LECTURAS (cuota gratuita de Firestore) ==============
+   El panel traía en CADA carga todo el historial (pedidos, ventas, 3 000 visitas, 5 000 eventos,
+   búsquedas, quiz, encuestas...). Ahora esas colecciones grandes se guardan en este navegador
+   (IndexedDB) y en cada carga solo se piden los documentos NUEVOS:
+     · "append": colecciones que solo crecen (visitas, eventos, búsquedas sin resultado, quiz,
+       encuestas): se pide solo lo posterior a lo último guardado.
+     · "window": colecciones que se pueden editar o borrar (pedidos, ventas): se vuelven a pedir los
+       últimos N días completos (así se ven cambios de estado y cancelaciones recientes) y lo más
+       viejo sale de la copia local.
+   Cada 7 días se hace una recarga completa, y "Sincronizar todo" (Configuración → Herramientas) la
+   fuerza al momento. Si IndexedDB no está disponible, todo funciona como antes (lectura completa). */
+const RC = { dbp:null };
+function rcDb(){
+  if(!RC.dbp) RC.dbp = new Promise(res=>{
+    try{
+      const r = indexedDB.open('cdlp_admin_cache', 1);
+      r.onupgradeneeded = ()=>{ try{ r.result.createObjectStore('c'); }catch(e){} };
+      r.onsuccess = ()=>res(r.result); r.onerror = ()=>res(null); r.onblocked = ()=>res(null);
+    }catch(e){ res(null); }
+  });
+  return RC.dbp;
+}
+async function rcGet(k){ const d = await rcDb(); if(!d) return null; return new Promise(res=>{ try{ const q = d.transaction('c','readonly').objectStore('c').get(k); q.onsuccess = ()=>res(q.result||null); q.onerror = ()=>res(null); }catch(e){ res(null); } }); }
+async function rcSet(k,v){ const d = await rcDb(); if(!d) return false; return new Promise(res=>{ try{ const t = d.transaction('c','readwrite'); t.objectStore('c').put(v,k); t.oncomplete = ()=>res(true); t.onerror = ()=>res(false); t.onabort = ()=>res(false); }catch(e){ res(false); } }); }
+async function rcDel(k){ const d = await rcDb(); if(!d) return; return new Promise(res=>{ try{ const t = d.transaction('c','readwrite'); t.objectStore('c').delete(k); t.oncomplete = ()=>res(); t.onerror = ()=>res(); t.onabort = ()=>res(); }catch(e){ res(); } }); }
+async function rcClear(){ const d = await rcDb(); if(!d) return; return new Promise(res=>{ try{ const t = d.transaction('c','readwrite'); t.objectStore('c').clear(); t.oncomplete = ()=>res(); t.onerror = ()=>res(); t.onabort = ()=>res(); }catch(e){ res(); } }); }
+// Cuenta de lecturas hechas por esta pestaña (para ver el ahorro en Configuración → Herramientas).
+window.__readStats = window.__readStats || {full:0, incremental:0, cached:0, byCol:{}};
+async function cachedList(col, o){
+  o = o || {};
+  const field = o.field || 'date', limit = o.limit || 0, key = 'col:'+col, mode = o.windowDays ? 'w'+o.windowDays : 'a';
+  const stat = window.__readStats.byCol[col] = window.__readStats.byCol[col] || {docsRead:0, fromCache:0, kind:''};
+  const toRows = snap => snap.docs.map(d=>({id:d.id, data:d.data()}));
+  const full = async ()=>{ let q = db.collection(col).orderBy(field,'desc'); if(limit) q = q.limit(limit); const snap = await q.get(); stat.docsRead += snap.docs.length; stat.kind = 'completa'; window.__readStats.full++; return toRows(snap); };
+  const wrap = rows => ({docs: rows.map(r=>({id:r.id, data:()=>r.data})), size: rows.length});
+  let c = null; try{ c = await rcGet(key); }catch(e){}
+  const now = Date.now();
+  const usable = c && c.v===1 && Array.isArray(c.rows) && c.rows.length && c.limit===limit && c.field===field && c.mode===mode && (now-(c.fullAt||0)) < (o.fullDays||7)*864e5 && !o.forceFull;
+  let rows, fullAt;
+  if(!usable){ rows = await full(); fullAt = now; }
+  else {
+    let since, base;
+    if(o.windowDays){ since = new Date(now - o.windowDays*864e5).toISOString(); base = c.rows.filter(r=>String((r.data||{})[field]||'') < since); }
+    else { base = c.rows; since = base.reduce((m,r)=>{ const v = String((r.data||{})[field]||''); return v>m ? v : m; }, ''); }
+    try{
+      const snap = await db.collection(col).where(field,'>=',since).orderBy(field,'desc').get();
+      const newer = toRows(snap);
+      stat.docsRead += newer.length; stat.fromCache += base.length; stat.kind = 'incremental'; window.__readStats.incremental++;
+      const byId = new Map(); base.forEach(r=>byId.set(r.id,r)); newer.forEach(r=>byId.set(r.id,r));
+      rows = Array.from(byId.values()).sort((a,b)=> String((b.data||{})[field]||'').localeCompare(String((a.data||{})[field]||'')));
+      if(limit) rows = rows.slice(0, limit);
+      fullAt = c.fullAt;
+    }catch(e){ console.warn('Caché de '+col+': se hace lectura completa', e); rows = await full(); fullAt = now; }
+  }
+  rcSet(key, {v:1, field, limit, mode, fullAt, rows}).catch(()=>{});
+  return wrap(rows);
+}
+// Después de borrar o cambiar de raíz documentos de una colección en caché, se invalida su copia.
+function cacheInvalidate(col){ try{ rcDel('col:'+col); }catch(e){} }
+async function syncAllNow(){
+  await rcClear();
+  state.loaded = false; render();
+  await loadData();
+  showToast('Datos sincronizados por completo');
+}
+
+/* ============== CATÁLOGO ESTÁTICO: PEDIR PUBLICACIÓN ==============
+   La tienda lee catalogo.json (lo genera una GitHub Action), no Firestore. Para que lo que cambies en
+   el panel llegue a la tienda, cualquier guardado de un producto o de los ajustes deja un aviso en
+   settings/publish (con 20 s de espera para juntar varias ediciones) y la Action lo atiende. El botón
+   "Publicar tienda ahora" (Configuración → Herramientas) lo marca urgente. Las ventas del POS y los
+   descuentos de stock NO piden publicación (la tienda revisa existencias frescas al pagar). */
+(function(){
+  let timer = null;
+  async function send(urgent){
+    try{
+      const o = {requestedAt:new Date().toISOString(), requestedBy:(auth.currentUser&&auth.currentUser.email)||''};
+      if(urgent) o.urgent = true;
+      await db.collection('settings').doc('publish').set(o, {merge:true});
+      state.publishRequestedAt = o.requestedAt; return true;
+    }catch(e){ console.warn('No se pudo pedir la publicación de la tienda', e && e.code); return false; }
+  }
+  const schedule = ()=>{ clearTimeout(timer); timer = setTimeout(()=>send(false), 20000); };
+  window.cdlpRequestPublish = (urgent)=>{ clearTimeout(timer); return send(!!urgent); };
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch) return;
+  const colOf = ref => { try{ return ref && ref.parent && ref.parent.id; }catch(e){ return null; } };
+  const relevant = ref => { const c = colOf(ref); return c==='products' || (c==='settings' && ref.id==='store'); };
+  const DR = F.DocumentReference.prototype, B = F.WriteBatch.prototype;
+  ['set','update','delete'].forEach(n=>{
+    const orig = DR[n];
+    DR[n] = function(...a){ const p = orig.apply(this, a); if(relevant(this)) Promise.resolve(p).then(schedule, ()=>{}); return p; };
+    const bo = B[n];
+    B[n] = function(ref, ...a){ if(relevant(ref)) this.__cdlpPub = true; return bo.call(this, ref, ...a); };
+  });
+  const bc = B.commit;
+  B.commit = function(...a){ const p = bc.apply(this, a); if(this.__cdlpPub) Promise.resolve(p).then(schedule, ()=>{}); return p; };
+})();
+async function publishStoreNow(){
+  state.publishBusy = true; render();
+  const ok = await cdlpRequestPublish(true);
+  state.publishBusy = false;
+  showToast(ok ? 'Listo: la tienda se actualizará en unos 20–25 minutos como máximo' : 'No se pudo pedir la publicación (revisa permisos de configuración)');
+  loadPublishStatus(true);
+}
+async function loadPublishStatus(force){
+  if(state.publishStatusLoading || (state.publishStatus && !force)) return;
+  state.publishStatusLoading = true;
+  try{ const d = await db.collection('settings').doc('publish').get(); state.publishStatus = d.exists ? d.data() : {}; }
+  catch(e){ state.publishStatus = {error:true}; }
+  state.publishStatusLoading = false; render();
+}
+function renderPublishPanel(){
+  if(!state.publishStatus && !state.publishStatusLoading) setTimeout(()=>loadPublishStatus(), 0);
+  const s = state.publishStatus || {};
+  const fmt = iso => iso ? new Date(iso).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}) : '—';
+  const pending = s.requestedAt && (!s.publishedAt || s.requestedAt > s.publishedAt);
+  const rs = window.__readStats || {full:0,incremental:0,byCol:{}};
+  const rows = Object.entries(rs.byCol||{}).map(([c,v])=>`<tr><td>${escDescHtml(c)}</td><td>${v.kind||'—'}</td><td style="text-align:right;">${v.docsRead}</td><td style="text-align:right;">${v.fromCache}</td></tr>`).join('');
+  return `
+    <div class="panel">
+      <div class="panel-title">Publicar tienda (catálogo estático)</div>
+      <div class="note-box">La tienda pública ya no lee Firestore: carga <strong>catalogo.json</strong>, que genera una GitHub Action con tus productos visibles y los ajustes públicos (sin costos, proveedores ni existencias por centro). Se actualiza sola cuando guardas productos o ajustes, y como mínimo cada 6 horas (para refrescar existencias). Si cambiaste algo y quieres que salga ya, usa el botón.</div>
+      <div class="preview-count">Última publicación: <strong>${state.publishStatusLoading&&!state.publishStatus?'consultando…':fmt(s.publishedAt)}</strong>${s.productCount?` · ${s.productCount} productos · ${s.sizeKb} KB`:''}</div>
+      <div class="preview-count">Último aviso desde el panel: ${fmt(s.requestedAt)} ${pending?'· <strong style="color:var(--amber,#b26a00);">en espera de publicarse</strong>':(s.publishedAt?'· ya publicado':'')}</div>
+      ${s.error?`<div class="note-box" style="color:var(--rose);">No se pudo leer el estado (¿falta permiso?).</div>`:''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn-primary" style="width:auto;" ${state.publishBusy?'disabled':''} onclick="publishStoreNow()">${state.publishBusy?'Enviando…':'Publicar tienda ahora'}</button>
+        <button class="btn-tertiary" onclick="loadPublishStatus(true)">Actualizar estado</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Ahorro de lecturas del panel</div>
+      <div class="note-box">Los historiales grandes se guardan en este navegador y en cada carga solo se piden los documentos nuevos. Si ves algo desactualizado (por ejemplo algo que cambió desde otro dispositivo), usa “Sincronizar todo”.</div>
+      ${rows?`<div style="overflow-x:auto;"><table class="orders-table"><thead><tr><th>Colección</th><th>Última carga</th><th style="text-align:right;">Leídos de Firestore</th><th style="text-align:right;">Tomados de la copia</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="preview-count">Aún sin datos en esta sesión.</div>'}
+      <button class="btn-tertiary" style="margin-top:10px;" onclick="syncAllNow()">Sincronizar todo (lectura completa)</button>
+    </div>`;
+}
+
 /* ============== LOAD + MIGRATION ============== */
 async function loadData(attempt){
   attempt = attempt || 1;
@@ -1134,9 +1273,9 @@ async function loadData(attempt){
 
     const [setSnap, ordersSnap, salesSnap, visitsSnap, cashiersSnap, centersSnap, transfersSnap, auditsSnap, customersSnap, couponUsageSnap, cashRegistersSnap, analyticsEventsSnap, abandonedCartsSnap, storeMessagesSnap, suppliersSnap, restockItemsSnap, commissionAgentsSnap, activePosSessionsSnap] = await Promise.all([
       db.collection('settings').doc('store').get(),
-      db.collection('orders').orderBy('date','desc').get(),
-      db.collection('sales').orderBy('date','desc').get(),
-      db.collection('visits').orderBy('date','desc').limit(3000).get(),
+      cachedList('orders', {windowDays:45}),
+      cachedList('sales', {windowDays:45}),
+      cachedList('visits', {limit:3000}),
       db.collection('cashiers').get(),
       db.collection('distributionCenters').get(),
       db.collection('transfers').orderBy('date','desc').limit(200).get(),
@@ -1146,7 +1285,7 @@ async function loadData(attempt){
       db.collection('cashRegisters').orderBy('openedAt','desc').limit(300).get(),
       // Eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout, compra) de la
       // tienda pública. Colección aparte de "visits" para no reducir la ventana que cubre su límite de 3000.
-      db.collection('analyticsEvents').orderBy('date','desc').limit(5000).get(),
+      cachedList('analyticsEvents', {limit:5000}),
       // Carritos que un cliente empezó a llenar en el checkout de la tienda (nombre + teléfono
       // capturados) pero no completó. La tienda (index.html) guarda/borra su propio borrador;
       // aquí solo se leen para el botón "Carritos abandonados" de Pedidos.
@@ -1229,14 +1368,14 @@ async function loadData(attempt){
     // Colecciones más nuevas: si una falla (por ejemplo porque todavía no se publican las reglas de
     // Firestore más recientes), el panel sigue cargando normal y solo avisa en Resumen cuál falló.
     state.loadWarnings = [];
-    const safeGet = async (label, query) => { try{ return await query.get(); }catch(e){ console.error('No se pudo cargar '+label, e); state.loadWarnings.push(label); return {docs:[]}; } };
+    const safeGet = async (label, query) => { try{ return await (typeof query.get==='function' ? query.get() : query); }catch(e){ console.error('No se pudo cargar '+label, e); state.loadWarnings.push(label); return {docs:[]}; } };
     const [expSnap, shrSnap, reqSnap, missSnap, pcbSnap, casSnap, pexSnap] = await Promise.all([
       safeGet('gastos', db.collection('expenses').orderBy('date','desc').limit(1500)),
       safeGet('mermas', db.collection('shrinkage').orderBy('date','desc').limit(1000)),
       safeGet('avisos "avísame cuando llegue"', db.collection('restockRequests').limit(2000)),
-      safeGet('búsquedas sin resultado', db.collection('searchMisses').orderBy('date','desc').limit(1500)),
+      safeGet('búsquedas sin resultado', cachedList('searchMisses', {limit:1500})),
       safeGet('cambios masivos de precio', db.collection('priceChangeBatches').orderBy('date','desc').limit(10)),
-      safeGet('encuesta de carrito abandonado', db.collection('cartAbandonSurveys').orderBy('date','desc').limit(1000)),
+      safeGet('encuesta de carrito abandonado', cachedList('cartAbandonSurveys', {limit:1000})),
       // "Cambio de producto" del POS (devolver uno y llevarse otro) se guardaba en esta colección
       // desde hace tiempo, pero nada en Admin lo leía todavía -- se queda registrado pero invisible.
       // Se agrega aquí para mostrarlo en Estadísticas → Productos → "Cambios de producto".
@@ -1247,7 +1386,7 @@ async function loadData(attempt){
     state.restockRequests = reqSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.searchMisses = missSnap.docs.map(d=>({id:d.id, ...d.data()}));
     // Respuestas del quiz de la tienda: si las reglas aún no permiten leerlas, simplemente no se muestran (sin avisos).
-    try{ const qs = await db.collection('quizResponses').orderBy('date','desc').limit(2000).get(); state.quizResponses = qs.docs.map(d=>({id:d.id, ...d.data()})); }catch(e){ state.quizResponses = []; }
+    try{ const qs = await cachedList('quizResponses', {limit:2000}); state.quizResponses = qs.docs.map(d=>({id:d.id, ...d.data()})); }catch(e){ state.quizResponses = []; }
     state.priceChangeBatches = pcbSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.cartAbandonSurveys = casSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.productExchanges = pexSnap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -1352,40 +1491,41 @@ async function refreshBestSellersIfStale(force){
   state.settings.bestSellersUpdatedAt = new Date().toISOString();
   try{ await saveSettings(); }catch(e){ console.error('No se pudo guardar la lista de más vendidos', e); }
 }
-// Aviso de pedido/mensaje nuevo mientras el admin está abierto: revisa cada 45s si llegó algo
+// Aviso de pedido/mensaje nuevo mientras el admin está abierto: revisa cada 90 s si llegó algo
 // nuevo a "orders", "sales" o "storeMessages" desde la última revisión, sin que Ale tenga que
 // estar entrando a Pedidos o Mensajes a cada rato para enterarse. Se detiene si la pestaña no
 // está visible (minimizada/en segundo plano) para no gastar lecturas de más.
 let newOrderWatcherTimer = null;
 function ensureNewOrderWatcher(active){
   if(active && !newOrderWatcherTimer){
-    newOrderWatcherTimer = setInterval(checkForNewOrders, 45000);
+    newOrderWatcherTimer = setInterval(checkForNewOrders, 90000);
   } else if(!active && newOrderWatcherTimer){
     clearInterval(newOrderWatcherTimer); newOrderWatcherTimer = null;
   }
 }
 async function checkForNewOrders(){
   if(document.hidden || !state.user || !state.loaded) return;
+  // Cada revisión de pedidos/ventas cuesta mínimo 1 lectura por consulta aunque no haya nada nuevo,
+  // así que mensajes y carritos (menos urgentes) se revisan solo 1 de cada 5 ciclos.
+  state.watchTick = (state.watchTick||0) + 1;
+  const checkSecondary = state.watchTick % 5 === 1;
   const sinceOrders = state.lastOrderCheck || new Date().toISOString();
   const sinceMessages = state.lastMessageCheck || new Date().toISOString();
   const sinceCarts = state.lastCartCheck || new Date().toISOString();
   try{
+    const none = {docs:[], size:0};
     const [ordersSnap, salesSnap, messagesSnap, cartsSnap] = await Promise.all([
       db.collection('orders').where('date','>',sinceOrders).get(),
       db.collection('sales').where('date','>',sinceOrders).get(),
-      db.collection('storeMessages').where('date','>',sinceMessages).get(),
-      db.collection('abandonedCarts').where('updatedAt','>',sinceCarts).get(),
+      checkSecondary ? db.collection('storeMessages').where('date','>',sinceMessages).get() : Promise.resolve(none),
+      checkSecondary ? db.collection('abandonedCarts').where('updatedAt','>',sinceCarts).get() : Promise.resolve(none),
     ]);
     const newCount = ordersSnap.size + salesSnap.size;
     const newMsgCount = messagesSnap.size;
     const newCartCount = cartsSnap.size;
-    state.lastOrderCheck = new Date().toISOString();
-    state.lastMessageCheck = new Date().toISOString();
-    state.lastCartCheck = new Date().toISOString();
-    // Antes esta función solo revisaba pedidos/ventas/mensajes — un carrito abandonado nunca
-    // aparecía si el panel ya estaba abierto de antes, porque nada volvía a pedir esa lista
-    // hasta recargar la página entera. Ahora también la revisa (sin sonido ni aviso, porque no
-    // es urgente como un pedido), y refresca los datos en cuanto hay uno nuevo o actualizado.
+    const nowIso = new Date().toISOString();
+    state.lastOrderCheck = nowIso;
+    if(checkSecondary){ state.lastMessageCheck = nowIso; state.lastCartCheck = nowIso; }
     if(newCount>0 || newMsgCount>0 || newCartCount>0){
       if(newCount>0) state.newOrderCount = (state.newOrderCount||0) + newCount;
       if(newMsgCount>0) state.newMessageCount = (state.newMessageCount||0) + newMsgCount;
@@ -1394,7 +1534,17 @@ async function checkForNewOrders(){
       if(newCount>0) parts.push(`${newCount} pedido${newCount>1?'s':''} nuevo${newCount>1?'s':''}`);
       if(newMsgCount>0) parts.push(`${newMsgCount} mensaje${newMsgCount>1?'s':''} nuevo${newMsgCount>1?'s':''}`);
       if(parts.length) showToast(parts.join(' · '));
-      await loadData();
+      // ANTES esto llamaba a loadData() completo (miles de lecturas por cada pedido nuevo). Ahora solo
+      // se agregan a la memoria los documentos que acaban de llegar, que ya vienen en las consultas de arriba.
+      const have = new Set(state.orders.map(o=>o.id));
+      ordersSnap.docs.forEach(d=>{ if(!have.has(d.id)){ state.orders.push({id:d.id, source:'tienda', archived:false, ...d.data()}); have.add(d.id); } });
+      salesSnap.docs.forEach(d=>{ if(!have.has(d.id)){ const data = d.data(); state.orders.push({ id:d.id, source:'pos', archived:false, status:'Entregado', customer: data.customerName || 'Venta en tienda física', ...data }); have.add(d.id); } });
+      if(newCount>0) state.orders.sort((a,b)=> new Date(b.date) - new Date(a.date));
+      if(newMsgCount>0){ const hm = new Set((state.storeMessages||[]).map(m=>m.id)); messagesSnap.docs.forEach(d=>{ if(!hm.has(d.id)) state.storeMessages.unshift({id:d.id, status:'nuevo', ...d.data()}); }); }
+      if(newCartCount>0){
+        try{ const cs = await db.collection('abandonedCarts').orderBy('updatedAt','desc').limit(300).get(); state.abandonedCarts = cs.docs.map(d=>({id:d.id, ...d.data()})); }catch(e){ console.warn('No se pudieron refrescar los carritos', e); }
+      }
+      render();
     }
   }catch(e){ console.error('No se pudo revisar pedidos/mensajes/carritos nuevos', e); }
 }
@@ -1831,12 +1981,13 @@ async function deleteOrder(id, source, skipConfirm){
       if(rr && rr.ok===false) return;
     }
     await db.collection(col).doc(id).delete();
+    cacheInvalidate(col);
     state.orders = state.orders.filter(x=>x.id!==id);
     if(!skipConfirm){
       render();
       if(backup) showUndo(`Se eliminó ${label}`, async()=>{
         if(restoreStock) await adjustStockForSale({...backup, id, centerId:backup.stockCenterId||defaultCenterId()}, -1, {kind:'tienda'});
-        await db.collection(col).doc(id).set(backup);
+        await db.collection(col).doc(id).set(backup); cacheInvalidate(col);
         state.orders = [{id, source, ...backup}, ...state.orders].sort((a,b)=> new Date(b.date) - new Date(a.date));
         showToast('Pedido recuperado'); render();
       }, 10000);
@@ -2852,7 +3003,7 @@ async function handleLogin(){
   try{ await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword); }
   catch(e){ state.loginError = 'Correo o contraseña incorrectos'; render(); }
 }
-function handleLogout(){ auth.signOut(); state.loaded=false; ensureNewOrderWatcher(false); }
+function handleLogout(){ auth.signOut(); state.loaded=false; ensureNewOrderWatcher(false); try{ rcClear(); }catch(e){} }
 
 /* ============== PRODUCTOS ============== */
 // Por cada variante (talla, color...) de un producto: cuánto se ha vendido en los últimos 90 días
@@ -4214,7 +4365,7 @@ function openAuditLog(){
 }
 async function loadAuditLog(){
   try{
-    const snap = await db.collection('adminAuditLog').get();
+    const snap = await db.collection('adminAuditLog').orderBy('date','desc').limit(150).get();
     const items = snap.docs.map(d=>({id:d.id, ...d.data()}));
     items.sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.auditLogItems = items.slice(0,150);
@@ -6071,22 +6222,32 @@ function computeRealtime(){
   });
   return { recentVisitsCount: recentVisits.length, feed };
 }
-// Refresco automático de "Tiempo real": trae solo lo reciente cada 20s mientras esa
+// Refresco automático de "Tiempo real": trae solo lo reciente cada 60 s mientras esa
 // sub-pestaña esté abierta, y se detiene al salir para no dejar temporizadores vivos.
 let realtimeTimer = null;
 function ensureRealtimeTimer(active){
   if(active && !realtimeTimer){
+    // ANTES: 400 documentos cada 20 s (≈1 200 lecturas por minuto abierta). Ahora: solo lo posterior a
+    // lo último recibido (normalmente 0–5 documentos), cada 60 s, y solo con la pestaña visible.
     realtimeTimer = setInterval(async ()=>{
+      if(document.hidden) return;
       try{
+        const horizon = new Date(Date.now() - 35*60*1000).toISOString();
+        const lastOf = (arr)=> (arr||[]).reduce((m,x)=> (x && x.date && x.date>m) ? x.date : m, '');
+        const sinceV = lastOf(state.recentVisitsLive) || lastOf(state.visits) || horizon;
+        const sinceE = lastOf(state.recentEventsLive) || lastOf(state.analyticsEvents) || horizon;
         const [visitsSnap, eventsSnap] = await Promise.all([
-          db.collection('visits').orderBy('date','desc').limit(200).get(),
-          db.collection('analyticsEvents').orderBy('date','desc').limit(200).get(),
+          db.collection('visits').where('date','>',sinceV).orderBy('date','desc').limit(200).get(),
+          db.collection('analyticsEvents').where('date','>',sinceE).orderBy('date','desc').limit(200).get(),
         ]);
-        state.recentVisitsLive = visitsSnap.docs.map(d=>d.data());
-        state.recentEventsLive = eventsSnap.docs.map(d=>d.data());
+        const keep = (arr)=> (arr||[]).filter(x=>x && x.date && x.date > horizon);
+        const baseV = (state.recentVisitsLive && state.recentVisitsLive.length) ? state.recentVisitsLive : (state.visits||[]);
+        const baseE = (state.recentEventsLive && state.recentEventsLive.length) ? state.recentEventsLive : (state.analyticsEvents||[]);
+        state.recentVisitsLive = [...visitsSnap.docs.map(d=>d.data()), ...keep(baseV)].slice(0,400);
+        state.recentEventsLive = [...eventsSnap.docs.map(d=>d.data()), ...keep(baseE)].slice(0,400);
         if(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal') render();
       }catch(e){ /* silencioso */ }
-    }, 20000);
+    }, 60000);
   } else if(!active && realtimeTimer){
     clearInterval(realtimeTimer); realtimeTimer = null;
   }
@@ -8328,7 +8489,18 @@ function setTransferFrom(centerId){
 
 /* ============== CLIENTES ============== */
 function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
+// Memoria de un solo "turno": la lista se arma recorriendo TODOS los pedidos y se pedía varias veces
+// en cada pantalla (lista, filtros, ciudades, etiquetas, duplicados...). Ahora se calcula una vez por
+// render/acción y la copia se descarta en cuanto termina ese turno, así nunca muestra datos viejos.
+let _custMemo = null;
 function computeCustomersList(){
+  if(_custMemo) return _custMemo;
+  const list = _computeCustomersList();
+  _custMemo = list;
+  Promise.resolve().then(()=>{ _custMemo = null; });
+  return list;
+}
+function _computeCustomersList(){
   const byPhone = {};
   const aliasKey = {};
   state.customers.forEach(m=>{ if(m.phone && (m.altPhones||[]).length){ const pk = normalizePhone(m.phone); m.altPhones.forEach(a=>{ aliasKey[normalizePhone(a)] = pk; }); } });
@@ -8929,6 +9101,7 @@ async function dismissSearchMiss(normalized){
       ids.slice(i,i+400).forEach(id=>batch.delete(db.collection('searchMisses').doc(id)));
       await batch.commit();
     }
+    cacheInvalidate('searchMisses');
     state.searchMisses = state.searchMisses.filter(m=>!ids.includes(m.id));
   }catch(e){ console.error(e); showToast('No se pudo descartar'); }
   render();
@@ -8958,6 +9131,7 @@ function clearCartAbandonSurveys(){
   const batch = db.batch();
   ids.slice(0,400).forEach(id=>batch.delete(db.collection('cartAbandonSurveys').doc(id)));
   batch.commit().then(()=>{
+    cacheInvalidate('cartAbandonSurveys');
     state.cartAbandonSurveys = [];
     showToast('Respuestas borradas'); render();
   });
@@ -13630,7 +13804,7 @@ function renderConfig(){
    no en cada carga del panel, porque es información técnica que casi nunca hace falta ver. */
 function loadSystemErrors(){
   state.systemErrorsLoading = true; render();
-  db.collection('systemErrors').get().then(snap=>{
+  db.collection('systemErrors').orderBy('date','desc').limit(200).get().then(snap=>{
     const items = snap.docs.map(d=>({id:d.id, ...d.data()}));
     items.sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.systemErrors = items.slice(0,200);
@@ -13969,7 +14143,7 @@ async function undoImportedShift(){
   render();
 }
 function renderHerramientasSubpanel(){
-  return `<div class="panel">${renderHistoricalImportPanel()}</div>${renderImportShiftPanel()}`;
+  return `${renderPublishPanel()}<div class="panel">${renderHistoricalImportPanel()}</div>${renderImportShiftPanel()}`;
 }
 function renderHistoricalImportPanel(){
   const r = state.histImportPreview;

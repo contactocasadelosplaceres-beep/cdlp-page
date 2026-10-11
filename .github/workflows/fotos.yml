@@ -1,7 +1,7 @@
 name: Fotos de productos a archivos webp
 # Convierte las fotos base64 guardadas en Firestore en archivos .webp de este repositorio.
 # Manual: Actions → "Fotos de productos a archivos webp" → Run workflow (primero con DRY_RUN=1).
-# Automático: cada hora convierte solo las fotos nuevas que se hayan subido desde el panel.
+# Automático: 1 vez al día convierte solo las fotos nuevas que se hayan subido desde el panel.
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +22,10 @@ on:
         default: '0'
         required: false
   schedule:
-    - cron: '17 * * * *'
+    # Antes cada hora (24 lecturas completas de "products" al día = miles de lecturas de la cuota gratuita).
+    # Ahora 1 vez al día (07:17 hora de México). Las fotos nuevas salen en catalogo.json aunque sigan en
+    # base64 (hasta ~1.5 MB); para convertirlas al momento: Actions → Run workflow.
+    - cron: '17 13 * * *'
 permissions:
   contents: write
   pages: write

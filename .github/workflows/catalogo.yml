@@ -1,0 +1,46 @@
+name: Catálogo estático (catalogo.json)
+# Genera catalogo.json con los productos y ajustes PÚBLICOS para que la tienda no lea Firestore.
+# Se revisa cada 20 min (cuesta 1 lectura si no hay nada que publicar) y regenera cuando:
+#   · el panel pidió publicar (botón "Publicar tienda" o al guardar productos/ajustes), o
+#   · pasaron 6 h desde la última publicación (refresca existencias), o
+#   · lo lanzas a mano: Actions → "Catálogo estático" → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '1 = regenerar aunque no haya cambios'
+        default: '1'
+        required: false
+      dry_run:
+        description: '1 = solo reporte (no escribe nada)'
+        default: '0'
+        required: false
+  schedule:
+    - cron: '*/20 * * * *'
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: catalogo
+  cancel-in-progress: false
+jobs:
+  catalogo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/catalogo/package-lock.json
+      - run: npm ci --prefix tools/catalogo --no-audit --no-fund
+      - name: Generar catalogo.json
+        run: node tools/catalogo/build.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force || '0' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
+          MAX_AGE_HORAS: '6'

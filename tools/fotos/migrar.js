@@ -142,6 +142,8 @@ async function run({ db, sharp, commit = true }) {
     if (ok) applied++; else { skipped++; console.log(`  ${p.id} cambió mientras tanto; se reintenta en la siguiente corrida.`); }
   }
   console.log(`Productos actualizados: ${applied} · omitidos por cambios: ${skipped}`);
+  // El catálogo estático (catalogo.json) debe enterarse de las rutas nuevas de las fotos.
+  if (applied > 0) { try { await db.collection('settings').doc('publish').set({ requestedAt: new Date().toISOString(), urgent: true }, { merge: true }); console.log('Se pidió publicar catalogo.json.'); } catch (e) { console.log('No se pudo pedir la publicación del catálogo:', e.message); } }
 
   // 5) limpieza opcional de archivos que ya nadie usa
   if (CLEAN_ORPHANS && !LIMIT && !ONLY_IDS.length) {

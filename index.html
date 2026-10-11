@@ -791,21 +791,50 @@ function saveCart(){
 
 let state = { products:[], settings:{...DEFAULT_SETTINGS}, orderCount:0, cart: loadStoredCart(), activeCat:"Todos", activeNeed:null, activeBestSellers:false, searchQuery:"", searchOpen:false, cartOpen:false, checkoutOpen:false, profileOpen:false, profileDraft:null, orderPlaced:false, loaded:false, loadError:false, catalogIncomplete:false, detailProductId:null, detailImageIndex:0, detailSelectedVariant:{}, lastOrderNumber:null, gridRenderLimit:20, submittingOrder:false, couponInput:"", appliedCoupon:null, couponError:"", messageDrawerOpen:false, sendingMessage:false, messageSent:false, messageDraft:{name:'',phone:'',type:'pregunta',text:''}, checkoutReminderOpen:false, checkoutReminderShown:false, openFaqIndex:null, notifySent:{}, notifyName:'', notifyPhone:'', fullCatalogLoaded:false, wishlistOpen:false, compareIds:[], compareOpen:false, cartAbandonSurveyOpen:false, cartAbandonSurveyShown:false, priceMin:'', priceMax:'', sortBy:'', onlyAvailable:false, privacyPolicyOpen:false, priceFilterOpen:false, couponOpen:false, quizOpen:false, quizStep:0, quizAnswers:{need:null,cat:null,budget:null}, zoomOpen:false, zoomPct:100 };
 
+// Baja catalogo.json (mismo sitio, sin Firestore). 'no-cache' = revalida con el servidor (respuesta 304
+// si no cambió), así un catálogo recién publicado se ve sin esperar a que caduque la copia del navegador.
+async function loadCatalogFile(){
+  const ctl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  const t = ctl ? setTimeout(()=>ctl.abort(), 12000) : null;
+  try{
+    const r = await fetch('catalogo.json', {cache:'no-cache', signal: ctl ? ctl.signal : undefined});
+    if(!r.ok) throw new Error('catalogo.json '+r.status);
+    const j = await r.json();
+    if(!j || !Array.isArray(j.products) || !j.products.length || typeof j.settings!=='object') throw new Error('catalogo.json vacío o inválido');
+    return j;
+  } finally { if(t) clearTimeout(t); }
+}
 async function loadData(attempt){
   attempt = attempt || 1;
   try{
-    const [prodSnap, setSnap, counterSnap] = await Promise.all([
-      db.collection('products').orderBy('name').limit(40).get(),
-      db.collection('settings').doc('store').get(),
-      db.collection('counters').doc('orders').get(),
-    ]);
+    // CATÁLOGO ESTÁTICO: productos, ajustes públicos y número de pedidos vienen de catalogo.json
+    // (lo genera una GitHub Action, ver tools/catalogo) y NO cuestan lecturas de Firestore. Solo si
+    // el archivo todavía no existe o no se puede bajar (primera vez, sin señal) se usa Firestore como antes.
+    let staticCat = null;
+    try{ staticCat = await loadCatalogFile(); }catch(e){ console.warn('catalogo.json no disponible, se usa Firestore', e && e.message); }
+    let prodSnap=null, setSnap=null, counterSnap=null;
+    if(!staticCat){
+      [prodSnap, setSnap, counterSnap] = await Promise.all([
+        db.collection('products').orderBy('name').limit(40).get(),
+        db.collection('settings').doc('store').get(),
+        db.collection('counters').doc('orders').get(),
+      ]);
+    }
     // "counters/orders" es de lectura pública (lo usa también el checkout para sacar el
     // folio) y se incrementa en cada pedido de la tienda y cada venta del Punto de Venta,
     // así que sirve como número real de pedidos para el rating-line, sin exponer ningún
     // dato de pedidos individuales (eso sigue protegido detrás del permiso "pedidos").
-    state.orderCount = counterSnap.exists ? Math.max(0, (counterSnap.data().next||1) - 1) : 0;
-    state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
-    state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
+    if(staticCat){
+      state.orderCount = Math.max(0, Number(staticCat.orderCount)||0);
+      state.products = staticCat.products.filter(p=>!p.hidden && !p.deletedAt);
+      state.settings = {...DEFAULT_SETTINGS, ...(staticCat.settings||{})};
+      state.catalogStatic = true; state.catalogGeneratedAt = staticCat.generatedAt || '';
+      state.fullCatalogLoaded = true; state.catalogIncomplete = false;
+    } else {
+      state.orderCount = counterSnap.exists ? Math.max(0, (counterSnap.data().next||1) - 1) : 0;
+      state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
+      state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
+    }
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
     if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
@@ -838,7 +867,8 @@ async function loadData(attempt){
   applyThemeVars();
   trackVisit();
   openProductFromURL();
-  if(!state.loadError) loadSavedCartProducts();
+  if(!state.loadError && !state.catalogStatic) loadSavedCartProducts();
+  if(state.catalogStatic){ state.catalogIncomplete = false; state.fullCatalogLoaded = true; pruneUnavailableCartItems(); clampCartToStock(); render(); }
   // En segundo plano, sin bloquear la primera pantalla: trae el resto del catálogo completo
   // (arriba solo se cargaron los primeros 40, para que la primera pantalla aparezca rápido).
   // Antes, si esto fallaba (señal débil, la app pasó a segundo plano, etc.) no se reintentaba
@@ -848,7 +878,7 @@ async function loadData(attempt){
   // se sentía como si "no hubiera productos" o "no aparecieran sugerencias" — cuando en realidad
   // sí existían, solo que no habían terminado de cargar. Ahora si falla, reintenta solo unas
   // cuantas veces, y si de plano no puede, avisa con un botón para intentar de nuevo a mano.
-  if(!state.loadError) loadFullCatalogWithRetry();
+  if(!state.loadError && !state.catalogStatic) loadFullCatalogWithRetry();
 }
 // Enlace directo a un producto (ej. compartido por WhatsApp): ?producto=ID en la URL. Si ese
 // producto no viene entre los primeros 40 que se cargaron de entrada, se trae solo, sin esperar
@@ -870,7 +900,7 @@ async function openProductFromURL(){
   }
   if(!id) return;
   let p = state.products.find(x=>x.id===id);
-  if(!p){
+  if(!p && !state.catalogStatic){
     try{
       const doc = await db.collection('products').doc(id).get();
       if(doc.exists && !doc.data().deletedAt){
