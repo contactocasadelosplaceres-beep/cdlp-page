@@ -646,7 +646,11 @@
   body{background:var(--bg);}
   .topbar{background:var(--header-bg,#521C3E);}
   .cart-count{border-color:var(--header-bg,#521C3E);}
-  .trust-top{display:block;width:100%;background:#0A4A5B;color:#FFFFFF;text-align:center;font-size:11px;font-weight:600;padding:6px 12px;line-height:1.3;letter-spacing:.01em;}
+  .trust-top{display:block;width:100%;background:#F4E9F0;color:#521C3E;text-align:center;font-size:12px;font-weight:600;padding:7px 12px;line-height:1.3;border-bottom:1px solid rgba(82,28,62,.12);}
+  .trust-top svg{vertical-align:-2px;margin-right:6px;opacity:.85;}
+  .trust-top .tt-long{display:none;} .trust-top .tt-long i{display:inline-block;width:4px;height:4px;border-radius:50%;background:#BC355C;margin:0 12px;vertical-align:middle;opacity:.7;}
+  @media(min-width:768px){ .trust-top .tt-short{display:none;} .trust-top .tt-long{display:inline;} }
+  @media(max-width:359px){ .trust-top{font-size:11px;} }
   .badge-row .badge{white-space:nowrap;}
   /* Tarjeta de producto */
   .card{background:#FFFFFF;border:1px solid #EAEAEA;border-radius:12px;padding:10px;justify-content:space-between;}
@@ -2403,6 +2407,14 @@ function dismissAnnounceBar(){
   try{ sessionStorage.setItem(ANNOUNCE_CLOSED_KEY, announceText()); }catch(e){}
   render();
 }
+// Franja corta bajo el encabezado: frase natural en celular (una sola línea) y tres puntos en computadora.
+function renderTrustTop(){
+  const box = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></svg>';
+  return `<div class="trust-top" role="note">
+    <span class="tt-short">${box}Te llega en caja sin marcas y pagas al recibir</span>
+    <span class="tt-long">${box}Caja sin marcas ni logos<i></i>Pagas hasta que lo recibes<i></i>Nadie sabe qué pediste</span>
+  </div>`;
+}
 function renderAnnounceBar(){
   const s = state.settings;
   if(s.announceEnabled===false || isKioskMode()) return '';
@@ -3940,7 +3952,7 @@ function renderStore(){
   return `
   <a class="skip-link" href="#catalogo" onclick="event.preventDefault();scrollToId('catalogo');const g=document.getElementById('catalogo');if(g){g.setAttribute('tabindex','-1');g.focus({preventScroll:true});}">Saltar al catálogo</a>
   <div class="app">
-    <div class="topbar">${renderAnnounceBar()}${renderHeader()}${isKioskMode()?'':'<div class="trust-top">🔒 Envío 100% Discreto • Pago Contra Entrega • Empaque Neutro</div>'}</div>
+    <div class="topbar">${renderAnnounceBar()}${renderHeader()}${isKioskMode()?'':renderTrustTop()}</div>
     <div class="topbar-spacer" id="topbar-spacer"></div>
     ${state.settings.storePaused ? `<div class="note-box" style="margin:14px 20px 0;background:#F6DDE3;color:#7A2E45;font-weight:600;">${icon('alert-triangle',15)} ${state.settings.storePausedMessage || 'La tienda está en pausa temporalmente y no podemos tomar pedidos.'}</div>` : ''}
     ${state.loadError ? `<div class="load-error-box"><strong>No pudimos cargar el catálogo</strong><span>Parece que la conexión está lenta o se cortó.</span><button onclick="state.loadError=false;state.loaded=false;render();loadData()">Reintentar</button></div>` : ''}
