@@ -1018,6 +1018,7 @@ const DEFAULT_SETTINGS = {
   storeName:"La Casa de los Placeres", whatsapp:"523317494004",
   schedule:"Lun–Vie 10am–9pm · Sáb 10am–2pm",
   announceEnabled:true, announceText:"Atendemos {horario}", announceLink:"", announceColor:"navy",
+  trustBarEnabled:true, trustBarShort:"Te llega en empaque sin marcas y pagas al recibir", trustBarItems:["Empaque sin marcas ni logos","Pagas hasta que lo recibes","Nadie sabe qué pediste"],
   searchSynonyms:[],
   heroTitle:"Tu catálogo, con total discreción.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
@@ -1759,7 +1760,7 @@ let _settingsAuditBaseline = null;
 const SETTINGS_FIELD_LABELS = {
   duplicatesIgnored:"Productos marcados como no duplicados",
   storeName:'Nombre de la tienda', whatsapp:'WhatsApp de la tienda', schedule:'Horario',
-  searchSynonyms:'Sinónimos del buscador', announceEnabled:'Barra de anuncio visible', announceText:'Texto de la barra de anuncio', announceLink:'Enlace de la barra de anuncio', announceColor:'Color de la barra de anuncio',
+  searchSynonyms:'Sinónimos del buscador', announceEnabled:'Barra de anuncio visible', announceText:'Texto de la barra de anuncio', announceLink:'Enlace de la barra de anuncio', announceColor:'Color de la barra de anuncio', trustBarEnabled:'Franja de confianza visible', trustBarShort:'Franja de confianza (celular)', trustBarItems:'Franja de confianza (computadora)',
   heroTitle:'Título principal', heroSubtitle:'Subtítulo principal', categories:'Categorías',
   hiddenCategories:'Categorías ocultas', needs:'Necesidades/etiquetas', sections:'Secciones visibles',
   headerSubtitle:'Subtítulo del encabezado', showHeaderSubtitle:'Mostrar subtítulo del encabezado',
@@ -13325,7 +13326,45 @@ function renderAnnounceSubpanel(){
     </div>
     <div class="form-field"><label>Vista previa</label><div id="ann-preview">${announcePreviewHtml()}</div></div>
     <button class="btn-primary" onclick="saveAnnounceSettings()">Guardar</button>
+  </div>
+  ${renderTrustBarPanel()}`;
+}
+// Franja de confianza: la línea clara que va justo debajo del encabezado de la tienda.
+function trustItems(){ const s = state.settings; return Array.isArray(s.trustBarItems) ? s.trustBarItems.slice(0,3) : ['Empaque sin marcas ni logos','Pagas hasta que lo recibes','Nadie sabe qué pediste']; }
+function trustPreviewHtml(){
+  const s = state.settings, esc = t=>String(t||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  if(s.trustBarEnabled===false) return `<div class="note-box">Franja oculta.</div>`;
+  const short = s.trustBarShort!=null ? s.trustBarShort : 'Te llega en empaque sin marcas y pagas al recibir';
+  const items = trustItems().map(x=>String(x||'').trim()).filter(Boolean);
+  const box = (t)=>`<div style="padding:7px 12px;border-radius:8px;background:#F4E9F0;color:#521C3E;font-size:12px;font-weight:600;text-align:center;margin-bottom:6px;">${t}</div>`;
+  return `<div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:3px;">En celular</div>${box(esc(short)||'—')}<div style="font-size:11.5px;color:var(--ink-soft);margin:6px 0 3px;">En computadora</div>${box(items.map(esc).join(' &nbsp;·&nbsp; ')||esc(short))}`;
+}
+function renderTrustBarPanel(){
+  const s = state.settings, items = trustItems();
+  while(items.length<3) items.push('');
+  return `
+  <div class="panel">
+    <div class="panel-title">Franja de confianza (debajo del encabezado)</div>
+    <div class="panel-sub">Una línea clara que le recuerda al cliente lo que más le preocupa: que el paquete no diga nada y que paga al recibir. En celular se ve una sola frase corta; en computadora, hasta tres puntos.</div>
+    <label class="checkbox-row">
+      <input type="checkbox" ${s.trustBarEnabled!==false?'checked':''} onchange="state.settings.trustBarEnabled=this.checked;document.getElementById('trust-preview').innerHTML=trustPreviewHtml()">
+      <span>Mostrar la franja en la tienda</span>
+    </label>
+    <div class="form-field" style="margin-top:10px;"><label>Frase para celular <small style="font-weight:500;">(máx. 55 letras para que quepa en una línea)</small></label>
+      <input id="trust-short" maxlength="70" value="${String(s.trustBarShort!=null?s.trustBarShort:'Te llega en empaque sin marcas y pagas al recibir').replace(/"/g,'&quot;')}" oninput="state.settings.trustBarShort=this.value;document.getElementById('trust-count').textContent=this.value.length;document.getElementById('trust-preview').innerHTML=trustPreviewHtml()">
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;"><span id="trust-count">${String(s.trustBarShort!=null?s.trustBarShort:'Te llega en empaque sin marcas y pagas al recibir').length}</span> letras</div>
+    </div>
+    <div class="form-field"><label>Puntos para computadora <small style="font-weight:500;">(deja vacío el que no uses)</small></label>
+      ${items.map((t,i)=>`<input id="trust-item-${i}" maxlength="40" style="margin-bottom:6px;" value="${String(t||'').replace(/"/g,'&quot;')}" placeholder="Punto ${i+1}" oninput="const a=trustItems();while(a.length<3)a.push('');a[${i}]=this.value;state.settings.trustBarItems=a;document.getElementById('trust-preview').innerHTML=trustPreviewHtml()">`).join('')}
+    </div>
+    <div class="form-field"><label>Vista previa</label><div id="trust-preview">${trustPreviewHtml()}</div></div>
+    <button class="btn-primary" onclick="saveTrustBarSettings()">Guardar franja</button>
   </div>`;
+}
+function saveTrustBarSettings(){
+  const short = (document.getElementById('trust-short').value||'').trim();
+  const items = [0,1,2].map(i=>(document.getElementById('trust-item-'+i).value||'').trim());
+  saveSettingsForm({ trustBarEnabled: state.settings.trustBarEnabled!==false, trustBarShort: short, trustBarItems: items });
 }
 function saveAnnounceSettings(){
   const link = (document.getElementById('ann-link').value||'').trim();
