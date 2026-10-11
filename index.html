@@ -488,6 +488,51 @@
   .rel-price{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;}
   .rel-add{margin-top:auto;height:36px;border-radius:8px;background:var(--rose);color:#fff;font-size:13px;font-weight:600;border:0;cursor:pointer;font-family:inherit;}
   .rel-add.alt{background:transparent;color:var(--rose);border:1.5px solid var(--rose);}
+  /* ===== Oferta relámpago (se acomoda según cuántos productos tenga) ===== */
+  .fl-block{margin:18px 16px 0;padding:16px;border-radius:20px;background:linear-gradient(135deg,#BC355C 0%,#8E2A5F 55%,#5C1F49 100%);color:#fff;box-shadow:0 18px 40px -22px rgba(188,53,92,.8);position:relative;overflow:hidden;}
+  .fl-block::after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.08);pointer-events:none;}
+  .fl-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:relative;z-index:1;}
+  .fl-bolt{flex:0 0 40px;height:40px;border-radius:12px;background:#FFD24D;display:flex;align-items:center;justify-content:center;font-size:22px;animation:flPulse 1.6s ease-in-out infinite;}
+  @keyframes flPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
+  .fl-titles{flex:1;min-width:0;}
+  .fl-kicker{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.85;}
+  .fl-title{font-size:17px;font-weight:800;line-height:1.2;overflow-wrap:anywhere;}
+  .fl-clock{flex-shrink:0;text-align:center;background:rgba(0,0,0,.22);border-radius:12px;padding:6px 10px;}
+  .fl-clock small{display:block;font-size:10px;font-weight:700;opacity:.85;letter-spacing:.04em;}
+  .fl-clock b{font-size:16px;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+  .fl-items{position:relative;z-index:1;}
+  .fl-card{background:#fff;color:var(--ink);border-radius:16px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;min-width:0;box-shadow:0 8px 20px -14px rgba(0,0,0,.45);transition:transform .15s ease;}
+  .fl-card:active{transform:scale(.98);}
+  .fl-img{position:relative;aspect-ratio:1/1;background:var(--surface-soft);}
+  .fl-img img{width:100%;height:100%;object-fit:cover;display:block;}
+  .fl-off{position:absolute;top:10px;left:10px;background:#FFD24D;color:#5C1F49;font-weight:900;font-size:14px;padding:4px 10px;border-radius:999px;box-shadow:0 4px 10px -4px rgba(0,0,0,.4);}
+  .fl-info{padding:10px 12px 12px;display:flex;flex-direction:column;gap:3px;flex:1;}
+  .fl-name{font-size:13.5px;font-weight:700;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .fl-prices{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;} .fl-prices b{font-size:18px;color:var(--rose);} .fl-prices s{font-size:12.5px;color:var(--ink-soft);} .fl-prices small{font-size:11px;color:var(--ink-soft);font-weight:600;}
+  .fl-save{font-size:12px;font-weight:700;color:#3d7a12;}
+  .fl-left{font-size:12px;font-weight:800;color:var(--rose);}
+  .fl-cta{margin-top:auto;padding-top:6px;}
+  .fl-cta .rel-add,.fl-cta .card-add{width:100%;margin-top:0;}
+  /* 1 producto: tarjeta grande centrada */
+  .fl-one .fl-items{display:flex;justify-content:center;}
+  .fl-one .fl-card{width:100%;max-width:420px;}
+  .fl-card.big .fl-name{font-size:16px;-webkit-line-clamp:3;} .fl-card.big .fl-prices b{font-size:26px;} .fl-card.big .fl-info{padding:14px 16px 16px;gap:5px;}
+  @media(min-width:700px){
+    .fl-one .fl-card{max-width:720px;flex-direction:row;}
+    .fl-one .fl-img{flex:0 0 46%;aspect-ratio:auto;min-height:280px;}
+    .fl-one .fl-info{justify-content:center;padding:24px;}
+    .fl-card.big .fl-name{font-size:20px;}
+    .fl-card.big .fl-prices b{font-size:32px;}
+  }
+  /* 2 productos: lado a lado */
+  .fl-two .fl-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:760px;margin:0 auto;}
+  /* 3 o más: carrusel en celular, cuadrícula en computadora */
+  .fl-many .fl-items{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none;}
+  .fl-many .fl-items::-webkit-scrollbar{display:none;}
+  .fl-many .fl-card{flex:0 0 46%;scroll-snap-align:start;}
+  @media(min-width:700px){ .fl-many .fl-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));overflow:visible;margin:0;padding:0;} .fl-many .fl-card{flex:none;} }
+  @media(min-width:1024px){ .fl-block{margin:22px auto 0;max-width:1180px;padding:22px;} .fl-title{font-size:20px;} }
+  @media(prefers-reduced-motion:reduce){ .fl-bolt{animation:none;} }
   /* ===== Zoom de fotos ===== */
   .detail-main-img-wrap img{cursor:zoom-in;}
   .zoom-badge{position:absolute;right:10px;bottom:10px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;display:flex;align-items:center;justify-content:center;pointer-events:none;}
@@ -3436,23 +3481,65 @@ function renderFooterSection(){
   </footer>`;
 }
 
+/* Oferta relámpago: se acomoda sola según cuántos productos tenga.
+   1 producto → tarjeta grande centrada (foto + precio + botón) · 2 → lado a lado ·
+   3 o más → carrusel en celular y cuadrícula en computadora. Reloj en vivo (cada segundo). */
+function flashItems(f){
+  const prods = [];
+  state.products.filter(p=>!p.hidden && !p.isKit && (p.stock||0)>0 && flashCoversAny(f,p)).forEach(p=>{
+    if((f.productIds||[]).includes(p.id) || flashCatsHit(f,p) || !(p.variants||[]).length) prods.push(p);
+    else (p.variants||[]).filter(v=>(v.stock||0)>0 && (f.productIds||[]).includes(p.id+'::'+v.id)).forEach(v=>prods.push(variantDisplayProduct(p, v)));
+  });
+  return prods.slice(0, 12);
+}
+function flashClock(end){
+  const ms = Math.max(0, new Date(end).getTime() - Date.now());
+  const t = Math.floor(ms/1000), d = Math.floor(t/86400), h = Math.floor(t%86400/3600), m = Math.floor(t%3600/60), sec = t%60;
+  const pad = n=>String(n).padStart(2,'0');
+  return d>0 ? `${d}d ${pad(h)}h ${pad(m)}m` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+let flashTick = null;
+function ensureFlashTick(){
+  if(flashTick) return;
+  flashTick = setInterval(()=>{
+    const els = document.querySelectorAll('[data-flash-end]');
+    if(!els.length){ clearInterval(flashTick); flashTick = null; return; }
+    els.forEach(el=>{ el.textContent = flashClock(el.getAttribute('data-flash-end')); });
+  }, 1000);
+}
+function flashCard(p, f, big){
+  const d = productDisplayPrice(p);
+  const img = p.images && p.images.length ? `<img src="${thumbSrc(p.images[0])}" alt="" loading="lazy">` : `<div class="rel-fallback" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>`;
+  const save = d.was ? d.was - d.price : 0;
+  const open = `openProductDetail('${p.id}'${p._fv?`,'${p._fv}'`:''})`;
+  return `<article class="fl-card ${big?'big':''}" onclick="${open}">
+    <div class="fl-img">${img}<span class="fl-off">−${f.percent}%</span></div>
+    <div class="fl-info">
+      <div class="fl-name">${escHtml(p.name)}</div>
+      <div class="fl-prices">${d.from?'<small>Desde</small> ':''}<b>${money(d.price)}</b>${d.was?`<s>${money(d.was)}</s>`:''}</div>
+      ${save>=1 ? `<div class="fl-save">Ahorras ${money(save)}</div>` : ''}
+      ${big && p.stock>0 && p.stock<=5 ? `<div class="fl-left">¡Solo quedan ${p.stock}!</div>` : ''}
+      ${isKioskMode() ? '' : `<div class="fl-cta">${cardAction(p, big?'card':'mini')}</div>`}
+    </div>
+  </article>`;
+}
 function renderFlashSection(){
   const list = flashSalesActive(); if(!list.length) return '';
-  return list.map(f=>{
-    // Producto completo (o su categoría) → su tarjeta; solo algunas variantes → una tarjeta por variante.
-    const prods = [];
-    state.products.filter(p=>!p.hidden && !p.isKit && (p.stock||0)>0 && flashCoversAny(f,p)).forEach(p=>{
-      if((f.productIds||[]).includes(p.id) || flashCatsHit(f,p) || !(p.variants||[]).length) prods.push(p);
-      else (p.variants||[]).filter(v=>(v.stock||0)>0 && (f.productIds||[]).includes(p.id+'::'+v.id)).forEach(v=>prods.push(variantDisplayProduct(p, v)));
-    });
-    prods.splice(10);
+  const html = list.map(f=>{
+    const prods = flashItems(f);
     if(!prods.length) return '';
-    const lab = formatPromoCountdown(new Date(f.end)) || 'Última hora';
-    return `<div class="flash-block">
-      <div class="flash-head"><div class="flash-title">⚡ ${String(f.name||'Oferta relámpago').replace(/</g,'&lt;')} · ${f.percent}% menos</div><div class="flash-timer">${lab}</div></div>
-      <div class="rel-row">${prods.map(p=>renderMiniCard(p)).join('')}</div>
-    </div>`;
+    const n = prods.length, layout = n===1 ? 'one' : n===2 ? 'two' : 'many';
+    return `<section class="fl-block fl-${layout}" aria-label="Oferta relámpago">
+      <div class="fl-head">
+        <div class="fl-bolt" aria-hidden="true">⚡</div>
+        <div class="fl-titles"><div class="fl-kicker">Oferta relámpago</div><div class="fl-title">${escHtml(f.name||'Oferta relámpago')}</div></div>
+        <div class="fl-clock" aria-label="Tiempo restante"><small>Termina en</small><b data-flash-end="${escHtml(f.end)}">${flashClock(f.end)}</b></div>
+      </div>
+      <div class="fl-items">${prods.map(p=>flashCard(p, f, n===1)).join('')}</div>
+    </section>`;
   }).join('');
+  if(html) setTimeout(ensureFlashTick, 0);
+  return html;
 }
 const SECTION_RENDERERS = {
   hero: renderHeroSection,

@@ -53,4 +53,16 @@ const norm = s => String(s == null ? '' : s).trim().toLowerCase();
   sh('git checkout --orphan diag-variantes'); sh('git rm -rf --cached . >/dev/null'); sh('git add diag/variantes.json');
   sh('git commit -m "Diagnóstico de variantes"'); sh('git push -f origin diag-variantes');
   process.exit(0);
-})().catch(e => { console.error(e); process.exit(1); });
+})().catch(e => {
+  console.error(e);
+  // Sube el error a la rama para poder leerlo sin acceso a los registros de Actions.
+  try{
+    const dir = path.join(process.cwd(), 'diag'); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'variantes.json'), JSON.stringify({ generatedAt: new Date().toISOString(), error: String(e && (e.stack || e.message) || e).slice(0, 4000) }, null, 1));
+    const sh = c => execSync(c, { stdio: 'inherit' });
+    sh('git config user.name "cdlp-diag[bot]"'); sh('git config user.email "actions@users.noreply.github.com"');
+    sh('git checkout --orphan diag-variantes'); sh('git rm -rf --cached . >/dev/null'); sh('git add diag/variantes.json');
+    sh('git commit -m "Diagnóstico de variantes (error)"'); sh('git push -f origin diag-variantes');
+  }catch(e2){ console.error(e2); }
+  process.exit(1);
+});
