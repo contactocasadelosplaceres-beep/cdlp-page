@@ -2930,11 +2930,9 @@ function normalizePhone(phone){ return (phone||'').replace(/\D/g,''); }
 // mecanismo que en index.html: se manda "a ciegas" (no-cors) para evitar el bloqueo de CORS de
 // un webhook de Slack llamado sin servidor propio, y nunca debe interrumpir el cobro si falla.
 function sendSlackNotification(text){
-  const url = state.settings.slackWebhookUrl;
-  if(!url) return;
-  try{
-    fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({text}) }).catch(()=>{});
-  }catch(e){ /* silencioso a propósito: Slack es un aviso extra, no debe tronar el cobro */ }
+  // Los avisos a Slack ya no salen del navegador (el webhook era público en settings/store). Ahora los manda
+  // la GitHub Action "Avisos a Slack" (tools/slack) cada ~5 min con el webhook como secreto.
+  return;
 }
 function receiptWhatsappMessage(){
   const lines = (state.lastSaleItems||[]).map(it=>`• ${it.qty}x ${it.name} — ${money(it.price*it.qty)}`).join('\n');

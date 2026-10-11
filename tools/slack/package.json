@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-slack",
+  "private": true,
+  "description": "Avisos a Slack de cada pedido de la tienda y cada venta del POS (sin exponer el webhook en el navegador)",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}

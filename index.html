@@ -1573,11 +1573,9 @@ function waLink(msg){ const num=(state.settings.whatsapp||'').replace(/\D/g,'');
 // sea JSON) para evitar que el navegador la bloquee — a cambio, nunca se sabe si en verdad llegó
 // bien, así que esto es "mejor esfuerzo", no garantizado.
 function sendSlackNotification(text){
-  const url = state.settings.slackWebhookUrl;
-  if(!url) return;
-  try{
-    fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({text}) }).catch(()=>{});
-  }catch(e){ /* silencioso a propósito: Slack es un aviso extra, no debe tronar la compra */ }
+  // Los avisos a Slack ya no salen del navegador (el webhook era público en settings/store). Ahora los manda
+  // la GitHub Action "Avisos a Slack" (tools/slack) cada ~5 min con el webhook como secreto.
+  return;
 }
 
 function addToCart(id, variantId){

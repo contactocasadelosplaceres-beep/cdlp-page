@@ -1496,19 +1496,40 @@ async function refreshBestSellersIfStale(force){
 // estar entrando a Pedidos o Mensajes a cada rato para enterarse. Se detiene si la pestaña no
 // está visible (minimizada/en segundo plano) para no gastar lecturas de más.
 let newOrderWatcherTimer = null;
+// YA NO revisa cada cierto tiempo (cada revisión costaba lecturas aunque no hubiera nada nuevo): se
+// revisa con el botón "Actualizar" de arriba, o solo al volver a esta pestaña después de 5 min o más.
+// Los avisos de cada venta le llegan a Ale por Slack (GitHub Action), no dependen de tener el panel abierto.
 function ensureNewOrderWatcher(active){
   if(active && !newOrderWatcherTimer){
-    newOrderWatcherTimer = setInterval(checkForNewOrders, 90000);
-  } else if(!active && newOrderWatcherTimer){
-    clearInterval(newOrderWatcherTimer); newOrderWatcherTimer = null;
+    newOrderWatcherTimer = true;
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.hidden || !state.user || !state.loaded) return;
+      if(Date.now() - (state.lastRefreshAt||0) >= 5*60*1000) refreshNow(true);
+    });
   }
 }
-async function checkForNewOrders(){
-  if(document.hidden || !state.user || !state.loaded) return;
+async function refreshNow(quiet){
+  if(state.refreshing) return;
+  state.refreshing = true; if(!quiet) render();
+  try{
+    const found = await checkForNewOrders(true);
+    if(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal') await refreshRealtime();
+    if(!quiet && !found) showToast('Todo al día: no hay nada nuevo');
+  }finally{ state.refreshing = false; state.lastRefreshAt = Date.now(); render(); }
+}
+function refreshLabel(){
+  if(state.refreshing) return 'Actualizando…';
+  const t = state.lastRefreshAt; if(!t) return 'Actualizar';
+  const m = Math.floor((Date.now()-t)/60000);
+  return m<1 ? 'Actualizar · ahora' : `Actualizar · hace ${m} min`;
+}
+async function checkForNewOrders(manual){
+  if(!state.user || !state.loaded) return 0;
+  if(!manual && document.hidden) return 0;
   // Cada revisión de pedidos/ventas cuesta mínimo 1 lectura por consulta aunque no haya nada nuevo,
   // así que mensajes y carritos (menos urgentes) se revisan solo 1 de cada 5 ciclos.
   state.watchTick = (state.watchTick||0) + 1;
-  const checkSecondary = state.watchTick % 5 === 1;
+  const checkSecondary = manual === true || state.watchTick % 5 === 1;
   const sinceOrders = state.lastOrderCheck || new Date().toISOString();
   const sinceMessages = state.lastMessageCheck || new Date().toISOString();
   const sinceCarts = state.lastCartCheck || new Date().toISOString();
@@ -1546,7 +1567,8 @@ async function checkForNewOrders(){
       }
       render();
     }
-  }catch(e){ console.error('No se pudo revisar pedidos/mensajes/carritos nuevos', e); }
+    return newCount + newMsgCount + newCartCount;
+  }catch(e){ console.error('No se pudo revisar pedidos/mensajes/carritos nuevos', e); if(manual) showToast('No se pudo actualizar, intenta de nuevo'); return 0; }
 }
 // Aviso sonoro corto, generado sin archivo de audio (Web Audio API) — dos tonos breves.
 function playNewOrderChime(){
@@ -4878,6 +4900,7 @@ function renderAdmin(){
       </nav>
       <div class="sidebar-footer">
         <button onclick="toggleTheme()">${isDarkTheme()?icon('sun',15):icon('moon',15)}<span>${isDarkTheme()?'Tema claro':'Tema oscuro'}</span></button>
+        <button onclick="refreshNow()" ${state.refreshing?'disabled':''}>${icon('refresh-cw',15)}<span>${refreshLabel()}</span></button>
         <button onclick="openGlobalSearch()">${icon('search',15)}<span>Buscar</span></button>
         ${!state.myPermissions ? `<a href="pos.html" target="_blank">${icon('bag',15)}<span>Punto de venta</span></a>` : ''}
         <button onclick="handleLogout()">${icon('x',15)}<span>Cerrar sesión</span></button>
@@ -4889,6 +4912,7 @@ function renderAdmin(){
       <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Panel de administración</div></div>
       <div class="admin-top-actions">
         <button class="logout-link" onclick="toggleTheme()" title="${isDarkTheme()?'Cambiar a tema claro':'Cambiar a tema oscuro'}">${isDarkTheme()?icon('sun',13):icon('moon',13)}</button>
+        <button class="logout-link" onclick="refreshNow()" ${state.refreshing?'disabled':''}>${icon('refresh-cw',13)} ${refreshLabel()}</button>
         <button class="logout-link" onclick="openGlobalSearch()">${icon('search',13)} Buscar</button>
         ${!state.myPermissions ? `<a class="logout-link" href="pos.html" target="_blank">Punto de venta</a>` : ''}
         <button class="logout-link" onclick="handleLogout()">Cerrar sesión</button>
@@ -6225,31 +6249,30 @@ function computeRealtime(){
 // Refresco automático de "Tiempo real": trae solo lo reciente cada 60 s mientras esa
 // sub-pestaña esté abierta, y se detiene al salir para no dejar temporizadores vivos.
 let realtimeTimer = null;
+// Sin temporizador: solo trae datos al entrar a la pestaña (si no se trajeron hace menos de 2 min) y
+// cuando se pulsa "Actualizar". Pide únicamente lo posterior a lo último recibido.
+async function refreshRealtime(){
+  state.realtimeFetchedAt = Date.now();
+  try{
+    const horizon = new Date(Date.now() - 35*60*1000).toISOString();
+    const lastOf = (arr)=> (arr||[]).reduce((m,x)=> (x && x.date && x.date>m) ? x.date : m, '');
+    const sinceV = lastOf(state.recentVisitsLive) || lastOf(state.visits) || horizon;
+    const sinceE = lastOf(state.recentEventsLive) || lastOf(state.analyticsEvents) || horizon;
+    const [visitsSnap, eventsSnap] = await Promise.all([
+      db.collection('visits').where('date','>',sinceV).orderBy('date','desc').limit(200).get(),
+      db.collection('analyticsEvents').where('date','>',sinceE).orderBy('date','desc').limit(200).get(),
+    ]);
+    const keep = (arr)=> (arr||[]).filter(x=>x && x.date && x.date > horizon);
+    const baseV = (state.recentVisitsLive && state.recentVisitsLive.length) ? state.recentVisitsLive : (state.visits||[]);
+    const baseE = (state.recentEventsLive && state.recentEventsLive.length) ? state.recentEventsLive : (state.analyticsEvents||[]);
+    state.recentVisitsLive = [...visitsSnap.docs.map(d=>d.data()), ...keep(baseV)].slice(0,400);
+    state.recentEventsLive = [...eventsSnap.docs.map(d=>d.data()), ...keep(baseE)].slice(0,400);
+  }catch(e){ /* silencioso */ }
+}
 function ensureRealtimeTimer(active){
-  if(active && !realtimeTimer){
-    // ANTES: 400 documentos cada 20 s (≈1 200 lecturas por minuto abierta). Ahora: solo lo posterior a
-    // lo último recibido (normalmente 0–5 documentos), cada 60 s, y solo con la pestaña visible.
-    realtimeTimer = setInterval(async ()=>{
-      if(document.hidden) return;
-      try{
-        const horizon = new Date(Date.now() - 35*60*1000).toISOString();
-        const lastOf = (arr)=> (arr||[]).reduce((m,x)=> (x && x.date && x.date>m) ? x.date : m, '');
-        const sinceV = lastOf(state.recentVisitsLive) || lastOf(state.visits) || horizon;
-        const sinceE = lastOf(state.recentEventsLive) || lastOf(state.analyticsEvents) || horizon;
-        const [visitsSnap, eventsSnap] = await Promise.all([
-          db.collection('visits').where('date','>',sinceV).orderBy('date','desc').limit(200).get(),
-          db.collection('analyticsEvents').where('date','>',sinceE).orderBy('date','desc').limit(200).get(),
-        ]);
-        const keep = (arr)=> (arr||[]).filter(x=>x && x.date && x.date > horizon);
-        const baseV = (state.recentVisitsLive && state.recentVisitsLive.length) ? state.recentVisitsLive : (state.visits||[]);
-        const baseE = (state.recentEventsLive && state.recentEventsLive.length) ? state.recentEventsLive : (state.analyticsEvents||[]);
-        state.recentVisitsLive = [...visitsSnap.docs.map(d=>d.data()), ...keep(baseV)].slice(0,400);
-        state.recentEventsLive = [...eventsSnap.docs.map(d=>d.data()), ...keep(baseE)].slice(0,400);
-        if(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal') render();
-      }catch(e){ /* silencioso */ }
-    }, 60000);
-  } else if(!active && realtimeTimer){
-    clearInterval(realtimeTimer); realtimeTimer = null;
+  if(active && Date.now() - (state.realtimeFetchedAt||0) > 120000){
+    state.realtimeFetchedAt = Date.now();
+    refreshRealtime().then(()=>{ if(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal') render(); });
   }
 }
 
@@ -6916,7 +6939,7 @@ function renderStatsTiempoReal(){
     </div>
     <div class="panel">
       <div class="panel-title">Actividad reciente</div>
-      <div class="panel-sub">Se actualiza automáticamente cada 20 segundos mientras estás en esta pestaña</div>
+      <div class="panel-sub">Se actualiza al entrar y cuando pulsas “Actualizar” (así no se gastan lecturas de más). <button class="btn-tertiary" style="padding:4px 10px;" onclick="refreshNow()">${refreshLabel()}</button></div>
       ${r.feed.length===0 ? `<div class="empty-state">Sin actividad en los últimos minutos.</div>` :
         r.feed.map(f=>`<div class="list-row"><div class="row-main"><div class="row-title">${f.label}</div>${f.detail?`<div class="row-sub">${f.detail}</div>`:''}</div><div class="row-sub">${new Date(f.date).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div></div>`).join('')}
     </div>
@@ -13984,9 +14007,8 @@ function renderOperativoSubpanel(){
     <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207" oninput="state.settings.deliveryWhatsapp=this.value"></div>
     <div class="form-field"><label>Aviso de costo de envío (se muestra en el carrito y al confirmar el pedido)</label><input id="set-shipping-note" value="${s.shippingNote||''}" placeholder="El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán." oninput="state.settings.shippingNote=this.value"></div>
     <div class="form-field">
-      <label>Webhook de Slack (opcional)</label>
-      <input id="set-slack-webhook" value="${s.slackWebhookUrl||''}" placeholder="https://hooks.slack.com/services/..." oninput="state.settings.slackWebhookUrl=this.value">
-      <div class="note-box" style="margin-top:6px;">Si lo llenas, cada pedido nuevo de la tienda y cada venta cerrada en el Punto de Venta mandan además un aviso automático a ese canal de Slack (en paralelo al mensaje de WhatsApp, no lo reemplaza). Para conseguir esta URL: en Slack, crea una app → Incoming Webhooks → actívalo → "Add New Webhook to Workspace" y elige el canal. <strong>Ojo:</strong> como esta tienda no tiene servidor propio, esta URL queda visible en el código de la página para quien la busque — alguien podría usarla para mandar mensajes falsos a tu canal (spam), aunque no puede leer ni robar ningún dato tuyo con ella. Déjalo vacío si prefieres no activar esto.</div>
+      <label>Avisos a Slack</label>
+      <div class="note-box" style="margin-top:6px;">Cada pedido nuevo de la tienda y cada venta del Punto de Venta llegan a Slack con un retraso de unos 5 minutos (los manda una GitHub Action, ya no el navegador, para que el webhook no sea público). El webhook se guarda como secreto <strong>SLACK_WEBHOOK_URL</strong> en GitHub → Settings → Secrets and variables → Actions. En cuanto exista, el webhook que estaba aquí se borra solo de la configuración pública.</div>
     </div>
     <div class="form-field">
       <label>Pedidos adicionales a sumar en "+X pedidos" de tu tienda</label>
@@ -14227,7 +14249,7 @@ function handleSaveSettings(){
     storeAddress: document.getElementById('set-store-address').value.trim(),
     deliveryWhatsapp: document.getElementById('set-delivery-wa').value.trim(),
     shippingNote: document.getElementById('set-shipping-note').value.trim(),
-    slackWebhookUrl: document.getElementById('set-slack-webhook').value.trim(),
+    slackWebhookUrl: state.settings.slackWebhookUrl || '',
     historicalOrderCountOffset: Math.max(0, Number(document.getElementById('set-hist-offset').value)||0),
     layawayMinPct: Math.min(100, Math.max(1, Number(document.getElementById('set-ly-pct').value)||20)),
     layawayDays: Math.max(1, Number(document.getElementById('set-ly-days').value)||30),

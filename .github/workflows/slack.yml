@@ -1,0 +1,31 @@
+name: Avisos a Slack (pedidos y ventas)
+# Cada ~5 min revisa si hubo pedidos de la tienda o ventas del POS nuevas y las manda a Slack.
+# Secreto recomendado: SLACK_WEBHOOK_URL (Settings → Secrets and variables → Actions). Mientras no exista,
+# usa el webhook que ya estaba en settings/store para no interrumpir los avisos.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: slack
+  cancel-in-progress: false
+jobs:
+  slack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, sparse-checkout: tools/slack }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/slack/package-lock.json
+      - run: npm ci --prefix tools/slack --no-audit --no-fund
+      - name: Avisar
+        run: node tools/slack/notify.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

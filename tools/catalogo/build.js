@@ -32,7 +32,7 @@ const PRIV_VARIANT = ['cost', 'stockByCenter', 'supplierId'];
 // Ajustes que son solo del panel (la tienda no los usa).
 const PRIV_SETTINGS = ['recurringExpenses', 'salesGoalMonthly', 'duplicatesIgnored', 'deliveryWhatsapp', 'storeAddress',
   'repurchaseProductIds', 'repurchaseDays', 'churnRiskDays', 'churnRiskMinPurchases', 'deliverySurveyQuestions',
-  'bestSellersUpdatedAt', 'ai'];
+  'bestSellersUpdatedAt', 'slackWebhookUrl', 'ai'];
 const SECRET_KEY = /(secret|token|password|passwd|apikey|api_key|privatekey)/i;
 
 const isData = s => typeof s === 'string' && s.startsWith('data:');
