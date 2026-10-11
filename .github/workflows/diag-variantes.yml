@@ -9,7 +9,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with: { sparse-checkout: tools/diag }
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm install --prefix tools/diag --no-audit --no-fund
