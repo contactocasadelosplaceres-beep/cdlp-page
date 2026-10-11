@@ -755,6 +755,79 @@ firebase.initializeApp(firebaseConfig);
     });
   }catch(e){ console.warn('Blindaje de texto no disponible', e); }
 })();
+/* ============== ÍNDICE DE CLIENTES (ahorro de lecturas) ==============
+   Un solo documento, customers/__indice_pos, guarda nombre + teléfono de TODOS los clientes
+   (perfiles: m[id] = {n,p,u}; quien solo compró sin perfil: m['ph_'+tel] = {n,p,t,d:1}).
+   Buscar un cliente cuesta 1 lectura (ese documento) en vez de leer toda la lista, y abrir su
+   ficha cuesta 1 más. Este bloque lo mantiene al día solo: cada vez que el panel o el POS crean,
+   editan o borran un cliente, se actualiza su renglón en el índice (sin leerlo) y se le pone
+   updatedAt al cliente (así el panel puede traer solo lo que cambió). */
+(function(){
+  const IDX = '__indice_pos', COL = 'customers';
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch || !F.CollectionReference) return;
+  const colOf = ref => { try{ return ref && ref.parent && ref.parent.id; }catch(e){ return null; } };
+  const isCust = ref => colOf(ref)===COL && ref.id!==IDX;
+  const isPlain = o => o && typeof o==='object' && Object.getPrototypeOf(o)===Object.prototype;
+  const ph10 = s => String(s==null?'':s).replace(/\D/g,'').slice(-10);
+  const DR = F.DocumentReference.prototype, CR = F.CollectionReference.prototype, B = F.WriteBatch.prototype;
+  const oSet = DR.set, oUpd = DR.update, oDel = DR.delete, oAdd = CR.add, bSet = B.set, bUpd = B.update, bDel = B.delete, bCommit = B.commit;
+  const stamp = data => { if(!isPlain(data)) return data; return {...data, updatedAt: new Date().toISOString()}; };
+  function idxOps(id, data, del){
+    const ops = {};
+    if(del){ ops['m.'+id] = F.FieldValue.delete(); return ops; }
+    if(!isPlain(data)) return null;
+    ops['m.'+id+'.u'] = data.updatedAt || new Date().toISOString();
+    if(typeof data.name==='string') ops['m.'+id+'.n'] = data.name.slice(0,80);
+    if(data.phone!==undefined && typeof data.phone!=='object'){ const p = ph10(data.phone); ops['m.'+id+'.p'] = p; if(p.length===10) ops['m.ph_'+p] = F.FieldValue.delete(); }
+    return ops;
+  }
+  async function applyIdx(fs, ops){
+    if(!ops || !Object.keys(ops).length) return;
+    const ref = fs.collection(COL).doc(IDX);
+    try{ await oUpd.call(ref, ops); }
+    catch(e){
+      // Si el índice todavía no existe, se crea con lo que haya (sin borrar nada).
+      try{ const m = {}; Object.entries(ops).forEach(([k,v])=>{ const parts = k.split('.'); if(parts.length===3){ (m[parts[1]] = m[parts[1]] || {})[parts[2]] = v; } }); if(Object.keys(m).length) await oSet.call(ref, {kind:'posIndex', m}, {merge:true}); }catch(e2){ console.warn('Índice de clientes', e2); }
+    }
+  }
+  window.cdlpCustIdxUpdate = (id, data, del)=>applyIdx(firebase.firestore(), idxOps(id, data, del));
+  DR.set = function(data, opts){
+    if(!isCust(this)) return oSet.call(this, data, opts);
+    const d = stamp(data), self = this;
+    const p = oSet.call(this, d, opts);
+    Promise.resolve(p).then(()=>applyIdx(self.firestore, idxOps(self.id, d)), ()=>{});
+    return p;
+  };
+  DR.update = function(...a){
+    if(!isCust(this) || !isPlain(a[0])) return oUpd.apply(this, a);
+    const d = stamp(a[0]), self = this;
+    const p = oUpd.call(this, d);
+    Promise.resolve(p).then(()=>applyIdx(self.firestore, idxOps(self.id, d)), ()=>{});
+    return p;
+  };
+  DR.delete = function(){
+    if(!isCust(this)) return oDel.call(this);
+    const self = this, p = oDel.call(this);
+    Promise.resolve(p).then(()=>applyIdx(self.firestore, idxOps(self.id, null, true)), ()=>{});
+    return p;
+  };
+  CR.add = function(data){
+    if(this.id!==COL) return oAdd.call(this, data);
+    const d = stamp(data), fs = this.firestore;
+    const p = oAdd.call(this, d);
+    Promise.resolve(p).then(ref=>applyIdx(fs, idxOps(ref.id, d)), ()=>{});
+    return p;
+  };
+  B.set = function(ref, data, opts){ if(!isCust(ref)) return bSet.call(this, ref, data, opts); const d = stamp(data); (this.__cdlpCust = this.__cdlpCust||[]).push([ref, d, false]); return bSet.call(this, ref, d, opts); };
+  B.update = function(ref, ...a){ if(!isCust(ref) || !isPlain(a[0])) return bUpd.call(this, ref, ...a); const d = stamp(a[0]); (this.__cdlpCust = this.__cdlpCust||[]).push([ref, d, false]); return bUpd.call(this, ref, d); };
+  B.delete = function(ref){ if(isCust(ref)) (this.__cdlpCust = this.__cdlpCust||[]).push([ref, null, true]); return bDel.call(this, ref); };
+  B.commit = function(...a){
+    const list = this.__cdlpCust, p = bCommit.apply(this, a);
+    if(list && list.length) Promise.resolve(p).then(()=>{ const ops = {}; let fs = null; list.forEach(([ref,d,del])=>{ fs = fs || ref.firestore; Object.assign(ops, idxOps(ref.id, d, del)||{}); }); if(fs) applyIdx(fs, ops); }, ()=>{});
+    return p;
+  };
+})();
 /* ============== COSTOS PRIVADOS (QA-03) ==============
    El costo de compra, su historial y el proveedor ya no viven en "products" (que cualquiera puede leer
    porque la tienda la necesita), sino en "productCosts", que solo lee y escribe el personal.
@@ -1290,7 +1363,7 @@ async function loadData(attempt){
       db.collection('distributionCenters').get(),
       db.collection('transfers').orderBy('date','desc').limit(200).get(),
       db.collection('audits').orderBy('date','desc').limit(100).get(),
-      db.collection('customers').get(),
+      loadCustomersSmart(),
       db.collection('couponUsage').get(),
       db.collection('cashRegisters').orderBy('openedAt','desc').limit(300).get(),
       // Eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout, compra) de la
@@ -1413,9 +1486,8 @@ async function loadData(attempt){
     state.transfers = transfersSnap.docs.map(d=>({id:d.id, ...d.data()}));
     state.audits = auditsSnap.docs.map(d=>({id:d.id, ...d.data()}));
     // El documento índice para el Punto de Venta (POS_CUSTOMER_INDEX_ID) no es un cliente: se aparta.
-    const _idxDoc = customersSnap.docs.find(d=>d.id===POS_CUSTOMER_INDEX_ID);
-    state.posCustomerIndexPrev = _idxDoc ? (_idxDoc.data().list||[]) : [];
     state.customers = customersSnap.docs.filter(d=>d.id!==POS_CUSTOMER_INDEX_ID).map(d=>({id:d.id, ...d.data()}));
+    state.customersLoadedAt = new Date().toISOString();
     state.couponUsage = couponUsageSnap.docs.map(d=>d.data());
     state.cashRegisters = cashRegistersSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
@@ -1473,25 +1545,73 @@ async function loadData(attempt){
    índice dentro de "customers" con nombre + teléfono de esos clientes; el POS lo lee (1 lectura) y, al
    elegir a uno, le crea su perfil. Se conserva lo anterior del índice (el panel solo ve ~45 días de pedidos). */
 const POS_CUSTOMER_INDEX_ID = '__indice_pos';
+/* Clientes con caché local: en vez de leer TODOS los clientes en cada carga, se lee el índice
+   (1 lectura) y solo los clientes nuevos o cambiados desde la última vez (su "u" en el índice no
+   coincide con lo guardado en este dispositivo). Cada 7 días, o si algo no cuadra, se lee todo. */
+async function loadCustomersSmart(){
+  const wrap = rows => ({docs: rows.map(r=>({id:r.id, data:()=>r.data}))});
+  const fullRead = async ()=>{
+    const snap = await db.collection('customers').get();
+    const idx = snap.docs.find(d=>d.id===POS_CUSTOMER_INDEX_ID);
+    state.posCustomerIndexDoc = idx ? (idx.data()||{}) : null;
+    const rows = snap.docs.filter(d=>d.id!==POS_CUSTOMER_INDEX_ID).map(d=>({id:d.id, data:d.data()}));
+    rcSet('cust:v2', {fullAt:Date.now(), rows}).catch(()=>{});
+    window.__readStats && (window.__readStats.byCol.customers = {docsRead:snap.docs.length, fromCache:0, kind:'completa'});
+    return wrap(rows);
+  };
+  let idxDoc = null;
+  try{ const d = await db.collection('customers').doc(POS_CUSTOMER_INDEX_ID).get(); idxDoc = d.exists ? (d.data()||{}) : null; }catch(e){ return fullRead(); }
+  state.posCustomerIndexDoc = idxDoc;
+  const m = idxDoc && idxDoc.m;
+  let c = null; try{ c = await rcGet('cust:v2'); }catch(e){}
+  if(!m || !c || !Array.isArray(c.rows) || (Date.now()-(c.fullAt||0)) > 7*864e5) return fullRead();
+  const prof = Object.entries(m).filter(([k,e])=>e && !e.d && !k.startsWith('ph_'));
+  const byId = new Map(c.rows.map(r=>[r.id, r]));
+  const need = prof.filter(([id,e])=>{ const r = byId.get(id); return !r || String((r.data||{}).updatedAt||'') !== String(e.u||''); }).map(([id])=>id);
+  if(need.length > 150) return fullRead();
+  const fresh = [];
+  for(let i=0;i<need.length;i+=10){
+    const chunk = need.slice(i,i+10);
+    const snap = await db.collection('customers').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
+    snap.docs.forEach(d=>fresh.push({id:d.id, data:d.data()}));
+  }
+  fresh.forEach(r=>byId.set(r.id, r));
+  const keep = new Set(prof.map(([id])=>id));
+  const rows = [...byId.values()].filter(r=>keep.has(r.id));
+  rcSet('cust:v2', {fullAt:c.fullAt, rows}).catch(()=>{});
+  window.__readStats && (window.__readStats.byCol.customers = {docsRead:1+fresh.length, fromCache:rows.length-fresh.length, kind:'incremental'});
+  return wrap(rows);
+}
+
 async function syncPosCustomerIndex(){
   if(state.loadFailed || !state.loaded) return;
   if(state.myPermissions && !state.myPermissions.clientes) return;   // colaborador sin permiso de Clientes
   const last10 = ph => normalizePhone(ph).slice(-10);
-  const withProfile = new Set(state.customers.map(c=>last10(c.phone)).filter(Boolean));
-  const byPhone = new Map();
-  (state.posCustomerIndexPrev||[]).forEach(e=>{ const k = last10(e.p); if(k.length===10) byPhone.set(k, e); });
+  const prevDoc = state.posCustomerIndexDoc || null;
+  const prev = (prevDoc && prevDoc.m) || {};
+  const want = {};
+  // Perfiles guardados
+  state.customers.forEach(c=>{ want[c.id] = {n:String(c.name||'').slice(0,80), p:last10(c.phone), u:String(c.updatedAt||'')}; });
+  const withProfile = new Set(Object.values(want).map(e=>e.p).filter(Boolean));
+  // Quien compró sin perfil (tienda o mostrador con teléfono); se conservan los anteriores del índice
+  Object.entries(prev).forEach(([k,e])=>{ if(e && e.d && e.p && !withProfile.has(e.p)) want[k] = e; });
+  (prevDoc && Array.isArray(prevDoc.list) ? prevDoc.list : []).forEach(e=>{ const p = last10(e.p); if(p.length===10 && !withProfile.has(p) && !want['ph_'+p]) want['ph_'+p] = {n:String(e.n||'').slice(0,80), p, t:String(e.t||''), d:1}; });
   computeCustomersList().forEach(c=>{
     if(c.manualId) return;
-    const k = last10(c.phone); if(k.length!==10) return;
-    const prev = byPhone.get(k);
-    const t = c.lastDate || (prev && prev.t) || '';
-    if(!prev || String(t) >= String(prev.t||'')) byPhone.set(k, {n:String(c.name||'').slice(0,80), p:k, t:String(t).slice(0,10)});
+    const p = last10(c.phone); if(p.length!==10 || withProfile.has(p)) return;
+    const t = String(c.lastDate||'').slice(0,10), old = want['ph_'+p];
+    if(!old || t >= String(old.t||'')) want['ph_'+p] = {n:String(c.name||'').slice(0,80), p, t, d:1};
   });
-  let list = [...byPhone.values()].filter(e=>!withProfile.has(e.p)).sort((a,b)=>String(b.t).localeCompare(String(a.t))).slice(0,8000);
-  const prevKey = JSON.stringify(state.posCustomerIndexPrev||[]), nextKey = JSON.stringify(list);
-  if(prevKey===nextKey) return;
-  await db.collection('customers').doc(POS_CUSTOMER_INDEX_ID).set({kind:'posIndex', list, count:list.length, updatedAt:new Date().toISOString()});
-  state.posCustomerIndexPrev = list;
+  const ops = {}; let n = 0;
+  Object.entries(want).forEach(([k,e])=>{ if(JSON.stringify(prev[k]||null)!==JSON.stringify(e)){ ops['m.'+k] = e; n++; } });
+  // Quitar del índice perfiles que ya no existen (sin tocar los creados en el POS después de cargar el panel)
+  Object.entries(prev).forEach(([k,e])=>{ if(!want[k] && e && (e.d || String(e.u||'') < String(state.customersLoadedAt||''))){ ops['m.'+k] = firebase.firestore.FieldValue.delete(); n++; } });
+  if(prevDoc && prevDoc.list) ops.list = firebase.firestore.FieldValue.delete();
+  if(!Object.keys(ops).length) return;
+  const ref = db.collection('customers').doc(POS_CUSTOMER_INDEX_ID);
+  if(!prevDoc) await ref.set({kind:'posIndex', m:want, updatedAt:new Date().toISOString()});
+  else { ops.updatedAt = new Date().toISOString(); await ref.update(ops); }
+  state.posCustomerIndexDoc = {kind:'posIndex', m:want};
 }
 // "Más vendidos" automático: analiza lo vendido de verdad (tienda + POS, sin lo cancelado) en
 // los últimos 30 días y guarda el resultado en la configuración pública de la tienda (así
