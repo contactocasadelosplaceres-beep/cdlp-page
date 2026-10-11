@@ -895,6 +895,7 @@ function renderWarehouseModal(){
                 <div>
                   <div style="font-weight:700;">${p.name}</div>
                   <div class="panel-sub" style="margin:2px 0 0;">${p.location ? `${icon('map-pin',13)} ${p.location}` : 'Sin ubicación registrada'}</div>
+                  ${(p.variants||[]).length ? `<div class="panel-sub" style="margin:4px 0 0;">${p.variants.map(v=>`${escHtml(variantLabel(v))}: <b>${vCenterStock(v, state.activeCenter.id)}</b>`).join(' · ')}</div>` : ''}
                 </div>
                 <button class="icon-btn" title="Dejar una nota sobre este producto" onclick="state.warehouseNoteProductId=state.warehouseNoteProductId==='${p.id}'?null:'${p.id}';state.warehouseNoteText='';render()">${icon('message-circle',18)}</button>
               </div>
@@ -1885,17 +1886,24 @@ async function confirmCashClose(){
 
 function cartCount(){ return Object.values(state.cart).reduce((a,b)=>a+b,0); }
 /* Ofertas relámpago (se programan en Admin → Marketing): mismo cálculo que la tienda. */
-function flashFor(p){
+/* Referencias de producto: "pid" = todo el producto, "pid::vid" = solo esa variante. */
+function refHit(list, pid, vid){ list = list||[]; return list.includes(pid) || (!!vid && list.includes(pid+'::'+vid)); }
+function flashFor(p, v){
   if(!p || p.isKit) return null;
   const now = Date.now(), cats = (p.categories&&p.categories.length)?p.categories:[p.cat];
-  const f = ((state.settings&&state.settings.flashSales)||[]).find(x=>x.active!==false && x.percent>0 && x.start && x.end && new Date(x.start).getTime()<=now && new Date(x.end).getTime()>now && ((x.productIds||[]).includes(p.id) || (x.categories||[]).some(c=>cats.includes(c))));
+  const f = ((state.settings&&state.settings.flashSales)||[]).find(x=>x.active!==false && x.percent>0 && x.start && x.end && new Date(x.start).getTime()<=now && new Date(x.end).getTime()>now && (refHit(x.productIds, p.id, v&&v.id) || (x.categories||[]).some(c=>cats.includes(c))));
   if(!f) return null;
-  const price = Math.round(p.price*(1-f.percent/100)*100)/100;
-  return price<p.price ? {sale:f, price} : null;
+  const list = variantListPrice(p, v);
+  const price = Math.round(list*(1-f.percent/100)*100)/100;
+  return price<list ? {sale:f, price} : null;
 }
-function effectivePrice(p){
-  const base = (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price;
-  const fl = flashFor(p);
+function effectivePrice(p, v){
+  const list = variantListPrice(p, v);
+  let base;
+  if(v && v.promoPriceOverride>0 && v.promoPriceOverride<list) base = v.promoPriceOverride;
+  else if(v && v.priceOverride>0) base = list;
+  else base = (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price;
+  const fl = flashFor(p, v);
   return fl && fl.price<base ? fl.price : base;
 }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
@@ -1969,16 +1977,12 @@ function renderCheckoutReminderModal(){
 function variantListPrice(p, v){ return v && v.priceOverride>0 ? v.priceOverride : p.price; }
 // Precio por unidad: promoción propia de la variante, luego su precio propio y si no, el del producto con sus promociones.
 function itemPrice(p, v){
-  if(v){
-    const list = variantListPrice(p, v);
-    if(v.promoPriceOverride>0 && v.promoPriceOverride<list) return v.promoPriceOverride;
-    if(v.priceOverride>0) return v.priceOverride;
-  }
-  return effectivePrice(p);
+  // Precio propio de la variante (si tiene) y, encima, la oferta relámpago que la cubra (producto completo o esa variante).
+  return effectivePrice(p, v||null);
 }
 function posDisplayPrice(p){
   const vs = p.variants||[];
-  if(!vs.length || !vs.some(v=>v.priceOverride>0 || v.promoPriceOverride>0)){ const pr = effectivePrice(p); return {price:pr, was:pr<p.price?p.price:0, from:false}; }
+  if(!vs.length){ const pr = effectivePrice(p); return {price:pr, was:pr<p.price?p.price:0, from:false}; }
   const inStock = vs.filter(v=>vCenterStock(v,state.activeCenter.id)>0), pool = inStock.length ? inStock : vs;
   const rows = pool.map(v=>({v, price:itemPrice(p,v)}));
   const min = rows.reduce((a,b)=>b.price<a.price?b:a);
@@ -2035,15 +2039,15 @@ function changeQty(id,delta){ const cur=state.cart[id]||0; const next=cur+delta;
    Adicional a los descuentos y promociones ya aplicados en el precio de cada
    producto; requiere siempre un motivo de justificación. */
 function prodCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
-function isCouponEligibleItem(prodCategories, prodId, coupon){
+function isCouponEligibleItem(prodCategories, prodId, coupon, variantId){
   if(coupon.scope==='all') return true;
   if(coupon.scope==='categories') return (prodCategories||[]).some(c=>(coupon.categories||[]).includes(c));
-  if(coupon.scope==='products') return (coupon.productIds||[]).includes(prodId);
+  if(coupon.scope==='products') return refHit(coupon.productIds, prodId, variantId);
   return false;
 }
 function couponEligibleCartEntries(coupon){
   return Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return {key,qty,p,v}; })
-    .filter(({p})=>p && isCouponEligibleItem(prodCats(p), p.id, coupon));
+    .filter(({p,v})=>p && isCouponEligibleItem(prodCats(p), p.id, coupon, v?v.id:null));
 }
 function couponDiscountAmount(coupon){
   return couponEligibleCartEntries(coupon).reduce((s,{p,v,qty})=>s + Math.round(itemPrice(p,v)*qty*(coupon.discountPercent/100)), 0);
