@@ -6395,6 +6395,8 @@ const HEALTH_CHECKS_DEF = [
   {key:'negativeMargin', label:'Costo igual o mayor al precio de venta'},
   {key:'lowMargin', label:'Margen menor al 20%'},
   {key:'priceMismatch', label:'Precio muy distinto a un producto similar'},
+  {key:'variantBroken', label:'Variantes que no se pueden elegir en la tienda'},
+  {key:'variantStockOnlyProduct', label:'Existencias en el producto pero en 0 en todas sus variantes'},
 ];
 // Alerta de precios inconsistentes: dos productos de la MISMA categoría cuyo nombre comparte al
 // menos 2 palabras significativas (se ignoran palabras de 3 letras o menos, como "de"/"con") pero
@@ -6506,6 +6508,8 @@ function computeCatalogHealthRaw(){
     negativeMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m<=0; }),
     lowMargin: state.products.filter(p=>{ const m = productMarginPct(p); return m!==null && m>0 && m<20; }),
     priceMismatch: priceMismatchList.map(x=>x.product),
+    variantBroken: state.products.filter(p=>(p.variants||[]).length && variantRepairPreview(p).changed),
+    variantStockOnlyProduct: state.products.filter(variantStockOnlyInProduct),
   };
   const priceMismatchByProductId = {};
   priceMismatchList.forEach(x=>{ priceMismatchByProductId[x.product.id] = x; });
@@ -7032,15 +7036,15 @@ function renderStatsProductos(){
             ${shown.map(p=>`
               <div class="list-row">
                 <div class="row-main" style="cursor:pointer;" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>
-                  <div class="row-title">${p.name}</div><div class="row-sub">${check.key==='textGlitch' ? escDescHtml(textGlitchSnippet(p)) : p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}${check.key==='priceMismatch' && check.priceMismatchByProductId[p.id] ? ` · ${money(p.price)} vs. "${check.priceMismatchByProductId[p.id].other.name}" a ${money(check.priceMismatchByProductId[p.id].other.price)} — toca para revisar` : ''}</div>
+                  <div class="row-title">${p.name}</div><div class="row-sub">${check.key==='textGlitch' ? escDescHtml(textGlitchSnippet(p)) : check.key==='variantBroken' ? escDescHtml(variantRepairPreview(p).problems.join(' · ')) : check.key==='variantStockOnlyProduct' ? `El producto dice ${p.stock} piezas pero cada variante tiene 0: en la tienda salen agotadas. Abre el producto y reparte las existencias entre sus variantes.` : p.cat}${(check.key==='negativeMargin'||check.key==='lowMargin') ? ` · Costo ${money(p.cost||0)} · Venta ${money(productSellPrice(p))} (${(productMarginPct(p)||0).toFixed(0)}% de margen) — toca para editar` : ''}${check.key==='priceMismatch' && check.priceMismatchByProductId[p.id] ? ` · ${money(p.price)} vs. "${check.priceMismatchByProductId[p.id].other.name}" a ${money(check.priceMismatchByProductId[p.id].other.price)} — toca para revisar` : ''}</div>
                 </div>
-                <button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Ya lo revisé</button>
+                ${check.key==='variantBroken' ? `<button class="btn-outline" style="padding:7px 12px;font-size:12.5px;" onclick="repairProductVariants(['${p.id}'])">${icon('check',13)} Reparar</button>` : `<button class="btn-tertiary" title="Ya lo revisé, deja de avisarme de esto para este producto" onclick="dismissHealthItem('${p.id}','${check.key}')">${icon('check',13)} Ya lo revisé</button>`}
                 ${(check.key==='expired'||check.key==='expiringSoon') ? `<button class="btn-tertiary" title="Darlo de baja del inventario" onclick="openShrinkForProduct('${p.id}')">Registrar merma</button>` : ''}
                 ${check.key==='outOfStockVisible' ? `<button class="btn-tertiary" title="Ocultar de la tienda mientras se repone" onclick="if(confirm('¿Ocultar \\'${p.name.replace(/'/g,"\\\\'")}\\' de la tienda?'))quickHideProduct('${p.id}')">${icon('eye-off',13)} Ocultar</button>` : ''}
               </div>
             `).join('')}
             ${renderShowMoreButton('healthListShowMore', remaining)}
-            ${check.list.length>1 ? `<button class="btn-tertiary" style="margin-top:10px;margin-right:8px;" onclick="dismissHealthCheckAll('${check.key}')">${icon('check',13)} Ya revisé todos (${check.list.length})</button>` : ''}
+            ${check.key==='variantBroken' ? `<button class="btn-primary" style="margin-top:10px;margin-right:8px;width:auto;" onclick="repairProductVariants(${JSON.stringify(check.list.map(p=>p.id)).replace(/"/g,"'")})">${icon('check',13)} Reparar todos (${check.list.length})</button>` : check.list.length>1 ? `<button class="btn-tertiary" style="margin-top:10px;margin-right:8px;" onclick="dismissHealthCheckAll('${check.key}')">${icon('check',13)} Ya revisé todos (${check.list.length})</button>` : ''}
             ${allForCheck.dismissedCount>0 ? `
               <button class="btn-tertiary" style="margin-top:10px;" onclick="state.healthShowDismissed=!state.healthShowDismissed;render()">${state.healthShowDismissed?'Ocultar':'Ver'} los ${allForCheck.dismissedCount} ya revisados en "${check.label}"</button>
               ${state.healthShowDismissed ? `
@@ -15139,6 +15143,71 @@ const VAR_VALUE_SUGGESTIONS = {
   largo:['15 cm','18 cm','20 cm','25 cm'],
   modelo:[],
 };
+/* ---- Reparación de la estructura de variantes ----
+   Algunos productos (importados de Tiendanube o editados con el editor viejo) traen variantes cuyas
+   propiedades no cuadran: sin "variantGroups", grupos con "options" en vez de "values", o
+   combinaciones escritas distinto ("rojo " vs "Rojo", "color" vs "Color"). La tienda y el POS
+   entonces no podían elegir variante. Esto lo arregla en memoria (y el panel lo guarda). */
+function variantRepair(p){
+  const vs = Array.isArray(p && p.variants) ? p.variants : [];
+  if(!vs.length) return {changed:false, problems:[]};
+  const before = JSON.stringify([p.variantGroups||null, vs.map(v=>[v.id, v.combo])]);
+  const problems = [];
+  const nk = s=>String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  let groups = (Array.isArray(p.variantGroups)?p.variantGroups:[]).filter(g=>g && String(g.name||'').trim()).map(g=>({
+    name: String(g.name).trim(),
+    values: (Array.isArray(g.values)?g.values:Array.isArray(g.options)?g.options:[]).map(x=>String(x==null?'':x).trim()).filter(Boolean)
+  }));
+  if(!(Array.isArray(p.variantGroups) && p.variantGroups.length)) problems.push('tenía variantes pero no sus propiedades');
+  else if(p.variantGroups.some(g=>g && !Array.isArray(g.values))) problems.push('una propiedad no tenía su lista de opciones');
+  vs.forEach((v,i)=>{
+    if(!v.id){ v.id = 'v'+i+'_'+String(p.id||'').slice(-4); problems.push('variante sin identificador'); }
+    if(!v.combo || typeof v.combo!=='object' || !Object.keys(v.combo).length){ v.combo = {'Opción': String(v.name||v.sku||('Opción '+(i+1)))}; problems.push('variante sin combinación'); }
+  });
+  if(!groups.length){
+    const map = {};
+    vs.forEach(v=>Object.entries(v.combo).forEach(([k,val])=>{ k=String(k).trim(); val=String(val==null?'':val).trim(); (map[k]=map[k]||[]); if(val && !map[k].includes(val)) map[k].push(val); }));
+    groups = Object.entries(map).map(([name,values])=>({name, values}));
+  }
+  let mism = false;
+  vs.forEach(v=>{
+    const nc = {};
+    Object.entries(v.combo).forEach(([k,val])=>{
+      let g = groups.find(x=>nk(x.name)===nk(k));
+      if(!g){ g = {name:String(k).trim(), values:[]}; groups.push(g); mism = true; }
+      const sval = String(val==null?'':val).trim() || 'Única';
+      let hit = g.values.find(x=>nk(x)===nk(sval));
+      if(hit===undefined){ hit = sval; g.values.push(sval); mism = true; }
+      if(g.name!==k || hit!==val) mism = true;
+      nc[g.name] = hit;
+    });
+    v.combo = nc;
+  });
+  groups = groups.filter(g=>vs.some(v=>g.name in v.combo));
+  vs.forEach(v=>groups.forEach(g=>{ if(!(g.name in v.combo)){ v.combo[g.name] = 'Sin especificar'; if(!g.values.includes('Sin especificar')) g.values.push('Sin especificar'); mism = true; } }));
+  groups.forEach(g=>{ g.values = g.values.filter(val=>vs.some(v=>v.combo[g.name]===val)); });
+  if(mism) problems.push('las opciones de las variantes no coincidían con sus propiedades');
+  p.variantGroups = groups;
+  const changed = before !== JSON.stringify([p.variantGroups, vs.map(v=>[v.id, v.combo])]);
+  return {changed, problems: changed ? [...new Set(problems)] : []};
+}
+function variantRepairAll(list){ (list||[]).forEach(p=>{ try{ variantRepair(p); }catch(e){ console.warn('variantRepair', p && p.id, e); } }); return list; }
+function variantRepairPreview(p){ const c = JSON.parse(JSON.stringify(p)); return variantRepair(c); }
+function variantStockOnlyInProduct(p){ const vs = p.variants||[]; return vs.length>0 && vs.every(v=>!(Number(v.stock)>0)) && Number(p.stock)>0; }
+async function repairProductVariants(ids, silent){
+  ids = (ids||[]).filter(id=>state.products.some(p=>p.id===id)); if(!ids.length) return 0;
+  let n = 0;
+  for(const id of ids){
+    const p = state.products.find(x=>x.id===id);
+    const c = JSON.parse(JSON.stringify(p)); const r = variantRepair(c);
+    if(!r.changed) continue;
+    try{ await db.collection('products').doc(id).update({variantGroups:c.variantGroups, variants:c.variants}); p.variantGroups = c.variantGroups; p.variants = c.variants; n++; }
+    catch(e){ console.error(e); showToast('No se pudo reparar '+p.name); }
+  }
+  if(n){ try{ logAdminAction('reparar_variantes','producto', n+' producto(s)'); }catch(e){} }
+  if(!silent) showToast(n ? `Variantes reparadas en ${n} producto(s)` : 'No había nada que reparar');
+  render(); return n;
+}
 function varKey(s){ return searchClean(s).replace(/\s+/g,''); }
 function varLabelOf(v){ return Object.values((v&&v.combo)||{}).join(' / ') || (v && v.name) || 'Variante'; }
 // Productos viejos (importados o creados con el editor anterior): si hay variantes pero no propiedades, se reconstruyen.
