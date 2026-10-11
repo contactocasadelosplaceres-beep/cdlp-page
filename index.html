@@ -2408,11 +2408,22 @@ function dismissAnnounceBar(){
   render();
 }
 // Franja corta bajo el encabezado: frase natural en celular (una sola línea) y tres puntos en computadora.
+// Franja corta bajo el encabezado (se edita en el panel: Diseño → Barra de anuncio).
+// Celular: una frase en una línea. Computadora: hasta 3 puntos cortos.
+const TRUST_DEFAULT_SHORT = 'Te llega en empaque sin marcas y pagas al recibir';
+const TRUST_DEFAULT_ITEMS = ['Empaque sin marcas ni logos','Pagas hasta que lo recibes','Nadie sabe qué pediste'];
 function renderTrustTop(){
+  const st = state.settings || {};
+  if(st.trustBarEnabled===false) return '';
+  const esc = t=>String(t||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const short = String(st.trustBarShort!=null ? st.trustBarShort : TRUST_DEFAULT_SHORT).trim();
+  const items = (Array.isArray(st.trustBarItems) ? st.trustBarItems : TRUST_DEFAULT_ITEMS).map(x=>String(x||'').trim()).filter(Boolean).slice(0,3);
+  if(!short && !items.length) return '';
   const box = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></svg>';
+  const longTxt = items.length ? items.map(esc).join('<i></i>') : esc(short);
   return `<div class="trust-top" role="note">
-    <span class="tt-short">${box}Te llega en caja sin marcas y pagas al recibir</span>
-    <span class="tt-long">${box}Caja sin marcas ni logos<i></i>Pagas hasta que lo recibes<i></i>Nadie sabe qué pediste</span>
+    <span class="tt-short">${box}${esc(short || items.join(' · '))}</span>
+    <span class="tt-long">${box}${longTxt}</span>
   </div>`;
 }
 function renderAnnounceBar(){
