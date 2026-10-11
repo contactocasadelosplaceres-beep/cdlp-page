@@ -292,20 +292,29 @@
   .v2-resinfo{padding:0 16px 6px;font-size:12.5px;color:var(--ink-soft);}
   .v2-grid{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 14px 110px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:start;grid-auto-rows:max-content;}
   @media(min-width:600px){.v2-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
-  @media(min-width:900px){.v2-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));padding-bottom:24px;}}
-  .pt{position:relative;display:flex;flex-direction:column;text-align:left;padding:0;width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);overflow:hidden;min-width:0;transition:transform .08s ease,border-color .15s ease,box-shadow .15s ease;}
-  .pt:hover{border-color:var(--primary);box-shadow:var(--shadow-sm);} .pt:active{transform:scale(.97);}
-  .pt.pt-in{border-color:var(--primary);}
-  .pt.pt-out{opacity:.55;cursor:not-allowed;}
-  .pt-img{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:3/2;background:var(--surface-soft);font-weight:800;font-size:22px;letter-spacing:.04em;}
-  .pt-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:var(--surface);}
-  .pt-badge{position:absolute;top:6px;right:6px;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:var(--primary);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);}
-  .pt-sale{position:absolute;left:6px;top:6px;background:var(--rose);color:#fff;font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:999px;}
-  .pt-name{padding:8px 10px 2px;font-size:13px;font-weight:600;line-height:1.25;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em;}
-  .pt-foot{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:4px 10px 10px;margin-top:auto;}
-  .pt-price{font-weight:800;color:var(--primary-deep);font-size:14px;line-height:1.2;}
-  .pt-price small{font-weight:600;font-size:10.5px;color:var(--ink-soft);} .pt-price s{font-weight:500;font-size:11px;color:var(--ink-soft);margin-left:4px;}
-  .pt-stock{font-size:11px;color:var(--ink-soft);white-space:nowrap;} .pt-stock.low{color:#9a5b00;font-weight:700;} .pt-stock.zero{color:var(--rose);font-weight:700;}
+  @media(min-width:900px){.v2-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));padding-bottom:24px;}}
+  .pt{position:relative;display:flex;flex-direction:column;background:var(--surface);border:1.5px solid var(--border);border-left:5px solid var(--cc,var(--primary));border-radius:var(--radius-md);min-width:0;transition:transform .08s ease,border-color .15s ease,box-shadow .15s ease;}
+  .pt:hover{box-shadow:var(--shadow-sm);} .pt:active{transform:scale(.98);}
+  .pt.pt-in{border-color:var(--primary);border-left-color:var(--cc,var(--primary));background:#FFF8FB;}
+  .pt.pt-out{opacity:.55;}
+  .pt-main{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:10px 12px 11px;width:100%;flex:1;font:inherit;color:var(--ink);min-height:118px;}
+  .pt-main:disabled{cursor:not-allowed;}
+  .pt-cat{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--cc,var(--ink-soft));max-width:calc(100% - 30px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pt-name{font-size:14px;font-weight:700;line-height:1.25;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;padding-right:22px;}
+  .pt-price{margin-top:auto;font-weight:800;color:var(--primary-deep);font-size:16px;line-height:1.2;}
+  .pt-price small{font-weight:600;font-size:11px;color:var(--ink-soft);} .pt-price s{font-weight:500;font-size:11.5px;color:var(--ink-soft);margin-left:4px;}
+  .pt-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .pt-stock{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;} .pt-stock.low{color:#9a5b00;font-weight:700;} .pt-stock.zero{color:var(--rose);font-weight:700;}
+  .pt-sale{background:var(--rose);color:#fff;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;}
+  .pt-badge{position:absolute;top:8px;right:8px;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:var(--primary);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none;}
+  .pt-info{position:absolute;right:6px;bottom:6px;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-soft);font:italic 700 13px Georgia,serif;display:flex;align-items:center;justify-content:center;}
+  .pt-info:hover{border-color:var(--primary);color:var(--primary-deep);}
+  .v2-banner.info{background:#E8F4F7;color:#0A4A5B;}
+  .v2-info-price{font-family:'League Spartan',sans-serif;font-size:28px;font-weight:800;color:var(--primary-deep);margin:4px 0 10px;} .v2-info-price s{font-size:15px;color:var(--ink-soft);font-weight:500;} .v2-info-price small{font-size:13px;color:var(--ink-soft);}
+  .v2-info-list{margin:10px 0 0;border-top:1px solid var(--border);}
+  .v2-info-row{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .v2-info-row small{display:block;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .v2-info-r{text-align:right;} .v2-info-r span{font-weight:800;} .v2-info-r small.low{color:#9a5b00;font-weight:700;} .v2-info-r small.zero{color:var(--rose);font-weight:700;}
   .v2-empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;color:var(--ink-soft);padding:40px 16px;font-size:13px;}
   .v2-empty b{color:var(--ink);font-size:15px;} .v2-empty.small{padding:28px 12px;}
   /* Ticket */
@@ -429,6 +438,79 @@ firebase.initializeApp(firebaseConfig);
     });
   }catch(e){ console.warn('Blindaje de texto no disponible', e); }
 })();
+/* ============== ÍNDICE DE CLIENTES (ahorro de lecturas) ==============
+   Un solo documento, customers/__indice_pos, guarda nombre + teléfono de TODOS los clientes
+   (perfiles: m[id] = {n,p,u}; quien solo compró sin perfil: m['ph_'+tel] = {n,p,t,d:1}).
+   Buscar un cliente cuesta 1 lectura (ese documento) en vez de leer toda la lista, y abrir su
+   ficha cuesta 1 más. Este bloque lo mantiene al día solo: cada vez que el panel o el POS crean,
+   editan o borran un cliente, se actualiza su renglón en el índice (sin leerlo) y se le pone
+   updatedAt al cliente (así el panel puede traer solo lo que cambió). */
+(function(){
+  const IDX = '__indice_pos', COL = 'customers';
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch || !F.CollectionReference) return;
+  const colOf = ref => { try{ return ref && ref.parent && ref.parent.id; }catch(e){ return null; } };
+  const isCust = ref => colOf(ref)===COL && ref.id!==IDX;
+  const isPlain = o => o && typeof o==='object' && Object.getPrototypeOf(o)===Object.prototype;
+  const ph10 = s => String(s==null?'':s).replace(/\D/g,'').slice(-10);
+  const DR = F.DocumentReference.prototype, CR = F.CollectionReference.prototype, B = F.WriteBatch.prototype;
+  const oSet = DR.set, oUpd = DR.update, oDel = DR.delete, oAdd = CR.add, bSet = B.set, bUpd = B.update, bDel = B.delete, bCommit = B.commit;
+  const stamp = data => { if(!isPlain(data)) return data; return {...data, updatedAt: new Date().toISOString()}; };
+  function idxOps(id, data, del){
+    const ops = {};
+    if(del){ ops['m.'+id] = F.FieldValue.delete(); return ops; }
+    if(!isPlain(data)) return null;
+    ops['m.'+id+'.u'] = data.updatedAt || new Date().toISOString();
+    if(typeof data.name==='string') ops['m.'+id+'.n'] = data.name.slice(0,80);
+    if(data.phone!==undefined && typeof data.phone!=='object'){ const p = ph10(data.phone); ops['m.'+id+'.p'] = p; if(p.length===10) ops['m.ph_'+p] = F.FieldValue.delete(); }
+    return ops;
+  }
+  async function applyIdx(fs, ops){
+    if(!ops || !Object.keys(ops).length) return;
+    const ref = fs.collection(COL).doc(IDX);
+    try{ await oUpd.call(ref, ops); }
+    catch(e){
+      // Si el índice todavía no existe, se crea con lo que haya (sin borrar nada).
+      try{ const m = {}; Object.entries(ops).forEach(([k,v])=>{ const parts = k.split('.'); if(parts.length===3){ (m[parts[1]] = m[parts[1]] || {})[parts[2]] = v; } }); if(Object.keys(m).length) await oSet.call(ref, {kind:'posIndex', m}, {merge:true}); }catch(e2){ console.warn('Índice de clientes', e2); }
+    }
+  }
+  window.cdlpCustIdxUpdate = (id, data, del)=>applyIdx(firebase.firestore(), idxOps(id, data, del));
+  DR.set = function(data, opts){
+    if(!isCust(this)) return oSet.call(this, data, opts);
+    const d = stamp(data), self = this;
+    const p = oSet.call(this, d, opts);
+    Promise.resolve(p).then(()=>applyIdx(self.firestore, idxOps(self.id, d)), ()=>{});
+    return p;
+  };
+  DR.update = function(...a){
+    if(!isCust(this) || !isPlain(a[0])) return oUpd.apply(this, a);
+    const d = stamp(a[0]), self = this;
+    const p = oUpd.call(this, d);
+    Promise.resolve(p).then(()=>applyIdx(self.firestore, idxOps(self.id, d)), ()=>{});
+    return p;
+  };
+  DR.delete = function(){
+    if(!isCust(this)) return oDel.call(this);
+    const self = this, p = oDel.call(this);
+    Promise.resolve(p).then(()=>applyIdx(self.firestore, idxOps(self.id, null, true)), ()=>{});
+    return p;
+  };
+  CR.add = function(data){
+    if(this.id!==COL) return oAdd.call(this, data);
+    const d = stamp(data), fs = this.firestore;
+    const p = oAdd.call(this, d);
+    Promise.resolve(p).then(ref=>applyIdx(fs, idxOps(ref.id, d)), ()=>{});
+    return p;
+  };
+  B.set = function(ref, data, opts){ if(!isCust(ref)) return bSet.call(this, ref, data, opts); const d = stamp(data); (this.__cdlpCust = this.__cdlpCust||[]).push([ref, d, false]); return bSet.call(this, ref, d, opts); };
+  B.update = function(ref, ...a){ if(!isCust(ref) || !isPlain(a[0])) return bUpd.call(this, ref, ...a); const d = stamp(a[0]); (this.__cdlpCust = this.__cdlpCust||[]).push([ref, d, false]); return bUpd.call(this, ref, d); };
+  B.delete = function(ref){ if(isCust(ref)) (this.__cdlpCust = this.__cdlpCust||[]).push([ref, null, true]); return bDel.call(this, ref); };
+  B.commit = function(...a){
+    const list = this.__cdlpCust, p = bCommit.apply(this, a);
+    if(list && list.length) Promise.resolve(p).then(()=>{ const ops = {}; let fs = null; list.forEach(([ref,d,del])=>{ fs = fs || ref.firestore; Object.assign(ops, idxOps(ref.id, d, del)||{}); }); if(fs) applyIdx(fs, ops); }, ()=>{});
+    return p;
+  };
+})();
 /* ============== COSTOS PRIVADOS (QA-03) ==============
    El costo de compra, su historial y el proveedor ya no viven en "products" (que cualquiera puede leer
    porque la tienda la necesita), sino en "productCosts", que solo lee y escribe el personal.
@@ -496,8 +578,8 @@ firebase.initializeApp(firebaseConfig);
     return S.loading;
   }
   window.cdlpEnsurePrivate = ()=>ensurePrivate(firebase.firestore());
-  F.Query.prototype.get = async function(o){ if(this.id==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return qGet.call(this, o); };
-  F.DocumentReference.prototype.get = async function(o){ if(colOf(this)==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return dGet.call(this, o); };
+  // En el POS NO se leen todos los costos al abrir (ahorro de ~480 lecturas): solo se piden
+  // cuando hacen falta (devolución dañada), con window.cdlpEnsurePrivate() o leyendo productCosts/{id}.
   [F.DocumentSnapshot, F.QueryDocumentSnapshot].forEach(C=>{
     if(!C || !C.prototype || Object.prototype.hasOwnProperty.call(C.prototype,'__cdlpPriv')) return;
     const orig = C.prototype.data;
@@ -649,6 +731,7 @@ state.offlineQueueCount = loadOfflineQueue().length;
 // cuadrícula de productos y addToCart (que ya usan centerStock) funcionan igual sin más cambios.
 function centerStock(p, centerId){
   if(p && p.isKit) return computeKitStockAtCenter(p, centerId);
+  if(p && !p.stockByCenter && p._cat) return Number(p.stock)||0;   // del catálogo: aproximado hasta leerlo
   return (p.stockByCenter && p.stockByCenter[centerId]) || 0;
 }
 /* ---- Variantes con existencias POR CENTRO ----
@@ -659,6 +742,7 @@ function posDefaultCenterId(){ const c = (state.centers||[]).find(x=>x.isDefault
 function vCenterStock(v, cid){
   if(!v) return 0;
   if(v.stockByCenter) return v.stockByCenter[cid]||0;
+  if(v._approx) return Number(v.stock)||0;
   return cid===posDefaultCenterId() ? (v.stock||0) : 0;
 }
 function vSetCenterStock(v, cid, n){
@@ -683,7 +767,7 @@ function computeKitStockAtCenter(p, centerId){
     const comp = state.products.find(x=>x.id===ki.productId);
     const need = ki.qty||1;
     const kv = comp && ki.variantId ? (comp.variants||[]).find(x=>x.id===ki.variantId) : null;
-    const avail = comp ? Math.floor((ki.variantId ? (kv ? vCenterStock(kv, centerId) : 0) : ((comp.stockByCenter&&comp.stockByCenter[centerId])||0))/need) : 0;
+    const avail = comp ? Math.floor((ki.variantId ? (kv ? vCenterStock(kv, centerId) : 0) : centerStock(comp, centerId))/need) : 0;
     if(avail < min) min = avail;
   });
   return min===Infinity ? 0 : Math.max(0, min);
@@ -708,21 +792,22 @@ async function loadData(attempt){
   attempt = attempt || 1;
   state.loadFailed = false;
   try{
-    const [prodSnap, setSnap, cashiersSnap, centersSnap, customersSnap] = await Promise.all([
-      db.collection('products').get(),
+    const [prodRes, setSnap, cashiersSnap, centersSnap] = await Promise.all([
+      posLoadProducts(),
       db.collection('settings').doc('store').get(),
       db.collection('cashiers').get(),
       db.collection('distributionCenters').get(),
-      db.collection('customers').get(),
     ]);
-    state.products = variantRepairAll(prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.deletedAt)); // los que están en la papelera del admin no se venden
+    state.products = variantRepairAll(prodRes.products.filter(p=>!p.deletedAt)); // los que están en la papelera del admin no se venden
+    state.productsSource = prodRes.source; state.catalogGeneratedAt = prodRes.generatedAt;
+    setTimeout(()=>posCheckPublish(), 500);
     state.settings = setSnap.exists ? setSnap.data() : {};
     state.categories = setSnap.exists ? (setSnap.data().categories||[]) : [];
     state.coupons = setSnap.exists ? (setSnap.data().coupons||[]) : [];
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
     state.centers = centersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
-    applyCustomersSnapPOS(customersSnap.docs);
-    state.customersFetchedAt = Date.now();
+    // Clientes: ya no se lee la lista completa al abrir; se usa el índice (1 lectura) al buscar.
+    state.customers = state.customers || [];
     if(state.centers.length===0){
       const ref = await db.collection('distributionCenters').add({name:'Principal', isDefault:true, active:true, createdAt:new Date().toISOString()});
       state.centers = [{id:ref.id, name:'Principal', isDefault:true, active:true}];
@@ -794,7 +879,7 @@ function onPosSearchInput(v){
 // eso basta con que el buscador esté enfocado — no hace falta ninguna integración especial más
 // que reconocer ese Enter y, si el texto coincide exacto con el SKU de un producto, agregarlo
 // solo al carrito en vez de dejarlo como una búsqueda de texto cualquiera.
-function handlePosSearchKeydown(e){
+async function handlePosSearchKeydown(e){
   if(e.key !== 'Enter') return;
   const raw = state.search.trim();
   if(!raw) return;
@@ -808,7 +893,7 @@ function handlePosSearchKeydown(e){
     if(res.length===1) match = res[0];
     else { showToast(res.length ? 'Hay varios resultados: toca el que quieres' : 'Ningún producto tiene ese código'); return; }
   }
-  if(vmatch){ state.variantPickerProduct = match.id; pickVariant(vmatch.id); }
+  if(vmatch){ await posEnsureFresh([match.id]); state.variantPickerProduct = match.id; pickVariant(vmatch.id); }
   else addToCart(match.id);
   state.search = ''; state.prodGridLimit = PROD_GRID_PAGE_SIZE; render();
   const i = document.getElementById('pos-search-input');
@@ -874,6 +959,7 @@ async function exchangeMoveStock(entry, delta){
   }
 }
 async function confirmExchange(){
+  try{ const ids = [state.exchangeOut&&state.exchangeOut.id, state.exchangeIn&&state.exchangeIn.id].filter(Boolean); if(ids.length) await posEnsureFresh(ids, 0); }catch(e){}
   if(state.exchangeBusy) return;
   const out = state.exchangeOut, inp = state.exchangeIn, mode = state.exchangeMode;
   if(!out){ showToast('Elige el producto que regresa'); return; }
@@ -897,7 +983,8 @@ async function confirmExchange(){
       logStockMovement(out.id, mode==='cambio'?'cambio_producto':'devolucion_cliente', out.qty, mode==='cambio'?`Cambio: regresó "${out.name}" por "${inp.name}"`:`Devolución de cliente: ${out.name}${reason?' — '+reason:''}`, cid);
     }else{
       const vOut = out.variantId ? exVariantsOf(pOut).find(x=>x.id===out.variantId) : null;
-      const unitCost = (vOut && Number(vOut.cost)>0) ? Number(vOut.cost) : (pOut&&pOut.cost)||0;
+      let unitCost = (vOut && Number(vOut.cost)>0) ? Number(vOut.cost) : (pOut&&pOut.cost)||0;
+      if(!unitCost){ try{ const pc = await db.collection('productCosts').doc(out.id).get(); const c = pc.exists ? pc.data() : {}; unitCost = Number((out.variantId && c.variantCosts && c.variantCosts[out.variantId]) || c.cost) || 0; }catch(e){} }
       await db.collection('shrinkage').add({
         date:new Date().toISOString(), productId:out.id, productName:out.name, variantId:out.variantId||null, qty:out.qty,
         reason:'Devuelto dañado', note: reason || (mode==='cambio'?`Cambio por "${inp.name}"`:'Devolución de cliente'),
@@ -2064,7 +2151,8 @@ function selectPayMethod(m){
   state.payMethod = m;
   render();
 }
-function addReminderProductAndContinue(id, vid){
+async function addReminderProductAndContinue(id, vid){
+  await posEnsureFresh([id]);
   if(vid){
     const p = state.products.find(x=>x.id===id), v = p && (p.variants||[]).find(x=>x.id===vid);
     if(p && v){
@@ -2187,9 +2275,11 @@ function getFrequentProductIds(limit){
     return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,limit||18).map(([id])=>id);
   }catch(e){ return []; }
 }
-function addToCart(id){
-  const p = state.products.find(x=>x.id===id);
+async function addToCart(id){
+  let p = state.products.find(x=>x.id===id);
   if(!p) return;
+  // 1 lectura: precio y existencias reales de este producto en este centro.
+  if(!p._fresh || (Date.now()-p._fresh) > 60000){ state.freshLoadingId = id; render(); await posEnsureFresh([id]); state.freshLoadingId = null; p = state.products.find(x=>x.id===id); if(!p) return; }
   if(p.variantGroups && p.variantGroups.length){ state.variantPickerProduct = id; render(); return; }
   const available = centerStock(p, state.activeCenter.id);
   if(available<=(state.cart[id]||0)){ showToast(`Sin existencias suficientes en ${state.activeCenter.name}`); return; }
@@ -2321,44 +2411,44 @@ function renderDiscountModal(){
 }
 
 /* ============== CLIENTE DE LA VENTA ============== */
-function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.newCustomerAddress=''; render(); refreshCustomersPOS(); }
+function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.newCustomerAddress=''; render(); posLoadCustIndex(); }
 /* ---- Clientes: perfiles + índice que arma el panel ----
    El panel junta como clientes también a quien compró en la tienda en línea o en mostrador con su
    teléfono. Esos no tienen perfil en "customers", así que el panel guarda un documento índice
    (customers/__indice_pos) con nombre y teléfono; aquí se busca en ambos. Al elegir a uno del índice
    se le crea su perfil, para que la venta quede ligada a esa persona. */
 const POS_CUSTOMER_INDEX_ID = '__indice_pos';
-function applyCustomersSnapPOS(docs){
-  const idx = docs.find(d=>d.id===POS_CUSTOMER_INDEX_ID);
-  if(idx) state.customerIndex = (idx.data().list||[]);
-  else if(!state.customerIndex) state.customerIndex = [];
-  state.customers = docs.filter(d=>d.id!==POS_CUSTOMER_INDEX_ID).map(d=>({id:d.id, ...d.data()}));
+/* Clientes en el POS sin leer toda la lista:
+   · al abrir el buscador (o escribir un WhatsApp) se lee el índice de clientes: 1 lectura, y se
+     reutiliza 5 minutos; · al elegir a alguien se lee su ficha: 1 lectura; · crear uno no lee nada. */
+async function posLoadCustIndex(force){
+  if(state.custIdxLoading) return state.custIdxLoading;
+  if(!force && state.custIdx && (Date.now()-state.custIdxAt) < 5*60000) return;
+  state.custIdxLoading = (async ()=>{
+    try{
+      const d = await db.collection('customers').doc(POS_CUSTOMER_INDEX_ID).get();
+      const data = d.exists ? (d.data()||{}) : {};
+      const m = {...(data.m||{})};
+      (Array.isArray(data.list)?data.list:[]).forEach(e=>{ const p = posLast10(e.p); if(p.length===10 && !m['ph_'+p]) m['ph_'+p] = {n:e.n, p, t:e.t, d:1}; });
+      state.custIdx = m; state.custIdxAt = Date.now();
+    }catch(e){ console.warn('No se pudo leer el índice de clientes', e); state.custIdx = state.custIdx || {}; }
+    state.custIdxLoading = null;
+    if(state.customerPickerOpen) render();
+  })();
+  return state.custIdxLoading;
 }
 function posLast10(ph){ return String(ph||'').replace(/\D/g,'').slice(-10); }
-function posIndexEntries(){
-  const have = new Set();
-  state.customers.forEach(c=>{ const k = posLast10(c.phone); if(k) have.add(k); (c.altPhones||[]).forEach(a=>{ const k2 = posLast10(a); if(k2) have.add(k2); }); });
-  return (state.customerIndex||[]).filter(e=>e && e.p && !have.has(posLast10(e.p)));
+// Renglones del índice: perfiles (con id) y quien solo compró (d:1). Los perfiles recién creados aquí se suman.
+function posCustEntries(){
+  const m = state.custIdx || {}, out = [], seen = new Set();
+  (state.customers||[]).forEach(c=>{ out.push({id:c.id, n:c.name, p:posLast10(c.phone)}); seen.add(c.id); });
+  Object.entries(m).forEach(([k,e])=>{ if(!e) return; if(e.d || k.startsWith('ph_')) out.push({n:e.n, p:e.p, t:e.t, d:1}); else if(!seen.has(k)) out.push({id:k, n:e.n, p:e.p}); });
+  const profPhones = new Set(out.filter(e=>e.id&&e.p).map(e=>e.p));
+  return out.filter(e=>!e.d || !profPhones.has(e.p));
 }
-function findIndexByPhonePOS(digits){ const k = String(digits||'').slice(-10); if(k.length<10) return null; return posIndexEntries().find(e=>posLast10(e.p)===k) || null; }
-// Trae clientes nuevos registrados después de abrir el POS (sin volver a leer toda la lista) y el índice.
-async function refreshCustomersPOS(){
-  if(state.customersRefreshing || (Date.now() - (state.customersFetchedAt||0)) < 60000) return;
-  state.customersRefreshing = true;
-  try{
-    // Desde la última lectura (menos 15 min de margen por relojes desfasados entre equipos).
-    const since = new Date((state.customersFetchedAt||Date.now()) - 15*60000).toISOString();
-    const startedAt = Date.now();
-    const q = db.collection('customers').where('createdAt','>',since);
-    const [snap, idx] = await Promise.all([q.get(), db.collection('customers').doc(POS_CUSTOMER_INDEX_ID).get().catch(()=>null)]);
-    const known = new Set(state.customers.map(c=>c.id));
-    snap.docs.forEach(d=>{ if(d.id!==POS_CUSTOMER_INDEX_ID && !known.has(d.id)) state.customers.push({id:d.id, ...d.data()}); });
-    if(idx && idx.exists) state.customerIndex = idx.data().list||[];
-    state.customersFetchedAt = startedAt;
-    if(state.customerPickerOpen) render();
-  }catch(e){ console.warn('No se pudieron actualizar los clientes', e); }
-  state.customersRefreshing = false;
-}
+function posIndexEntries(){ return posCustEntries().filter(e=>e.d); }
+function findIndexByPhonePOS(digits){ const k = String(digits||'').slice(-10); if(k.length<10) return null; return posIndexEntries().find(e=>e.p===k) || null; }
+async function refreshCustomersPOS(){ await posLoadCustIndex(); }
 async function selectIndexCustomerPOS(phone){
   const e = findIndexByPhonePOS(posLast10(phone)); if(!e) return;
   const payload = {name:e.n||('Cliente '+e.p.slice(-4)), phone:e.p, email:'', address:'', city:'', state:'', country:'', notes:'Perfil creado desde el Punto de Venta (ya había comprado)', createdAt:new Date().toISOString(), source:'pos-indice'};
@@ -2369,7 +2459,17 @@ async function selectIndexCustomerPOS(phone){
   }catch(err){ console.error(err); showToast('No se pudo seleccionar el cliente'); }
   render();
 }
-function selectCustomerPOS(id){ state.activeCustomer = state.customers.find(c=>c.id===id) || null; state.customerPickerOpen=false; render(); }
+async function selectCustomerPOS(id){
+  let c = state.customers.find(x=>x.id===id);
+  if(!c){
+    try{
+      const d = await db.collection('customers').doc(id).get();   // 1 lectura: la ficha de esa persona
+      if(!d.exists){ showToast('Ese cliente ya no existe'); if(state.custIdx) delete state.custIdx[id]; render(); return; }
+      c = {id:d.id, ...d.data()}; state.customers.push(c);
+    }catch(e){ const ix = (state.custIdx||{})[id]; if(!ix){ showToast('No se pudo abrir el cliente'); return; } c = {id, name:ix.n, phone:ix.p}; }
+  }
+  state.activeCustomer = c; state.customerPickerOpen=false; render();
+}
 function clearCustomerPOS(){ state.activeCustomer=null; state.customerPickerOpen=false; render(); }
 async function saveNewCustomerPOS(){
   const name = state.newCustomerName.trim();
@@ -2392,9 +2492,9 @@ function renderCustomerPickerModal(){
   // Solo se muestra algo cuando hay una búsqueda escrita — nunca la lista completa de
   // clientes de entrada, para que quien registre o revise a un cliente no vea de paso a
   // todos los demás.
-  let list = q ? state.customers.filter(c=>tolMatch(q, c.name, c.phone)) : [];
-  list = list.slice(0,40);
-  const idxList = q ? posIndexEntries().filter(e=>tolMatch(q, e.n, e.p)).slice(0, Math.max(0, 40-list.length)) : [];
+  const all = q ? posCustEntries().filter(e=>tolMatch(q, e.n, e.p)) : [];
+  const list = all.filter(e=>e.id).slice(0,40).map(e=>({id:e.id, name:e.n||'Sin nombre', phone:e.p}));
+  const idxList = all.filter(e=>e.d).slice(0, Math.max(0, 40-list.length));
   return `
   <div class="modal-overlay">
     <div class="modal">
@@ -2405,7 +2505,7 @@ function renderCustomerPickerModal(){
         <input id="customer-search-pos-input" class="field-input" type="text" placeholder="Buscar por nombre o teléfono..." value="${state.customerSearchPOS}" oninput="state.customerSearchPOS=this.value;render()">
         <div style="max-height:260px;overflow-y:auto;margin-bottom:12px;">
           ${!q ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Escribe un nombre o teléfono para buscar.</div>` :
-            (list.length+idxList.length)===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.${state.customersRefreshing?' Buscando clientes nuevos…':''}</div>` : list.map(c=>`
+            (list.length+idxList.length)===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">${state.custIdxLoading||!state.custIdx?'Cargando clientes…':'Sin resultados.'}</div>` : list.map(c=>`
             <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="selectCustomerPOS('${c.id}')">
               <span>${escHtml(c.name)}</span><span style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">${escHtml(c.phone||'')}</span>
             </button>`).join('') + idxList.map(e=>`
@@ -2630,12 +2730,16 @@ async function reserveStockForSale(items, centerId){
    si existe se asocia solo y si no se crea el cliente al momento. Es opcional y nunca bloquea el cobro. */
 function quickPhoneDigits(){ return String(state.quickPhone||'').replace(/\D/g,''); }
 function findCustomerByPhonePOS(digits){
-  const k = digits.slice(-10); if(k.length<10) return null;
-  return state.customers.find(c=>{ const d=String(c.phone||'').replace(/\D/g,''); return d.slice(-10)===k || (c.altPhones||[]).some(a=>String(a).replace(/\D/g,'').slice(-10)===k); }) || null;
+  const k = String(digits||'').slice(-10); if(k.length<10) return null;
+  const local = state.customers.find(c=>{ const d=String(c.phone||'').replace(/\D/g,''); return d.slice(-10)===k || (c.altPhones||[]).some(a=>String(a).replace(/\D/g,'').slice(-10)===k); });
+  if(local) return local;
+  const e = posCustEntries().find(x=>x.id && x.p===k);
+  return e ? {id:e.id, name:e.n||('Cliente '+k.slice(-4)), phone:e.p} : null;
 }
 function escQuickAttr(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function onQuickPhoneInput(v){
   state.quickPhone = String(v||'').replace(/[^0-9+\s-]/g,'').slice(0,18);
+  if(quickPhoneDigits().length>=10 && !state.custIdx){ posLoadCustIndex().then(()=>{ if(quickPhoneDigits().length>=10) onQuickPhoneInput(state.quickPhone); }); return; }
   const m = findCustomerByPhonePOS(quickPhoneDigits());
   if(m){ state.activeCustomer = m; state.quickPhone = ''; showToast('Cliente encontrado: '+m.name); render(); return; }
   const ix = findIndexByPhonePOS(quickPhoneDigits());
@@ -2645,6 +2749,7 @@ function onQuickPhoneInput(v){
 async function ensureQuickCustomer(){
   if(state.activeCustomer) return;
   const digits = quickPhoneDigits(); if(digits.length<10) return;
+  if(!state.custIdx){ try{ await posLoadCustIndex(); }catch(e){} }
   const found = findCustomerByPhonePOS(digits);
   if(found){ state.activeCustomer = found; return; }
   const phone = digits.slice(-10);
@@ -3119,6 +3224,115 @@ function renderDeskCart(entries){
    · Derecha (o abajo en celular): el ticket de la venta con cliente, descuento y notas.
    · Cobrar abre un paso aparte con método de pago, efectivo recibido y cambio.
    ================================================================ */
+/* ============== PRODUCTOS DEL POS SIN GASTAR LECTURAS ==============
+   Antes, abrir el POS leía TODOS los productos y TODOS sus costos (~1,000 lecturas). Ahora:
+   · nombres, precios, variantes y categorías salen de catalogo.json (el mismo archivo de la tienda,
+     0 lecturas); los productos ocultos de la tienda se leen aparte (solo esos);
+   · las existencias de la cuadrícula son aproximadas (las de la última publicación); al tocar un
+     producto se lee ESE producto (1 lectura) y se usa su precio y existencias reales por centro;
+   · al cobrar se revisa todo en una transacción, como siempre;
+   · si catalogo.json no está disponible, se lee de Firebase como antes (sin los costos). */
+const POS_CAT_KEY = 'cdlp_pos_catalog_v1';
+function posSlim(p){ const c = {...p}; delete c.desc; delete c.images; delete c.longDesc; return c; }
+function posMarkApprox(p){ p._cat = true; (p.variants||[]).forEach(v=>{ if(v && !v.stockByCenter) v._approx = true; }); return p; }
+async function posLoadProducts(){
+  const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  if(!offline){
+    try{
+      const r = await fetch('catalogo.json', {cache:'no-cache'});
+      if(r.ok){
+        const j = await r.json();
+        if(j && Array.isArray(j.products) && j.products.length){
+          const prods = j.products.map(p=>posMarkApprox(posSlim(p)));
+          // Los ocultos de la tienda no vienen en el catálogo, pero en el mostrador sí se venden.
+          try{
+            const hs = await db.collection('products').where('hidden','==',true).get();
+            hs.docs.forEach(d=>{ const x = posSlim({id:d.id, ...d.data()}); x._fresh = Date.now(); const i = prods.findIndex(y=>y.id===x.id); if(i>=0) prods[i] = x; else prods.push(x); });
+          }catch(e){ console.warn('Productos ocultos', e); }
+          try{ localStorage.setItem(POS_CAT_KEY, JSON.stringify({savedAt:Date.now(), generatedAt:j.generatedAt||null, products:prods})); }catch(e){}
+          return {products:prods, source:'catalogo', generatedAt:j.generatedAt||null};
+        }
+      }
+    }catch(e){ console.warn('catalogo.json no disponible, se usa Firebase', e); }
+  }
+  if(offline){
+    try{ const c = JSON.parse(localStorage.getItem(POS_CAT_KEY)||'null'); if(c && Array.isArray(c.products) && c.products.length) return {products:c.products, source:'local', generatedAt:c.generatedAt}; }catch(e){}
+  }
+  const snap = await db.collection('products').get();
+  const now = Date.now();
+  return {products: snap.docs.map(d=>{ const x = posSlim({id:d.id, ...d.data()}); x._fresh = now; return x; }), source:'firebase', generatedAt:null};
+}
+// Lee de Firebase solo los productos indicados (y los componentes si es kit). 1 lectura por producto.
+async function posEnsureFresh(ids, maxAgeMs){
+  const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  if(offline) return false;
+  maxAgeMs = maxAgeMs==null ? 60000 : maxAgeMs;
+  const want = new Set();
+  (ids||[]).forEach(id=>{ const p = state.products.find(x=>x.id===id); want.add(id); if(p && p.isKit) (p.kitItems||[]).forEach(ki=>ki.productId && want.add(ki.productId)); });
+  const need = [...want].filter(id=>{ const p = state.products.find(x=>x.id===id); return !p || !p._fresh || (Date.now()-p._fresh) > maxAgeMs; });
+  if(!need.length) return true;
+  try{
+    for(let i=0;i<need.length;i+=10){
+      const snap = await db.collection('products').where(firebase.firestore.FieldPath.documentId(),'in',need.slice(i,i+10)).get();
+      snap.docs.forEach(d=>{
+        const x = posSlim({id:d.id, ...d.data()}); variantRepair(x); x._fresh = Date.now();
+        const cur = state.products.find(y=>y.id===d.id);
+        if(cur){ Object.keys(cur).forEach(k=>{ if(!(k in x)) delete cur[k]; }); Object.assign(cur, x); }
+        else state.products.push(x);
+      });
+    }
+    state.products.filter(k=>k.isKit).forEach(k=>{ try{ k.stock = computeKitStock(k); }catch(e){} });
+    return true;
+  }catch(e){ console.warn('No se pudieron leer existencias frescas', e); return false; }
+}
+// Aviso si el catálogo podría estar atrasado (1 lectura al abrir).
+async function posCheckPublish(){
+  if(state.productsSource!=='catalogo') { state.catalogStale = false; return; }
+  try{
+    const d = await db.collection('settings').doc('publish').get(); const x = d.exists ? d.data() : {};
+    const gen = state.catalogGeneratedAt ? new Date(state.catalogGeneratedAt).getTime() : 0;
+    const pending = x.requestedAt && (!x.publishedAt || x.requestedAt > x.publishedAt);
+    const old = gen && (Date.now()-gen) > 6*3600000;
+    state.catalogStale = !!(pending || old); state.catalogPending = !!pending;
+  }catch(e){ state.catalogStale = false; }
+  render();
+}
+async function posReloadProducts(){
+  state.reloadingProducts = true; render();
+  try{
+    const r = await posLoadProducts();
+    state.products = variantRepairAll(r.products.filter(p=>!p.deletedAt));
+    state.productsSource = r.source; state.catalogGeneratedAt = r.generatedAt;
+    showToast(r.source==='catalogo' ? 'Productos actualizados' : 'Productos leídos de Firebase');
+  }catch(e){ showToast('No se pudieron actualizar los productos'); }
+  state.reloadingProducts = false; await posCheckPublish();
+}
+// Ficha rápida para consultar un producto (precio y existencias reales): 1 lectura.
+async function openPosInfo(id){
+  state.posInfoId = id; state.posInfoLoading = true; render();
+  await posEnsureFresh([id], 0);
+  state.posInfoLoading = false; render();
+}
+function renderPosInfoSheet(){
+  const p = state.products.find(x=>x.id===state.posInfoId); if(!p) return '';
+  const cid = state.activeCenter.id, others = state.centers.filter(c=>c.id!==cid);
+  const vs = (p.variants||[]).length ? p.variants : null;
+  const dp = posDisplayPrice(p);
+  const st = (v, c)=> v ? vCenterStock(v, c) : centerStock(p, c);
+  const row = (label, v)=>`<div class="v2-info-row"><div><b>${escHtml(label)}</b>${others.length?`<small>${others.map(c=>`${escHtml(c.name)}: ${st(v,c.id)}`).join(' · ')}</small>`:''}</div><div class="v2-info-r"><span>${money(v?itemPrice(p,v):effectivePrice(p))}</span><small class="${st(v,cid)<=0?'zero':st(v,cid)<=3?'low':''}">${st(v,cid)} en ${escHtml(state.activeCenter.name)}</small></div></div>`;
+  return `
+  <div class="modal-overlay v2-sheet-wrap" onclick="if(event.target===this){state.posInfoId=null;render()}">
+    <div class="modal v2-varsheet" role="dialog" aria-label="Información de ${escHtml(p.name)}">
+      <div class="v2-pay-head"><span class="v2-sub2">${escHtml(posCatOf(p))}${p.sku?` · SKU ${escHtml(p.sku)}`:''}</span><button class="v2-mini" onclick="state.posInfoId=null;render()" aria-label="Cerrar">${icon('x',16)}</button></div>
+      <h3 style="margin:4px 0 2px;">${escHtml(p.name)}</h3>
+      <div class="v2-info-price">${dp.from?'<small>Desde</small> ':''}${money(dp.price)}${dp.was?` <s>${money(dp.was)}</s>`:''}</div>
+      ${state.posInfoLoading ? `<div class="v2-note">Consultando precio y existencias al día…</div>` : `<div class="v2-note" style="text-align:left;">${icon('check',13)} Precio y existencias al día${p.location?` · Ubicación: <b>${escHtml(p.location)}</b>`:''}</div>`}
+      <div class="v2-info-list">${vs ? vs.map(v=>row(variantLabel(v), v)).join('') : row('Existencias', null)}</div>
+      <button class="v2-charge big" ${posStockOf(p)<=0||state.posInfoLoading?'disabled':''} onclick="state.posInfoId=null;addToCart('${p.id}')">${icon('check',16)} Agregar a la venta</button>
+    </div>
+  </div>`;
+}
+function posCatOf(p){ return (p.categories&&p.categories[0]) || p.cat || ''; }
 function posThumb(src){ return (typeof src==='string' && src.startsWith('img/p/') && !src.startsWith('img/p/t/')) ? 'img/p/t/'+src.slice(6) : src; }
 function posInitials(name){ return String(name||'?').replace(/[^\p{L}\p{N} ]/gu,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase() || '?'; }
 function posCartQtyOf(pid){ return Object.entries(state.cart).reduce((s,[k,q])=>s+(k===pid||k.indexOf(pid+'::')===0?q:0),0); }
@@ -3127,19 +3341,21 @@ function posProdCard(p){
   const hasVariants = (p.variants||[]).length>0 && p.variantGroups && p.variantGroups.length>0;
   const dp = posDisplayPrice(p);
   const stock = posStockOf(p), out = stock<=0, inCart = posCartQtyOf(p.id);
-  const img = p.images && p.images.length ? posThumb(p.images[0]) : '';
+  const color = catColor(p.cat), loading = state.freshLoadingId===p.id;
   return `
-  <button type="button" class="pt ${out?'pt-out':''} ${inCart?'pt-in':''}" ${out?'disabled aria-disabled="true"':''} onclick="addToCart('${p.id}')" aria-label="${escHtml(p.name)}, ${money(dp.price)}${out?', agotado':''}">
-    <span class="pt-img" style="background:${catColor(p.cat)}1f;color:${catColor(p.cat)};"><span>${escHtml(posInitials(p.name))}</span>${img?`<img src="${escHtml(img)}" alt="" loading="lazy" onerror="this.remove()">`:''}
-      ${inCart?`<span class="pt-badge">${inCart}</span>`:''}
-      ${dp.was?`<span class="pt-sale">Oferta</span>`:''}
-    </span>
-    <span class="pt-name">${escHtml(p.name)}</span>
-    <span class="pt-foot">
+  <div class="pt ${out?'pt-out':''} ${inCart?'pt-in':''}" style="--cc:${color};">
+    <button type="button" class="pt-main" ${out?'disabled aria-disabled="true"':''} onclick="addToCart('${p.id}')" aria-label="Agregar ${escHtml(p.name)}, ${money(dp.price)}${out?', agotado':''}">
+      <span class="pt-cat">${escHtml(posCatOf(p))}</span>
+      <span class="pt-name">${escHtml(p.name)}</span>
       <span class="pt-price">${dp.from?'<small>Desde</small> ':''}${money(dp.price)}${dp.was?` <s>${money(dp.was)}</s>`:''}</span>
-      <span class="pt-stock ${out?'zero':stock<=3?'low':''}">${out?'Agotado':hasVariants?`${(p.variants||[]).length} opciones`:`${stock} disp.`}</span>
-    </span>
-  </button>`;
+      <span class="pt-meta">
+        <span class="pt-stock ${out?'zero':stock<=3?'low':''}">${loading?'Revisando…':out?'Agotado':hasVariants?`${(p.variants||[]).length} opciones`:`${stock} disp.`}</span>
+        ${dp.was?`<span class="pt-sale">Oferta</span>`:''}
+      </span>
+    </button>
+    ${inCart?`<span class="pt-badge" aria-label="${inCart} en la venta">${inCart}</span>`:''}
+    <button type="button" class="pt-info" onclick="openPosInfo('${p.id}')" aria-label="Ver precio y existencias de ${escHtml(p.name)}" title="Ver precio y existencias al día">i</button>
+  </div>`;
 }
 function posFilteredProducts(){
   const frequentIds = getFrequentProductIds();
@@ -3175,6 +3391,7 @@ function renderPosHeader(){
         <div class="top-more-menu" onclick="event.stopPropagation()">
           <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Devolución o cambio</button>
           <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén (ubicación de productos)</button>
+          <button onclick="state.posMoreMenuOpen=false;posReloadProducts()">${icon('refresh-cw')} Actualizar lista de productos</button>
           <button onclick="state.posMoreMenuOpen=false;state.drawerModalOpen=true;render()">${icon('wallet')} Abrir cajón de dinero</button>
           ${state.heldSales.length ? `<button onclick="state.posMoreMenuOpen=false;state.heldOpen=true;render()">${icon('pause')} Ventas en espera (${state.heldSales.length})</button>` : ''}
           <hr>
@@ -3351,6 +3568,7 @@ function renderPOS(){
     ${state.posOffline ? `<div class="v2-banner warn">${icon('alert-triangle',14)} Sin conexión — puedes seguir vendiendo; las ventas se suben solas cuando regrese el internet.</div>`
       : state.offlineQueueCount>0 ? `<div class="v2-banner ok">${icon('history',14)} Subiendo ${state.offlineQueueCount} venta(s) hechas sin internet…</div>` : ''}
     ${renderPosHeader()}
+    ${state.catalogStale ? `<div class="v2-banner info">${icon('history',14)} <span style="flex:1;">${state.catalogPending?'Hay cambios de productos que aún no llegan aquí.':'La lista de productos tiene más de 6 horas.'} Al tocar un producto ves su precio real.</span><button class="v2-mini" onclick="posReloadProducts()" ${state.reloadingProducts?'disabled':''}>${state.reloadingProducts?'Actualizando…':'Actualizar'}</button></div>` : ''}
     <div class="v2-body">
       ${renderPosCatalog()}
       ${desk ? `<aside class="v2-ticket" aria-label="Venta actual">${renderPosTicket()}</aside>` : ''}
@@ -3368,6 +3586,7 @@ function renderPOS(){
     ` : ''}
   </div>
   ${state.payOpen ? renderPaySheet() : ''}
+  ${state.posInfoId ? renderPosInfoSheet() : ''}
   ${state.variantPickerProduct ? renderVariantPickerModal() : ''}`;
 }
 function renderVariantPickerModal(){
@@ -3381,7 +3600,6 @@ function renderVariantPickerModal(){
       <div class="v2-vargrid">
       ${(p.variants||[]).map(v=>{ const st = vCenterStock(v,state.activeCenter.id), pr = itemPrice(p,v), ls = variantListPrice(p,v), img = vImage(p,v); const inC = state.cart[cartKey(p.id,v.id)]||0; return `
         <button class="v2-var ${st<=0?'off':''}" ${st<=0?'disabled':''} onclick="pickVariant('${v.id}')">
-          ${img?`<img src="${escHtml(posThumb(img))}" alt="">`:''}
           <b>${escHtml(variantLabel(v))}</b>
           <span>${pr<ls?`<s>${money(ls)}</s> `:''}${money(pr)}</span>
           <small class="${st<=0?'zero':st<=3?'low':''}">${st<=0?'Agotado':`${st} disp.`}${inC?` · ${inC} en la venta`:''}</small>
@@ -4193,7 +4411,8 @@ async function lyCreate(){
     Object.entries(reserved||{}).forEach(([id,pl])=>{ const p = state.products.find(x=>x.id===id); if(p) Object.assign(p, pl); });
     state.products.filter(k=>k.isKit).forEach(k=>{ k.stock = computeKitStock(k); });
     // Cliente en la lista (se crea si es nuevo) con los datos extra
-    let cust = state.customers.find(c=>{ const d = lyDigits(c.phone).slice(-10); return d && d===lyDigits(f.phone).slice(-10); });
+    if(!state.custIdx){ try{ await posLoadCustIndex(); }catch(e){} }
+    let cust = findCustomerByPhonePOS(lyDigits(f.phone));
     const extra = {phone2:f.phone2.trim(), reference:{name:f.refName.trim(), phone:f.refPhone.trim()}, idNote:f.idNote.trim()};
     try{
       if(!cust){
@@ -4416,6 +4635,7 @@ function navLayers(){
   if(s.cashPanelOpen) L.push(()=>{ s.cashPanelOpen=false; render(); });
   if(s.variantPickerProduct) L.push(()=>{ s.variantPickerProduct=null; render(); });
   if(s.payOpen) L.push(()=>closePay());
+  if(s.posInfoId) L.push(()=>{ s.posInfoId=null; render(); });
   if(s.ticketOpen && !posDesktop()) L.push(()=>{ s.ticketOpen=false; render(); });
   if(s.catalogOpen && posDesktop()) L.push(()=>closeCatalog());
   if(s.closingOpen) L.push(()=>{ s.closingOpen=false; render(); });
