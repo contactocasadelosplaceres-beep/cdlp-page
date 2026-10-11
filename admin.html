@@ -3026,6 +3026,7 @@ function mfaErrorText(e){
   const c = String((e && (e.code || e.message)) || '');
   if(/INVALID_(VERIFICATION_|MFA_|TOTP_)?CODE|invalid-verification-code|INVALID_ARGUMENT/i.test(c)) return 'Código incorrecto o vencido. Escribe el que muestra tu app en este momento.';
   if(/PENDING_CREDENTIAL|SESSION_EXPIRED|code-expired|TOTP_SESSION/i.test(c)) return 'Pasó demasiado tiempo. Vuelve a escribir tu correo y contraseña.';
+  if(/UNVERIFIED_EMAIL|unverified-email/i.test(c)) return 'Firebase pide confirmar tu correo antes de activar el código. Toca «Enviarme el correo de confirmación», abre el enlace que te llegue y vuelve a intentarlo aquí.';
   if(/OPERATION_NOT_ALLOWED|not enabled|MFA_NOT_ENABLED|operation-not-allowed|ADMIN_ONLY/i.test(c)) return 'El código de 6 dígitos aún no está activado en Firebase. Corre primero la acción «Activar código de 6 dígitos (MFA)» en GitHub.';
   if(/wrong-password|invalid-credential|INVALID_PASSWORD|INVALID_LOGIN/i.test(c)) return 'La contraseña no es correcta.';
   if(/too-many-requests|TOO_MANY/i.test(c)) return 'Demasiados intentos. Espera unos minutos.';
@@ -3093,6 +3094,19 @@ function mfaQrSvg(text){
 }
 function openMfaSetup(){ state.mfaSetup = { step:'pass', password:'', code:'', error:'', busy:false }; render(); }
 function cancelMfaSetup(){ state.mfaSetup = null; render(); }
+// Firebase solo deja registrar el código si el correo de la cuenta está confirmado.
+async function mfaSendVerifyEmail(){
+  const s = state.mfaSetup;
+  try{
+    await state.user.sendEmailVerification();
+    if(s){ s.verifySent = true; s.error = ''; }
+    showToast('Correo enviado a '+state.user.email+' (revisa también Spam)');
+  }catch(e){
+    console.error(e);
+    showToast(e && e.code==='auth/too-many-requests' ? 'Ya se envió hace poco; espera unos minutos y revisa tu correo' : 'No se pudo enviar el correo, intenta de nuevo');
+  }
+  render();
+}
 async function mfaSetupStart(){
   const s = state.mfaSetup; if(!s || s.busy) return;
   if(!s.password){ s.error = 'Escribe tu contraseña.'; render(); return; }
@@ -3100,6 +3114,7 @@ async function mfaSetupStart(){
   try{
     // Firebase pide haber iniciado sesión hace poco para registrar un segundo paso: se confirma la contraseña.
     await state.user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(state.user.email, s.password));
+    try{ await state.user.reload(); }catch(e){}
     const idToken = await state.user.getIdToken(true);
     const r = await mfaIdtPost('mfaEnrollment:start', { idToken, totpEnrollmentInfo:{} });
     const info = r.totpSessionInfo || {};
@@ -3189,6 +3204,9 @@ function renderNativeMfaPanel(){
       </div>`;
   } else if(s){
     body = `
+      ${(!state.user.emailVerified || /confirmar tu correo/.test(s.error||'')) ? `
+        <div class="note-box">Firebase pide que tu correo esté <strong>confirmado</strong> antes de activar el código. ${s.verifySent ? 'Ya te enviamos el correo: abre el enlace que trae (revisa también Spam) y después escribe tu contraseña aquí y toca Continuar.' : 'Toca el botón, abre el enlace que te llegue a '+escHtml(state.user.email)+' y luego continúa aquí.'}</div>
+        <button class="btn-outline" style="margin-bottom:12px;" onclick="mfaSendVerifyEmail()">${s.verifySent?'Reenviar el correo de confirmación':'Enviarme el correo de confirmación'}</button>` : ''}
       <div class="form-field"><label>Para empezar, confirma tu contraseña</label>
         <input type="password" autocomplete="current-password" value="${escHtml(s.password)}" oninput="state.mfaSetup.password=this.value" onkeydown="if(event.key==='Enter')mfaSetupStart()">
       </div>
