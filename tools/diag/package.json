@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-diag",
+  "private": true,
+  "description": "Diagnóstico de variantes de productos",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}
