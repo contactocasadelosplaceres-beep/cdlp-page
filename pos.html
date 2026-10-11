@@ -309,6 +309,7 @@
   .pt-badge{position:absolute;top:8px;right:8px;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:var(--primary);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none;}
   .pt-info{position:absolute;right:6px;bottom:6px;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-soft);font:italic 700 13px Georgia,serif;display:flex;align-items:center;justify-content:center;}
   .pt-info:hover{border-color:var(--primary);color:var(--primary-deep);}
+  .v2-loc{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#E8F4F7;color:#0A4A5B;} .v2-loc small{display:block;font-size:11px;font-weight:700;opacity:.8;} .v2-loc b{font-size:15px;}
   .v2-banner.info{background:#E8F4F7;color:#0A4A5B;}
   .v2-info-price{font-family:'League Spartan',sans-serif;font-size:28px;font-weight:800;color:var(--primary-deep);margin:4px 0 10px;} .v2-info-price s{font-size:15px;color:var(--ink-soft);font-weight:500;} .v2-info-price small{font-size:13px;color:var(--ink-soft);}
   .v2-info-list{margin:10px 0 0;border-top:1px solid var(--border);}
@@ -1110,7 +1111,7 @@ function renderWarehouseModal(){
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <div>
                   <div style="font-weight:700;">${p.name}</div>
-                  <div class="panel-sub" style="margin:2px 0 0;">${p.location ? `${icon('map-pin',13)} ${p.location}` : 'Sin ubicación registrada'}</div>
+                  <div class="panel-sub" style="margin:2px 0 0;">${p._fresh ? (p.location ? `${icon('map-pin',13)} ${escHtml(p.location)}` : 'Sin ubicación registrada') : `<button class="v2-mini" onclick="posEnsureFresh(['${p.id}'],0).then(()=>render())">${icon('map-pin',13)} Ver ubicación</button>`}</div>
                   ${(p.variants||[]).length ? `<div class="panel-sub" style="margin:4px 0 0;">${p.variants.map(v=>`${escHtml(variantLabel(v))}: <b>${vCenterStock(v, state.activeCenter.id)}</b>`).join(' · ')}</div>` : ''}
                 </div>
                 <button class="icon-btn" title="Dejar una nota sobre este producto" onclick="state.warehouseNoteProductId=state.warehouseNoteProductId==='${p.id}'?null:'${p.id}';state.warehouseNoteText='';render()">${icon('message-circle',18)}</button>
@@ -3326,7 +3327,7 @@ function renderPosInfoSheet(){
       <div class="v2-pay-head"><span class="v2-sub2">${escHtml(posCatOf(p))}${p.sku?` · SKU ${escHtml(p.sku)}`:''}</span><button class="v2-mini" onclick="state.posInfoId=null;render()" aria-label="Cerrar">${icon('x',16)}</button></div>
       <h3 style="margin:4px 0 2px;">${escHtml(p.name)}</h3>
       <div class="v2-info-price">${dp.from?'<small>Desde</small> ':''}${money(dp.price)}${dp.was?` <s>${money(dp.was)}</s>`:''}</div>
-      ${state.posInfoLoading ? `<div class="v2-note">Consultando precio y existencias al día…</div>` : `<div class="v2-note" style="text-align:left;">${icon('check',13)} Precio y existencias al día${p.location?` · Ubicación: <b>${escHtml(p.location)}</b>`:''}</div>`}
+      ${state.posInfoLoading ? `<div class="v2-note">Consultando precio, existencias y ubicación al día…</div>` : `<div class="v2-loc">${icon('map-pin',16)}<div><small>Ubicación en almacén</small><b>${p.location ? escHtml(p.location) : 'Sin ubicación registrada'}</b></div></div><div class="v2-sub2" style="margin-top:6px;">${icon('check',12)} Precio y existencias al día</div>`}
       <div class="v2-info-list">${vs ? vs.map(v=>row(variantLabel(v), v)).join('') : row('Existencias', null)}</div>
       <button class="v2-charge big" ${posStockOf(p)<=0||state.posInfoLoading?'disabled':''} onclick="state.posInfoId=null;addToCart('${p.id}')">${icon('check',16)} Agregar a la venta</button>
     </div>
