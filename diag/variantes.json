@@ -1,0 +1,2039 @@
+{
+ "generatedAt": "2026-10-11T08:20:59.704Z",
+ "total": 45,
+ "withIssues": 0,
+ "issues": [],
+ "products": [
+  {
+   "id": "1fGaPkd30jsTyr5b5QdB",
+   "name": "Slip negro cartoon wear",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rl70d",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r0c4t",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "2ZIl63seJlsxQ5O7ftlc",
+   "name": "Funda con anillo para testiculos",
+   "hidden": false,
+   "stock": 6,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "15 CM",
+      "19 CM",
+      "21 CM"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rp2yx",
+     "combo": {
+      "Tamaño": "15 CM"
+     },
+     "stock": 1,
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rvae6",
+     "combo": {
+      "Tamaño": "19 CM"
+     },
+     "stock": 5,
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rfapu",
+     "combo": {
+      "Tamaño": "21 CM"
+     },
+     "stock": 0,
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "3T6HkUCospwPsSRKUc75",
+   "name": "Succionador de clitoris y pezones recargable",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "name": "Color",
+     "values": [
+      "Morado",
+      "Negro"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rirhm",
+     "combo": {
+      "Color": "Morado"
+     },
+     "stock": 1,
+     "priceOverride": 450,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ran4k",
+     "combo": {
+      "Color": "Negro"
+     },
+     "stock": 0,
+     "priceOverride": 450,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "3xgTQeBaH5zoyyfKDY3x",
+   "name": "Par de copas succionadora ampliadora de pezón",
+   "hidden": false,
+   "stock": 8,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "3 cm diámetro",
+      "2.5 cm diámetro",
+      "1.8 cm diámetro"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r6j9c",
+     "combo": {
+      "Talla": "3 cm diámetro"
+     },
+     "stock": 3,
+     "priceOverride": 300,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rzzzx",
+     "combo": {
+      "Talla": "2.5 cm diámetro"
+     },
+     "stock": 3,
+     "priceOverride": 300,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rl199",
+     "combo": {
+      "Talla": "1.8 cm diámetro"
+     },
+     "stock": 2,
+     "priceOverride": 300,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "41ZXSNNGkN7yIqvg2uWU",
+   "name": "Plug gema metalico",
+   "hidden": false,
+   "stock": 16,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "Chico",
+      "Grande",
+      "Mediano"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rauyf",
+     "combo": {
+      "Tamaño": "Chico"
+     },
+     "stock": 2,
+     "priceOverride": 179,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rigdv",
+     "combo": {
+      "Tamaño": "Grande"
+     },
+     "stock": 9,
+     "priceOverride": 229,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r9r1f",
+     "combo": {
+      "Tamaño": "Mediano"
+     },
+     "stock": 5,
+     "priceOverride": 199,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "58Ymye1yB2o2445TDScj",
+   "name": "Dildo conejo vibrador y retráctil recargable",
+   "hidden": false,
+   "stock": 6,
+   "variantGroups": [
+    {
+     "name": "Color",
+     "values": [
+      "Rojo",
+      "Fucsia"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r0awv",
+     "combo": {
+      "Color": "Rojo"
+     },
+     "stock": 4,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 4
+     },
+     "priceOverride": 690,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rz9vm",
+     "combo": {
+      "Color": "Fucsia"
+     },
+     "stock": 2,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 2
+     },
+     "priceOverride": 690,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "5RWo7xfHGXUrl4TE5Od0",
+   "name": "Liguero negro zuppo \"Glow\"",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rt0ot",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "priceOverride": 399,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r8hj6",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "priceOverride": 399,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "9xQhKwCgE846lvdWftrT",
+   "name": "Slip blanco con grecas doradas zuppo",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rrq4b",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rmjhn",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Ab9BAxN789WGD1zsLr24",
+   "name": "Slip negro con grecas plateadas zuppo",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rpfig",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r6kj6",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "AuZTv3nDfYhV2NLwPH6Q",
+   "name": "Jock básico zuppo negro",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r3dcd",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 300,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r4jmn",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 300,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "AwCVIsWZ4nNWWvOgfdoQ",
+   "name": "Slip gris cartoon wear",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rkrr1",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rhwfc",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "BDDZO617eqofa2WFnLN8",
+   "name": "Plug anal en ancla",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "Chico",
+      "Grande",
+      "Mediano"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rct5d",
+     "combo": {
+      "Tamaño": "Chico"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rovb8",
+     "combo": {
+      "Tamaño": "Grande"
+     },
+     "stock": 1,
+     "priceOverride": 250,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rydjo",
+     "combo": {
+      "Tamaño": "Mediano"
+     },
+     "stock": 1,
+     "priceOverride": 200,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Bm9LZtBlogdDqDyTahZQ",
+   "name": "Boxer Zuppo leather fetish",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8qzts9",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 390,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rucme",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 390,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "D4tK3KMFguKPami78r3G",
+   "name": "Enema ducha perilla",
+   "hidden": false,
+   "stock": 6,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "Chico",
+      "Grande"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rbgkk",
+     "combo": {
+      "Tamaño": "Chico"
+     },
+     "stock": 2,
+     "priceOverride": 280,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r3abd",
+     "combo": {
+      "Tamaño": "Grande"
+     },
+     "stock": 4,
+     "priceOverride": 340,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "D5kZs6XZqOgNmSk7AtNj",
+   "name": "Pump Jock Naranja",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L",
+      "XL"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r9b0s",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ryydn",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rukmn",
+     "combo": {
+      "Talla": "XL"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "EgecYYHx9PloOf2CBvtJ",
+   "name": "Vibrador estimulador de silicon 20 modos de vibración",
+   "hidden": false,
+   "stock": 5,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "20 CM",
+      "15CM"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rukd2",
+     "combo": {
+      "Tamaño": "20 CM"
+     },
+     "stock": 3,
+     "priceOverride": 600,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8repyr",
+     "combo": {
+      "Tamaño": "15CM"
+     },
+     "stock": 2,
+     "priceOverride": 400,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "G5UGzftimZP1Q8XjPNF1",
+   "name": "Slip amarillo con grecas doradas zuppo",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r5wii",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rx3ua",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Lw1sQoec4viOWO3MYD3l",
+   "name": "Plug anal con gema de silicon",
+   "hidden": false,
+   "stock": 26,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "Chico",
+      "Mediano",
+      "Grande"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r1r8w",
+     "combo": {
+      "Tamaño": "Chico"
+     },
+     "stock": 7,
+     "priceOverride": 99,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r93gt",
+     "combo": {
+      "Tamaño": "Mediano"
+     },
+     "stock": 12,
+     "priceOverride": 129,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rdqik",
+     "combo": {
+      "Tamaño": "Grande"
+     },
+     "stock": 7,
+     "priceOverride": 149,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Md2FwJQtIJQEmswS3CCF",
+   "name": "Jockstrap zuppo con cremallera",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rfnlc",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rxj7u",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "NlXfQlerr3Ah3uqt3ckq",
+   "name": "Plug cola de zorro",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "Mediano",
+      "Chico"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8ry3wc",
+     "combo": {
+      "Tamaño": "Mediano"
+     },
+     "stock": 2,
+     "priceOverride": 280,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rtsa1",
+     "combo": {
+      "Tamaño": "Chico"
+     },
+     "stock": 0,
+     "priceOverride": 230,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "NvWUxJKzhqz8UzRBa4UR",
+   "name": "Slip blanco con grecas plateadas zuppo",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r820c",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rhigh",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "OdKwde53jQifOKpDo0jt",
+   "name": "Slip verde cartoon wear",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rmvzk",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ris0i",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Oq9xJNvaWpkp4m0oz3T0",
+   "name": "Masturbador tipo funda",
+   "hidden": false,
+   "stock": 0,
+   "variantGroups": [
+    {
+     "name": "Forma",
+     "values": [
+      "Ano",
+      "Boca",
+      "Vagina"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r3ccr",
+     "combo": {
+      "Forma": "Ano"
+     },
+     "stock": 1,
+     "priceOverride": 180,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r4nrk",
+     "combo": {
+      "Forma": "Boca"
+     },
+     "stock": 0,
+     "priceOverride": 180,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rj4xe",
+     "combo": {
+      "Forma": "Vagina"
+     },
+     "stock": 0,
+     "priceOverride": 180,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Pd9OBKlruc0Eg9NIARUI",
+   "name": "Tanga talla L con dos lineas",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "values": [
+      "Blanco",
+      "Azul",
+      "Café"
+     ],
+     "name": "Color"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rao9w",
+     "combo": {
+      "Color": "Blanco"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 130,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rf67f",
+     "combo": {
+      "Color": "Azul"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 130,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rqenq",
+     "combo": {
+      "Color": "Café"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 130,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "Pn5Sor6KiAiQOiuN3oVY",
+   "name": "Lubricante de bolsillo varios sabores 10ML",
+   "hidden": false,
+   "stock": 0,
+   "variantGroups": [
+    {
+     "values": [
+      "Chocolate",
+      "Kiwi",
+      "Platano",
+      "Fresa",
+      "Manzana",
+      "Mango",
+      "Uva"
+     ],
+     "name": "Sabor"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rmf7l",
+     "combo": {
+      "Sabor": "Chocolate"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rccwb",
+     "combo": {
+      "Sabor": "Kiwi"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8re24w",
+     "combo": {
+      "Sabor": "Platano"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rmpq1",
+     "combo": {
+      "Sabor": "Fresa"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rb05y",
+     "combo": {
+      "Sabor": "Manzana"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rqhwb",
+     "combo": {
+      "Sabor": "Mango"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rq8kx",
+     "combo": {
+      "Sabor": "Uva"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 50,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "QQUjB3N5icv6xYe7JcM8",
+   "name": "Slip zuppo fetish",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r7hos",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 390,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ry2cn",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 390,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "RxeEldsYpPGrG2x7NWwV",
+   "name": "Jockstrap azul zuppo",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rrclv",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rr2zw",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "SXqZmX6eN28hhscBhsJV",
+   "name": "Condón Playboy Sabores",
+   "hidden": false,
+   "stock": 86,
+   "variantGroups": [
+    {
+     "name": "Sabor",
+     "values": [
+      "Plátano",
+      "Sandía"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rl619",
+     "combo": {
+      "Sabor": "Plátano"
+     },
+     "stock": 42,
+     "priceOverride": 25,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rzopg",
+     "combo": {
+      "Sabor": "Sandía"
+     },
+     "stock": 44,
+     "priceOverride": 25,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "TspLzmPRkf74TsXOnIDB",
+   "name": "Jockstrap zuppo Anton",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rurzo",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rnbbz",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "VtiACEKXiSOGoUpl7tRb",
+   "name": "Slip azul con grecas doradas zuppo",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8ru31o",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r3q8e",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "ank5zK6HNeDTAY2Ohvv8",
+   "name": "Tanga Yutata",
+   "hidden": false,
+   "stock": 3,
+   "variantGroups": [
+    {
+     "name": "Color",
+     "values": [
+      "Rojo",
+      "Beige",
+      "Naranja"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8ryc48",
+     "combo": {
+      "Color": "Rojo"
+     },
+     "stock": 1,
+     "priceOverride": 150,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rpaau",
+     "combo": {
+      "Color": "Beige"
+     },
+     "stock": 1,
+     "priceOverride": 150,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r5kqz",
+     "combo": {
+      "Color": "Naranja"
+     },
+     "stock": 1,
+     "priceOverride": 150,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "avpuBQqqb9ad3lD7A5JJ",
+   "name": "Liguero blanco zuppo \"Glow\"",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r90ef",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "priceOverride": 399,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ryzvw",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "priceOverride": 399,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "ays7SWbftL4fD07Dv6qz",
+   "name": "Pump Jock Azul",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L",
+      "XL"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8re4ei",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rnsir",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r7opm",
+     "combo": {
+      "Talla": "XL"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "c2y3I6MDckjLO5hAqUAm",
+   "name": "Pump Jock Rojo",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "name": "Talla",
+     "values": [
+      "M",
+      "L",
+      "XL"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r48md",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rfd34",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "priceOverride": 200,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rkw9t",
+     "combo": {
+      "Talla": "XL"
+     },
+     "stock": 0,
+     "priceOverride": 200,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "dLrsrpeZank6BPnsB14T",
+   "name": "Plug corazon metalico",
+   "hidden": false,
+   "stock": 4,
+   "variantGroups": [
+    {
+     "name": "Tamaño",
+     "values": [
+      "Chico",
+      "Mediano",
+      "Grande"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r8rbo",
+     "combo": {
+      "Tamaño": "Chico"
+     },
+     "stock": 1,
+     "priceOverride": 179,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rpf6m",
+     "combo": {
+      "Tamaño": "Mediano"
+     },
+     "stock": 1,
+     "priceOverride": 199,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r9df7",
+     "combo": {
+      "Tamaño": "Grande"
+     },
+     "stock": 2,
+     "priceOverride": 229,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "eRr30oyCvXFEjXERaPD7",
+   "name": "Suspensorio Arjen Kroos",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Color",
+     "values": [
+      "Blanco",
+      "Celeste"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rpwxa",
+     "combo": {
+      "Color": "Blanco"
+     },
+     "stock": 1,
+     "priceOverride": 160,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r5vd0",
+     "combo": {
+      "Color": "Celeste"
+     },
+     "stock": 1,
+     "priceOverride": 160,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "fRLku8nzhJG08eZZIu1S",
+   "name": "Anillo vibrador con estimulador",
+   "hidden": false,
+   "stock": 1,
+   "variantGroups": [
+    {
+     "name": "Color",
+     "values": [
+      "Violeta",
+      "Rosa"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rtvfs",
+     "combo": {
+      "Color": "Violeta"
+     },
+     "stock": 1,
+     "priceOverride": 135,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8resc7",
+     "combo": {
+      "Color": "Rosa"
+     },
+     "stock": 0,
+     "priceOverride": 135,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "fWQkLPimhvH1jZo85Qri",
+   "name": "Aceite esencial aromatico para masaje Tout Temps 60ML",
+   "hidden": false,
+   "stock": 0,
+   "variantGroups": [
+    {
+     "name": "Olor",
+     "values": [
+      "Menta limon",
+      "Lavanda eucalipto",
+      "Romero"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rqknx",
+     "combo": {
+      "Olor": "Menta limon"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 160,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ree7y",
+     "combo": {
+      "Olor": "Lavanda eucalipto"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 160,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rjwxa",
+     "combo": {
+      "Olor": "Romero"
+     },
+     "stock": 0,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 0
+     },
+     "priceOverride": 160,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "gu2F8SyKmoFcNFmz6grb",
+   "name": "Liguero zuppo grecas doradas",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rro6y",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 420,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rw114",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 420,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "if1ozWp3eVFUBA3Ue9vs",
+   "name": "Gel vibrador comestible para sexo oral Dickalicious 2ML",
+   "hidden": false,
+   "stock": 0,
+   "variantGroups": [
+    {
+     "name": "Sabor",
+     "values": [
+      "Platano",
+      "Frambuesa",
+      "Fresa",
+      "Piña colada"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r3pll",
+     "combo": {
+      "Sabor": "Platano"
+     },
+     "stock": 0,
+     "priceOverride": 100,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ry7wh",
+     "combo": {
+      "Sabor": "Frambuesa"
+     },
+     "stock": 0,
+     "priceOverride": 100,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8ra5sr",
+     "combo": {
+      "Sabor": "Fresa"
+     },
+     "stock": 0,
+     "priceOverride": 100,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rd8rc",
+     "combo": {
+      "Sabor": "Piña colada"
+     },
+     "stock": 0,
+     "priceOverride": 100,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "j6d9oMmxKoqZR5jO3CRf",
+   "name": "Mini brief negro y rojo Cartoon wear",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rke7y",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r9vj5",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 260,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "jSxoK8vTOLyjCOGuMD5Q",
+   "name": "Boxer corto Valentino negro con grecas doradas zuppo",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "L",
+      "M"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rqx2p",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r3pdp",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 320,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "pD5cCp0aRmWHWL0HCdLb",
+   "name": "Huevo Mastubador Masculino Grande",
+   "hidden": false,
+   "stock": 29,
+   "variantGroups": [
+    {
+     "name": "Forma",
+     "values": [
+      "Vagina (Huevo rosa)",
+      "Ano",
+      "Boca",
+      "Vagina (Huevo verde)",
+      "Vagina (Huevo amarillo)",
+      "Vagina (Huevo morado)"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rxklt",
+     "combo": {
+      "Forma": "Vagina (Huevo rosa)"
+     },
+     "stock": 2,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 2
+     },
+     "priceOverride": 289,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rafex",
+     "combo": {
+      "Forma": "Ano"
+     },
+     "stock": 8,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 8
+     },
+     "priceOverride": 289,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rnksv",
+     "combo": {
+      "Forma": "Boca"
+     },
+     "stock": 7,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 7
+     },
+     "priceOverride": 289,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rtbar",
+     "combo": {
+      "Forma": "Vagina (Huevo verde)"
+     },
+     "stock": 3,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 3
+     },
+     "priceOverride": 289,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8reflj",
+     "combo": {
+      "Forma": "Vagina (Huevo amarillo)"
+     },
+     "stock": 4,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 4
+     },
+     "priceOverride": 289,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r5dda",
+     "combo": {
+      "Forma": "Vagina (Huevo morado)"
+     },
+     "stock": 5,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 5
+     },
+     "priceOverride": 289,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "xmqq0QdHFyEJH603u75X",
+   "name": "Liguero zuppo grecas plateadas",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "values": [
+      "M",
+      "L"
+     ],
+     "name": "Talla"
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8rkulo",
+     "combo": {
+      "Talla": "M"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 420,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8r8mho",
+     "combo": {
+      "Talla": "L"
+     },
+     "stock": 1,
+     "stockByCenter": {
+      "sg13JLWwd1SYTXFfrc2v": 1
+     },
+     "priceOverride": 420,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  },
+  {
+   "id": "y2nRimsrjytgNtZxlUID",
+   "name": "Esposas metalicas con Peluche",
+   "hidden": false,
+   "stock": 2,
+   "variantGroups": [
+    {
+     "name": "Color",
+     "values": [
+      "Negro",
+      "Rojo"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": "var_mu1q7d8r0na2",
+     "combo": {
+      "Color": "Negro"
+     },
+     "stock": 1,
+     "priceOverride": 350,
+     "sku": ""
+    },
+    {
+     "id": "var_mu1q7d8rbv0k",
+     "combo": {
+      "Color": "Rojo"
+     },
+     "stock": 1,
+     "priceOverride": 350,
+     "sku": ""
+    }
+   ],
+   "problems": []
+  }
+ ]
+}
