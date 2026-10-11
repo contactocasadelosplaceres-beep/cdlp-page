@@ -669,6 +669,164 @@
   .card-add:disabled,.rel-add:disabled{background:#E7E1E4;color:#777777;}
   .card .qty-step{height:44px;border-color:#993477;} .card .qty-step button{color:#993477;}
   .card-trust{font-size:9px;color:#0A4A5B;text-align:center;margin-top:6px;font-weight:600;}
+  /* ===== Paneles laterales v2 (marca: morado #993477, encabezado #521C3E, fondo #F9F7F8) ===== */
+  .btn-primary{background:#993477;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 22px -12px rgba(153,52,119,.6);}
+  .btn-primary:hover{background:#86295f;}
+  .drawer{background:#F9F7F8;}
+  .drawer-body{padding:16px 16px 20px;}
+  .drawer-foot{background:#fff;padding:12px 16px calc(14px + env(safe-area-inset-bottom));}
+  .drawer-head.dh2{background:linear-gradient(135deg,#521C3E 0%,#6E2453 100%);border-bottom:0;padding:calc(14px + env(safe-area-inset-top,0px)) 14px 14px 16px;gap:10px;color:#fff;}
+  .dh2 .dh-t{display:flex;align-items:center;gap:11px;min-width:0;}
+  .dh2 .dh-ic{flex:0 0 36px;width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;color:#fff;}
+  .dh2 .dh-tx{min-width:0;}
+  .dh2 h2{color:#fff;font-size:17px;line-height:1.2;margin:0;}
+  .dh2 .dh-sub{font-size:12px;color:rgba(255,255,255,.78);margin-top:2px;font-weight:500;}
+  .dh2 .close-x{margin:0;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;}
+  .dh2 .close-x:hover{background:rgba(255,255,255,.24);}
+  .dw-card{background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:14px;margin-bottom:12px;}
+  .dw-card-t{font-size:13.5px;font-weight:700;color:#521C3E;margin-bottom:10px;}
+  .dw-intro{font-size:13.5px;line-height:1.5;color:#4A3A44;margin:0 2px 14px;}
+  .dw-mini{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#0A4A5B;margin-top:10px;}
+  .dw-foot-note{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:#0A4A5B;font-weight:600;margin-top:8px;}
+  .drawer .form-field label{color:#521C3E;font-size:12.5px;}
+  .drawer .form-field label small{font-weight:500;color:#8A7A84;}
+  .drawer .form-field input,.drawer .form-field textarea,.drawer .form-field select,.dw-input{border:1.5px solid #E6DAE2;border-radius:10px;background:#FDFBFC;min-height:48px;padding:12px;font-size:16px;font-family:inherit;}
+  .drawer .form-field input:focus,.drawer .form-field textarea:focus,.dw-input:focus{background:#fff;border-color:#993477;outline:none;box-shadow:0 0 0 3px rgba(153,52,119,.14);}
+  .dw-empty{text-align:center;padding:36px 12px 10px;}
+  .dw-empty-ic{width:72px;height:72px;border-radius:50%;margin:0 auto 14px;background:#F4E9F0;color:#993477;display:flex;align-items:center;justify-content:center;}
+  .dw-empty-ic.ok{background:#EAF3D8;color:#5C8A12;}
+  .dw-empty h3{font-family:var(--font-heading);font-size:19px;color:#521C3E;margin:0 0 6px;}
+  .dw-empty p{font-size:13.5px;color:#6B5B65;line-height:1.5;margin:0 auto 18px;max-width:300px;}
+  .dw-empty .btn-primary{max-width:280px;margin:0 auto;}
+  /* filas de producto (favoritos y carrito) */
+  .dw-item{display:flex;gap:12px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:10px;margin-bottom:10px;cursor:pointer;transition:border-color .15s ease;}
+  .dw-item:hover{border-color:#D9B9CD;}
+  .dw-thumb{flex:0 0 76px;width:76px;height:76px;border-radius:10px;object-fit:contain;background:#F7F3F5;}
+  .dw-thumb-ph{display:flex;align-items:center;justify-content:center;color:#fff;}
+  .dw-info{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .dw-name{font-size:13.5px;font-weight:600;color:#1F1F1F;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .dw-price{margin-top:3px;font-size:12px;color:#8A7A84;}
+  .dw-price b{font-size:15px;color:#993477;}
+  .dw-price s{color:#9A8C95;}
+  .dw-off{display:inline-block;background:#F6A030;color:#000;font-weight:700;font-size:10px;border-radius:4px;padding:1px 5px;vertical-align:1px;}
+  .dw-tag{align-self:flex-start;margin-top:4px;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 8px;}
+  .dw-tag-low{background:#FFF3E0;color:#A3540A;}
+  .dw-actions{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:8px;}
+  .dw-btn{flex:1;min-height:40px;border-radius:9px;background:#993477;color:#fff;font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 10px;font-family:inherit;border:0;cursor:pointer;}
+  .dw-btn:hover{background:#86295f;}
+  .dw-btn-done{background:#EAF3D8;color:#4F7A10;}
+  .dw-btn-done:hover{background:#DDEBC5;}
+  .dw-btn-ghost{background:#F2ECEF;color:#6B5B65;}
+  .dw-btn-ghost:hover{background:#E9E0E5;}
+  .dw-icon-btn{flex:0 0 40px;width:40px;height:40px;border-radius:9px;border:1px solid #EAEAEA;background:#fff;color:#8A7A84;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}
+  .dw-icon-btn:hover{color:#BC355C;border-color:#F0C9D4;background:#FDF3F6;}
+  .btn-wa-soft{width:100%;min-height:46px;margin-top:8px;border-radius:10px;border:1.5px solid #CFE3B0;background:#F5FAEC;color:#3F6B0C;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;cursor:pointer;}
+  /* carrito */
+  .drawer .cart-item{background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:10px;margin-bottom:10px;gap:12px;}
+  .drawer .cart-item-swatch{width:68px;height:68px;border-radius:10px;object-fit:contain;background:#F7F3F5;}
+  .drawer .cart-item-subtotal{color:#993477;font-size:14.5px;}
+  .drawer .cart-item .qty-btn{width:34px;height:34px;border-radius:50%;background:#F4E9F0;border:0;color:#993477;}
+  .drawer .cart-item .qty-btn:disabled{opacity:.4;}
+  .drawer .cart-item .cart-item-bottom-row{align-items:center;}
+  .drawer .total-row{font-size:16px;color:#521C3E;}
+  .drawer .total-row span:last-child{color:#993477;}
+  .drawer .ship-badge{background:#EAF3F5;border-color:#CFE2E7;color:#0A4A5B;}
+  /* entrega */
+  .ck-steps{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#9A8C95;margin:0 2px 12px;}
+  .ck-steps span{white-space:nowrap;display:inline-flex;align-items:center;gap:3px;}
+  .ck-steps span.done{color:#5C8A12;} .ck-steps span.on{color:#993477;font-weight:800;}
+  .ck-steps i{flex:1;height:2px;min-width:8px;background:#E6DAE2;border-radius:2px;}
+  .ck-steps span:last-child{overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .drawer .ck-pills{background:#EAF3F5;border:1px solid #CFE2E7;padding:6px 14px;}
+  .drawer .ck-pill{color:#16343C;}
+  .drawer .ck-pill .ic{color:#0A4A5B;}
+  .drawer .ck-summary{border:1px solid #EAEAEA;border-radius:14px;padding:12px 14px;margin-bottom:12px;}
+  .ck-summary summary .ck-sum-l{display:inline-flex;align-items:center;gap:7px;font-weight:600;color:#521C3E;}
+  .ck-summary summary .ck-sum-l b{color:#993477;}
+  .ck-summary summary .ck-sum-r{font-weight:600;color:#993477;text-decoration:underline;text-underline-offset:3px;}
+  .ck-summary li{align-items:center;}
+  .ck-summary li .dw-thumb{flex:0 0 38px;width:38px;height:38px;border-radius:8px;}
+  .ck-summary li span{flex:1;}
+  .drawer .ck-check input{accent-color:#993477;}
+  /* mis datos */
+  .pf-perks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+  .pf-perks div{background:#fff;border:1px solid #EAEAEA;border-radius:12px;padding:10px 6px;text-align:center;font-size:11.5px;font-weight:600;color:#521C3E;line-height:1.3;}
+  .pf-perks span{display:flex;width:32px;height:32px;margin:0 auto 6px;border-radius:50%;background:#F4E9F0;color:#993477;align-items:center;justify-content:center;}
+  .pf-hello{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:12px 14px;margin-bottom:12px;}
+  .pf-av{flex:0 0 44px;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#993477,#BC355C);color:#fff;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;}
+  .pf-hello b{display:block;color:#521C3E;font-size:15px;}
+  .pf-hello span:not(.pf-av){font-size:12.5px;color:#6B5B65;}
+  .pf-link{width:100%;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:14px;font-weight:600;color:#1F1F1F;font-family:inherit;cursor:pointer;text-align:left;}
+  .pf-link > span{color:#BC355C;display:flex;}
+  .pf-link b{margin-left:auto;background:#F4E9F0;color:#993477;border-radius:999px;padding:2px 9px;font-size:12px;}
+  .pf-link > svg:last-child{color:#B9A9B3;}
+  .pf-wh summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:#521C3E;}
+  .pf-wh summary::-webkit-details-marker{display:none;}
+  .pf-wh summary span{margin-left:auto;color:#9A8C95;display:flex;transition:transform .15s ease;}
+  .pf-wh[open] summary span{transform:rotate(180deg);}
+  .drawer .btn-link{color:#7A6A74;}
+  /* chips (buzón, precio) */
+  .dw-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .dw-chip{min-height:40px;padding:0 16px;border-radius:999px;border:1.5px solid #E6DAE2;background:#fff;color:#521C3E;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;}
+  .dw-chip.on{background:#993477;border-color:#993477;color:#fff;}
+  .drawer .price-presets{display:flex;flex-wrap:wrap;gap:8px;}
+  .drawer .price-inputs input{border:1.5px solid #E6DAE2;border-radius:10px;background:#fff;}
+  .drawer .price-inputs label{color:#521C3E;font-weight:700;}
+  /* encuesta */
+  .drawer .abandon-opt{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #EAEAEA;border-radius:12px;min-height:52px;}
+  .drawer .abandon-opt i{flex:0 0 18px;width:18px;height:18px;border-radius:50%;border:2px solid #D3C2CC;}
+  .drawer .abandon-opt:hover,.drawer .abandon-opt:active{border-color:#993477;background:#FBF4F8;}
+  .drawer .abandon-opt:hover i{border-color:#993477;box-shadow:inset 0 0 0 3px #fff;background:#993477;}
+  /* recordatorio */
+  .drawer .reminder-row{border-radius:14px;border-color:#EAEAEA;padding:10px;}
+  .drawer .reminder-row .cart-item-swatch{width:60px;height:60px;border-radius:10px;object-fit:contain;background:#F7F3F5;}
+  .drawer .reminder-row .r-price{color:#993477;}
+  .drawer .reminder-add{background:#993477;border-radius:9px;height:40px;}
+  /* privacidad */
+  .dw-policy{font-size:13.5px;line-height:1.6;color:#3A2E36;}
+  .dw-policy h4{font-size:14px;color:#521C3E;margin:14px 0 4px;}
+  .dw-policy h4:first-child{margin-top:0;}
+  .dw-policy p{margin:0 0 8px;}
+  .dw-policy ul{margin:0 0 8px;padding-left:18px;}
+  .dw-policy li{margin-bottom:3px;}
+  /* quiz */
+  .drawer .quiz-dots i{width:28px;}
+  .drawer .quiz-dots i.on{background:#993477;}
+  .drawer .quiz-q{color:#521C3E;}
+  .drawer .quiz-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1.5px solid #EAEAEA;border-radius:12px;}
+  .drawer .quiz-opt svg{color:#C9B6C2;flex-shrink:0;}
+  .drawer .quiz-opt:hover{border-color:#D9B9CD;}
+  .drawer .quiz-opt:active,.drawer .quiz-opt.active{border-color:#993477;background:#FBF4F8;color:#993477;}
+  .drawer .quiz-skip{border-style:dashed;justify-content:center;}
+  .drawer .quiz-skip svg{display:none;}
+  /* comparar */
+  .cmp-grid{display:grid;gap:8px;}
+  .cmp-card{position:relative;background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:8px;text-align:center;}
+  .cmp-img{aspect-ratio:1/1;border-radius:10px;background:#F7F3F5;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .cmp-img img{width:100%;height:100%;object-fit:contain;}
+  .cmp-img .dw-thumb-ph{width:100%;height:100%;}
+  .cmp-name{font-size:12px;font-weight:600;color:#1F1F1F;line-height:1.3;margin-top:7px;cursor:pointer;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+  .cmp-x{position:absolute;top:4px;right:4px;z-index:2;width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.95);box-shadow:0 2px 4px rgba(0,0,0,.12);color:#6B5B65;display:flex;align-items:center;justify-content:center;border:0;cursor:pointer;}
+  .cmp-x::after{content:"";position:absolute;inset:-8px;}
+  .cmp-best{position:absolute;top:4px;left:4px;z-index:2;background:#7AB71A;color:#fff;font-size:9.5px;font-weight:800;border-radius:4px;padding:2px 6px;}
+  .cmp-row{background:#fff;border:1px solid #EAEAEA;border-radius:12px;padding:10px;margin-top:8px;}
+  .cmp-label{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#993477;margin-bottom:6px;}
+  .cmp-val{font-size:12.5px;color:#2D2D2D;line-height:1.4;min-width:0;overflow-wrap:anywhere;}
+  .cmp-val .dw-price{margin:0;} .cmp-val .dw-price b{font-size:14px;display:block;}
+  .cmp-desc{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;color:#4A3A44;}
+  .cmp-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px;}
+  .cmp-dot.ok{background:#7AB71A;} .cmp-dot.low{background:#F6A030;} .cmp-dot.out{background:#C4B5BE;}
+  .cmp-buy{margin-top:12px;} .cmp-buy .dw-btn{min-height:42px;font-size:12.5px;padding:0 6px;}
+  .ck-summary summary .ck-sum-l{text-decoration:none;}
+  .dw-chips.g2{display:grid;grid-template-columns:1fr 1fr;}
+  .drawer-detail .drawer-head{background:linear-gradient(135deg,#521C3E 0%,#6E2453 100%);border-bottom:0;padding-top:calc(12px + env(safe-area-inset-top,0px));padding-bottom:12px;}
+  .drawer-detail .drawer-head h2{color:#fff;font-size:16px;}
+  .drawer-detail .drawer-head .close-x{margin:0;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff !important;}
+  .drawer-detail .drawer-head .close-x[aria-pressed="true"]{color:#FF9DC1 !important;}
+  .drawer-detail .drawer-head .cmp-tg[aria-pressed="true"]{background:#20B7CA;color:#fff !important;}
+  .drawer-detail .drawer-head .close-x:hover{background:rgba(255,255,255,.24);}
+  @media(min-width:768px){ .drawer-body{padding:18px 20px 22px;} .drawer-head.dh2{padding-left:20px;padding-right:18px;} }
+
   @media(max-width:767px){
     .grid{grid-template-columns:1fr 1fr;gap:12px;}
     .topbar-main{height:60px;padding:0 10px;gap:8px;}
@@ -1203,10 +1361,10 @@ function submitCartAbandonSurvey(reason){
 function dismissCartAbandonSurvey(){ state.cartAbandonSurveyOpen = false; render(); }
 function renderCartAbandonSurveyDrawer(){
   return `
-    <div class="drawer-head"><h2>Antes de irte…</h2><button class="close-x" aria-label="Cerrar" onclick="dismissCartAbandonSurvey()">${icon('x')}</button></div>
+    ${drawerHead('Antes de irte…','message-circle','Una pregunta rápida, de un toque','dismissCartAbandonSurvey()')}
     <div class="drawer-body">
-      <div class="panel-sub" style="margin-bottom:14px;">Dejaste productos en tu carrito. ¿Nos dices por qué no completaste tu pedido? Nos ayuda a mejorar.</div>
-      ${CART_ABANDON_REASONS.map(r=>`<button class="abandon-opt" onclick="submitCartAbandonSurvey('${r.replace(/'/g,"\\'")}')">${r}</button>`).join('')}
+      <div class="dw-intro">Dejaste productos en tu carrito. ¿Qué te detuvo? Tu respuesta nos ayuda a mejorar (y tu carrito se queda guardado).</div>
+      ${CART_ABANDON_REASONS.map(r=>`<button class="abandon-opt" onclick="submitCartAbandonSurvey('${r.replace(/'/g,"\\'")}')"><i></i><span>${r}</span></button>`).join('')}
       <button class="abandon-skip" onclick="dismissCartAbandonSurvey()">No, gracias</button>
     </div>`;
 }
@@ -1216,6 +1374,15 @@ function icon(name, size){
   size = size || 16;
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+    heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/>',
+    user:'<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>',
+    bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+    trash:'<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+    'map-pin':'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    sparkle:'<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
+    'file-text':'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/>',
+    'chevron-right':'<path d="m9 18 6-6-6-6"/>',
+    'eye-off':'<path d="M9.9 4.2A10 10 0 0 1 12 4c5 0 9 4.5 10 8a12 12 0 0 1-2.4 3.8M6.6 6.6A12 12 0 0 0 2 12c1 3.5 5 8 10 8a10 10 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
     clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
     sliders:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
@@ -1600,17 +1767,17 @@ function renderCheckoutReminderDrawer(){
   // igual que en el resto de la tienda.
   const items = reminderProductsNotInCart();
   return `
-    <div class="drawer-head"><h2>¿Se te olvidó algo?</h2><button class="close-x" aria-label="Cerrar" onclick="continueCheckoutWithoutReminder()">${icon('x')}</button></div>
+    ${drawerHead('¿Se te olvidó algo?','gift','Lo que más se lleva junto','continueCheckoutWithoutReminder()')}
     <div class="drawer-body">
-      <p style="font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;">Muchas veces un lubricante hace toda la diferencia — aquí tienes algunas opciones, por si quieres agregar una:</p>
+      <div class="dw-intro">Muchas veces un lubricante hace toda la diferencia. Aquí tienes algunas opciones, por si quieres agregar una:</div>
       ${items.map(p=>`
         <div class="reminder-row">
           ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(p.images[0])}" alt="${p.name}" loading="lazy">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)};display:flex;align-items:center;justify-content:center;">${catIcon(p.cat)}</div>`}
-          <div class="r-name">${p.name}<div class="r-price">${money(effectivePrice(p))}</div></div>
+          <div class="r-name">${escHtml(p.name)}<div class="r-price">${money(effectivePrice(p))}</div></div>
           <button class="reminder-add" onclick="addReminderProductToCart('${p.id}'${p._fv?`,'${p._fv}'`:''})">+ Agregar</button>
         </div>`).join('')}
     </div>
-    <div class="drawer-foot"><button class="btn-neutral" style="margin-top:0;" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button><button class="btn-link" onclick="state.checkoutReminderOpen=false;render()">Volver al carrito</button></div>
+    <div class="drawer-foot"><button class="btn-primary" onclick="continueCheckoutWithoutReminder()">Continuar con mi pedido ${icon('chevron-right',17)}</button><button class="btn-link" onclick="state.checkoutReminderOpen=false;render()">Volver al carrito</button></div>
   `;
 }
 /* ---- Reparación de la estructura de variantes ----
@@ -2093,15 +2260,28 @@ function needsTermsAcceptance(){
 // Texto completo del aviso de privacidad, disponible desde el pie de página y desde el enlace
 // junto a la casilla de aceptación en el checkout — antes solo existía la frase corta de la
 // casilla, sin ningún lugar donde leer el aviso completo.
+function policyHtml(text){
+  // Convierte el texto plano del aviso en párrafos con subtítulos: una línea corta que termina en
+  // "?" o ":" o va en MAYÚSCULAS se muestra como subtítulo; las que empiezan con "-" como lista.
+  const out = []; let list = null;
+  String(text||'').split(/\n/).forEach(raw=>{
+    const l = raw.trim();
+    if(!l){ list = null; return; }
+    if(/^[-•]\s*/.test(l)){ if(!list){ list = []; out.push(list); } list.push(escHtml(l.replace(/^[-•]\s*/,''))); return; }
+    list = null;
+    const isHead = l.length<=70 && (/[?:]$/.test(l) || (l===l.toUpperCase() && /[A-ZÁÉÍÓÚÑ]/.test(l)) || !/[.,;]/.test(l));
+    out.push(isHead ? `<h4>${escHtml(l)}</h4>` : `<p>${escHtml(l)}</p>`);
+  });
+  return out.map(x=>Array.isArray(x) ? `<ul>${x.map(i=>`<li>${i}</li>`).join('')}</ul>` : x).join('');
+}
 function renderPrivacyPolicyDrawer(){
   const text = state.settings.privacyPolicyText || DEFAULT_SETTINGS.privacyPolicyText;
   const returnsText = state.settings.returnPolicyText || DEFAULT_SETTINGS.returnPolicyText;
   return `
-    <div class="drawer-head"><h2>Aviso de privacidad</h2><button class="close-x" aria-label="Cerrar" onclick="state.privacyPolicyOpen=false;render()">${icon('x')}</button></div>
+    ${drawerHead('Aviso de privacidad','shield','Cómo cuidamos tus datos',`state.privacyPolicyOpen=false;render()`)}
     <div class="drawer-body">
-      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;">${text}</div>
-      <div style="height:1px;background:var(--border);margin:18px 0;"></div>
-      <div style="font-size:13.5px;line-height:1.6;white-space:pre-wrap;">${returnsText}</div>
+      <div class="dw-card dw-policy">${policyHtml(text)}</div>
+      ${returnsText ? `<div class="dw-card dw-policy">${policyHtml(returnsText)}</div>` : ''}
     </div>
   `;
 }
@@ -2172,30 +2352,45 @@ function handleForgetProfile(){
 }
 function renderProfileDrawer(){
   const p = state.profileDraft || (state.profileDraft = {...(loadCustomerProfile()||{})});
+  const saved = loadCustomerProfile();
   const tier = activeWholesaleTier();
+  const favs = loadWishlist().length;
+  const first = saved && saved.name ? escHtml(String(saved.name).trim().split(/\s+/)[0]) : '';
   return `
-    <div class="drawer-head"><h2>Mis datos</h2><button class="close-x" aria-label="Cerrar" onclick="closeProfile()">${icon('x')}</button></div>
+    ${drawerHead('Mis datos','user', saved ? 'Tus datos guardados en este celular' : 'Compra más rápido la próxima vez','closeProfile()')}
     <div class="drawer-body">
-      <div class="note-box">Guarda tus datos en este celular para que tus próximos pedidos sean más rápidos. No se comparten con nadie más, ni requieren contraseña — solo quedan en este dispositivo.</div>
-      <div class="form-field"><label>Nombre completo</label><input id="pf-cli-name" type="text" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.name=this.value"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="pf-cli-phone" type="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.phone=this.value"></div>
-      <div class="form-field"><label>Dirección de entrega</label><textarea id="pf-cli-address" placeholder="Calle, número, colonia, referencias" oninput="state.profileDraft.address=this.value">${p.address||''}</textarea></div>
-      <div class="form-field" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
-        <label>Código de mayoreo</label>
+      ${saved ? `<div class="pf-hello"><span class="pf-av">${first.charAt(0).toUpperCase()||'?'}</span><div><b>Hola, ${first||'de nuevo'}</b><span>Tu próximo pedido se llena solo.</span></div></div>`
+        : `<div class="pf-perks">
+            <div><span>${icon('sparkle',16)}</span>Pides en segundos</div>
+            <div><span>${icon('lock',16)}</span>Sin contraseña</div>
+            <div><span>${icon('eye-off',16)}</span>Solo en tu celular</div>
+          </div>`}
+      ${favs && !isKioskMode() ? `<button class="pf-link" onclick="state.profileOpen=false;state.wishlistOpen=true;render()"><span>${icon('heart',16)}</span>Mis favoritos <b>${favs}</b>${icon('chevron-right',16)}</button>` : ''}
+      <div class="dw-card">
+        <div class="dw-card-t">Datos para tus pedidos</div>
+        <div class="form-field"><label for="pf-cli-name">Nombre completo</label><input id="pf-cli-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.name=this.value"></div>
+        <div class="form-field"><label for="pf-cli-phone">WhatsApp / Teléfono</label><input id="pf-cli-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.phone=this.value"></div>
+        <div class="form-field" style="margin-bottom:0;"><label for="pf-cli-address">Dirección de entrega</label><textarea id="pf-cli-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="state.profileDraft.address=this.value">${escHtml(p.address||'')}</textarea></div>
+        <div class="dw-mini">${icon('lock',12)} No se comparten con nadie: solo quedan guardados en este celular.</div>
+      </div>
+      <details class="dw-card pf-wh" ${tier?'open':''}>
+        <summary>${icon('gift',16)} ¿Tienes código de mayoreo? <span>${icon('chevron-down',16)}</span></summary>
+        <div style="margin-top:12px;">
         ${tier ? `
           <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Activo: ${tier.name} (${tier.discountPercent}% de descuento)</div>
           <button class="btn-secondary" onclick="clearWholesaleCode()">Desactivar mayoreo</button>
         ` : `
-          <div style="display:flex;gap:6px;">
-            <input id="wholesale-code-input" placeholder="Ej. MAY2024" style="flex:1;text-transform:uppercase;">
-            <button class="btn-outline" style="padding:0 14px;" onclick="applyWholesaleCodeManually()">Activar</button>
+          <div style="display:flex;gap:8px;">
+            <input id="wholesale-code-input" class="dw-input" placeholder="Ej. MAY2024" style="flex:1;text-transform:uppercase;">
+            <button class="dw-btn" style="flex:0 0 auto;padding:0 16px;" onclick="applyWholesaleCodeManually()">Activar</button>
           </div>
         `}
-      </div>
+        </div>
+      </details>
     </div>
     <div class="drawer-foot">
-      <button class="btn-primary" onclick="handleSaveProfile()">Guardar mis datos</button>
-      ${p.name ? `<button class="btn-secondary" onclick="handleForgetProfile()">Olvidar mis datos en este celular</button>` : ''}
+      <button class="btn-primary" onclick="handleSaveProfile()">${icon('check',17)} Guardar mis datos</button>
+      ${p.name ? `<button class="btn-link" onclick="handleForgetProfile()">Olvidar mis datos en este celular</button>` : ''}
     </div>`;
 }
 
@@ -2209,33 +2404,43 @@ const MESSAGE_MIN_INTERVAL_MS = 60000;
 function openMessageDrawer(){ state.messageDrawerOpen=true; state.messageDraft={name:'',phone:'',type:'pregunta',text:''}; render(); }
 function closeMessageDrawer(){ state.messageDrawerOpen=false; state.messageSent=false; render(); }
 function renderMessageDrawer(){
+  const close = 'closeMessageDrawer()';
   if(state.messageSent){
     return `
-    <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" aria-label="Cerrar" onclick="closeMessageDrawer()">${icon('x')}</button></div>
+    ${drawerHead('Buzón de sugerencias','message-circle','',close)}
     <div class="drawer-body">
-      <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} ¡Gracias! Tu mensaje fue enviado, lo vamos a revisar pronto.</div>
-    </div>
-    <div class="drawer-foot"><button class="btn-primary" onclick="closeMessageDrawer()">Cerrar</button></div>`;
-  }
-  return `
-    <div class="drawer-head"><h2>Buzón de sugerencias</h2><button class="close-x" aria-label="Cerrar" onclick="closeMessageDrawer()">${icon('x')}</button></div>
-    <div class="drawer-body">
-      <div class="note-box">¿Tienes una queja, sugerencia o pregunta para nosotros? Escríbenos aquí y te respondemos directo por WhatsApp.</div>
-      <div class="form-field"><label>Tu nombre</label><input id="msg-name" type="text" placeholder="Tu nombre" value="${(state.messageDraft.name||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.name=this.value"></div>
-      <div class="form-field"><label>WhatsApp / Teléfono</label><input id="msg-phone" type="tel" placeholder="33 1234 5678" value="${(state.messageDraft.phone||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.phone=this.value"></div>
-      <div class="form-field"><label>Tipo de mensaje</label>
-        <select id="msg-type" onchange="state.messageDraft.type=this.value">
-          <option value="pregunta" ${state.messageDraft.type==='pregunta'?'selected':''}>Pregunta</option>
-          <option value="sugerencia" ${state.messageDraft.type==='sugerencia'?'selected':''}>Sugerencia</option>
-          <option value="queja" ${state.messageDraft.type==='queja'?'selected':''}>Queja</option>
-          <option value="otro" ${state.messageDraft.type==='otro'?'selected':''}>Otro</option>
-        </select>
+      <div class="dw-empty">
+        <div class="dw-empty-ic ok">${icon('check',30)}</div>
+        <h3>¡Gracias por escribirnos!</h3>
+        <p>Ya nos llegó tu mensaje. Lo leemos con calma y te respondemos por WhatsApp.</p>
       </div>
-      <div class="form-field"><label>Tu mensaje</label><textarea id="msg-text" placeholder="Cuéntanos qué pasó o qué se te ocurre..." oninput="state.messageDraft.text=this.value">${state.messageDraft.text||''}</textarea></div>
+    </div>
+    <div class="drawer-foot"><button class="btn-primary" onclick="closeMessageDrawer()">Seguir viendo productos</button></div>`;
+  }
+  const d = state.messageDraft;
+  const types = [['pregunta','Pregunta'],['sugerencia','Sugerencia'],['queja','Queja'],['otro','Otro']];
+  const ph = {pregunta:'¿Qué te gustaría saber?', sugerencia:'¿Qué podríamos hacer mejor o qué te gustaría encontrar?', queja:'Cuéntanos qué pasó para resolverlo', otro:'Escríbenos lo que quieras'}[d.type||'pregunta'];
+  return `
+    ${drawerHead('Buzón de sugerencias','message-circle','Te leemos y respondemos por WhatsApp',close)}
+    <div class="drawer-body">
+      <div class="dw-intro">Tu opinión nos ayuda a mejorar. Pregúntanos, cuéntanos qué te gustaría encontrar o dinos si algo no salió bien.</div>
+      <div class="dw-card">
+        <div class="dw-card-t">¿Sobre qué nos escribes?</div>
+        <div class="dw-chips g2" role="radiogroup" aria-label="Tipo de mensaje">
+          ${types.map(([k,l])=>`<button type="button" role="radio" aria-checked="${(d.type||'pregunta')===k}" class="dw-chip ${(d.type||'pregunta')===k?'on':''}" onclick="state.messageDraft.type='${k}';render()">${l}</button>`).join('')}
+        </div>
+        <div class="form-field" style="margin-top:14px;"><label for="msg-text">Tu mensaje</label><textarea id="msg-text" rows="4" maxlength="1000" placeholder="${ph}" oninput="state.messageDraft.text=this.value">${escHtml(d.text||'')}</textarea></div>
+      </div>
+      <div class="dw-card">
+        <div class="dw-card-t">¿Cómo te contestamos?</div>
+        <div class="form-field"><label for="msg-name">Tu nombre</label><input id="msg-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${(d.name||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.name=this.value"></div>
+        <div class="form-field" style="margin-bottom:0;"><label for="msg-phone">WhatsApp / Teléfono</label><input id="msg-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${(d.phone||'').replace(/"/g,'&quot;')}" oninput="state.messageDraft.phone=this.value"></div>
+        <div class="dw-mini">${icon('lock',12)} Solo lo usamos para responderte.</div>
+      </div>
       <input id="msg-website" type="text" name="website" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
     </div>
     <div class="drawer-foot">
-      <button class="btn-primary" ${state.sendingMessage?'disabled style="opacity:.6"':''} onclick="handleSendStoreMessage()">${state.sendingMessage?'Enviando…':'Enviar mensaje'}</button>
+      <button class="btn-primary" ${state.sendingMessage?'disabled style="opacity:.6"':''} onclick="handleSendStoreMessage()">${state.sendingMessage?'Enviando…':icon('message-circle',17)+' Enviar mensaje'}</button>
     </div>`;
 }
 async function handleSendStoreMessage(){
@@ -2318,7 +2523,7 @@ function renderProductDetailDrawer(){
         <svg width="18" height="18" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
       </button>`}
       ${isKioskMode() ? '' : `
-      <button class="close-x" aria-label="Comparar producto" title="${isComparing(p.id)?'Quitar de comparar':'Agregar a comparar (elige 2 o más para ver lado a lado)'}" onclick="toggleCompare('${p.id}')" style="${isComparing(p.id)?'color:var(--navy);':''}">
+      <button class="close-x cmp-tg" aria-label="Comparar producto" aria-pressed="${isComparing(p.id)}" title="${isComparing(p.id)?'Quitar de comparar':'Agregar a comparar (elige 2 o más para ver lado a lado)'}" onclick="toggleCompare('${p.id}')" style="${isComparing(p.id)?'color:var(--navy);':''}">
         ${icon('columns')}
       </button>`}
       <button class="close-x" aria-label="Cerrar" onclick="closeProductDetail()">${icon('x')}</button>
@@ -2991,7 +3196,7 @@ function applyQuizToCatalog(){
 }
 function renderQuizDrawer(){
   const step = state.quizStep, a = state.quizAnswers, steps = quizSteps(a);
-  const head = `<div class="drawer-head"><h2>Encuentra tu producto ideal</h2><button class="close-x" aria-label="Cerrar" onclick="closeQuiz()">${icon('x')}</button></div>`;
+  const head = drawerHead('Encuentra tu producto ideal','sparkle', step<steps.length ? 'Responde 3 preguntas rápidas' : 'Elegimos esto para ti','closeQuiz()');
   const sel = (v)=>String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   if(step<steps.length){
     const field = steps[step], needs = state.settings.needs || DEFAULT_NEEDS;
@@ -3005,7 +3210,7 @@ function renderQuizDrawer(){
       <div class="quiz-progress"><span>Pregunta ${step+1} de ${steps.length}</span><div class="quiz-dots">${steps.map((_,i)=>`<i class="${i<=step?'on':''}"></i>`).join('')}</div></div>
       <h3 class="quiz-q">${Q.title}</h3>
       <div class="quiz-opts">
-        ${Q.opts.map(o=>`<button class="quiz-opt ${a[field]===o[0]?'active':''}" onclick="quizAnswer('${field}','${sel(o[0])}')">${o[1]}</button>`).join('')}
+        ${Q.opts.map(o=>`<button class="quiz-opt ${a[field]===o[0]?'active':''}" onclick="quizAnswer('${field}','${sel(o[0])}')"><span>${o[1]}</span>${icon('chevron-right',18)}</button>`).join('')}
         <button class="quiz-opt quiz-skip" onclick="quizAnswer('${field}',null)">${Q.skip}</button>
       </div>
       ${step>0 ? `<button class="btn-tertiary" style="margin-top:14px;" onclick="quizBack()">‹ Pregunta anterior</button>` : ''}
@@ -3290,18 +3495,18 @@ function renderPriceFilterRow(){
 }
 function renderPriceFilterDrawer(){
   return `
-  <div class="drawer-head"><h2>Filtrar por precio</h2><button class="close-x" aria-label="Cerrar" onclick="state.priceFilterOpen=false;render()" aria-label="Cerrar">${icon('x')}</button></div>
+  ${drawerHead('Filtrar por precio','sliders','Se combina con tu categoría o búsqueda',`state.priceFilterOpen=false;render()`)}
   <div class="drawer-body">
-    <div class="section-sub" style="margin:0 0 12px;">Se combina con la categoría o búsqueda que tengas activa.</div>
+    <div class="dw-card-t" style="margin-bottom:10px;">Rangos rápidos</div>
     <div class="price-presets">
-      ${[['','150','Hasta $150'],['150','300','$150 – $300'],['300','600','$300 – $600'],['600','','Más de $600']].map(p=>`<button class="filter-chip" onclick="setPricePreset('${p[0]}','${p[1]}')">${p[2]}</button>`).join('')}
+      ${[['','150','Hasta $150'],['150','300','$150 – $300'],['300','600','$300 – $600'],['600','','Más de $600']].map(p=>`<button class="dw-chip ${String(state.priceMin||'')===p[0]&&String(state.priceMax||'')===p[1]&&priceFilterActive()?'on':''}" onclick="setPricePreset('${p[0]}','${p[1]}')">${p[2]}</button>`).join('')}
     </div>
     <div class="price-inputs">
       <label>Mínimo<input id="price-min-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="$0" value="${state.priceMin}"></label>
       <label>Máximo<input id="price-max-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Sin límite" value="${state.priceMax}"></label>
     </div>
-    <button class="hero-btn-primary" style="width:100%;margin-top:18px;" onclick="applyPriceFilterFromPanel()">Ver resultados</button>
-    ${priceFilterActive() ? `<button class="hero-btn-outline" style="width:100%;margin-top:10px;" onclick="state.priceFilterOpen=false;clearPriceFilter()">Quitar filtro</button>` : ''}
+    <button class="btn-primary" style="margin-top:18px;" onclick="applyPriceFilterFromPanel()">${icon('search',16)} Ver resultados</button>
+    ${priceFilterActive() ? `<button class="btn-link" onclick="state.priceFilterOpen=false;clearPriceFilter()">Quitar filtro</button>` : ''}
   </div>`;
 }
 
@@ -3686,26 +3891,81 @@ function renderWholesaleBanner(tier){
   const missing = tier.minType==='amount' ? money(progress.needed-progress.current) : `${progress.needed-progress.current} pieza(s)`;
   return `<div class="note-box">Agrega <strong>${missing}</strong> más en productos participantes para desbloquear ${tier.discountPercent}% de descuento de mayoreo (${tier.name}).</div>`;
 }
+/* ============== PANELES LATERALES v2 ==============
+   Todos los paneles (carrito, favoritos, comparar, entrega, buzón, mis datos, quiz…) comparten
+   el mismo encabezado morado de la marca, fondo claro y tarjetas blancas, para que se sientan
+   parte de la misma tienda y no pantallas sueltas. */
+function drawerHead(title, ic, sub, closeJs, closeLabel){
+  return `<div class="drawer-head dh2">
+    <div class="dh-t"><span class="dh-ic" aria-hidden="true">${icon(ic,18)}</span><div class="dh-tx"><h2 tabindex="-1">${title}</h2>${sub?`<div class="dh-sub">${sub}</div>`:''}</div></div>
+    <button class="close-x" aria-label="${closeLabel||'Cerrar'}" onclick="${closeJs}">${icon('x',18)}</button>
+  </div>`;
+}
+function dwThumb(p, v){
+  const src = p && p.images && p.images.length ? thumbSrc((v && typeof vImage==='function' && vImage(p,v)) || p.images[0]) : '';
+  return src ? `<img class="dw-thumb" src="${src}" alt="" loading="lazy">` : `<div class="dw-thumb dw-thumb-ph" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>`;
+}
+function dwPriceHtml(p){
+  const now = automaticDiscountedPrice(p), was = Number(p.price)||0;
+  const off = was>now && was>0 ? Math.round((1-now/was)*100) : 0;
+  return `<div class="dw-price"><b>${money(now)}</b>${off?` <s>${money(was)}</s> <span class="dw-off">-${off}%</span>`:''}</div>`;
+}
+function dwInCart(id){ return Object.keys(state.cart||{}).some(k=>k===id || k.indexOf(id+'::')===0); }
+function dwHasVariants(p){ return !!(p.variantGroups && p.variantGroups.length); }
+function addAllWishlistToCart(){
+  if(isKioskMode()) return;
+  if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); return; }
+  let n = 0, pend = 0;
+  wishlistProducts().forEach(p=>{
+    if(dwHasVariants(p)){ if(!dwInCart(p.id)) pend++; return; }
+    if(dwInCart(p.id) || itemStock(p,null)<=0) return;
+    state.cart[p.id] = 1; n++; trackEvent('add_to_cart', {productId:p.id});
+  });
+  if(n){ saveCart(); }
+  showToast(n ? `${n} producto${n===1?'':'s'} agregado${n===1?'':'s'} al carrito${pend?` · ${pend} necesita${pend===1?'':'n'} elegir opción`:''}` : (pend ? 'Esos productos necesitan que elijas una opción (color, talla…)' : 'Ya están en tu carrito'));
+  render();
+}
 function renderWishlistDrawer(){
   const products = wishlistProducts();
-  return `
-    <div class="drawer-head"><h2>Mis favoritos</h2><button class="close-x" aria-label="Cerrar" onclick="state.wishlistOpen=false;render()">${icon('x')}</button></div>
+  const n = products.length;
+  const close = `state.wishlistOpen=false;render()`;
+  if(!n) return `${drawerHead('Mis favoritos','heart','',close)}
     <div class="drawer-body">
-      ${products.length>0 && !isKioskMode() ? `<button class="hero-btn-outline" style="width:100%;margin-bottom:14px;gap:8px;" onclick="shareWishlist()">${icon('whatsapp',17)} Compartir mis favoritos por WhatsApp</button>` : ''}
-      ${products.length===0 ? `<div class="empty-state">Aún no has guardado ningún favorito. Toca el corazón de un producto para guardarlo aquí.</div>` :
-        products.map(p=>`
-          <div class="cart-item" style="cursor:pointer;" onclick="state.wishlistOpen=false;openProductDetail('${p.id}')">
-            ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(p.images[0])}">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
-            <div class="cart-item-info">
-              <div class="cart-item-name">${p.name}</div>
-              <div class="cart-item-price">${money(automaticDiscountedPrice(p))}</div>
-              <div class="qty-row">
-                <button class="btn-tertiary" ${p.stock<=0?'disabled':''} onclick="event.stopPropagation();addToCart('${p.id}')">${p.stock<=0?'Agotado':'+ Agregar al carrito'}</button>
-                <a class="remove-link" onclick="event.stopPropagation();toggleWishlist('${p.id}')">Quitar</a>
-              </div>
-            </div>
-          </div>`).join('')}
+      <div class="dw-empty">
+        <div class="dw-empty-ic">${icon('heart',30)}</div>
+        <h3>Aún no tienes favoritos</h3>
+        <p>Toca el corazón de cualquier producto y lo guardamos aquí, para que lo encuentres rápido cuando quieras comprarlo.</p>
+        <button class="btn-primary" onclick="state.wishlistOpen=false;goToCatalog('Todos')">Explorar el catálogo</button>
+      </div>
     </div>`;
+  const canAll = products.some(p=>!dwInCart(p.id) && (dwHasVariants(p) || itemStock(p,null)>0));
+  return `${drawerHead('Mis favoritos','heart',`${n} guardado${n===1?'':'s'}`,close)}
+    <div class="drawer-body">
+      ${products.map(p=>{
+        const out = !dwHasVariants(p) && itemStock(p,null)<=0;
+        const inCart = dwInCart(p.id);
+        const low = !dwHasVariants(p) && !out && itemStock(p,null)<=3;
+        return `
+        <div class="dw-item" onclick="state.wishlistOpen=false;openProductDetail('${p.id}')">
+          ${dwThumb(p)}
+          <div class="dw-info">
+            <div class="dw-name">${escHtml(p.name)}</div>
+            ${dwPriceHtml(p)}
+            ${low ? `<div class="dw-tag dw-tag-low">Quedan ${itemStock(p,null)}</div>` : ''}
+            <div class="dw-actions">
+              ${isKioskMode() ? '' : out ? `<button class="dw-btn dw-btn-ghost" onclick="event.stopPropagation();state.wishlistOpen=false;openProductDetail('${p.id}')">Agotado · Avísame</button>`
+                : inCart ? `<button class="dw-btn dw-btn-done" onclick="event.stopPropagation();state.wishlistOpen=false;state.cartOpen=true;render()">${icon('check',14)} En tu carrito</button>`
+                : dwHasVariants(p) ? `<button class="dw-btn" onclick="event.stopPropagation();state.wishlistOpen=false;openProductDetail('${p.id}')">Elegir opción</button>`
+                : `<button class="dw-btn" onclick="event.stopPropagation();addToCart('${p.id}')">${icon('bag',14)} Agregar</button>`}
+              <button class="dw-icon-btn" aria-label="Quitar ${escHtml(p.name)} de favoritos" onclick="event.stopPropagation();toggleWishlist('${p.id}')">${icon('trash',16)}</button>
+            </div>
+          </div>
+        </div>`;}).join('')}
+    </div>
+    ${isKioskMode() ? '' : `<div class="drawer-foot">
+      ${canAll ? `<button class="btn-primary" onclick="addAllWishlistToCart()">${icon('bag',17)} Agregar todo al carrito</button>` : `<button class="btn-primary" onclick="state.wishlistOpen=false;state.cartOpen=true;render()">${icon('bag',17)} Ver mi carrito</button>`}
+      <button class="btn-wa-soft" onclick="shareWishlist()">${icon('whatsapp',17)} Compartir mi lista por WhatsApp</button>
+    </div>`}`;
 }
 /* ============== COMPARAR PRODUCTOS LADO A LADO ==============
    Hasta 3 productos a la vez, elegidos desde su ficha de detalle (el botón de comparar, junto
@@ -3751,25 +4011,42 @@ const COMPARE_ROWS = [
 function renderCompareDrawer(){
   const products = compareProducts();
   if(!products.length) return '';
-  return `
-    <div class="drawer-head"><h2>Comparar productos</h2><button class="close-x" aria-label="Cerrar" onclick="state.compareOpen=false;render()">${icon('x')}</button></div>
+  const prices = products.map(p=>automaticDiscountedPrice(p));
+  const minP = Math.min(...prices), allSame = prices.every(x=>x===minP);
+  const cols = `grid-template-columns:repeat(${products.length},minmax(0,1fr))`;
+  const stockTxt = p=>{ const st = dwHasVariants(p) ? (p.variants||[]).reduce((a,v)=>a+(v.stock||0),0) : itemStock(p,null);
+    return st<=0 ? `<span class="cmp-dot out"></span>Agotado` : st<=3 ? `<span class="cmp-dot low"></span>Últimas ${st}` : `<span class="cmp-dot ok"></span>Disponible`; };
+  const rows = [
+    ['Precio', p=>dwPriceHtml(p)],
+    ['Categoría', p=>escHtml(productCats(p).join(', ')||'—')],
+    ['Disponibilidad', stockTxt],
+    ['Opciones', p=>dwHasVariants(p) ? escHtml(p.variantGroups.map(g=>`${g.name}: ${(g.values||[]).length}`).join(' · ')) : 'Única'],
+    ['Descripción', p=>`<div class="cmp-desc">${escHtml(p.desc||'—')}</div>`],
+  ];
+  return `${drawerHead('Comparar productos','columns','Lado a lado para decidir más fácil',`state.compareOpen=false;render()`)}
     <div class="drawer-body">
-      <div style="display:flex;gap:10px;margin-bottom:6px;">
-        ${products.map(p=>`
-          <div style="flex:1;min-width:0;text-align:center;">
-            <div onclick="state.compareOpen=false;openProductDetail('${p.id}')" style="cursor:pointer;">${productImageHtml(p)}</div>
-            <div style="font-size:12px;font-weight:700;margin-top:6px;line-height:1.3;">${p.name}</div>
-            <button class="remove-link" style="margin-top:4px;" onclick="toggleCompare('${p.id}')">Quitar</button>
+      <div class="cmp-grid cmp-heads" style="${cols}">
+        ${products.map((p,i)=>`
+          <div class="cmp-card">
+            <button class="cmp-x" aria-label="Quitar ${escHtml(p.name)} de la comparación" onclick="toggleCompare('${p.id}')">${icon('x',13)}</button>
+            ${!allSame && prices[i]===minP ? `<span class="cmp-best">Mejor precio</span>` : ''}
+            <div class="cmp-img" onclick="state.compareOpen=false;openProductDetail('${p.id}')">${p.images&&p.images.length?`<img src="${thumbSrc(p.images[0])}" alt="" loading="lazy">`:`<div class="dw-thumb-ph" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>`}</div>
+            <div class="cmp-name" onclick="state.compareOpen=false;openProductDetail('${p.id}')">${escHtml(p.name)}</div>
           </div>`).join('')}
       </div>
-      ${COMPARE_ROWS.map(r=>`
-        <div style="border-top:1px solid var(--border);padding:10px 0;">
-          <div style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;">${r.label}</div>
-          <div style="display:flex;gap:10px;">
-            ${products.map(p=>`<div style="flex:1;min-width:0;font-size:12.5px;">${r.get(p)}</div>`).join('')}
-          </div>
+      ${rows.map(([label,get])=>`
+        <div class="cmp-row">
+          <div class="cmp-label">${label}</div>
+          <div class="cmp-grid" style="${cols}">${products.map(p=>`<div class="cmp-val">${get(p)}</div>`).join('')}</div>
         </div>`).join('')}
-      <button class="btn-tertiary" style="margin-top:14px;" onclick="clearCompare()">Vaciar comparación</button>
+      ${isKioskMode() ? '' : `<div class="cmp-grid cmp-buy" style="${cols}">
+        ${products.map(p=>{ const out = !dwHasVariants(p) && itemStock(p,null)<=0;
+          return out ? `<button class="dw-btn dw-btn-ghost" onclick="state.compareOpen=false;openProductDetail('${p.id}')">Agotado</button>`
+            : dwInCart(p.id) && !dwHasVariants(p) ? `<button class="dw-btn dw-btn-done" onclick="state.compareOpen=false;state.cartOpen=true;render()">${icon('check',13)} En carrito</button>`
+            : dwHasVariants(p) ? `<button class="dw-btn" onclick="state.compareOpen=false;openProductDetail('${p.id}')">Elegir</button>`
+            : `<button class="dw-btn" onclick="addToCart('${p.id}')">${icon('bag',13)} Agregar</button>`; }).join('')}
+      </div>`}
+      <button class="btn-link" style="margin-top:14px;" onclick="clearCompare()">Vaciar comparación</button>
     </div>`;
 }
 function renderCartDrawer(){
@@ -3778,10 +4055,10 @@ function renderCartDrawer(){
   const buyXPayYSavings = buyXPayYAdjustment();
   const gift = activeGift();
   return `
-    <div class="drawer-head"><h2>Tu carrito</h2><button class="close-x" aria-label="Cerrar carrito" onclick="closeCartDrawer()">${icon('x')}</button></div>
+    ${drawerHead('Tu carrito','bag', cartCount() ? `${cartCount()} artículo${cartCount()===1?'':'s'} · pagas al recibir` : '', 'closeCartDrawer()', 'Cerrar carrito')}
     <div class="drawer-body">
       ${tier ? renderWholesaleBanner(tier) : ''}
-      ${entries.length===0 ? `<div class="empty-state" style="padding:30px 20px 6px;">Tu carrito está vacío.</div>${isKioskMode() ? '' : `<div class="rel-block"><h3 class="rel-title">Lo más vendido</h3><div class="rel-grid">${popularProducts(4).map(x=>renderMiniCard(x,{close:'cartOpen'})).join('')}</div></div>`}` :
+      ${entries.length===0 ? `<div class="dw-empty" style="padding-bottom:6px;"><div class="dw-empty-ic">${icon('bag',28)}</div><h3>Tu carrito está vacío</h3><p>Agrega lo que te guste; pagas hasta que lo recibes.</p></div>${isKioskMode() ? '' : `<div class="rel-block"><h3 class="rel-title">Lo más vendido</h3><div class="rel-grid">${popularProducts(4).map(x=>renderMiniCard(x,{close:'cartOpen'})).join('')}</div></div>`}` :
         entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return state.fullCatalogLoaded ? '' : `<div class="cart-item cart-item-loading"><div class="cart-item-swatch"></div><div class="cart-item-info"><div class="cart-item-name">Cargando producto…</div><div class="cart-item-price">${qty} pza</div></div></div>`; const basePrice = variantUnitPrice(p, v); const price = couponDiscountedPrice(p, basePrice, v); const maxQ = itemStock(p, v); const atMax = qty>=maxQ; const nm = escHtml(p.name + (v?` (${variantLabel(v)})`:'')); return `
           <div class="cart-item">
             ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(vImage(p,v)||p.images[0])}" alt="">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
@@ -3794,7 +4071,7 @@ function renderCartDrawer(){
                 <button class="qty-btn" aria-label="Agregar una pieza de ${nm}" ${atMax?'disabled':''} onclick="changeQty('${key}',1)">+</button>
                 <div class="cart-item-bottom-row">
                   <span class="cart-item-subtotal">${money(price*qty)}</span>
-                  <button type="button" class="remove-link" aria-label="Quitar ${nm} del carrito" onclick="removeFromCart('${key}')">Quitar</button>
+                  <button type="button" class="dw-icon-btn" aria-label="Quitar ${nm} del carrito" onclick="removeFromCart('${key}')">${icon('trash',16)}</button>
                 </div>
               </div>
               ${atMax && maxQ<=5 ? `<div class="cart-stock-note">${maxQ===1?'Solo queda 1 pieza':`Solo quedan ${maxQ} piezas`}</div>` : ''}
@@ -3846,7 +4123,8 @@ function renderCartDrawer(){
       ${state.settings.shippingNote ? `<div class="ship-badge">${icon('truck',15)} <span>${state.settings.shippingNote}</span></div>` : ''}
       ${cartSavings()>0 ? `<div class="save-row">${icon('check',14)} Ahorras ${money(cartSavings())} en este pedido</div>` : ''}
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
-      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="proceedToCheckout()">Continuar pedido</button>
+      <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="proceedToCheckout()">Continuar pedido ${icon('chevron-right',17)}</button>
+      ${entries.length ? `<div class="dw-foot-note">${icon('lock',12)} Pagas al recibir · Empaque sin marcas</div>` : ''}
     </div>`;
 }
 
@@ -3865,27 +4143,31 @@ function ckFieldInput(k){
 }
 // QA-21: qué se está comprando, a la vista en el último paso (plegable para no alargar el formulario).
 function renderCheckoutSummary(){
-  const lines = Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return p ? {name: p.name + (v?` (${variantLabel(v)})`:''), qty, price: couponDiscountedPrice(p, variantUnitPrice(p, v), v)} : null; }).filter(Boolean);
+  const lines = Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return p ? {p, v, name: p.name + (v?` (${variantLabel(v)})`:''), qty, price: couponDiscountedPrice(p, variantUnitPrice(p, v), v)} : null; }).filter(Boolean);
   if(!lines.length) return '';
   const count = lines.reduce((a,l)=>a+l.qty,0);
-  return `<details class="ck-summary"><summary>${count} artículo${count===1?'':'s'} en tu pedido <span>Ver</span></summary>
-    <ul>${lines.map(l=>`<li><span>${l.qty} × ${escHtml(l.name)}</span><b>${money(l.price*l.qty)}</b></li>`).join('')}</ul></details>`;
+  return `<details class="ck-summary"><summary><span class="ck-sum-l">${icon('bag',15)} ${count} artículo${count===1?'':'s'} · <b>${money(cartTotal())}</b></span> <span class="ck-sum-r">Ver</span></summary>
+    <ul>${lines.map(l=>`<li>${dwThumb(l.p,l.v)}<span>${l.qty} × ${escHtml(l.name)}</span><b>${money(l.price*l.qty)}</b></li>`).join('')}</ul></details>`;
 }
 function renderCheckoutDrawer(){
   const p = ckDraft();
   return `
-    <div class="drawer-head"><h2>Datos de entrega</h2><button class="close-x" aria-label="Cerrar" onclick="state.checkoutOpen=false;render()">${icon('x')}</button></div>
+    ${drawerHead('Datos de entrega','map-pin','Último paso · te toma un minuto',`state.checkoutOpen=false;render()`)}
     <div class="drawer-body">
+      <div class="ck-steps" aria-hidden="true"><span class="done">${icon('check',12)} Carrito</span><i></i><span class="on">2 · Entrega</span><i></i><span>3 · Confirmamos por WhatsApp</span></div>
       <div class="ck-pills">
-        <div class="ck-pill"><span class="ic">${icon('banknote',16)}</span><span><b>Pago contra entrega.</b> Empaque neutro, sin ningún logo visible.</span></div>
+        <div class="ck-pill"><span class="ic">${icon('banknote',16)}</span><span><b>Pagas al recibir.</b> En efectivo, o con tarjeta/transferencia que coordinamos por WhatsApp.</span></div>
+        <div class="ck-pill"><span class="ic">${icon('package',16)}</span><span><b>Empaque sin marcas.</b> Nadie sabe qué pediste.</span></div>
         ${state.settings.shippingNote ? `<div class="ck-pill"><span class="ic">${icon('truck',16)}</span><span>${state.settings.shippingNote}</span></div>` : ''}
-        <div class="ck-pill"><span class="ic">${icon('credit-card',16)}</span><span>Tarjeta o transferencia: lo coordinamos por WhatsApp.</span></div>
       </div>
       ${renderCheckoutSummary()}
+      <div class="dw-card">
+      <div class="dw-card-t">¿A dónde te lo llevamos?</div>
       <div class="form-field"><label for="ck-name">Nombre completo</label><input id="ck-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${escHtml(p.name||'')}" oninput="ckFieldInput('name')" ${ckErr('name')?'aria-invalid="true" aria-describedby="ck-name-err"':''}>${ckErrHtml('name')}</div>
       <div class="form-field"><label for="ck-phone">WhatsApp / Teléfono</label><input id="ck-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${escHtml(p.phone||'')}" oninput="ckFieldInput('phone')" ${ckErr('phone')?'aria-invalid="true" aria-describedby="ck-phone-err"':''}>${ckErrHtml('phone')}</div>
       <div class="form-field"><label for="ck-address">Dirección de entrega</label><textarea id="ck-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="ckFieldInput('address')" ${ckErr('address')?'aria-invalid="true" aria-describedby="ck-address-err"':''}>${escHtml(p.address||'')}</textarea>${ckErrHtml('address')}</div>
-      <div class="form-field"><label for="ck-notes">Notas (opcional)</label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="ckFieldInput('notes')">${escHtml(p.notes||'')}</textarea></div>
+      <div class="form-field" style="margin-bottom:0;"><label for="ck-notes">Notas <small>(opcional)</small></label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="ckFieldInput('notes')">${escHtml(p.notes||'')}</textarea></div>
+      </div>
       <p class="ck-save-note">Guardamos estos datos en nuestro sistema para ayudarte a terminar tu pedido si se interrumpe. Solo los usamos para contactarte sobre esta compra.</p>
       <div class="ck-hp" aria-hidden="true"><label>Sitio web de tu empresa (déjalo vacío)<input id="ck-company-site" type="text" name="company_site" tabindex="-1" autocomplete="off"></label></div>
       <label class="ck-check" style="color:var(--ink-soft);margin-top:-2px;">
@@ -3900,7 +4182,8 @@ function renderCheckoutDrawer(){
     </div>
     <div class="drawer-foot">
       <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
-      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':'Finalizar pedido ('+money(cartTotal())+')'}</button>
+      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':icon('lock',16)+' Finalizar pedido ('+money(cartTotal())+')'}</button>
+      <div class="dw-foot-note">No pagas nada ahora · te confirmamos por WhatsApp</div>
       <button class="btn-link" onclick="state.checkoutOpen=false;state.cartOpen=true;render()">Volver al carrito</button>
     </div>`;
 }
