@@ -610,7 +610,8 @@ async function loadData(attempt){
     state.coupons = setSnap.exists ? (setSnap.data().coupons||[]) : [];
     state.cashiers = cashiersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
     state.centers = centersSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(c=>c.active);
-    state.customers = customersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+    applyCustomersSnapPOS(customersSnap.docs);
+    state.customersFetchedAt = Date.now();
     if(state.centers.length===0){
       const ref = await db.collection('distributionCenters').add({name:'Principal', isDefault:true, active:true, createdAt:new Date().toISOString()});
       state.centers = [{id:ref.id, name:'Principal', isDefault:true, active:true}];
@@ -2137,7 +2138,54 @@ function renderDiscountModal(){
 }
 
 /* ============== CLIENTE DE LA VENTA ============== */
-function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.newCustomerAddress=''; render(); }
+function openCustomerPicker(){ state.customerPickerOpen=true; state.customerSearchPOS=''; state.newCustomerMode=false; state.newCustomerName=''; state.newCustomerPhone=''; state.newCustomerAddress=''; render(); refreshCustomersPOS(); }
+/* ---- Clientes: perfiles + índice que arma el panel ----
+   El panel junta como clientes también a quien compró en la tienda en línea o en mostrador con su
+   teléfono. Esos no tienen perfil en "customers", así que el panel guarda un documento índice
+   (customers/__indice_pos) con nombre y teléfono; aquí se busca en ambos. Al elegir a uno del índice
+   se le crea su perfil, para que la venta quede ligada a esa persona. */
+const POS_CUSTOMER_INDEX_ID = '__indice_pos';
+function applyCustomersSnapPOS(docs){
+  const idx = docs.find(d=>d.id===POS_CUSTOMER_INDEX_ID);
+  if(idx) state.customerIndex = (idx.data().list||[]);
+  else if(!state.customerIndex) state.customerIndex = [];
+  state.customers = docs.filter(d=>d.id!==POS_CUSTOMER_INDEX_ID).map(d=>({id:d.id, ...d.data()}));
+}
+function posLast10(ph){ return String(ph||'').replace(/\D/g,'').slice(-10); }
+function posIndexEntries(){
+  const have = new Set();
+  state.customers.forEach(c=>{ const k = posLast10(c.phone); if(k) have.add(k); (c.altPhones||[]).forEach(a=>{ const k2 = posLast10(a); if(k2) have.add(k2); }); });
+  return (state.customerIndex||[]).filter(e=>e && e.p && !have.has(posLast10(e.p)));
+}
+function findIndexByPhonePOS(digits){ const k = String(digits||'').slice(-10); if(k.length<10) return null; return posIndexEntries().find(e=>posLast10(e.p)===k) || null; }
+// Trae clientes nuevos registrados después de abrir el POS (sin volver a leer toda la lista) y el índice.
+async function refreshCustomersPOS(){
+  if(state.customersRefreshing || (Date.now() - (state.customersFetchedAt||0)) < 60000) return;
+  state.customersRefreshing = true;
+  try{
+    // Desde la última lectura (menos 15 min de margen por relojes desfasados entre equipos).
+    const since = new Date((state.customersFetchedAt||Date.now()) - 15*60000).toISOString();
+    const startedAt = Date.now();
+    const q = db.collection('customers').where('createdAt','>',since);
+    const [snap, idx] = await Promise.all([q.get(), db.collection('customers').doc(POS_CUSTOMER_INDEX_ID).get().catch(()=>null)]);
+    const known = new Set(state.customers.map(c=>c.id));
+    snap.docs.forEach(d=>{ if(d.id!==POS_CUSTOMER_INDEX_ID && !known.has(d.id)) state.customers.push({id:d.id, ...d.data()}); });
+    if(idx && idx.exists) state.customerIndex = idx.data().list||[];
+    state.customersFetchedAt = startedAt;
+    if(state.customerPickerOpen) render();
+  }catch(e){ console.warn('No se pudieron actualizar los clientes', e); }
+  state.customersRefreshing = false;
+}
+async function selectIndexCustomerPOS(phone){
+  const e = findIndexByPhonePOS(posLast10(phone)); if(!e) return;
+  const payload = {name:e.n||('Cliente '+e.p.slice(-4)), phone:e.p, email:'', address:'', city:'', state:'', country:'', notes:'Perfil creado desde el Punto de Venta (ya había comprado)', createdAt:new Date().toISOString(), source:'pos-indice'};
+  try{
+    const ref = await db.collection('customers').add(payload);
+    const c = {id:ref.id, ...payload}; state.customers.push(c); state.activeCustomer = c;
+    state.customerPickerOpen = false; showToast('Cliente seleccionado: '+c.name);
+  }catch(err){ console.error(err); showToast('No se pudo seleccionar el cliente'); }
+  render();
+}
 function selectCustomerPOS(id){ state.activeCustomer = state.customers.find(c=>c.id===id) || null; state.customerPickerOpen=false; render(); }
 function clearCustomerPOS(){ state.activeCustomer=null; state.customerPickerOpen=false; render(); }
 async function saveNewCustomerPOS(){
@@ -2163,6 +2211,7 @@ function renderCustomerPickerModal(){
   // todos los demás.
   let list = q ? state.customers.filter(c=>tolMatch(q, c.name, c.phone)) : [];
   list = list.slice(0,40);
+  const idxList = q ? posIndexEntries().filter(e=>tolMatch(q, e.n, e.p)).slice(0, Math.max(0, 40-list.length)) : [];
   return `
   <div class="modal-overlay">
     <div class="modal">
@@ -2173,9 +2222,12 @@ function renderCustomerPickerModal(){
         <input id="customer-search-pos-input" class="field-input" type="text" placeholder="Buscar por nombre o teléfono..." value="${state.customerSearchPOS}" oninput="state.customerSearchPOS=this.value;render()">
         <div style="max-height:260px;overflow-y:auto;margin-bottom:12px;">
           ${!q ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Escribe un nombre o teléfono para buscar.</div>` :
-            list.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` : list.map(c=>`
+            (list.length+idxList.length)===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.${state.customersRefreshing?' Buscando clientes nuevos…':''}</div>` : list.map(c=>`
             <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;" onclick="selectCustomerPOS('${c.id}')">
-              <span>${c.name}</span><span style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">${c.phone||''}</span>
+              <span>${escHtml(c.name)}</span><span style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">${escHtml(c.phone||'')}</span>
+            </button>`).join('') + idxList.map(e=>`
+            <button class="cashier-item" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;" onclick="selectIndexCustomerPOS('${escHtml(e.p)}')">
+              <span style="text-align:left;">${escHtml(e.n||'Sin nombre')}<br><span style="font-size:11px;color:var(--ink-soft);font-weight:500;">Ya compró${e.t?' · última vez '+escHtml(e.t):''}</span></span><span style="font-size:11.5px;color:var(--ink-soft);font-weight:500;">${escHtml(e.p)}</span>
             </button>`).join('')}
         </div>
         <button class="btn-secondary" style="margin-top:0;" onclick="state.newCustomerMode=true;render()">+ Agregar nuevo cliente</button>
@@ -2403,8 +2455,9 @@ function onQuickPhoneInput(v){
   state.quickPhone = String(v||'').replace(/[^0-9+\s-]/g,'').slice(0,18);
   const m = findCustomerByPhonePOS(quickPhoneDigits());
   if(m){ state.activeCustomer = m; state.quickPhone = ''; showToast('Cliente encontrado: '+m.name); render(); return; }
+  const ix = findIndexByPhonePOS(quickPhoneDigits());
   const hint = document.getElementById('quick-phone-hint');
-  if(hint) hint.textContent = quickPhoneDigits().length>=10 ? 'Se guardará como cliente nuevo al cobrar' : '';
+  if(hint) hint.textContent = ix ? ('Ya compró antes: '+(ix.n||'cliente')+' — se ligará al cobrar') : quickPhoneDigits().length>=10 ? 'Se guardará como cliente nuevo al cobrar' : '';
 }
 async function ensureQuickCustomer(){
   if(state.activeCustomer) return;
@@ -2412,7 +2465,8 @@ async function ensureQuickCustomer(){
   const found = findCustomerByPhonePOS(digits);
   if(found){ state.activeCustomer = found; return; }
   const phone = digits.slice(-10);
-  const payload = {name:'Cliente '+phone.slice(-4), phone, email:'', address:'', city:'', state:'', country:'', notes:'Creado desde el cobro en el Punto de Venta', createdAt:new Date().toISOString(), source:'pos-rapido'};
+  const ix = findIndexByPhonePOS(phone);
+  const payload = {name:(ix && ix.n) || ('Cliente '+phone.slice(-4)), phone, email:'', address:'', city:'', state:'', country:'', notes:'Creado desde el cobro en el Punto de Venta', createdAt:new Date().toISOString(), source:'pos-rapido'};
   const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
   if(offline){ state.activeCustomer = {id:null, ...payload}; return; }
   try{
@@ -3128,7 +3182,18 @@ function lyLive(l){ return (l.payments||[]).filter(p=>!p.voided); }
 function lyPaid(l){ return lyR2(lyLive(l).reduce((s,p)=>s+(Number(p.amount)||0),0)); }
 function lyBalance(l){ return lyR2((l.total||0) - lyPaid(l)); }
 function lyOverdue(l){ return l.status==='activo' && !!l.dueDate && l.dueDate < lyToday() && lyBalance(l)>0; }
-function lyMinPct(){ const n = Number(state.settings && state.settings.layawayMinPct); return n>0 && n<=100 ? n : 20; }
+// Abono inicial mínimo obligatorio: 20% como piso (si en Configuración se pone más, manda ese).
+const LY_MIN_PCT_FLOOR = 20;
+function lyMinPct(){ const n = Number(state.settings && state.settings.layawayMinPct); return Math.max(LY_MIN_PCT_FLOOR, n>0 && n<=100 ? n : 20); }
+function lyPctOf(part, total){ total = Number(total)||0; return total>0 ? Math.round((Number(part)||0)/total*1000)/10 : 0; }
+// Texto del abono: monto, % del total y saldo, con aviso si no llega al mínimo.
+function lyInitialHint(total, initial){
+  const pct = lyPctOf(initial, total), min = lyMinPct(), bal = Math.max(0, lyR2(total - initial));
+  const ok = initial > 0 && pct + 0.0001 >= min;
+  return `Abono: <b>${lyM(initial)}</b> = <b style="color:${ok?'var(--green,#2e9e6b)':'var(--rose,#BC355C)'}">${pct}%</b> del total ${ok?'✓':`· mínimo ${min}% (${lyM(Math.ceil(total*min/100))})`}<br>Saldo restante: <b>${lyM(bal)}</b>`;
+}
+// Referencia: opcional; si se escribe teléfono, que tenga 10 dígitos.
+function lyRefOk(name, phone){ const d = lyDigits(phone); if(d && d.length<10){ showToast('El teléfono de la referencia debe tener 10 dígitos (o déjalo vacío)'); return false; } return true; }
 function lyDays(){ const n = Number(state.settings && state.settings.layawayDays); return n>0 ? n : 30; }
 function lyPolicy(){ return (state.settings && state.settings.layawayPolicy) || 'El producto se reserva y se entrega hasta liquidar el total. Si no se liquida en la fecha límite, el apartado se cancela.'; }
 function lyStore(){ return (state.settings && state.settings.storeName) || 'La Casa de los Placeres'; }
@@ -3383,7 +3448,7 @@ async function lySaveCust(){
   const f = state.lyCust; if(!f || state.lyBusy) return;
   if(!String(f.name).trim()){ showToast('Escribe el nombre del cliente'); return; }
   if(lyDigits(f.phone).length<10){ showToast('El WhatsApp debe tener 10 dígitos'); return; }
-  if(!String(f.refName).trim() || lyDigits(f.refPhone).length<10){ showToast('Falta la referencia (nombre y 10 dígitos)'); return; }
+  if(!lyRefOk(f.refName, f.refPhone)) return;
   if(!String(f.address).trim()){ showToast('Falta el domicilio'); return; }
   const l = state.lyList.find(x=>x.id===f.id); if(!l) return;
   state.lyBusy = true; render();
@@ -3403,7 +3468,7 @@ function lyRenderCustModal(){
     <h3>Datos del cliente</h3><div class="ly-wrap">
       ${inp('name','Nombre completo')}
       <div class="ly-grid2">${inp('phone','WhatsApp','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono','type="tel" inputmode="tel"')}</div>
-      <div class="ly-grid2">${inp('refName','Contacto de referencia')}${inp('refPhone','Teléfono de la referencia','type="tel" inputmode="tel"')}</div>
+      <div class="ly-grid2">${inp('refName','Contacto de referencia (opcional)')}${inp('refPhone','Teléfono de la referencia (opcional)','type="tel" inputmode="tel"')}</div>
       ${inp('address','Domicilio')}${inp('idNote','Identificación (opcional)')}${inp('notes','Notas del apartado','maxlength="200"')}
     </div>
     <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyCust=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lySaveCust()">${state.lyBusy?'Guardando…':'Guardar'}</button></div>
@@ -3597,8 +3662,58 @@ function lyRenderPayModal(){
 }
 function lyPayHintText(bal, amt){ return amt>bal+0.001 ? `<span style="color:var(--rose,#BC355C)">El abono es mayor al saldo.</span>` : amt>0 ? `Quedará un saldo de <b>${lyM(lyR2(bal-amt))}</b>${lyR2(bal-amt)<=0.001?' · se liquida el apartado':''}.` : ''; }
 function lyPayHint(){ const m = state.lyPay; const l = m && state.lyList.find(x=>x.id===m.id); const el = document.getElementById('ly-pay-hint'); if(l && el) el.innerHTML = lyPayHintText(lyBalance(l), lyR2(m.amount)); }
+// Mensaje para el cliente al crear el apartado: folio y condiciones.
+function lyCreatedText(l){
+  const paid = lyPaid(l), bal = lyBalance(l);
+  const days = l.dueDate ? Math.max(0, Math.round((new Date(l.dueDate+'T12:00:00') - new Date(lyToday()+'T12:00:00'))/86400000)) : null;
+  return `*Se ha creado tu apartado* — ${lyStore()}\n` +
+    `Folio: *${lyFolio(l.folio)}*\nCliente: ${l.customer && l.customer.name || ''}\n\n` +
+    `*Productos*\n${lyItemsText(l)}\n\n` +
+    `Total: ${lyM(l.total)}\nAbono inicial: ${lyM(paid)} (${lyPctOf(paid, l.total)}%)\n*Saldo pendiente: ${lyM(bal)}*\n` +
+    (l.dueDate ? `Fecha límite para liquidar: *${lyDateLabel(l.dueDate)}*${days!==null?` (${days} días)`:''}\n` : '') +
+    `\n*Condiciones*\n• Puedes abonar cuando quieras antes de la fecha límite, en efectivo, tarjeta o transferencia.\n• Al abonar, menciona tu folio ${lyFolio(l.folio)}.\n_${lyPolicy()}_`;
+}
+function lyCopyCreated(id){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  const t = lyCreatedText(l).replace(/[*_]/g,'');
+  try{ navigator.clipboard.writeText(t).then(()=>showToast('Condiciones copiadas'), ()=>showToast('No se pudo copiar')); }catch(e){ showToast('No se pudo copiar'); }
+}
+function lyShareCreatedWa(id){
+  const l = state.lyList.find(x=>x.id===id); if(!l) return;
+  const phone = lyWaPhone(l.customer && l.customer.phone); if(!phone){ showToast('Este apartado no tiene WhatsApp del cliente'); return; }
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(lyCreatedText(l))}`, '_blank');
+}
+function lyRenderCreatedModal(l){
+  const paid = lyPaid(l), bal = lyBalance(l), pct = lyPctOf(paid, l.total);
+  const days = l.dueDate ? Math.max(0, Math.round((new Date(l.dueDate+'T12:00:00') - new Date(lyToday()+'T12:00:00'))/86400000)) : null;
+  const kv = (k,v)=>`<div class="ly-kv"><span>${k}</span><span>${v}</span></div>`;
+  return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" role="dialog" aria-label="Apartado creado" style="max-width:440px !important;">
+    <div style="text-align:center;">
+      <div style="font-size:30px;line-height:1;">✅</div>
+      <h3 style="margin:6px 0 2px;">Se ha creado el apartado</h3>
+      <div class="ly-sub">Comunícale al cliente su folio y las condiciones.</div>
+      <div style="font-size:30px;font-weight:800;letter-spacing:.04em;margin:8px 0 2px;">${lyEsc(lyFolio(l.folio))}</div>
+      <div class="ly-sub">${lyEsc(l.customer&&l.customer.name)}</div>
+    </div>
+    <div class="ly-box" style="margin-top:12px;">
+      ${kv('Total',lyM(l.total))}${kv('Abono inicial',`${lyM(paid)} (${pct}%)`)}${kv('<b>Saldo pendiente</b>',`<b>${lyM(bal)}</b>`)}
+      ${l.dueDate?kv('Fecha límite',`${lyEsc(lyDateLabel(l.dueDate))}${days!==null?` · ${days} días`:''}`):''}
+    </div>
+    <div class="ly-box" style="margin-top:8px;">
+      <div style="font-weight:800;">Condiciones</div>
+      <div class="ly-sub" style="color:var(--ink,#2B1620);">• Puede abonar cuando quiera antes de la fecha límite (efectivo, tarjeta o transferencia).<br>• Al abonar, menciona su folio.<br><i>${lyEsc(lyPolicy())}</i></div>
+    </div>
+    <div class="ly-actions" style="margin-top:14px;">
+      <button class="btn-primary" onclick="lyShareCreatedWa('${l.id}')">Enviar por WhatsApp</button>
+      <button class="btn-secondary" onclick="lyCopyCreated('${l.id}')">Copiar condiciones</button>
+      <button class="btn-secondary" onclick="lyPrint('${l.id}','${state.lyReceipt.payId}')">Imprimir comprobante</button>
+    </div>
+    <button class="btn-secondary" style="margin-top:8px;width:100%;" onclick="state.lyReceipt=null;render()">Listo</button>
+  </div></div>`;
+}
 function lyRenderReceiptModal(){
   const r = state.lyReceipt; const l = r && state.lyList.find(x=>x.id===r.id); if(!l) return '';
+  if(r.created) return lyRenderCreatedModal(l);
   const p = (l.payments||[]).find(x=>x.id===r.payId);
   return `<div class="modal-overlay" style="z-index:1300;"><div class="modal ly-modal" style="max-width:400px !important;text-align:center;">
     <h3>${p&&p.kind==='reembolso'?'Reembolso registrado':'Abono registrado'}</h3>
@@ -3682,12 +3797,12 @@ function lyRenderFormModal(){
   const rest = lyR2(f.total - lyR2(f.initial));
   return `<div class="modal-overlay" style="z-index:1250;"><div class="modal ly-modal">
     <h3>Apartar con abonos</h3>
-    <div class="ly-sub" style="margin:-6px 0 10px;">Total ${lyM(f.total)}. El producto se entrega hasta liquidar. Abono inicial mínimo: ${lyM(f.min)} (${lyMinPct()}%).</div>
+    <div class="ly-sub" style="margin:-6px 0 10px;">Total ${lyM(f.total)}. El producto se entrega hasta liquidar. Abono inicial mínimo obligatorio: ${lyM(f.min)} (${lyMinPct()}%).</div>
     <div class="ly-wrap">
-      <div class="ly-sec">Datos del cliente (obligatorios)</div>
+      <div class="ly-sec">Datos del cliente</div>
       ${inp('name','Nombre completo','Nombre y apellidos')}
       <div class="ly-grid2">${inp('phone','WhatsApp','10 dígitos','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono (opcional)','','type="tel" inputmode="tel"')}</div>
-      <div class="ly-grid2">${inp('refName','Contacto de referencia','Nombre (familiar o amigo)')}${inp('refPhone','Teléfono de la referencia','10 dígitos','type="tel" inputmode="tel"')}</div>
+      <div class="ly-grid2">${inp('refName','Contacto de referencia (opcional)','Nombre (familiar o amigo)')}${inp('refPhone','Teléfono de la referencia (opcional)','10 dígitos','type="tel" inputmode="tel"')}</div>
       ${inp('address','Domicilio','Calle, número, colonia, ciudad')}
       ${inp('idNote','Identificación (opcional)','Ej. INE, últimos 4 dígitos del folio')}
       <div class="ly-sec">Condiciones</div>
@@ -3697,20 +3812,19 @@ function lyRenderFormModal(){
       </div>
       <label class="ly-lab">Método del abono<select class="ly-inp" onchange="lyFormSet('method',this.value)">${LY_METHODS.map(x=>`<option ${f.method===x?'selected':''}>${x}</option>`).join('')}</select></label>
       ${inp('notes','Notas (opcional)','')}
-      <div id="ly-form-hint" class="ly-sub">${rest>=0?`Saldo restante: <b>${lyM(rest)}</b>`:''}</div>
+      <div id="ly-form-hint" class="ly-sub" style="font-size:13px;">${lyInitialHint(f.total, lyR2(f.initial))}</div>
       <div class="ly-sub"><i>${lyEsc(lyPolicy())}</i></div>
     </div>
     <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyForm=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lyCreate()">${state.lyBusy?'Guardando…':'Crear apartado y cobrar abono'}</button></div>
   </div></div>`;
 }
-function lyFormHint(){ const f = state.lyForm, el = document.getElementById('ly-form-hint'); if(f&&el) el.innerHTML = `Saldo restante: <b>${lyM(Math.max(0,lyR2(f.total-lyR2(f.initial))))}</b>`; }
+function lyFormHint(){ const f = state.lyForm, el = document.getElementById('ly-form-hint'); if(f&&el) el.innerHTML = lyInitialHint(f.total, lyR2(f.initial)); }
 async function lyCreate(){
   const f = state.lyForm; if(!f || state.lyBusy) return;
   const need = (v,msg)=>{ if(!String(v||'').trim()){ showToast(msg); return false; } return true; };
   if(!need(f.name,'Escribe el nombre del cliente')) return;
   if(lyDigits(f.phone).length<10){ showToast('El WhatsApp debe tener 10 dígitos'); return; }
-  if(!need(f.refName,'Falta el contacto de referencia')) return;
-  if(lyDigits(f.refPhone).length<10){ showToast('El teléfono de la referencia debe tener 10 dígitos'); return; }
+  if(!lyRefOk(f.refName, f.refPhone)) return;
   if(!need(f.address,'Falta el domicilio')) return;
   if(!f.dueDate || f.dueDate < lyToday()){ showToast('Elige una fecha límite válida'); return; }
   const initial = lyR2(f.initial);
@@ -3753,7 +3867,7 @@ async function lyCreate(){
     const saved = {id:ref.id, ...doc}; lyUpsertLocal(saved); state.lyLoaded = state.lyLoaded || false;
     if(f.method==='Efectivo') { await lyHost().cashMovement({type:'ingreso', amount:initial, note:'Abono inicial apartado '+lyFolio(folio), date:now, layawayId:ref.id}).catch(e=>console.error(e)); drawerPulse(); }
     clearPosCart(); state.cart = {}; state.manualDiscount = null; state.activeCustomer = null; state.quickPhone = ''; state.saleNotes = ''; state.splitAmounts = {}; state.payMethod = 'Efectivo'; state.cartCollapsed = true;
-    state.lyForm = null; state.lyReceipt = {id:ref.id, payId:pay.id}; state.lyOpen = true; state.lyDetailId = ref.id;
+    state.lyForm = null; state.lyReceipt = {id:ref.id, payId:pay.id, created:true}; state.lyOpen = true; state.lyDetailId = ref.id;
     if(!state.lyLoaded) lyLoad(true);
     showToast('Apartado '+lyFolio(folio)+' creado');
   }catch(e){
