@@ -1,0 +1,29 @@
+name: Activar código de 6 dígitos (MFA)
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo revisar · 0 = activar'
+        default: '1'
+        required: true
+      quitar_a:
+        description: 'Rescate (opcional): correo al que se le quita el código, p. ej. si perdió el celular. Vacío = activar TOTP en el proyecto'
+        default: ''
+        required: false
+permissions:
+  contents: read
+jobs:
+  mfa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: tools/mfa }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --prefix tools/mfa --no-audit --no-fund
+      - run: node tools/mfa/enable.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          QUITAR_A: ${{ inputs.quitar_a }}

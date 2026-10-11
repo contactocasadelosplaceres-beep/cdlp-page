@@ -1050,6 +1050,7 @@ const THEME_FONTS = [
 let state = {
   authChecked:false, user:null, loginEmail:"", loginPassword:"", loginError:"",
   totpRequired:false, totpVerified:false, totpSecretForChallenge:null, totpSetup:null, totpDisableCode:"", totpChallengeInput:"", totpChallengeError:"", adminSessions:undefined,
+  mfaResolver:null, mfaCode:"", mfaError:"", mfaBusy:false, mfaSetup:null, mfaRemove:null,
   changePasswordCurrent:"", changePasswordNew:"", changePasswordConfirm:"", changePasswordError:"", changePasswordSubmitting:false,
   products:[], trashProducts:[], trashOpen:false, duplicatesOpen:false, duplicateGroups:null, orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS},
   statsSubview:"general", visitsPeriod:"hoy",
@@ -2886,7 +2887,7 @@ function renderTotpChallenge(){
       <input id="totp-challenge-input" inputmode="numeric" maxlength="6" placeholder="000000" value="${state.totpChallengeInput||''}" oninput="state.totpChallengeInput=this.value" onkeydown="if(event.key==='Enter')handleTotpChallenge()">
       <div class="login-error">${state.totpChallengeError||''}</div>
       <button class="btn-primary" style="width:100%;" onclick="handleTotpChallenge()">Verificar</button>
-      <button class="logout-link" style="margin-top:12px;" onclick="handleLogout()">Cerrar sesión</button>
+      <button class="btn-tertiary" style="margin-top:12px;" onclick="handleLogout()">Cerrar sesión</button>
     </div>
   </div>`;
 }
@@ -2935,8 +2936,10 @@ function renderTotpSubpanel(){
   if(state.adminSessions===undefined){ state.adminSessions=null; loadAdminSessions(); }
   const myDeviceId = getDeviceId();
   return `
-  <div class="panel">
-    <div class="panel-title">Verificación en dos pasos</div>
+  ${renderNativeMfaPanel()}
+  ${(enabled && !mfaEnrolledFactors(state.user).length) ? `  <div class="panel">
+    <div class="panel-title">Verificación anterior (solo en el navegador)</div>
+    <div class="note-box" style="font-weight:700;">Esta es la verificación vieja. Al activar arriba el código de 6 dígitos de Firebase, esta se apaga sola.</div>
     <div class="note-box">Le agrega, a <strong>tu</strong> cuenta (${escDescHtml(state.user.email)}), un código de 6 dígitos de una app como Google Authenticator, además de tu contraseña normal. Una vez que lo confirmes en este navegador, no te lo vuelve a pedir aquí durante 30 días — pasado ese tiempo, o si inicias sesión desde otro dispositivo, te lo pide de nuevo. Cada persona con acceso al panel activa esto por separado, para su propia cuenta. <strong>Importante:</strong> como esta tienda no tiene servidor propio, esto es un obstáculo adicional en el navegador, no algo que Firebase mismo exija — alguien que ya tenga tu contraseña y sepa usar las herramientas de desarrollador del navegador podría saltárselo. Sí frena a alguien que solo consiguió tu contraseña sin más.</div>
     ${enabled ? `
       <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Activada en esta cuenta.</div>
@@ -2965,7 +2968,7 @@ function renderTotpSubpanel(){
     ` : `
       <button class="btn-primary" onclick="openTotpSetup()">Activar verificación en dos pasos</button>
     `}
-  </div>
+  </div>` : ''}
   <div class="panel">
     <div class="panel-title">Cambiar contraseña</div>
     <div class="note-box">Al cambiarla, Firebase cierra automáticamente la sesión en todos tus demás dispositivos — puede tardar hasta 1 hora en notarse ahí (así revisa Firebase si la sesión sigue siendo válida), no es instantáneo. Este dispositivo sigue con la sesión iniciada normalmente.</div>
@@ -2993,8 +2996,220 @@ function renderTotpSubpanel(){
     }
   </div>`;
 }
+/* ---- Código de 6 dígitos de Firebase (MFA nativo, TOTP) ----
+   A diferencia de la verificación anterior (que solo era una pantalla en el navegador), este
+   segundo paso lo exige Firebase mismo: con solo la contraseña, Firebase NO entrega la sesión.
+   El SDK "compat" que usa esta página no trae el generador TOTP, así que el paso final se hace
+   directo contra la API oficial de Identity Toolkit con la misma llave pública de la página;
+   el SDK sigue manejando la sesión (resolver.resolveSignIn / multiFactor.enroll). */
+const MFA_IDT = 'https://identitytoolkit.googleapis.com/v2/accounts/';
+async function mfaIdtPost(path, body){
+  const r = await fetch(MFA_IDT + path + '?key=' + encodeURIComponent(firebaseConfig.apiKey), {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(!r.ok){ const m = (j.error && j.error.message) || ('HTTP ' + r.status); const e = new Error(m); e.code = 'idt/' + m; throw e; }
+  return j;
+}
+function mfaTotpSignInAssertion(enrollmentId, code){
+  return { factorId:'totp', _process: (auth, session) => mfaIdtPost('mfaSignIn:finalize', {
+    mfaPendingCredential: session.credential, mfaEnrollmentId: enrollmentId,
+    totpVerificationInfo: { verificationCode: String(code) } }) };
+}
+function mfaTotpEnrollAssertion(sessionInfo, code){
+  return { factorId:'totp', _process: (auth, session, displayName) => mfaIdtPost('mfaEnrollment:finalize', {
+    idToken: session.credential, displayName: displayName || 'App autenticador',
+    totpVerificationInfo: { sessionInfo, verificationCode: String(code) } }) };
+}
+function mfaCleanCode(v){ return String(v||'').replace(/\D/g,'').slice(0,6); }
+function mfaErrorText(e){
+  const c = String((e && (e.code || e.message)) || '');
+  if(/INVALID_(VERIFICATION_|MFA_|TOTP_)?CODE|invalid-verification-code|INVALID_ARGUMENT/i.test(c)) return 'Código incorrecto o vencido. Escribe el que muestra tu app en este momento.';
+  if(/PENDING_CREDENTIAL|SESSION_EXPIRED|code-expired|TOTP_SESSION/i.test(c)) return 'Pasó demasiado tiempo. Vuelve a escribir tu correo y contraseña.';
+  if(/OPERATION_NOT_ALLOWED|not enabled|MFA_NOT_ENABLED|operation-not-allowed|ADMIN_ONLY/i.test(c)) return 'El código de 6 dígitos aún no está activado en Firebase. Corre primero la acción «Activar código de 6 dígitos (MFA)» en GitHub.';
+  if(/wrong-password|invalid-credential|INVALID_PASSWORD|INVALID_LOGIN/i.test(c)) return 'La contraseña no es correcta.';
+  if(/too-many-requests|TOO_MANY/i.test(c)) return 'Demasiados intentos. Espera unos minutos.';
+  if(/network|Failed to fetch/i.test(c)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.';
+  return 'No se pudo verificar (' + c.replace(/^idt\//,'').slice(0,60) + ').';
+}
+function mfaTotpHint(resolver){
+  const hints = (resolver && resolver.hints) || [];
+  return hints.find(h => h.factorId === 'totp') || hints[0] || null;
+}
+function mfaEnrolledFactors(user){
+  try{ return ((user && user.multiFactor && user.multiFactor.enrolledFactors) || []).slice(); }catch(e){ return []; }
+}
+// Inicio de sesión, paso 2: el correo y contraseña ya fueron correctos y Firebase pide el código.
+async function handleMfaLogin(){
+  const code = mfaCleanCode(state.mfaCode);
+  if(code.length !== 6){ state.mfaError = 'Escribe los 6 dígitos.'; render(); return; }
+  const hint = mfaTotpHint(state.mfaResolver);
+  if(!hint){ state.mfaError = 'Esta cuenta no tiene app de autenticación registrada.'; render(); return; }
+  state.mfaBusy = true; state.mfaError = ''; render();
+  try{
+    await state.mfaResolver.resolveSignIn(mfaTotpSignInAssertion(hint.uid, code));
+    state.mfaResolver = null; state.mfaCode = ''; state.mfaBusy = false; state.loginPassword = '';
+    // onAuthStateChanged se encarga del resto (permisos y carga de datos)
+  }catch(e){
+    console.error(e); state.mfaBusy = false; state.mfaCode = '';
+    state.mfaError = mfaErrorText(e);
+    if(/Vuelve a escribir/.test(state.mfaError)) state.mfaResolver = null;
+    render();
+  }
+}
+function cancelMfaLogin(){ state.mfaResolver = null; state.mfaCode = ''; state.mfaError = ''; state.mfaBusy = false; render(); }
+function renderMfaLoginStep(errClass, backClass){
+  return `
+      <h2>Código de verificación</h2>
+      <p>Abre tu app de autenticación (Google Authenticator, Microsoft Authenticator…) y escribe el código de 6 dígitos de <strong>Casa de los Placeres</strong>.</p>
+      <input id="mfa-login-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Código de 6 dígitos" value="${escHtml(state.mfaCode||'')}" oninput="state.mfaCode=this.value;if(mfaCleanCode(this.value).length===6&&!state.mfaBusy)handleMfaLogin()" onkeydown="if(event.key==='Enter')handleMfaLogin()" style="letter-spacing:6px;text-align:center;font-size:22px;">
+      <div class="${errClass}" role="alert">${state.mfaError||''}</div>
+      <button class="btn-primary" style="width:100%;" ${state.mfaBusy?'disabled':''} onclick="handleMfaLogin()">${state.mfaBusy?'Verificando…':'Verificar'}</button>
+      <button class="${backClass}" style="margin-top:12px;" onclick="cancelMfaLogin()">Volver</button>`;
+}
+/* Configuración → Seguridad: registrar / quitar la app de autenticación (MFA nativo). */
+let _qrLibPromise = null;
+function loadQrLib(){
+  if(window.qrcode) return Promise.resolve();
+  if(_qrLibPromise) return _qrLibPromise;
+  _qrLibPromise = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+    s.onload = ()=>res(); s.onerror = ()=>{ _qrLibPromise = null; rej(new Error('qr')); };
+    document.head.appendChild(s);
+  });
+  return _qrLibPromise;
+}
+function mfaOtpauthUrl(secret){
+  const issuer = 'Casa de los Placeres';
+  const account = (state.user && state.user.email) || 'admin';
+  return 'otpauth://totp/' + encodeURIComponent(issuer) + ':' + encodeURIComponent(account)
+    + '?secret=' + encodeURIComponent(secret) + '&issuer=' + encodeURIComponent(issuer)
+    + '&algorithm=SHA1&digits=6&period=30';
+}
+function mfaQrSvg(text){
+  try{ const q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({cellSize:5, margin:3, scalable:true}); }
+  catch(e){ return ''; }
+}
+function openMfaSetup(){ state.mfaSetup = { step:'pass', password:'', code:'', error:'', busy:false }; render(); }
+function cancelMfaSetup(){ state.mfaSetup = null; render(); }
+async function mfaSetupStart(){
+  const s = state.mfaSetup; if(!s || s.busy) return;
+  if(!s.password){ s.error = 'Escribe tu contraseña.'; render(); return; }
+  s.busy = true; s.error = ''; render();
+  try{
+    // Firebase pide haber iniciado sesión hace poco para registrar un segundo paso: se confirma la contraseña.
+    await state.user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(state.user.email, s.password));
+    const idToken = await state.user.getIdToken(true);
+    const r = await mfaIdtPost('mfaEnrollment:start', { idToken, totpEnrollmentInfo:{} });
+    const info = r.totpSessionInfo || {};
+    if(!info.sharedSecretKey || !info.sessionInfo) throw new Error('respuesta incompleta');
+    s.secret = info.sharedSecretKey; s.sessionInfo = info.sessionInfo; s.password = '';
+    s.step = 'scan'; s.busy = false;
+    try{ await loadQrLib(); }catch(e){ s.qrFailed = true; }
+    render();
+    setTimeout(()=>{ const el = document.getElementById('mfa-setup-code'); if(el) el.focus(); }, 50);
+  }catch(e){ console.error(e); s.busy = false; s.error = mfaErrorText(e); render(); }
+}
+async function mfaSetupConfirm(){
+  const s = state.mfaSetup; if(!s || s.busy) return;
+  const code = mfaCleanCode(s.code);
+  if(code.length !== 6){ s.error = 'Escribe los 6 dígitos que muestra la app.'; render(); return; }
+  s.busy = true; s.error = ''; render();
+  try{
+    await state.user.multiFactor.enroll(mfaTotpEnrollAssertion(s.sessionInfo, code), 'App autenticador');
+    state.mfaSetup = null;
+    // La verificación anterior (solo en el navegador) ya no hace falta: se apaga para no pedir dos códigos.
+    if(state.totpRequired){
+      try{ await db.collection('security_totp').doc(totpDocId(state.user.email)).update({ enabled:false, replacedByFirebaseMfa:true, updatedAt:new Date().toISOString() }); }catch(e){ console.warn(e); }
+      state.totpRequired = false;
+    }
+    showToast('Listo: Firebase pedirá el código de 6 dígitos en cada inicio de sesión');
+    render();
+  }catch(e){ console.error(e); s.busy = false; s.code = ''; s.error = mfaErrorText(e); render(); }
+}
+function openMfaRemove(){ state.mfaRemove = { password:'', code:'', error:'', busy:false }; render(); }
+function cancelMfaRemove(){ state.mfaRemove = null; render(); }
+async function mfaRemoveConfirm(){
+  const s = state.mfaRemove; if(!s || s.busy) return;
+  const code = mfaCleanCode(s.code);
+  if(!s.password || code.length !== 6){ s.error = 'Escribe tu contraseña y el código actual de la app.'; render(); return; }
+  s.busy = true; s.error = ''; render();
+  try{
+    const cred = firebase.auth.EmailAuthProvider.credential(state.user.email, s.password);
+    try{ await state.user.reauthenticateWithCredential(cred); }
+    catch(e){
+      if(e.code !== 'auth/multi-factor-auth-required' || !e.resolver) throw e;
+      const hint = mfaTotpHint(e.resolver);
+      await e.resolver.resolveSignIn(mfaTotpSignInAssertion(hint.uid, code));
+    }
+    for(const f of mfaEnrolledFactors(state.user)) await state.user.multiFactor.unenroll(f.uid);
+    state.mfaRemove = null;
+    showToast('Se quitó el código de 6 dígitos de tu cuenta');
+    render();
+  }catch(e){ console.error(e); s.busy = false; s.code = ''; s.error = mfaErrorText(e); render(); }
+}
+function renderNativeMfaPanel(){
+  const factors = mfaEnrolledFactors(state.user);
+  const s = state.mfaSetup, r = state.mfaRemove;
+  let body;
+  if(factors.length){
+    const f = factors[0];
+    const since = f.enrollmentTime ? new Date(f.enrollmentTime).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : '';
+    body = `
+      <div class="note-box" style="background:#EAF3D8;color:var(--green);font-weight:700;">${icon('check')} Activado en tu cuenta${since?' desde el '+since:''}. Firebase pide el código cada vez que alguien inicia sesión con tu correo, en el panel y en el punto de venta.</div>
+      ${r ? `
+        <div class="form-field"><label>Tu contraseña</label><input type="password" autocomplete="current-password" value="${escHtml(r.password)}" oninput="state.mfaRemove.password=this.value"></div>
+        <div class="form-field"><label>Código actual de tu app</label><input inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" value="${escHtml(r.code)}" oninput="state.mfaRemove.code=this.value" onkeydown="if(event.key==='Enter')mfaRemoveConfirm()"></div>
+        ${r.error?`<div class="login-error" role="alert">${r.error}</div>`:''}
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="cancelMfaRemove()">Cancelar</button>
+          <button class="btn-primary" style="flex:1;" ${r.busy?'disabled':''} onclick="mfaRemoveConfirm()">${r.busy?'Quitando…':'Quitar el código de mi cuenta'}</button>
+        </div>` : `
+        <button class="btn-tertiary" onclick="openMfaRemove()">Quitar (por ejemplo, si cambias de celular)</button>`}`;
+  } else if(s && s.step === 'scan'){
+    const svg = (!s.qrFailed && window.qrcode) ? mfaQrSvg(mfaOtpauthUrl(s.secret)) : '';
+    body = `
+      <div class="form-field"><label>1. En tu app de autenticación toca «+» y escanea este código</label>
+        ${svg ? `<div style="width:220px;max-width:100%;margin:6px auto 4px;background:#fff;padding:6px;border-radius:10px;" aria-label="Código QR para la app de autenticación">${svg}</div>` : `<div class="note-box">No se pudo dibujar el QR; usa la clave de abajo («Ingresar una clave de configuración», tipo «Basada en tiempo»).</div>`}
+      </div>
+      <div class="form-field"><label>¿No puedes escanear? Escribe esta clave en la app</label>
+        <div style="display:flex;gap:6px;">
+          <input value="${escHtml(s.secret)}" readonly style="flex:1;font-family:monospace;letter-spacing:1px;">
+          <button class="btn-outline" onclick="navigator.clipboard.writeText(state.mfaSetup.secret);showToast('Clave copiada')">Copiar</button>
+        </div>
+      </div>
+      <div class="form-field"><label>2. Escribe el código de 6 dígitos que aparece en la app</label>
+        <input id="mfa-setup-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" value="${escHtml(s.code)}" oninput="state.mfaSetup.code=this.value" onkeydown="if(event.key==='Enter')mfaSetupConfirm()">
+      </div>
+      ${s.error?`<div class="login-error" role="alert">${s.error}</div>`:''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="cancelMfaSetup()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" ${s.busy?'disabled':''} onclick="mfaSetupConfirm()">${s.busy?'Activando…':'Confirmar y activar'}</button>
+      </div>`;
+  } else if(s){
+    body = `
+      <div class="form-field"><label>Para empezar, confirma tu contraseña</label>
+        <input type="password" autocomplete="current-password" value="${escHtml(s.password)}" oninput="state.mfaSetup.password=this.value" onkeydown="if(event.key==='Enter')mfaSetupStart()">
+      </div>
+      ${s.error?`<div class="login-error" role="alert">${s.error}</div>`:''}
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="cancelMfaSetup()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" ${s.busy?'disabled':''} onclick="mfaSetupStart()">${s.busy?'Preparando…':'Continuar'}</button>
+      </div>`;
+  } else {
+    body = `<button class="btn-primary" onclick="openMfaSetup()">Activar código de 6 dígitos</button>`;
+  }
+  return `
+  <div class="panel">
+    <div class="panel-title">Código de 6 dígitos al iniciar sesión</div>
+    <div class="note-box">Además de tu contraseña, Firebase te pedirá el código de una app como Google Authenticator. Esta vez lo exige <strong>Firebase mismo</strong>: quien solo tenga tu contraseña no obtiene la sesión, ni con herramientas de desarrollador. Se activa para <strong>tu</strong> cuenta (${escDescHtml(state.user.email)}); cada persona con acceso lo activa en la suya. Si cambias de celular, quítalo aquí y vuelve a activarlo en el nuevo. Si lo pierdes sin poder entrar, se quita desde GitHub con la acción «Activar código de 6 dígitos (MFA)».</div>
+    ${body}
+  </div>`;
+}
 auth.onAuthStateChanged(async user=>{
   state.user = user; state.authChecked = true;
+  state.mfaSetup=null; state.mfaRemove=null; if(user){ state.mfaResolver=null; state.mfaError=""; }
   state.totpRequired=false; state.totpVerified=false; state.totpSecretForChallenge=null; state.totpSetup=null; state.totpDisableCode='';
   if(!user){ render(); return; }
   // Candado por claim: solo entra personal con claim admin o staff. getIdTokenResult(true)
@@ -3009,6 +3224,8 @@ auth.onAuthStateChanged(async user=>{
     render(); return;
   }
   state.isAdmin = _claims.admin === true;
+  // Con el código de Firebase (MFA nativo) ya activado, la verificación anterior del navegador sobra.
+  if(mfaEnrolledFactors(user).length){ recordAdminSession(user.email); if(!state.loaded) loadData(); else render(); return; }
   try{
     const doc = await db.collection('security_totp').doc(totpDocId(user.email)).get();
     if(doc.exists && doc.data().enabled){
@@ -3023,7 +3240,14 @@ auth.onAuthStateChanged(async user=>{
 async function handleLogin(){
   state.loginError='';
   try{ await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword); }
-  catch(e){ state.loginError = 'Correo o contraseña incorrectos'; render(); }
+  catch(e){
+    if(e && e.code==='auth/multi-factor-auth-required' && e.resolver){
+      state.mfaResolver = e.resolver; state.mfaCode=''; state.mfaError=''; render();
+      setTimeout(()=>{ const el=document.getElementById('mfa-login-code'); if(el) el.focus(); }, 50);
+      return;
+    }
+    state.loginError = (e && e.code==='auth/too-many-requests') ? 'Demasiados intentos. Espera unos minutos.' : 'Correo o contraseña incorrectos'; render();
+  }
 }
 function handleLogout(){ auth.signOut(); state.loaded=false; ensureNewOrderWatcher(false); try{ rcClear(); }catch(e){} }
 
@@ -4814,12 +5038,13 @@ function renderLogin(){
   <div class="login-screen">
     <button class="logout-link" style="position:absolute;top:16px;right:16px;background:rgba(0,0,0,0.15);" onclick="toggleTheme()" title="${isDarkTheme()?'Cambiar a tema claro':'Cambiar a tema oscuro'}">${isDarkTheme()?icon('sun',13):icon('moon',13)}</button>
     <div class="login-card">
+      ${state.mfaResolver ? renderMfaLoginStep('login-error','btn-tertiary') : `
       <h2>Panel de administración</h2>
       <p>Inicia sesión con tu cuenta de administrador</p>
       <input id="login-email" type="email" placeholder="Correo" value="${state.loginEmail}" oninput="state.loginEmail=this.value">
       <input id="login-pass" type="password" placeholder="Contraseña" value="${state.loginPassword}" oninput="state.loginPassword=this.value" onkeydown="if(event.key==='Enter')handleLogin()">
       <div class="login-error">${state.loginError}</div>
-      <button class="btn-primary" style="width:100%;" onclick="handleLogin()">Entrar</button>
+      <button class="btn-primary" style="width:100%;" onclick="handleLogin()">Entrar</button>`}
     </div>
   </div>`;
 }

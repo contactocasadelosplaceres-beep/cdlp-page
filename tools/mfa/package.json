@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-mfa",
+  "private": true,
+  "description": "Activa el codigo de 6 digitos (TOTP) de Firebase Authentication",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}
