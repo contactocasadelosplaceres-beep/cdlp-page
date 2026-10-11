@@ -2072,14 +2072,14 @@ function openOrderDetailModal(id){
 }
 function closeOrderDetailModal(){ state.orderDetailModal = null; state.orderDiscountEditing=false; render(); }
 function prodCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
-function isCouponEligibleItem(prodCategories, prodId, coupon){
+function isCouponEligibleItem(prodCategories, prodId, coupon, variantId){
   if(coupon.scope==='all') return true;
   if(coupon.scope==='categories') return (prodCategories||[]).some(c=>(coupon.categories||[]).includes(c));
-  if(coupon.scope==='products') return (coupon.productIds||[]).includes(prodId);
+  if(coupon.scope==='products') return refHit(coupon.productIds, prodId, variantId);
   return false;
 }
 function orderCouponEligibleItems(o, coupon){
-  return (o.items||[]).map(it=>({it, p: state.products.find(x=>x.id===it.id)})).filter(({p})=>p && isCouponEligibleItem(prodCats(p), p.id, coupon));
+  return (o.items||[]).map(it=>({it, p: state.products.find(x=>x.id===it.id)})).filter(({it,p})=>p && isCouponEligibleItem(prodCats(p), p.id, coupon, it.variantId));
 }
 function orderCouponDiscountAmount(o, coupon){
   return orderCouponEligibleItems(o, coupon).reduce((s,{it})=>s + Math.round(it.price*it.qty*(coupon.discountPercent/100)), 0);
@@ -3473,11 +3473,22 @@ function onPromoPickSearch(v){
   state.promoPickSearch = v; render();
   const i = document.getElementById('promo-pick-search'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
+// Variantes en específico dentro de la lista para promocionar (vacío = el producto completo).
+async function togglePromoVariant(pid, vid){
+  const p = state.products.find(x=>x.id===pid); if(!p) return;
+  const cur = (p.promoVariantIds||[]).filter(id=>(p.variants||[]).some(v=>v.id===id));
+  const next = cur.includes(vid) ? cur.filter(x=>x!==vid) : [...cur, vid];
+  try{ await db.collection('products').doc(pid).update({promoVariantIds: next}); p.promoVariantIds = next; render(); }
+  catch(e){ console.error(e); showToast('No se pudo actualizar'); }
+}
 function promoPickText(){
   const base = location.href.replace(/admin\.html.*$/, 'index.html');
+  const priceTxt = (list, promo)=> promo>0 && promo<list ? `${money(promo)} (antes ${money(list)})` : money(list);
   return state.products.filter(p=>p.promoCandidate).map(p=>{
-    const price = p.promoPrice>0 && p.promoPrice<(p.price||0) ? `${money(p.promoPrice)} (antes ${money(p.price)})` : money(p.price);
-    return `• ${p.name} — ${price}\n  ${base}?producto=${encodeURIComponent(p.id)}`;
+    const link = `${base}?producto=${encodeURIComponent(p.id)}`;
+    const vs = (p.variants||[]).filter(v=>(p.promoVariantIds||[]).includes(v.id));
+    if(vs.length) return vs.map(v=>{ const list = v.priceOverride>0 ? v.priceOverride : p.price; const promo = v.promoPriceOverride>0 ? v.promoPriceOverride : (v.priceOverride>0 ? 0 : p.promoPrice); return `• ${p.name} (${varLabelOf(v)}) — ${priceTxt(list, promo)}\n  ${link}`; }).join('\n');
+    return `• ${p.name} — ${priceTxt(p.price, p.promoPrice)}\n  ${link}`;
   }).join('\n');
 }
 function copyPromoPickList(){
@@ -3494,6 +3505,7 @@ function renderPromoPickModal(){
       <div class="row-main">
         <div class="row-title">${escDescHtml(p.name)}</div>
         <div class="row-sub">${p.promoPrice>0&&p.promoPrice<(p.price||0)?`<s>${money(p.price)}</s> ${money(p.promoPrice)}`:money(p.price)} · ${(p.stock||0)<=0?'agotado':`${p.stock} en stock`}${p.hidden?' · oculto en tienda':''}</div>
+        ${inList && (p.variants||[]).length ? `<div class="row-sub" style="margin-top:4px;">Variantes a promocionar (ninguna marcada = todas):</div><div class="flash-chips" style="margin:4px 0 0;">${p.variants.map(v=>{ const on = (p.promoVariantIds||[]).includes(v.id); return `<button type="button" aria-pressed="${on}" style="${on?'background:var(--primary);color:#fff;border-color:var(--primary);':''}" onclick="togglePromoVariant('${p.id}','${v.id}')">${on?'✓ ':''}${escDescHtml(varLabelOf(v))}</button>`; }).join('')}</div>` : ''}
       </div>
       <div class="row-actions">
         ${inList ? `<button class="icon-btn" title="Crear publicación" onclick="state.promoPickOpen=false;openPostModal('${p.id}')">${icon('share',15)}</button>
@@ -5279,12 +5291,21 @@ function renderAdmin(){
    local. La tienda y el POS lo aplican solos mientras esté en curso (flashFor en index.html y pos.html)
    y el precio vuelve al normal al terminar, sin tener que editar productos. */
 function flashList(){ return state.settings.flashSales || []; }
-function flashCovers(f, p){
-  const cats = (p.categories && p.categories.length) ? p.categories : [p.cat];
-  return (f.productIds||[]).includes(p.id) || (f.categories||[]).some(c=>cats.includes(c));
+function flashCatsHit(f, p){ const cats = (p.categories && p.categories.length) ? p.categories : [p.cat]; return (f.categories||[]).some(c=>cats.includes(c)); }
+// v = variante concreta (o nada): "pid" cubre todas las variantes, "pid::vid" solo esa.
+function flashCovers(f, p, v){ return refHit(f.productIds, p.id, v&&v.id) || flashCatsHit(f, p); }
+function flashCoversAny(f, p){ return refHitAny(f.productIds, p.id) || flashCatsHit(f, p); }
+function flashProducts(f){ return state.products.filter(p=>!p.isKit && flashCoversAny(f,p)); }
+// Lo que quedaría por debajo del costo, revisando cada variante cubierta con su propio precio y costo.
+function flashBelowCost(f){
+  const pct = (Number(f.percent)||0)/100, out = [];
+  flashProducts(f).forEach(p=>{
+    const vs = p.variants||[];
+    if(!vs.length){ if(p.cost>0 && p.price*(1-pct) < p.cost) out.push({name:p.name}); return; }
+    vs.filter(v=>flashCovers(f,p,v)).forEach(v=>{ const list = v.priceOverride>0 ? v.priceOverride : p.price, cost = v.cost>0 ? v.cost : p.cost; if(cost>0 && list*(1-pct) < cost) out.push({name:p.name+' ('+varLabelOf(v)+')'}); });
+  });
+  return out;
 }
-function flashProducts(f){ return state.products.filter(p=>!p.isKit && flashCovers(f,p)); }
-function flashBelowCost(f){ return flashProducts(f).filter(p=>p.cost>0 && p.price*(1-(Number(f.percent)||0)/100) < p.cost); }
 function flashStatus(f){
   if(f.active===false) return 'pausada';
   const now = Date.now(), s = new Date(f.start).getTime(), e = new Date(f.end).getTime();
@@ -5308,7 +5329,7 @@ function closeFlashModal(){ state.flashModal = null; render(); }
 function toggleFlashProduct(pid, checked){
   const f = state.flashModal; if(!f) return;
   if(checked){ if(!f.productIds.includes(pid)) f.productIds.push(pid); } else f.productIds = f.productIds.filter(x=>x!==pid);
-  render();
+  render(); const i = document.getElementById('fl-search'); if(i && checked){ i.focus(); }
 }
 function toggleFlashCategory(cat, checked){
   const f = state.flashModal; if(!f) return;
@@ -5326,7 +5347,6 @@ function renderFlashModal(){
   const cands = q ? searchProducts(q, state.products.filter(p=>!p.isKit)).slice(0,12) : [];
   const covered = flashProducts(f);
   const below = flashBelowCost(f);
-  const picked = f.productIds.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   const secBase = pmSection('fl_base','La oferta',{icon:'clock', body:`
     <div class="form-field"><label>Nombre (lo ve la clienta)</label><input id="fl-name" value="${escDescHtml(f.name||'')}" placeholder="Ej. Relámpago de viernes" oninput="state.flashModal.name=this.value"></div>
     <div class="form-field"><label>Descuento (%)</label><input id="fl-pct" type="number" inputmode="decimal" min="1" max="90" value="${f.percent}" oninput="state.flashModal.percent=this.value" onchange="render()"></div>`});
@@ -5340,8 +5360,9 @@ function renderFlashModal(){
       <div class="pm-chips">${(state.settings.categories||[]).map(c=>`<label><input type="checkbox" ${(f.categories||[]).includes(c)?'checked':''} onchange="toggleFlashCategory('${c.replace(/'/g,"\\'")}',this.checked)"> ${escDescHtml(c)}</label>`).join('')}</div>
     </div>
     <div class="form-field"><label>Productos sueltos</label><input id="fl-search" placeholder="Buscar por nombre…" value="${escDescHtml(state.flashProductSearch||'')}" oninput="state.flashProductSearch=this.value;render()"></div>
-    ${cands.length ? `<div style="max-height:170px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">${cands.map(p=>`<label class="list-row" style="margin:0;border-radius:0;border:none;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" ${(f.productIds||[]).includes(p.id)?'checked':''} onchange="toggleFlashProduct('${p.id}',this.checked)"><div class="row-main"><div class="row-title" style="font-size:13px;">${escDescHtml(p.name)}</div></div></label>`).join('')}</div>` : ''}
-    ${picked.length ? `<div class="flash-chips">${picked.map(p=>`<button type="button" onclick="toggleFlashProduct('${p.id}',false)">${escDescHtml(p.name.length>26?p.name.slice(0,25)+'…':p.name)} ✕</button>`).join('')}</div>` : ''}
+    <div class="row-sub" style="margin:-4px 0 6px;">Si el producto tiene variantes, puedes marcarlo completo o solo la(s) variante(s) que quieras.</div>
+    ${refMultiPickerHtml(cands, f.productIds, 'toggleFlashProduct')}
+    ${(f.productIds||[]).length ? refChipsHtml(f.productIds, 'toggleFlashProduct') : ''}
     ${below.length ? `<div class="note-box" style="background:#F6DDE3;color:#7A2E45;">${icon('alert-triangle',14)} Con ese descuento ${below.length} producto${below.length===1?'':'s'} se vender${below.length===1?'ía':'ían'} por debajo del costo: ${escDescHtml(below.slice(0,3).map(p=>p.name).join(', '))}${below.length>3?'…':''}.</div>` : ''}`});
   return `<div class="modal-overlay"><div class="modal" style="max-width:560px;">
     <h3>${flashList().some(x=>x.id===f.id)?'Editar':'Nueva'} oferta relámpago</h3>
@@ -10807,6 +10828,7 @@ function toggleWholesaleProduct(pid, checked){
   const t = state.wholesaleModal;
   if(checked){ if(!t.productIds.includes(pid)) t.productIds.push(pid); }
   else{ t.productIds = t.productIds.filter(id=>id!==pid); }
+  render();
 }
 async function saveWholesaleTier(){
   const t = state.wholesaleModal;
@@ -10901,7 +10923,7 @@ function renderMayoreo(){
               <button class="icon-btn danger" onclick="deleteWholesaleTier('${t.id}')">${icon('trash')}</button>
             </div>
           </div>
-          <div class="row-sub">${t.discountPercent}% de descuento · ${t.scope==='all'?'Toda la tienda':t.scope==='categories'?`Categorías: ${(t.categories||[]).join(', ')||'—'}`:`${(t.productIds||[]).length} producto(s) seleccionado(s)`} · Mínimo: ${t.minType==='amount'?money(t.minValue):`${t.minValue} pieza(s)`}</div>
+          <div class="row-sub">${t.discountPercent}% de descuento · ${t.scope==='all'?'Toda la tienda':t.scope==='categories'?`Categorías: ${(t.categories||[]).join(', ')||'—'}`:`Productos: ${escDescHtml(refPickedSummary(t.productIds))}`} · Mínimo: ${t.minType==='amount'?money(t.minValue):`${t.minValue} pieza(s)`}</div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
             <input readonly value="${wholesaleLink(t.code)}" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:11.5px;color:var(--ink-soft);">
             <button class="btn-outline" style="padding:8px 12px;white-space:nowrap;" onclick="copyWholesaleLink('${t.code}')">Copiar enlace</button>
@@ -10945,16 +10967,8 @@ function renderWholesaleModal(){
         <div class="form-field"><label>Buscar productos para incluir</label>
           <input id="wholesale-product-search-input" placeholder="Nombre del producto..." value="${state.wholesaleProductSearch}" oninput="state.wholesaleProductSearch=this.value;render()">
         </div>
-        ${candidates.length>0 ? `
-          <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${candidates.map(p=>`
-              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
-                <input type="checkbox" ${(t.productIds||[]).includes(p.id)?'checked':''} onchange="toggleWholesaleProduct('${p.id}',this.checked)">
-                <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div></div>
-              </label>`).join('')}
-          </div>
-        ` : ''}
-        <div class="panel-sub">${(t.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
+        ${refMultiPickerHtml(candidates, t.productIds, 'toggleWholesaleProduct')}
+        ${refChipsHtml(t.productIds, 'toggleWholesaleProduct')}
       ` : ''}`});
   const secMin = pmSection('wt_minimo','Compra mínima',{icon:'dollar-sign', hint:'Desde cuánto se activa este precio', body:`
       <div class="two-col-keep">
@@ -11011,6 +11025,7 @@ function toggleCouponProduct(pid, checked){
   const c = state.couponModal;
   if(checked){ if(!c.productIds.includes(pid)) c.productIds.push(pid); }
   else{ c.productIds = c.productIds.filter(id=>id!==pid); }
+  render();
 }
 async function saveCoupon(){
   const c = state.couponModal;
@@ -11076,7 +11091,7 @@ function renderCupones(){
               <button class="icon-btn danger" onclick="deleteCoupon('${c.id}')">${icon('trash')}</button>
             </div>
           </div>
-          <div class="row-sub">${c.discountPercent}% de descuento · ${c.scope==='all'?'Toda la tienda':c.scope==='categories'?`Categorías: ${(c.categories||[]).join(', ')||'—'}`:`${(c.productIds||[]).length} producto(s)`}</div>
+          <div class="row-sub">${c.discountPercent}% de descuento · ${c.scope==='all'?'Toda la tienda':c.scope==='categories'?`Categorías: ${(c.categories||[]).join(', ')||'—'}`:`Productos: ${escDescHtml(refPickedSummary(c.productIds))}`}</div>
           <div class="row-sub">Vigencia: ${c.startDate||c.endDate?`${c.startDate||'sin inicio'} — ${c.endDate||'sin fin'}`:'Indeterminada'} · Usos: ${couponUsedCount(c.code)}${c.maxUses>0?` de ${c.maxUses}`:' (ilimitado)'}</div>
         </div>
       `;}).join('')}
@@ -11115,16 +11130,8 @@ function renderCouponModal(){
         <div class="form-field"><label>Buscar productos para incluir</label>
           <input id="coupon-product-search-input" placeholder="Nombre del producto..." value="${state.couponProductSearch}" oninput="state.couponProductSearch=this.value;render()">
         </div>
-        ${candidates.length>0 ? `
-          <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${candidates.map(p=>`
-              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
-                <input type="checkbox" ${(c.productIds||[]).includes(p.id)?'checked':''} onchange="toggleCouponProduct('${p.id}',this.checked)">
-                <div class="row-main"><div class="row-title" style="font-size:13px;">${p.name}</div></div>
-              </label>`).join('')}
-          </div>
-        ` : ''}
-        <div class="panel-sub">${(c.productIds||[]).length} producto(s) seleccionado(s) actualmente.</div>
+        ${refMultiPickerHtml(candidates, c.productIds, 'toggleCouponProduct')}
+        ${refChipsHtml(c.productIds, 'toggleCouponProduct')}
       ` : ''}`});
   const secLimits = pmSection('cp_limites','Vigencia y límites',{icon:'calendar', hint:'Todo es opcional', body:`
       <div class="two-col">
@@ -11134,7 +11141,7 @@ function renderCouponModal(){
       <div class="form-field"><label>Límite de usos (0 = ilimitado)</label><input id="cp-maxuses" type="number" inputmode="numeric" value="${c.maxUses||0}" oninput="state.couponModal.maxUses=this.value"></div>
       <label class="pm-switch">
         <span class="pm-switch-txt">Un solo uso por cliente<small>Por teléfono — útil para cupones de "primera compra"</small></span>
-        <input id="cp-single-use" type="checkbox" ${c.singleUsePerCustomer?'checked':''}>
+        <input id="cp-single-use" type="checkbox" ${c.singleUsePerCustomer?'checked':''} onchange="state.couponModal.singleUsePerCustomer=this.checked">
       </label>
       ${couponUsedCount(c.code)>0 ? `<div class="panel-sub" style="margin:8px 0 0;">Ya se ha usado ${couponUsedCount(c.code)} vez(veces).</div>` : ''}`});
   return `
@@ -11189,7 +11196,11 @@ function togglePromoProduct(pid, checked){
   const p = state.promoModal;
   if(checked){ if(!p.productIds.includes(pid)) p.productIds.push(pid); }
   else{ p.productIds = p.productIds.filter(id=>id!==pid); }
+  render();
 }
+function setPromoGiftRef(ref){ state.promoModal.giftProductId = ref; render(); }
+function setPromoTriggerRef(ref){ state.promoModal.triggerProductId = ref; render(); }
+function setPromoDiscountRef(ref){ state.promoModal.discountProductId = ref; render(); }
 function addPromoTier(){ state.promoModal.tiers.push({minQty:0, discountPercent:0}); render(); }
 function removePromoTier(idx){ state.promoModal.tiers.splice(idx,1); render(); }
 function setPromoTier(idx, field, value){ state.promoModal.tiers[idx][field] = Number(value)||0; }
@@ -11217,6 +11228,7 @@ async function savePromotion(){
   if(type==='gift'){
     updated.minAmount = Number(document.getElementById('pr-gift-minamount').value)||0;
     if(!updated.giftProductId){ showToast('Elige el producto de regalo'); return; }
+    { const gp = refProduct(updated.giftProductId); if(gp && (gp.variants||[]).length && !refSplit(updated.giftProductId).vid){ showToast('Elige qué variante se regala'); return; } }
   }
   if(type==='cross_sell'){
     updated.discountPercent = Number(document.getElementById('pr-cross-discount').value)||0;
@@ -11245,22 +11257,16 @@ function promoSummary(p){
   if(p.type==='buyxpayy') return `Lleva ${p.buyQty} y paga ${p.payQty}`;
   if(p.type==='progressive') return (p.tiers||[]).map(t=>`${t.minQty}+: ${t.discountPercent}%`).join(' · ');
   if(p.type==='cart_discount') return `${p.discountPercent}% de descuento${p.minAmount>0?` desde ${money(p.minAmount)}`:''}`;
-  if(p.type==='gift'){ const g = state.products.find(x=>x.id===p.giftProductId); return `Regalo: ${g?g.name:'—'}${p.minAmount>0?` desde ${money(p.minAmount)}`:''}`; }
-  if(p.type==='cross_sell'){ const a=state.products.find(x=>x.id===p.triggerProductId), b=state.products.find(x=>x.id===p.discountProductId); return `${a?a.name:'—'} + ${b?b.name:'—'}: ${p.discountPercent}% en el segundo`; }
+  if(p.type==='gift'){ return `Regalo: ${refLabel(p.giftProductId)||'—'}${p.minAmount>0?` desde ${money(p.minAmount)}`:''}`; }
+  if(p.type==='cross_sell'){ return `${refLabel(p.triggerProductId)||'—'} + ${refLabel(p.discountProductId)||'—'}: ${p.discountPercent}% en el segundo`; }
   return '';
 }
 // Avisa en el panel cuando el producto clave de una promoción de regalo/cruce ya no tiene
 // existencias — la tienda (index.html) ya la oculta sola en ese caso (ver activeGift y
 // crossSellSuggestions), pero Ale también debe verlo aquí para reponer o desactivarla.
 function promoOutOfStockWarning(p){
-  if(p.type==='gift'){
-    const g = state.products.find(x=>x.id===p.giftProductId);
-    if(g && g.stock<=0) return `El producto de regalo ("${g.name}") está agotado`;
-  }
-  if(p.type==='cross_sell'){
-    const b = state.products.find(x=>x.id===p.discountProductId);
-    if(b && b.stock<=0) return `El producto con descuento ("${b.name}") está agotado`;
-  }
+  if(p.type==='gift' && refProduct(p.giftProductId) && refStock(p.giftProductId)<=0) return `El producto de regalo ("${refLabel(p.giftProductId)}") está agotado`;
+  if(p.type==='cross_sell' && refProduct(p.discountProductId) && refStock(p.discountProductId)<=0) return `El producto con descuento ("${refLabel(p.discountProductId)}") está agotado`;
   return '';
 }
 function renderPromociones(){
@@ -11314,16 +11320,8 @@ function renderPromoScopePicker(p){
       <div class="form-field"><label>Buscar productos</label>
         <input id="promo-product-search-input" placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
       </div>
-      ${candidates.length>0 ? `
-        <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-          ${candidates.map(pr=>`
-            <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
-              <input type="checkbox" ${(p.productIds||[]).includes(pr.id)?'checked':''} onchange="togglePromoProduct('${pr.id}',this.checked)">
-              <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
-            </label>`).join('')}
-        </div>
-      ` : ''}
-      <div class="panel-sub">${(p.productIds||[]).length} producto(s) seleccionado(s).</div>
+      ${refMultiPickerHtml(candidates, p.productIds, 'togglePromoProduct')}
+      ${refChipsHtml(p.productIds, 'togglePromoProduct')}
     ` : ''}
   `;
 }
@@ -11371,16 +11369,8 @@ function renderPromoModal(){
         <div class="form-field"><label>Buscar producto de regalo</label>
           <input id="promo-product-search-input" placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
         </div>
-        ${(state.promoProductSearch||'').trim() ? `
-          <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${searchProducts(state.promoProductSearch, state.products).slice(0,15).map(pr=>`
-              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
-                <input type="radio" name="pr-gift-radio" ${p.giftProductId===pr.id?'checked':''} onchange="state.promoModal.giftProductId='${pr.id}'">
-                <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
-              </label>`).join('')}
-          </div>
-        ` : ''}
-        <div class="panel-sub">Regalo elegido: ${p.giftProductId ? (state.products.find(x=>x.id===p.giftProductId)||{}).name || '—' : 'ninguno'}</div>
+        ${(state.promoProductSearch||'').trim() ? refSinglePickerHtml(searchProducts(state.promoProductSearch, state.products).slice(0,15), p.giftProductId, 'setPromoGiftRef', false) : ''}
+        <div class="panel-sub">Regalo elegido: <strong>${p.giftProductId ? escDescHtml(refLabel(p.giftProductId)||'—') : 'ninguno'}</strong>${p.giftProductId && !refSplit(p.giftProductId).vid && (refProduct(p.giftProductId)||{}).variants && refProduct(p.giftProductId).variants.length ? ' <span style="color:var(--rose);">— elige la variante que se regala</span>' : ''}</div>
       ` : ''}
 
       ${p.type==='cross_sell' ? `
@@ -11388,29 +11378,13 @@ function renderPromoModal(){
         <div class="form-field"><label>Buscar producto A (el que dispara la promo)</label>
           <input id="promo-product-search-input" placeholder="Nombre del producto..." value="${state.promoProductSearch}" oninput="state.promoProductSearch=this.value;render()">
         </div>
-        ${(state.promoProductSearch||'').trim() ? `
-          <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${searchProducts(state.promoProductSearch, state.products).slice(0,10).map(pr=>`
-              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
-                <input type="radio" name="pr-trigger-radio" ${p.triggerProductId===pr.id?'checked':''} onchange="state.promoModal.triggerProductId='${pr.id}'">
-                <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
-              </label>`).join('')}
-          </div>
-        ` : ''}
-        <div class="panel-sub" style="margin-bottom:10px;">Producto A: ${p.triggerProductId ? (state.products.find(x=>x.id===p.triggerProductId)||{}).name || '—' : 'ninguno'}</div>
+        ${(state.promoProductSearch||'').trim() ? refSinglePickerHtml(searchProducts(state.promoProductSearch, state.products).slice(0,10), p.triggerProductId, 'setPromoTriggerRef', true) : ''}
+        <div class="panel-sub" style="margin-bottom:10px;">Producto A: <strong>${p.triggerProductId ? escDescHtml(refLabel(p.triggerProductId)||'—') : 'ninguno'}</strong></div>
         <div class="form-field"><label>Buscar producto B (el que recibe el descuento)</label>
           <input id="promo-product-search2-input" placeholder="Nombre del producto..." value="${state.promoProductSearch2}" oninput="state.promoProductSearch2=this.value;render()">
         </div>
-        ${(state.promoProductSearch2||'').trim() ? `
-          <div style="max-height:130px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;">
-            ${searchProducts(state.promoProductSearch2, state.products).slice(0,10).map(pr=>`
-              <label class="list-row" style="margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;cursor:pointer;">
-                <input type="radio" name="pr-discountprod-radio" ${p.discountProductId===pr.id?'checked':''} onchange="state.promoModal.discountProductId='${pr.id}'">
-                <div class="row-main"><div class="row-title" style="font-size:13px;">${pr.name}</div></div>
-              </label>`).join('')}
-          </div>
-        ` : ''}
-        <div class="panel-sub">Producto B: ${p.discountProductId ? (state.products.find(x=>x.id===p.discountProductId)||{}).name || '—' : 'ninguno'}</div>
+        ${(state.promoProductSearch2||'').trim() ? refSinglePickerHtml(searchProducts(state.promoProductSearch2, state.products).slice(0,10), p.discountProductId, 'setPromoDiscountRef', true) : ''}
+        <div class="panel-sub">Producto B: <strong>${p.discountProductId ? escDescHtml(refLabel(p.discountProductId)||'—') : 'ninguno'}</strong></div>
       ` : ''}
   `});
   const secDates = pmSection('pr_vigencia','Vigencia',{icon:'calendar', hint:'Opcional: déjalo vacío para que no caduque', body:`
@@ -12011,13 +11985,13 @@ async function deleteSupplierDoc(id){
 // lo cancelado) — la base real para sugerir cuánto pedir. Como se calcula sobre state.orders
 // (siempre la venta más reciente que ya está cargada), la sugerencia se recalcula sola cada
 // vez que se usa: no es una foto fija de un solo momento.
-function salesVelocity(productId, days){
+function salesVelocity(productId, days, variantId){
   const cutoff = Date.now() - days*24*60*60*1000;
   let qty = 0;
   state.orders.forEach(o=>{
     if(o.status==='Cancelado') return;
     if(new Date(o.date).getTime() < cutoff) return;
-    (o.items||[]).forEach(it=>{ if(it.id===productId) qty += Number(it.qty)||0; });
+    (o.items||[]).forEach(it=>{ if(it.id===productId && (!variantId || it.variantId===variantId)) qty += Number(it.qty)||0; });
   });
   return qty;
 }
@@ -12027,12 +12001,12 @@ function salesVelocity(productId, days){
 // hay con qué calcular un ritmo real — se sugiere un mínimo conservador de 3 en vez de un
 // número inventado, para no sobrepedir algo que no sabes si se va a mover.
 const RESTOCK_LOOKBACK_DAYS = 60, RESTOCK_TARGET_DAYS = 30, RESTOCK_MIN_SALES_TO_TRUST = 2;
-function suggestRestockQty(p){
-  const sold = salesVelocity(p.id, RESTOCK_LOOKBACK_DAYS);
-  if(sold < RESTOCK_MIN_SALES_TO_TRUST) return 3;
+function suggestRestockQty(p, v){
+  const sold = salesVelocity(p.id, RESTOCK_LOOKBACK_DAYS, v ? v.id : null);
+  if(sold < RESTOCK_MIN_SALES_TO_TRUST) return v ? 2 : 3;
   const dailyRate = sold / RESTOCK_LOOKBACK_DAYS;
   const target = Math.ceil(dailyRate * RESTOCK_TARGET_DAYS);
-  return Math.max(1, target - (p.stock||0));
+  return Math.max(1, target - ((v ? v.stock : p.stock)||0));
 }
 async function addProductToRestock(productId, qty, variantId){
   const p = state.products.find(x=>x.id===productId);
@@ -12049,7 +12023,7 @@ async function addProductToRestock(productId, qty, variantId){
     }
   }
   const existing = state.restockItems.find(r=>r.id===docId);
-  const payload = { productId, variantId: variantId||null, productName:p.name + (rv0 ? ` — ${varLabelOf(rv0)}` : ''), productCat:p.cat||'', qty: existing ? existing.qty : (qty||suggestRestockQty(p)), supplierId: existing ? existing.supplierId : '', addedAt: existing ? existing.addedAt : new Date().toISOString() };
+  const payload = { productId, variantId: variantId||null, productName:p.name + (rv0 ? ` — ${varLabelOf(rv0)}` : ''), productCat:p.cat||'', qty: existing ? existing.qty : (qty||suggestRestockQty(p, rv0)), supplierId: existing ? existing.supplierId : '', addedAt: existing ? existing.addedAt : new Date().toISOString() };
   try{
     await db.collection('restockItems').doc(docId).set(payload);
     if(existing) Object.assign(existing, payload);
@@ -12190,7 +12164,8 @@ async function markSupplierOrderDone(supplierId){
 }
 function renderReabasto(){
   const q = (state.restockAddSearch||'').trim().toLowerCase();
-  const searchResults = q ? searchProducts(q, state.products.filter(p=>!state.restockItems.find(r=>r.productId===p.id))).slice(0,8) : [];
+  const inRestock = (pid, vid)=>state.restockItems.some(r=>r.productId===pid && (r.variantId||null)===(vid||null));
+  const searchResults = q ? searchProducts(q, state.products.filter(p=>(p.variants||[]).length ? p.variants.some(v=>!inRestock(p.id,v.id)) : !inRestock(p.id,null))).slice(0,8) : [];
   const groups = [...state.suppliers.map(s=>({id:s.id, name:s.name})), {id:'', name:'Sin proveedor asignado'}];
   // Inversión estimada: solo suma los productos que tienen costo registrado (Productos → editar
   // → "Costo"). Los que no lo tienen se cuentan aparte, para que sepas que ese total es parcial
@@ -12230,8 +12205,10 @@ function renderReabasto(){
           ${searchResults.map(p=>`
             <div class="list-row" style="margin:0;">
               ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · stock: ${p.stock} · sugerido: ${suggestRestockQty(p)}</div></div>
-              <button class="btn-outline" onclick="addProductToRestock('${p.id}')">+ Agregar</button>
+              <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat} · stock: ${p.stock}${(p.variants||[]).length?'':` · sugerido: ${suggestRestockQty(p)}`}</div>
+                ${(p.variants||[]).length ? `<div class="flash-chips" style="margin:6px 0 0;">${p.variants.map(v=>inRestock(p.id,v.id) ? `<button type="button" disabled style="opacity:.55;">${escDescHtml(varLabelOf(v))} · en la lista</button>` : `<button type="button" onclick="addProductToRestock('${p.id}', null, '${v.id}')">+ ${escDescHtml(varLabelOf(v))} <span style="font-weight:500;color:var(--ink-soft);">(${Number(v.stock)||0})</span></button>`).join('')}</div>` : ''}
+              </div>
+              ${(p.variants||[]).length ? '' : `<button class="btn-outline" onclick="addProductToRestock('${p.id}')">+ Agregar</button>`}
             </div>
           `).join('')}
         </div>
@@ -12248,7 +12225,8 @@ function renderReabasto(){
           <div class="panel-title">${g.name} <span class="row-sub">(${items.length} producto${items.length===1?'':'s'}${groupTotal>0?` · ${money(groupTotal)}`:''})</span></div>
           ${items.map(r=>{
             const p = state.products.find(x=>x.id===r.productId);
-            const suggested = p ? suggestRestockQty(p) : null;
+            const rv = p && r.variantId ? (p.variants||[]).find(v=>v.id===r.variantId) : null;
+            const suggested = p ? suggestRestockQty(p, rv) : null;
             return `
             <div class="list-row">
               <div class="row-main"><div class="row-title">${r.productName}</div><div class="row-sub">${r.productCat||''}${p&&!(p.cost>0)?' · sin costo registrado':''}</div></div>
@@ -13527,6 +13505,47 @@ function removePromoImage(){
 
 /* Selector con variantes: cada producto con variantes muestra una fila por variante.
    Referencias: "pid" = producto completo; "pid::vid" = esa variante en específico. */
+/* ---- Referencias a producto o a una variante en específico ----
+   En listas de productos de ofertas, cupones, mayoreo, promociones, recompra, etc. se guarda:
+   "pid" = el producto completo (todas sus variantes) · "pid::vid" = solo esa variante.
+   La tienda y el POS entienden ambos formatos (refHit). */
+function refSplit(ref){ const parts = String(ref||'').split('::'); return {pid:parts[0], vid:parts[1]||null}; }
+function refHit(list, pid, vid){ list = list||[]; return list.includes(pid) || (!!vid && list.includes(pid+'::'+vid)); }
+function refHitAny(list, pid){ list = list||[]; return list.includes(pid) || list.some(r=>String(r).indexOf(pid+'::')===0); }
+function refProduct(ref){ return state.products.find(x=>x.id===refSplit(ref).pid) || null; }
+function refVariant(ref){ const {vid} = refSplit(ref); const p = refProduct(ref); return p && vid ? ((p.variants||[]).find(v=>v.id===vid)||null) : null; }
+function refLabel(ref){
+  const {vid} = refSplit(ref); const p = refProduct(ref); if(!p) return '';
+  if(!vid) return p.name + ((p.variants||[]).length ? ' (todas las variantes)' : '');
+  const v = refVariant(ref); return v ? p.name+' ('+varLabelOf(v)+')' : '';
+}
+function refStock(ref){ const v = refVariant(ref), p = refProduct(ref); return v ? (Number(v.stock)||0) : (p ? (Number(p.stock)||0) : 0); }
+function refsValidOnly(list){ return (list||[]).filter(refValid); }
+function refJs(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+// Lista con casillas: una fila por producto ("todas las variantes") y una por cada variante.
+function refMultiPickerHtml(cands, ids, fn){
+  if(!cands.length) return '';
+  return `<div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px;margin-bottom:8px;">${cands.map(p=>renderRefPickerRows(p, ids||[], fn)).join('')}</div>`;
+}
+// Lo ya elegido, como chips con ✕ para quitar.
+function refChipsHtml(ids, fn){
+  const valid = refsValidOnly(ids);
+  if(!valid.length) return `<div class="panel-sub">Ningún producto elegido todavía.</div>`;
+  return `<div class="flash-chips">${valid.map(r=>{ const l = refLabel(r); return `<button type="button" title="Quitar" onclick="${fn}('${refJs(r)}',false)">${escDescHtml(l.length>40?l.slice(0,39)+'…':l)} ✕</button>`; }).join('')}</div>`;
+}
+// Selección de uno solo (regalo, producto A / B): botones por producto y por variante.
+// allowWhole=false obliga a elegir variante cuando el producto tiene variantes (ej. el regalo).
+function refSinglePickerHtml(cands, selected, setFn, allowWhole){
+  if(!cands.length) return '';
+  const row = (ref, label, sub, disabled)=>`<label class="checkbox-row"${sub?' style="margin-left:22px;"':''}${disabled?' aria-disabled="true"':''}><input type="radio" name="${setFn}" ${selected===ref?'checked':''} ${disabled?'disabled':''} onchange="${setFn}('${refJs(ref)}')"><span>${label}</span></label>`;
+  return `<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px;margin-bottom:8px;">${cands.map(p=>{
+    const vs = p.variants||[];
+    if(!vs.length) return row(p.id, escapeHtmlAudit(p.name)+(Number(p.stock)>0?'':' <span style="color:var(--danger,#c0392b);font-size:12px;">· agotado</span>'));
+    return (allowWhole ? row(p.id, escapeHtmlAudit(p.name)+' <span style="color:var(--ink-soft);font-size:12px;">(cualquier variante)</span>') : `<div class="row-sub" style="padding:6px 4px 2px;font-weight:700;">${escapeHtmlAudit(p.name)} — elige la variante:</div>`)
+      + vs.map(v=>row(p.id+'::'+v.id, escapeHtmlAudit(varLabelOf(v))+(Number(v.stock)>0?'':' <span style="color:var(--danger,#c0392b);font-size:12px;">· agotada</span>'), true)).join('');
+  }).join('')}</div>`;
+}
+function refPickedSummary(list){ const v = refsValidOnly(list); return v.length ? v.slice(0,3).map(refLabel).join(', ')+(v.length>3?` y ${v.length-3} más`:'') : '—'; }
 function refValid(ref){
   const [pid, vid] = String(ref).split('::');
   const p = state.products.find(x=>x.id===pid);
@@ -13676,10 +13695,12 @@ function computeRepurchaseCandidates(){
     const d = new Date(o.date).getTime();
     if(isNaN(d)) return;
     (o.items||[]).forEach(it=>{
-      if(!it.id || !ids.includes(it.id)) return;
-      const key = phone+'|'+it.id;
+      if(!it.id || !refHit(ids, it.id, it.variantId)) return;
+      // Si se marcó una variante en específico, el recordatorio es por esa variante.
+      const ref = (it.variantId && ids.includes(it.id+'::'+it.variantId)) ? it.id+'::'+it.variantId : it.id;
+      const key = phone+'|'+ref;
       if(!lastByPhoneProduct[key] || d > lastByPhoneProduct[key].date){
-        lastByPhoneProduct[key] = {date:d, phone, name, productId: it.id};
+        lastByPhoneProduct[key] = {date:d, phone, name, productId: ref};
       }
     });
   });
@@ -13691,7 +13712,7 @@ function computeRepurchaseCandidates(){
       if(!notifiedAt) return true;
       return (Date.now() - new Date(notifiedAt).getTime()) >= days*86400000;
     })
-    .map(x=>({...x, product: state.products.find(p=>p.id===x.productId), daysSince: Math.floor((Date.now()-x.date)/86400000)}))
+    .map(x=>{ const pr = refProduct(x.productId); return {...x, product: pr ? {...pr, name: refSplit(x.productId).vid ? (refLabel(x.productId)||pr.name) : pr.name} : null, daysSince: Math.floor((Date.now()-x.date)/86400000)}; })
     .filter(x=>x.product)
     .sort((a,b)=>b.daysSince-a.daysSince);
 }
@@ -13723,11 +13744,7 @@ function renderRepurchaseSubpanel(){
     <input id="repurchase-search" placeholder="Buscar producto por nombre..." value="${state.repurchaseProductSearch||''}" oninput="state.repurchaseProductSearch=this.value;render()" style="margin:10px 0;">
     <div style="max-height:240px;overflow-y:auto;margin-bottom:16px;">
       ${results.length===0 ? `<div class="empty-state">${q?'Sin resultados.':'Aún no has marcado ninguno — busca arriba para empezar.'}</div>` :
-        results.map(p=>`
-          <label class="checkbox-row">
-            <input type="checkbox" ${ids.includes(p.id)?'checked':''} onchange="toggleRepurchaseProduct('${p.id}', this.checked)">
-            <span>${p.name}</span>
-          </label>`).join('')}
+        results.map(p=>renderRefPickerRows(p, ids, 'toggleRepurchaseProduct')).join('')}
     </div>
     <div class="panel-title">Clientes para contactar (${candidates.length})</div>
     ${candidates.length===0 ? `<div class="empty-state">Nadie está pendiente de recompra por ahora.</div>` :

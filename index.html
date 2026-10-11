@@ -1152,16 +1152,38 @@ function icon(name, size){
    precio normal vuelve solo (no se modifica ningún producto). */
 function flashLive(){ return (state.settings.flashSales||[]).filter(f=>f.active!==false && f.start && f.end && new Date(f.end).getTime()>Date.now()); }
 function flashSalesActive(){ const now=Date.now(); return flashLive().filter(f=>f.percent>0 && new Date(f.start).getTime()<=now); }
-function flashCovers(f,p){ const cats=(p.categories&&p.categories.length)?p.categories:[p.cat]; return (f.productIds||[]).includes(p.id) || (f.categories||[]).some(c=>cats.includes(c)); }
-function flashFor(p){
+/* Referencias de producto en ofertas/cupones/mayoreo/promociones: "pid" = todo el producto,
+   "pid::vid" = solo esa variante. v = la variante concreta que se está cobrando (o nada). */
+function refHit(list, pid, vid){ list = list||[]; return list.includes(pid) || (!!vid && list.includes(pid+'::'+vid)); }
+function refHitAny(list, pid){ list = list||[]; return list.includes(pid) || list.some(r=>String(r).indexOf(pid+'::')===0); }
+// En una tarjeta "de vitrina" de una variante (variantDisplayProduct), su variante es _fv.
+function soleVariant(p){ return p && p._fv ? (p.variants||[]).find(x=>x.id===p._fv)||null : null; }
+function flashCatsHit(f,p){ const cats=(p.categories&&p.categories.length)?p.categories:[p.cat]; return (f.categories||[]).some(c=>cats.includes(c)); }
+function flashCovers(f,p,v){ return refHit(f.productIds, p.id, v&&v.id) || flashCatsHit(f,p); }
+function flashCoversAny(f,p){ return refHitAny(f.productIds, p.id) || flashCatsHit(f,p); }
+function flashFor(p, v){
   if(!p || p.isKit) return null;
-  const f = flashSalesActive().find(x=>flashCovers(x,p)); if(!f) return null;
-  const price = Math.round(p.price*(1-f.percent/100)*100)/100;
-  return price<p.price ? {sale:f, price} : null;
+  v = v || soleVariant(p);
+  const f = flashSalesActive().find(x=>flashCovers(x,p,v)); if(!f) return null;
+  const list = listPriceOf(p, v);
+  const price = Math.round(list*(1-f.percent/100)*100)/100;
+  return price<list ? {sale:f, price} : null;
 }
-function effectivePrice(p){
-  const base = (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price;
-  const fl = flashFor(p);
+// Oferta relámpago que toca a este producto aunque sea en una sola de sus variantes (para avisos en tarjetas).
+function flashForAny(p){
+  if(!p || p.isKit) return null;
+  const direct = flashFor(p); if(direct) return direct;
+  for(const v of (p.variants||[])){ const fl = flashFor(p, v); if(fl) return fl; }
+  return null;
+}
+function effectivePrice(p, v){
+  v = v || soleVariant(p);
+  const list = listPriceOf(p, v);
+  let base;
+  if(v && v.promoPriceOverride>0 && v.promoPriceOverride<list) base = v.promoPriceOverride;
+  else if(v && v.priceOverride>0) base = list;
+  else base = (p.promoPrice>0 && p.promoPrice<p.price) ? p.promoPrice : p.price;
+  const fl = flashFor(p, v);
   return fl && fl.price<base ? fl.price : base;
 }
 
@@ -1208,28 +1230,29 @@ function captureKioskModeFromURL(){
 function isKioskMode(){
   try{ return localStorage.getItem(KIOSK_KEY)==='1'; }catch(e){ return false; }
 }
-function isEligibleForTier(p, tier){
+function isEligibleForTier(p, tier, v){
   if(!tier) return false;
   if(tier.scope==='all') return true;
   if(tier.scope==='categories') return productCats(p).some(c=>(tier.categories||[]).includes(c));
-  if(tier.scope==='products') return (tier.productIds||[]).includes(p.id);
+  if(tier.scope==='products') return v===undefined && !p._fv ? refHitAny(tier.productIds, p.id) : refHit(tier.productIds, p.id, (v||soleVariant(p)||{}).id);
   return false;
 }
 function wholesaleCartProgress(tier){
   let amount = 0, qty = 0;
   Object.entries(state.cart).forEach(([key,q])=>{
-    const {p} = parseCartKey(key);
-    if(p && isEligibleForTier(p, tier)){ amount += effectivePrice(p)*q; qty += q; }
+    const {p,v} = parseCartKey(key);
+    if(p && isEligibleForTier(p, tier, v||null)){ amount += effectivePrice(p, v)*q; qty += q; }
   });
   const current = tier.minType==='amount' ? amount : qty;
   return { current, needed: tier.minValue, unlocked: current >= tier.minValue };
 }
-function finalPrice(p){
+function finalPrice(p, v){
+  v = v || soleVariant(p);
   const tier = activeWholesaleTier();
-  const base = effectivePrice(p);
-  if(tier && isEligibleForTier(p, tier)){
+  const base = effectivePrice(p, v);
+  if(tier && isEligibleForTier(p, tier, v||null)){
     const progress = wholesaleCartProgress(tier);
-    if(progress.unlocked) return Math.min(base, Math.round(p.price*(1-tier.discountPercent/100)*100)/100);
+    if(progress.unlocked) return Math.min(base, Math.round(listPriceOf(p, v)*(1-tier.discountPercent/100)*100)/100);
   }
   return base;
 }
@@ -1248,14 +1271,14 @@ function applyWholesaleCodeManually(){
 }
 
 /* ============== CUPONES DE DESCUENTO ============== */
-function isCouponEligible(p, coupon){
+function isCouponEligible(p, coupon, v){
   if(coupon.scope==='all') return true;
   if(coupon.scope==='categories') return productCats(p).some(c=>(coupon.categories||[]).includes(c));
-  if(coupon.scope==='products') return (coupon.productIds||[]).includes(p.id);
+  if(coupon.scope==='products') return refHit(coupon.productIds, p.id, (v||soleVariant(p)||{}).id);
   return false;
 }
 function cartHasCouponEligibleItem(coupon){
-  return Object.keys(state.cart).some(key=>{ const {p}=parseCartKey(key); return p && isCouponEligible(p, coupon); });
+  return Object.keys(state.cart).some(key=>{ const {p,v}=parseCartKey(key); return p && isCouponEligible(p, coupon, v); });
 }
 async function applyCouponCode(){
   const code = (state.couponInput||'').trim().toUpperCase();
@@ -1295,8 +1318,8 @@ async function couponUsedByPhone(code, phone){
   }catch(e){ console.error(e); return false; }
 }
 function removeCoupon(){ state.appliedCoupon=null; state.couponError=''; render(); }
-function couponDiscountedPrice(p, price){
-  if(!state.appliedCoupon || !isCouponEligible(p, state.appliedCoupon)) return price;
+function couponDiscountedPrice(p, price, v){
+  if(!state.appliedCoupon || !isCouponEligible(p, state.appliedCoupon, v)) return price;
   return Math.round(price*(1-state.appliedCoupon.discountPercent/100)*100)/100;
 }
 
@@ -1310,46 +1333,51 @@ function activePromotions(){
     return true;
   });
 }
-function isPromoScopeEligible(p, promo){
+function isPromoScopeEligible(p, promo, v){
   if(promo.scope==='all') return true;
   if(promo.scope==='categories') return productCats(p).some(c=>(promo.categories||[]).includes(c));
-  if(promo.scope==='products') return (promo.productIds||[]).includes(p.id);
+  if(promo.scope==='products') return v===undefined && !p._fv ? refHitAny(promo.productIds, p.id) : refHit(promo.productIds, p.id, (v||soleVariant(p)||{}).id);
   return false;
 }
 function cartEligibleQtyAndAmount(promo){
   let qty=0, amount=0;
   Object.entries(state.cart).forEach(([key,q])=>{
-    const {p} = parseCartKey(key);
-    if(p && isPromoScopeEligible(p, promo)){ qty+=q; amount += finalPrice(p)*q; }
+    const {p,v} = parseCartKey(key);
+    if(p && isPromoScopeEligible(p, promo, v||null)){ qty+=q; amount += finalPrice(p, v)*q; }
   });
   return {qty, amount};
 }
+// ¿Esta línea del carrito (producto + variante) es la referencia "pid" o "pid::vid"?
+function cartHasRef(ref){
+  const r = String(ref||'').split('::');
+  return Object.keys(state.cart).some(key=>{ const {p,v}=parseCartKey(key); return p && p.id===r[0] && (!r[1] || (v && v.id===r[1])); });
+}
+function refMatchesItem(ref, p, v){ const r = String(ref||'').split('::'); return !!p && p.id===r[0] && (!r[1] || (!!v && v.id===r[1])); }
 // Precio por unidad después de aplicar la MEJOR promoción automática disponible
 // (nunca se combinan varias entre sí: siempre se usa la que más le convenga al cliente).
-function automaticDiscountedPrice(p){
-  let best = finalPrice(p); // ya incluye precio promocional del producto y mayoreo (si está desbloqueado)
+function automaticDiscountedPrice(p, v){
+  v = v || soleVariant(p);
+  const list = listPriceOf(p, v);
+  let best = finalPrice(p, v); // ya incluye precio promocional (del producto o de la variante), relámpago y mayoreo
   activePromotions().forEach(promo=>{
-    if(promo.type==='cart_discount' && isPromoScopeEligible(p, promo)){
+    if(promo.type==='cart_discount' && isPromoScopeEligible(p, promo, v||null)){
       const {amount} = cartEligibleQtyAndAmount(promo);
       if(amount >= (promo.minAmount||0)){
-        const candidate = Math.round(p.price*(1-promo.discountPercent/100)*100)/100;
+        const candidate = Math.round(list*(1-promo.discountPercent/100)*100)/100;
         if(candidate < best) best = candidate;
       }
     }
-    if(promo.type==='progressive' && isPromoScopeEligible(p, promo)){
+    if(promo.type==='progressive' && isPromoScopeEligible(p, promo, v||null)){
       const {qty} = cartEligibleQtyAndAmount(promo);
       const applicable = (promo.tiers||[]).filter(t=>qty>=t.minQty).sort((a,b)=>b.discountPercent-a.discountPercent);
       if(applicable.length){
-        const candidate = Math.round(p.price*(1-applicable[0].discountPercent/100)*100)/100;
+        const candidate = Math.round(list*(1-applicable[0].discountPercent/100)*100)/100;
         if(candidate < best) best = candidate;
       }
     }
-    if(promo.type==='cross_sell' && promo.discountProductId===p.id){
-      const hasTrigger = Object.keys(state.cart).some(key=>{ const {p:pp}=parseCartKey(key); return pp && pp.id===promo.triggerProductId; });
-      if(hasTrigger){
-        const candidate = Math.round(p.price*(1-promo.discountPercent/100)*100)/100;
-        if(candidate < best) best = candidate;
-      }
+    if(promo.type==='cross_sell' && refMatchesItem(promo.discountProductId, p, v) && cartHasRef(promo.triggerProductId)){
+      const candidate = Math.round(list*(1-promo.discountPercent/100)*100)/100;
+      if(candidate < best) best = candidate;
     }
   });
   return best;
@@ -1361,9 +1389,9 @@ function buyXPayYAdjustment(){
   activePromotions().filter(promo=>promo.type==='buyxpayy').forEach(promo=>{
     const units = [];
     Object.entries(state.cart).forEach(([key,q])=>{
-      const {p} = parseCartKey(key);
-      if(p && isPromoScopeEligible(p, promo)){
-        const unitPrice = automaticDiscountedPrice(p);
+      const {p,v} = parseCartKey(key);
+      if(p && isPromoScopeEligible(p, promo, v||null)){
+        const unitPrice = variantUnitPrice(p, v);
         for(let i=0;i<q;i++) units.push(unitPrice);
       }
     });
@@ -1380,7 +1408,7 @@ function cartSubtotalBeforeGift(){
     const {p,v} = parseCartKey(key);
     if(!p) return;
     let price = variantUnitPrice(p, v);
-    price = couponDiscountedPrice(p, price);
+    price = couponDiscountedPrice(p, price, v);
     s += price*qty;
   });
   return Math.max(0, s - buyXPayYAdjustment());
@@ -1390,24 +1418,24 @@ function activeGift(){
   // Si el producto de regalo ya se agotó, la promoción se "apaga" sola en la tienda en vez de
   // seguir ofreciendo un regalo que no se puede entregar — Ale no tiene que acordarse de
   // desactivarla a mano cada vez que se acaba ese producto.
+  // El regalo puede ser un producto o una variante en específico ("pid::vid").
   const gift = activePromotions().find(promo=>{
     if(promo.type!=='gift' || subtotal < (promo.minAmount||0)) return false;
-    const product = state.products.find(p=>p.id===promo.giftProductId);
+    const product = refResolve(promo.giftProductId);
     return product && product.stock>0;
   });
   if(!gift) return null;
-  const product = state.products.find(p=>p.id===gift.giftProductId);
-  return product ? {promo:gift, product} : null;
+  const product = refResolve(gift.giftProductId);
+  return product ? {promo:gift, product, pid:refParse(gift.giftProductId).pid, vid:refParse(gift.giftProductId).vid} : null;
 }
 // Sugerencia de producto complementario: reusa las promociones "cross_sell" que ya existen
 // (Producto A + Producto B, con % de descuento en B) — en cuanto A está en el carrito, se
 // muestra B como sugerencia con su descuento ya listo, sin ser un pop-up que interrumpa.
 // Si B ya está en el carrito, deja de sugerirse (ya no hace falta insistir).
 function crossSellSuggestions(){
-  const inCartIds = new Set(Object.keys(state.cart).map(key=>{ const {p}=parseCartKey(key); return p?p.id:null; }).filter(Boolean));
   return activePromotions()
-    .filter(promo=>promo.type==='cross_sell' && inCartIds.has(promo.triggerProductId) && !inCartIds.has(promo.discountProductId))
-    .map(promo=>({promo, product: state.products.find(p=>p.id===promo.discountProductId)}))
+    .filter(promo=>promo.type==='cross_sell' && cartHasRef(promo.triggerProductId) && !cartHasRef(promo.discountProductId))
+    .map(promo=>({promo, product: refResolve(promo.discountProductId)}))
     // Si el producto con descuento ya se agotó, no tiene caso sugerirlo (no se podría agregar).
     .filter(x=>x.product && x.product.stock>0);
 }
@@ -1558,7 +1586,7 @@ function cartTotal(){
     const {p,v} = parseCartKey(key);
     if(!p) return;
     let price = variantUnitPrice(p, v);
-    price = couponDiscountedPrice(p, price);
+    price = couponDiscountedPrice(p, price, v);
     total += price*qty;
   });
   total -= buyXPayYAdjustment();
@@ -1786,7 +1814,7 @@ async function submitOrder(formData){
   const items = Object.entries(state.cart).map(([key,qty])=>{
     const {p,v} = parseCartKey(key);
     let price = variantUnitPrice(p, v);
-    price = couponDiscountedPrice(p, price);
+    price = couponDiscountedPrice(p, price, v);
     const line = {id:p.id, variantId: v?v.id:null, name: p.name + (v?` (${variantLabel(v)})`:''), price, qty};
     if(p.isMysteryBox){
       const picks = pickMysteryBoxItems(p, qty);
@@ -1800,7 +1828,7 @@ async function submitOrder(formData){
   }
   const gift = activeGift();
   if(gift){
-    items.push({id:gift.product.id, name:`${gift.product.name} (regalo)`, price:0, qty:1});
+    items.push({id:gift.pid, variantId:gift.vid||null, name:`${gift.product.name} (regalo)`, price:0, qty:1});
   }
   const orderNumber = await getNextOrderNumber();
   const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
@@ -2362,18 +2390,13 @@ function listPriceOf(p, v){ return v && v.priceOverride>0 ? v.priceOverride : p.
 // Precio por unidad de una variante (antes de cupón): su promoción propia si la tiene, luego su precio propio,
 // y si no tiene nada propio el del producto con sus promociones automáticas.
 function variantUnitPrice(p, v){
-  if(v){
-    const list = listPriceOf(p, v);
-    if(v.promoPriceOverride>0 && v.promoPriceOverride<list) return v.promoPriceOverride;
-    if(v.priceOverride>0) return v.priceOverride;
-  }
-  return automaticDiscountedPrice(p);
+  // Precio propio de la variante (si tiene) y, encima, ofertas/mayoreo/promociones que la cubran.
+  return automaticDiscountedPrice(p, v);
 }
 // Lo que se muestra en tarjetas: si las variantes tienen precios distintos, "Desde $X" (del más barato con existencia).
 function productDisplayPrice(p){
   const vs = (p.variants||[]).filter(v=>v.stock>0), pool = vs.length ? vs : (p.variants||[]);
-  const custom = pool.some(v=>v.priceOverride>0 || v.promoPriceOverride>0);
-  if(!pool.length || !custom) { const pr = automaticDiscountedPrice(p); return {price:pr, was: pr<p.price ? p.price : 0, from:false}; }
+  if(!pool.length) { const pr = automaticDiscountedPrice(p); return {price:pr, was: pr<p.price ? p.price : 0, from:false}; }
   const rows = pool.map(v=>({v, price:variantUnitPrice(p,v)}));
   const min = rows.reduce((a,b)=>b.price<a.price?b:a);
   const from = rows.some(r=>Math.round(r.price*100)!==Math.round(min.price*100));
@@ -2384,13 +2407,13 @@ function priceHtml(p, big){
   const d = productDisplayPrice(p);
   return `${d.was ? `<s style="color:var(--ink-soft);font-weight:500;font-size:${big||11}px;margin-right:4px;">${money(d.was)}</s>` : ''}${d.from ? '<span style="font-size:.78em;font-weight:600;color:var(--ink-soft);margin-right:3px;">Desde</span>' : ''}${money(d.price)}`;
 }
-function unitSavings(p){ const s = p.price - automaticDiscountedPrice(p); return s>=1 ? s : 0; }
+function unitSavings(p){ const d = productDisplayPrice(p); const s = d.was ? d.was - d.price : 0; return s>=1 ? s : 0; }
 function cartSavings(){
   let total = 0;
   Object.entries(state.cart).forEach(([key,qty])=>{
     const {p,v} = parseCartKey(key); if(!p) return;
     let price = variantUnitPrice(p, v);
-    price = couponDiscountedPrice(p, price);
+    price = couponDiscountedPrice(p, price, v);
     const diff = listPriceOf(p,v) - price;
     if(diff>0) total += diff*qty;
   });
@@ -2400,7 +2423,8 @@ function cartSavings(){
 function savingsLabel(p){
   const sv = unitSavings(p);
   if(!sv) return '';
-  return `Ahorras ${moneyShort(sv)} (−${Math.round(sv/p.price*100)}%)`;
+  const was = productDisplayPrice(p).was || p.price;
+  return `Ahorras ${moneyShort(sv)} (−${Math.round(sv/was*100)}%)`;
 }
 
 /* ============== CANTIDAD − / + EN LA TARJETA ==============
@@ -2494,8 +2518,8 @@ function relatedProducts(p, n){
   const myNeeds = new Set(p.needs||[]), myCats = new Set(productCats(p));
   const partners = [];
   activePromotions().forEach(promo=>{
-    if(promo.type==='cross_sell' && promo.triggerProductId===p.id){
-      const q = state.products.find(x=>x.id===promo.discountProductId);
+    if(promo.type==='cross_sell' && refParse(promo.triggerProductId).pid===p.id){
+      const q = refResolve(promo.discountProductId);
       if(q && q.stock>0) partners.push(q);
     }
   });
@@ -3219,7 +3243,7 @@ function soonestPromoEndDate(p){
   activePromotions().forEach(promo=>{
     if(!promo.endDate) return;
     let applies = false;
-    if(promo.type==='cross_sell') applies = promo.discountProductId===p.id || promo.triggerProductId===p.id;
+    if(promo.type==='cross_sell') applies = refParse(promo.discountProductId).pid===p.id || refParse(promo.triggerProductId).pid===p.id;
     else applies = isPromoScopeEligible(p, promo);
     if(!applies) return;
     const end = new Date(promo.endDate+'T23:59:59');
@@ -3239,7 +3263,7 @@ function formatPromoCountdown(endDate){
   return `Termina en ${minutes} min`;
 }
 function renderPromoCountdownBadge(p){
-  const fl = flashFor(p);
+  const fl = flashForAny(p);
   if(fl){ const lab = formatPromoCountdown(new Date(fl.sale.end)); return `<span class="badge badge-best promo-countdown" style="background:var(--rose);">⚡ ${lab||'Relámpago'}</span>`; }
   const end = soonestPromoEndDate(p);
   if(!end) return '';
@@ -3279,7 +3303,7 @@ function renderProductCard(p, forceBest){
   const isBest = forceBest || featuredPidSet().has(p.id);
   const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
   const hasVariants = p.variantGroups && p.variantGroups.length>0;
-  const hasPromo = effectivePrice(p)<p.price;
+  const hasPromo = !!productDisplayPrice(p).was;
   const tier = activeWholesaleTier();
   const wholesaleEligible = tier && isEligibleForTier(p, tier);
   const wholesaleUnlocked = wholesaleEligible && wholesaleCartProgress(tier).unlocked;
@@ -3415,7 +3439,13 @@ function renderFooterSection(){
 function renderFlashSection(){
   const list = flashSalesActive(); if(!list.length) return '';
   return list.map(f=>{
-    const prods = state.products.filter(p=>!p.hidden && !p.isKit && (p.stock||0)>0 && flashCovers(f,p)).slice(0,10);
+    // Producto completo (o su categoría) → su tarjeta; solo algunas variantes → una tarjeta por variante.
+    const prods = [];
+    state.products.filter(p=>!p.hidden && !p.isKit && (p.stock||0)>0 && flashCoversAny(f,p)).forEach(p=>{
+      if((f.productIds||[]).includes(p.id) || flashCatsHit(f,p) || !(p.variants||[]).length) prods.push(p);
+      else (p.variants||[]).filter(v=>(v.stock||0)>0 && (f.productIds||[]).includes(p.id+'::'+v.id)).forEach(v=>prods.push(variantDisplayProduct(p, v)));
+    });
+    prods.splice(10);
     if(!prods.length) return '';
     const lab = formatPromoCountdown(new Date(f.end)) || 'Última hora';
     return `<div class="flash-block">
@@ -3545,7 +3575,7 @@ function renderCartDrawer(){
     <div class="drawer-body">
       ${tier ? renderWholesaleBanner(tier) : ''}
       ${entries.length===0 ? `<div class="empty-state" style="padding:30px 20px 6px;">Tu carrito está vacío.</div>${isKioskMode() ? '' : `<div class="rel-block"><h3 class="rel-title">Lo más vendido</h3><div class="rel-grid">${popularProducts(4).map(x=>renderMiniCard(x,{close:'cartOpen'})).join('')}</div></div>`}` :
-        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return state.fullCatalogLoaded ? '' : `<div class="cart-item cart-item-loading"><div class="cart-item-swatch"></div><div class="cart-item-info"><div class="cart-item-name">Cargando producto…</div><div class="cart-item-price">${qty} pza</div></div></div>`; const basePrice = variantUnitPrice(p, v); const price = couponDiscountedPrice(p, basePrice); const maxQ = itemStock(p, v); const atMax = qty>=maxQ; const nm = escHtml(p.name + (v?` (${variantLabel(v)})`:'')); return `
+        entries.map(([key,qty])=>{const {p,v}=parseCartKey(key); if(!p) return state.fullCatalogLoaded ? '' : `<div class="cart-item cart-item-loading"><div class="cart-item-swatch"></div><div class="cart-item-info"><div class="cart-item-name">Cargando producto…</div><div class="cart-item-price">${qty} pza</div></div></div>`; const basePrice = variantUnitPrice(p, v); const price = couponDiscountedPrice(p, basePrice, v); const maxQ = itemStock(p, v); const atMax = qty>=maxQ; const nm = escHtml(p.name + (v?` (${variantLabel(v)})`:'')); return `
           <div class="cart-item">
             ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(vImage(p,v)||p.images[0])}" alt="">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)}"></div>`}
             <div class="cart-item-info">
@@ -3569,7 +3599,7 @@ function renderCartDrawer(){
         <div class="cross-sell-card">
           ${product.images&&product.images.length ? `<img class="cross-sell-swatch" src="${thumbSrc(product.images[0])}" alt="">` : `<div class="cross-sell-swatch"></div>`}
           <div class="cross-sell-info">También te puede interesar <b>${product.name}</b> — <b>${promo.discountPercent}% de descuento</b> por llevarlo junto.</div>
-          <button class="cross-sell-add" onclick="addToCart('${product.id}')">Agregar</button>
+          <button class="cross-sell-add" onclick="addToCart('${product.id}'${product._fv?`,'${product._fv}'`:''})">Agregar</button>
         </div>
       `).join('')}
       ${entries.length>0 && genericCartSuggestions().length>0 ? `
@@ -3628,7 +3658,7 @@ function ckFieldInput(k){
 }
 // QA-21: qué se está comprando, a la vista en el último paso (plegable para no alargar el formulario).
 function renderCheckoutSummary(){
-  const lines = Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return p ? {name: p.name + (v?` (${variantLabel(v)})`:''), qty, price: couponDiscountedPrice(p, variantUnitPrice(p, v))} : null; }).filter(Boolean);
+  const lines = Object.entries(state.cart).map(([key,qty])=>{ const {p,v}=parseCartKey(key); return p ? {name: p.name + (v?` (${variantLabel(v)})`:''), qty, price: couponDiscountedPrice(p, variantUnitPrice(p, v), v)} : null; }).filter(Boolean);
   if(!lines.length) return '';
   const count = lines.reduce((a,l)=>a+l.qty,0);
   return `<details class="ck-summary"><summary>${count} artículo${count===1?'':'s'} en tu pedido <span>Ver</span></summary>
