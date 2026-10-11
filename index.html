@@ -872,13 +872,13 @@ async function loadData(attempt){
     // dato de pedidos individuales (eso sigue protegido detrás del permiso "pedidos").
     if(staticCat){
       state.orderCount = Math.max(0, Number(staticCat.orderCount)||0);
-      state.products = staticCat.products.filter(p=>!p.hidden && !p.deletedAt);
+      state.products = variantRepairAll(staticCat.products.filter(p=>!p.hidden && !p.deletedAt));
       state.settings = {...DEFAULT_SETTINGS, ...(staticCat.settings||{})};
       state.catalogStatic = true; state.catalogGeneratedAt = staticCat.generatedAt || '';
       state.fullCatalogLoaded = true; state.catalogIncomplete = false;
     } else {
       state.orderCount = counterSnap.exists ? Math.max(0, (counterSnap.data().next||1) - 1) : 0;
-      state.products = prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
+      state.products = variantRepairAll(prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt));
       state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
     }
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
@@ -997,7 +997,7 @@ async function loadFullCatalogWithRetry(attempt){
   attempt = attempt || 1;
   try{
     const fullSnap = await db.collection('products').orderBy('name').get();
-    state.products = fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt);
+    state.products = variantRepairAll(fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt));
     state.catalogIncomplete = false; state.fullCatalogLoaded = true;
     pruneUnavailableCartItems();
     clampCartToStock();
@@ -1567,6 +1567,55 @@ function renderCheckoutReminderDrawer(){
     <div class="drawer-foot"><button class="btn-neutral" style="margin-top:0;" onclick="continueCheckoutWithoutReminder()">Continuar sin agregar</button><button class="btn-link" onclick="state.checkoutReminderOpen=false;render()">Volver al carrito</button></div>
   `;
 }
+/* ---- Reparación de la estructura de variantes ----
+   Algunos productos (importados de Tiendanube o editados con el editor viejo) traen variantes cuyas
+   propiedades no cuadran: sin "variantGroups", grupos con "options" en vez de "values", o
+   combinaciones escritas distinto ("rojo " vs "Rojo", "color" vs "Color"). La tienda y el POS
+   entonces no podían elegir variante. Esto lo arregla en memoria (y el panel lo guarda). */
+function variantRepair(p){
+  const vs = Array.isArray(p && p.variants) ? p.variants : [];
+  if(!vs.length) return {changed:false, problems:[]};
+  const before = JSON.stringify([p.variantGroups||null, vs.map(v=>[v.id, v.combo])]);
+  const problems = [];
+  const nk = s=>String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  let groups = (Array.isArray(p.variantGroups)?p.variantGroups:[]).filter(g=>g && String(g.name||'').trim()).map(g=>({
+    name: String(g.name).trim(),
+    values: (Array.isArray(g.values)?g.values:Array.isArray(g.options)?g.options:[]).map(x=>String(x==null?'':x).trim()).filter(Boolean)
+  }));
+  if(!(Array.isArray(p.variantGroups) && p.variantGroups.length)) problems.push('tenía variantes pero no sus propiedades');
+  else if(p.variantGroups.some(g=>g && !Array.isArray(g.values))) problems.push('una propiedad no tenía su lista de opciones');
+  vs.forEach((v,i)=>{
+    if(!v.id){ v.id = 'v'+i+'_'+String(p.id||'').slice(-4); problems.push('variante sin identificador'); }
+    if(!v.combo || typeof v.combo!=='object' || !Object.keys(v.combo).length){ v.combo = {'Opción': String(v.name||v.sku||('Opción '+(i+1)))}; problems.push('variante sin combinación'); }
+  });
+  if(!groups.length){
+    const map = {};
+    vs.forEach(v=>Object.entries(v.combo).forEach(([k,val])=>{ k=String(k).trim(); val=String(val==null?'':val).trim(); (map[k]=map[k]||[]); if(val && !map[k].includes(val)) map[k].push(val); }));
+    groups = Object.entries(map).map(([name,values])=>({name, values}));
+  }
+  let mism = false;
+  vs.forEach(v=>{
+    const nc = {};
+    Object.entries(v.combo).forEach(([k,val])=>{
+      let g = groups.find(x=>nk(x.name)===nk(k));
+      if(!g){ g = {name:String(k).trim(), values:[]}; groups.push(g); mism = true; }
+      const sval = String(val==null?'':val).trim() || 'Única';
+      let hit = g.values.find(x=>nk(x)===nk(sval));
+      if(hit===undefined){ hit = sval; g.values.push(sval); mism = true; }
+      if(g.name!==k || hit!==val) mism = true;
+      nc[g.name] = hit;
+    });
+    v.combo = nc;
+  });
+  groups = groups.filter(g=>vs.some(v=>g.name in v.combo));
+  vs.forEach(v=>groups.forEach(g=>{ if(!(g.name in v.combo)){ v.combo[g.name] = 'Sin especificar'; if(!g.values.includes('Sin especificar')) g.values.push('Sin especificar'); mism = true; } }));
+  groups.forEach(g=>{ g.values = g.values.filter(val=>vs.some(v=>v.combo[g.name]===val)); });
+  if(mism) problems.push('las opciones de las variantes no coincidían con sus propiedades');
+  p.variantGroups = groups;
+  const changed = before !== JSON.stringify([p.variantGroups, vs.map(v=>[v.id, v.combo])]);
+  return {changed, problems: changed ? [...new Set(problems)] : []};
+}
+function variantRepairAll(list){ (list||[]).forEach(p=>{ try{ variantRepair(p); }catch(e){ console.warn('variantRepair', p && p.id, e); } }); return list; }
 function variantLabel(v){ return v ? Object.values(v.combo||{}).join(' / ') : ''; }
 /* Referencias a productos elegidos a mano (destacados, recordatorio al pagar): "idProducto" para todo el
    producto o "idProducto::idVariante" para una variante en particular. */
@@ -1712,6 +1761,11 @@ function openProductDetail(id, vid){
   trackEvent('product_view', {productId:id}); render();
 }
 function closeProductDetail(){ state.detailProductId=null; render(); }
+function selectVariantOptionIdx(gi, vi){
+  const dp = state.products.find(x=>x.id===state.detailProductId); if(!dp) return;
+  const g = (dp.variantGroups||[])[gi]; if(!g) return;
+  selectVariantOption(g.name, (g.values||[])[vi]);
+}
 function selectVariantOption(groupName, value){
   state.detailSelectedVariant[groupName] = value;
   const dp = state.products.find(x=>x.id===state.detailProductId);
@@ -2247,11 +2301,11 @@ function renderProductDetailDrawer(){
         ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
         ${hasVariants ? `
           <div style="margin:10px 0;">
-            ${p.variantGroups.map(g=>`
+            ${p.variantGroups.map((g,gi)=>`
               <div style="margin-bottom:10px;">
-                <div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;">${g.name}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;">${escHtml(g.name)}</div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                  ${g.values.map(v=>{ const out = variantOptionOut(p, g.name, v); return `<button class="cat-chip ${state.detailSelectedVariant[g.name]===v?'active':''} ${out?'chip-out':''}" onclick="selectVariantOption('${g.name.replace(/'/g,"\\'")}','${v.replace(/'/g,"\\'")}')">${v}${out?' <small>· agotado</small>':''}</button>`; }).join('')}
+                  ${(g.values||[]).map((v,vi)=>{ const out = variantOptionOut(p, g.name, v); const on = state.detailSelectedVariant[g.name]===v; return `<button class="cat-chip ${on?'active':''} ${out?'chip-out':''}" aria-pressed="${on}" onclick="selectVariantOptionIdx(${gi},${vi})">${escHtml(v)}${out?' <small>· agotado</small>':''}</button>`; }).join('')}
                 </div>
               </div>
             `).join('')}
