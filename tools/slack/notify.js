@@ -97,14 +97,32 @@ async function relaunch() {
     console.log(`Siguiente turno de avisos: ${r.status === 204 ? 'lanzado' : 'no se pudo (' + r.status + ')'}`);
   } catch (e) { console.log('No se pudo lanzar el siguiente turno:', e.message); }
 }
+/* HORARIO DE AVISOS: solo se revisa entre HORA_INICIO y HORA_FIN (hora de Ciudad Guzmán, UTC-6 todo el
+   año). Fuera de ese horario no se lee nada: la corrida espera dormida y, al abrir, la primera revisión
+   manda juntos los pedidos y ventas que llegaron de noche (el cursor guarda dónde se quedó). */
+const OFFSET_H = Number(env.UTC_OFFSET_HORAS || -6), H_START = Number(env.HORA_INICIO || 8), H_END = Number(env.HORA_FIN || 21);
+const localHour = t => (new Date(t + OFFSET_H * 3600000)).getUTCHours() + (new Date(t + OFFSET_H * 3600000)).getUTCMinutes() / 60;
+const inWindow = t => { const h = localHour(t); return h >= H_START && h < H_END; };
+function msUntilOpen(t) {
+  const loc = new Date(t + OFFSET_H * 3600000);
+  const open = Date.UTC(loc.getUTCFullYear(), loc.getUTCMonth(), loc.getUTCDate(), H_START) - OFFSET_H * 3600000;
+  return open > t ? open - t : open + 86400000 - t;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   const loopMin = Number(env.LOOP_MINUTES || 0), every = Math.max(30, Number(env.INTERVAL_SEC || 60)) * 1000;
-  if (!loopMin) { await main(); return; }
+  if (!loopMin) { if (inWindow(Date.now()) || env.FORZAR === '1') await main(); else console.log('Fuera del horario de avisos; no se revisa.'); return; }
   const end = Date.now() + loopMin * 60000;
   let fails = 0;
   while (Date.now() < end) {
+    if (!inWindow(Date.now())) {
+      const wait = Math.min(msUntilOpen(Date.now()), end - Date.now());
+      console.log(`Fuera del horario de avisos (${H_START}:00–${H_END}:00). Espero ${Math.round(wait / 60000)} min sin leer nada.`);
+      await sleep(Math.max(1000, wait));
+      continue;
+    }
     try { await main(); fails = 0; } catch (e) { fails++; console.error('Revisión fallida:', e.message); if (fails >= 10) break; }
-    await new Promise(r => setTimeout(r, every));
+    await sleep(every);
   }
   await relaunch();
 })().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
