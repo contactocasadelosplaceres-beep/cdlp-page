@@ -1,20 +1,23 @@
 name: Avisos a Slack (pedidos y ventas)
-# Cada ~5 min revisa si hubo pedidos de la tienda o ventas del POS nuevas y las manda a Slack.
+# Revisa cada minuto si hubo pedidos de la tienda o ventas del POS nuevas y las manda a Slack.
+# Cada corrida se queda ~5.6 h revisando y al final se vuelve a lanzar sola; el horario de abajo
+# solo es respaldo por si la cadena se corta (GitHub corre los horarios con horas de retraso).
 # Secreto recomendado: SLACK_WEBHOOK_URL (Settings → Secrets and variables → Actions). Mientras no exista,
 # usa el webhook que ya estaba en settings/store para no interrumpir los avisos.
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '7 * * * *'
 permissions:
   contents: read
+  actions: write
 concurrency:
   group: slack
   cancel-in-progress: false
 jobs:
   slack:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 1, sparse-checkout: tools/slack }
@@ -29,3 +32,6 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          LOOP_MINUTES: '335'
+          INTERVAL_SEC: '60'

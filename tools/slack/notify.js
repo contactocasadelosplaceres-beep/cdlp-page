@@ -30,18 +30,23 @@ async function post(url, text) {
   if (!r.ok) throw new Error(`Slack respondió ${r.status}`);
 }
 
+let CUR = null; // cursor en memoria: en el modo continuo solo se lee notifyState/slack una vez
 async function main() {
-  admin.initializeApp({ credential: admin.credential.cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
+  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
   const db = admin.firestore();
   const stRef = db.collection('notifyState').doc('slack');
-  const st = await stRef.get();
   const nowIso = new Date().toISOString();
-  if (!st.exists) {
-    await stRef.set({ ordersCursor: nowIso, salesCursor: nowIso, createdAt: nowIso });
-    console.log('Primera corrida: cursor inicial en ahora. No se avisa nada anterior.');
-    return;
+  if (!CUR) {
+    const st = await stRef.get();
+    if (!st.exists) {
+      await stRef.set({ ordersCursor: nowIso, salesCursor: nowIso, createdAt: nowIso });
+      CUR = { ordersCursor: nowIso, salesCursor: nowIso };
+      console.log('Primera corrida: cursor inicial en ahora. No se avisa nada anterior.');
+      return;
+    }
+    CUR = st.data();
   }
-  const cur = st.data();
+  const cur = CUR;
   const [oSnap, sSnap] = await Promise.all([
     db.collection('orders').where('date', '>', cur.ordersCursor).orderBy('date').limit(MAX_PER_RUN).get(),
     db.collection('sales').where('date', '>', cur.salesCursor).orderBy('date').limit(MAX_PER_RUN).get(),
@@ -77,7 +82,29 @@ async function main() {
     console.log('Se quitó slackWebhookUrl de settings/store (ahora vive en el secreto SLACK_WEBHOOK_URL).');
   }
   if (usingSecret) upd.webhookMigrated = true;
-  if (Object.keys(upd).length) await stRef.set(upd, { merge: true });
+  if (Object.keys(upd).length) { await stRef.set(upd, { merge: true }); CUR = Object.assign({}, CUR, upd); }
   console.log(`Pedidos/ventas nuevos: ${pend.length} · avisos enviados: ${sent}${usingSecret ? ' · webhook: secreto' : ' · webhook: settings/store (heredado)'}`);
 }
-main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
+/* MODO CONTINUO: GitHub corre los horarios "cada 5 min" con horas de retraso (se vio un aviso llegar
+   3–5 h tarde). Con LOOP_MINUTES > 0 la corrida se queda revisando cada INTERVAL_SEC segundos
+   (~2 lecturas por revisión) y, antes de terminar, se vuelve a lanzar sola (workflow_dispatch con el
+   GITHUB_TOKEN, que GitHub sí permite). Así siempre hay una revisando y el aviso llega en ~1 minuto. */
+async function relaunch() {
+  const repo = env.GITHUB_REPOSITORY, token = env.GITHUB_TOKEN;
+  if (!repo || !token) return;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/slack.yml/dispatches`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, body: JSON.stringify({ ref: env.GITHUB_REF_NAME || 'main' }) });
+    console.log(`Siguiente turno de avisos: ${r.status === 204 ? 'lanzado' : 'no se pudo (' + r.status + ')'}`);
+  } catch (e) { console.log('No se pudo lanzar el siguiente turno:', e.message); }
+}
+(async () => {
+  const loopMin = Number(env.LOOP_MINUTES || 0), every = Math.max(30, Number(env.INTERVAL_SEC || 60)) * 1000;
+  if (!loopMin) { await main(); return; }
+  const end = Date.now() + loopMin * 60000;
+  let fails = 0;
+  while (Date.now() < end) {
+    try { await main(); fails = 0; } catch (e) { fails++; console.error('Revisión fallida:', e.message); if (fails >= 10) break; }
+    await new Promise(r => setTimeout(r, every));
+  }
+  await relaunch();
+})().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
