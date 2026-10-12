@@ -1752,6 +1752,8 @@ async function loadCustomersSmart(){
   return wrap(rows);
 }
 
+// Igualdad sin importar el orden de los campos (Firestore no respeta el orden con que se guardaron).
+function stableEq(a,b){ const j = x => JSON.stringify(x, (k,v)=> (v && typeof v==='object' && !Array.isArray(v)) ? Object.keys(v).sort().reduce((o,kk)=>(o[kk]=v[kk],o),{}) : v); return j(a)===j(b); }
 async function syncPosCustomerIndex(){
   if(state.loadFailed || !state.loaded) return;
   if(state.myPermissions && !state.myPermissions.clientes) return;   // colaborador sin permiso de Clientes
@@ -1772,7 +1774,7 @@ async function syncPosCustomerIndex(){
     if(!old || t >= String(old.t||'')) want['ph_'+p] = {n:String(c.name||'').slice(0,80), p, t, d:1};
   });
   const ops = {}; let n = 0;
-  Object.entries(want).forEach(([k,e])=>{ if(JSON.stringify(prev[k]||null)!==JSON.stringify(e)){ ops['m.'+k] = e; n++; } });
+  Object.entries(want).forEach(([k,e])=>{ if(stableEq(prev[k]||null, e)===false){ ops['m.'+k] = e; n++; } });
   // Quitar del índice perfiles que ya no existen (sin tocar los creados en el POS después de cargar el panel)
   Object.entries(prev).forEach(([k,e])=>{ if(!want[k] && e && (e.d || String(e.u||'') < String(state.customersLoadedAt||''))){ ops['m.'+k] = firebase.firestore.FieldValue.delete(); n++; } });
   if(prevDoc && prevDoc.list) ops.list = firebase.firestore.FieldValue.delete();
@@ -15493,7 +15495,10 @@ const VAR_VALUE_SUGGESTIONS = {
 function variantRepair(p){
   const vs = Array.isArray(p && p.variants) ? p.variants : [];
   if(!vs.length) return {changed:false, problems:[]};
-  const before = JSON.stringify([p.variantGroups||null, vs.map(v=>[v.id, v.combo])]);
+  // Se compara sin importar el orden de los campos: Firestore puede devolver {values, name} en vez de
+  // {name, values} y eso NO es un problema (antes hacía que productos ya reparados volvieran a la lista).
+  const stableJson = x => JSON.stringify(x, (k,v)=> (v && typeof v==='object' && !Array.isArray(v)) ? Object.keys(v).sort().reduce((o,kk)=>(o[kk]=v[kk],o),{}) : v);
+  const before = stableJson([p.variantGroups||null, vs.map(v=>[v.id, v.combo])]);
   const problems = [];
   const nk = s=>String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   let groups = (Array.isArray(p.variantGroups)?p.variantGroups:[]).filter(g=>g && String(g.name||'').trim()).map(g=>({
@@ -15530,7 +15535,8 @@ function variantRepair(p){
   groups.forEach(g=>{ g.values = g.values.filter(val=>vs.some(v=>v.combo[g.name]===val)); });
   if(mism) problems.push('las opciones de las variantes no coincidían con sus propiedades');
   p.variantGroups = groups;
-  const changed = before !== JSON.stringify([p.variantGroups, vs.map(v=>[v.id, v.combo])]);
+  const changed = before !== stableJson([p.variantGroups, vs.map(v=>[v.id, v.combo])]);
+  if(changed && !problems.length) problems.push('la lista de opciones tenía valores repetidos o sin variante');
   return {changed, problems: changed ? [...new Set(problems)] : []};
 }
 function variantRepairAll(list){ (list||[]).forEach(p=>{ try{ variantRepair(p); }catch(e){ console.warn('variantRepair', p && p.id, e); } }); return list; }
