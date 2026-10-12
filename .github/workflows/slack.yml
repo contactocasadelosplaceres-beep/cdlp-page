@@ -3,6 +3,7 @@ name: Avisos a Slack (pedidos y ventas)
 # nuevas y las manda a Slack. Lo que llegue de noche se avisa junto a las 8:00. Cambiar el horario: HORA_INICIO / HORA_FIN.
 # Cada corrida se queda ~5.6 h revisando y al final se vuelve a lanzar sola; el horario de abajo
 # solo es respaldo por si la cadena se corta (GitHub corre los horarios con horas de retraso).
+# También vigila el catálogo: si el panel pidió publicar, lanza "Catálogo estático" en ≤5 min (≤30 de noche).
 # Secreto recomendado: SLACK_WEBHOOK_URL (Settings → Secrets and variables → Actions). Mientras no exista,
 # usa el webhook que ya estaba en settings/store para no interrumpir los avisos.
 on:
@@ -39,3 +40,5 @@ jobs:
           HORA_INICIO: '8'
           HORA_FIN: '21'
           UTC_OFFSET_HORAS: '-6'
+          CATALOGO_CADA_MIN: '5'
+          CATALOGO_NOCHE_MIN: '30'
