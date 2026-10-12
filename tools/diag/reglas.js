@@ -16,13 +16,13 @@ admin.initializeApp({ credential: admin.credential.cert(sa) });
   for (const c of cols) {
     const i = src.indexOf('match /' + c + '/');
     if (i < 0) { out.push(c + '=SIN REGLA'); continue; }
-    let depth = 0, j = src.indexOf('{', i), k = j;
+    let depth = 0, j = src.indexOf('{', src.indexOf('}', i) + 1), k = j;
     for (; k < src.length; k++) { if (src[k] === '{') depth++; else if (src[k] === '}') { depth--; if (depth === 0) break; } }
     const block = src.slice(i, k + 1);
     const allowLines = block.split('\n').filter(l => /allow/.test(l)).map(l => l.trim().replace(/\s+/g, ' ')).join(' | ');
     out.push(`${c}: ${allowLines.slice(0, 260)}`);
   }
-  out.forEach(l => console.log('::notice::' + l));
+  for (let a = 0; a < out.length; a += 6) console.log('::notice::' + out.slice(a, a + 6).join(' ‖ '));
   const fns = (src.match(/function\s+\w+/g) || []).join(', ');
   console.log('::notice::funciones: ' + fns);
 })().catch(e => { console.log('::error::' + (e.message || e)); process.exit(1); });
