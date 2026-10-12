@@ -1,0 +1,22 @@
+name: Registro público de cuentas
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: 'revisar = solo informar · cerrar = impedir crear cuentas desde una página'
+        default: 'revisar'
+        required: true
+permissions:
+  contents: read
+jobs:
+  registro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --prefix tools/diag --no-audit --no-fund && node tools/auth/registro.cjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          ACCION: ${{ inputs.accion }}

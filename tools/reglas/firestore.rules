@@ -1,0 +1,305 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ====== AUTORIZACIÓN POR CUSTOM CLAIMS (Opción B) ======
+    // Antes: "autenticado y sin doc en staffPermissions" = admin total (cualquiera que lograra
+    // autenticarse era admin). Ahora: SOLO quien tiene el claim 'admin' o 'staff' (se asignan con
+    // tools/claims/setClaims.js). Un desconocido autenticado no tiene claim -> no puede nada.
+    function isUnrestricted() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+    function isStaff() {
+      return request.auth != null && request.auth.token.staff == true;
+    }
+    function isTeam() {
+      return isUnrestricted() || isStaff();
+    }
+    // Permiso fino para colaboradores: sigue leyéndose en vivo de staffPermissions (cambios al instante).
+    function myStaffDoc() {
+      return get(/databases/$(database)/documents/staffPermissions/$(request.auth.token.email.lower()));
+    }
+    // Pedido que crea la tienda en línea (sin sesión): solo estos campos, estado "Nuevo", origen
+    // "tienda" y total no negativo (hallazgo H-04). Los precios por renglón no se pueden revisar
+    // aquí; el panel avisa si el total no cuadra con los productos.
+    function validStoreOrder() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['date','orderNumber','source','customer','phone','address','notes','items','total','status','couponCode','campaign','fraudSignals'])
+        && d.source == 'tienda' && d.status == 'Nuevo'
+        && d.items is list && d.items.size() > 0 && d.items.size() <= 200
+        && d.total is number && d.total >= 0 && d.total <= 1000000
+        && d.date is string && d.date.size() <= 40
+        && (!('orderNumber' in d) || d.orderNumber == null || d.orderNumber is number)
+        && d.customer is string && d.customer.size() <= 200
+        && d.phone is string && d.phone.size() <= 40
+        && (!('address' in d) || (d.address is string && d.address.size() <= 500))
+        && (!('notes' in d) || d.notes == null || (d.notes is string && d.notes.size() <= 2000))
+        && (!('couponCode' in d) || d.couponCode == null || (d.couponCode is string && d.couponCode.size() <= 60))
+        && (!('campaign' in d) || (d.campaign is string && d.campaign.size() <= 80))
+        && (!('fraudSignals' in d) || (d.fraudSignals is list && d.fraudSignals.size() <= 10));
+    }
+    function hasPerm(p) {
+      return isUnrestricted() ||
+        ( isStaff()
+          && exists(/databases/$(database)/documents/staffPermissions/$(request.auth.token.email.lower()))
+          && myStaffDoc().data.permissions.get(p, false) == true );
+    }
+
+    match /products/{docId} {
+      allow read: if true;
+      allow write: if hasPerm('productos');
+    }
+
+    match /settings/{docId} {
+      // Solo 'store' es público (lo necesita la tienda). El resto (incl. 'ai') pide permiso 'config'.
+      // Antes 'store' era público y traía notas internas, meta de ventas y el webhook (H-01/H-03).
+      // La tienda ya lee catalogo.json; solo el equipo lee 'store' y 'publish' directo.
+      allow read: if (isTeam() && (docId == 'store' || docId == 'publish')) || hasPerm('config');
+      allow write: if hasPerm('config');
+    }
+
+    // Costos, historial de costo y proveedor por producto (H-02): solo personal.
+    match /productCosts/{docId} {
+      allow read, write: if hasPerm('productos') || hasPerm('pedidos');
+    }
+
+    // Configuración que no debe ser pública.
+    match /settingsPrivate/{docId} {
+      allow read, write: if hasPerm('config');
+    }
+
+    match /orders/{docId} {
+      allow create: if hasPerm('pedidos') || validStoreOrder();
+      allow read, update, delete: if hasPerm('pedidos');
+    }
+
+    match /visits/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['date','source','campaign'])
+                    && request.resource.data.date is string && request.resource.data.date.size() <= 40
+                    && request.resource.data.source is string && request.resource.data.source.size() <= 40
+                    && (!('campaign' in request.resource.data) || (request.resource.data.campaign is string && request.resource.data.campaign.size() <= 80));
+      allow read: if hasPerm('estadisticas');
+    }
+
+    match /analyticsEvents/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['type','date','productId','cartTotal','orderTotal'])
+                    && request.resource.data.type in ['product_view','add_to_cart','wishlist_add','checkout_start','purchase']
+                    && request.resource.data.date is string && request.resource.data.date.size() <= 40
+                    && (!('productId' in request.resource.data) || (request.resource.data.productId is string && request.resource.data.productId.size() <= 60))
+                    && (!('cartTotal' in request.resource.data) || request.resource.data.cartTotal is number)
+                    && (!('orderTotal' in request.resource.data) || request.resource.data.orderTotal is number);
+      allow read: if hasPerm('estadisticas');
+    }
+
+    match /cashiers/{docId} {
+      allow read, write: if isUnrestricted();
+    }
+
+    match /staffPermissions/{docId} {
+      allow read, write: if isUnrestricted();
+    }
+
+    match /security_totp/{docId} {
+      allow read, write: if request.auth != null && request.auth.token.email.lower() == docId;
+    }
+
+    match /admin_sessions/{docId} {
+      allow read: if request.auth != null && docId.split('__')[0] == request.auth.token.email.lower();
+      allow create: if isTeam() && request.resource.data.email == request.auth.token.email.lower();
+      allow update, delete: if isTeam() && resource.data.email == request.auth.token.email.lower();
+    }
+
+    match /sales/{docId} {
+      allow create, read, update, delete: if hasPerm('pedidos');
+    }
+
+    match /layaways/{docId} {
+      allow create, read, update, delete: if hasPerm('pedidos');
+    }
+
+    match /counters/{docId} {
+      // Lectura pública (el checkout saca el folio). Escritura acotada: solo el campo 'next',
+      // entero, y solo subiendo de 1 en 1 -> nadie puede corromper la numeración de folios.
+      allow read: if true;
+      allow create: if hasPerm('pedidos')
+                    && request.resource.data.keys().hasOnly(['next'])
+                    && request.resource.data.next is int
+                    && request.resource.data.next >= 1
+                    && request.resource.data.next <= 1000000;
+      allow update: if request.resource.data.keys().hasOnly(['next'])
+                    && request.resource.data.next is int
+                    && request.resource.data.next == resource.data.next + 1;
+      allow delete: if isUnrestricted();
+    }
+
+    match /distributionCenters/{docId} {
+      allow read, write: if hasPerm('centros');
+    }
+
+    match /suppliers/{docId} {
+      allow read, write: if hasPerm('centros');
+    }
+    match /restockItems/{docId} {
+      allow read, write: if hasPerm('centros');
+    }
+
+    match /transfers/{docId} {
+      allow create, read, update: if hasPerm('centros');
+    }
+
+    match /audits/{docId} {
+      allow create, read, update, delete: if hasPerm('centros');
+    }
+
+    match /stockMovements/{docId} {
+      allow create: if isTeam();              // antes: request.auth != null
+      allow read: if hasPerm('productos');
+    }
+
+    match /adminAuditLog/{docId} {
+      allow create: if isTeam();              // antes: request.auth != null
+      allow read: if isUnrestricted();
+    }
+
+    match /customerMessages/{docId} {
+      allow create: if isTeam();              // antes: request.auth != null
+      allow read: if hasPerm('clientes');
+    }
+
+    match /commissionAgents/{docId} {
+      allow read, write: if hasPerm('pedidos');
+    }
+
+    match /activePosSessions/{docId} {
+      allow create, update, delete: if isTeam();   // antes: request.auth != null
+      allow read: if hasPerm('caja');
+    }
+
+    match /expenses/{docId} {
+      allow read, write: if isUnrestricted();
+    }
+
+    match /shrinkage/{docId} {
+      allow read, write: if hasPerm('centros');
+    }
+
+    match /restockRequests/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['productId','variantId','variantLabel','productName','name','phone','date','notified'])
+                    && request.resource.data.productId is string
+                    && request.resource.data.phone is string
+                    && request.resource.data.phone.size() >= 8 && request.resource.data.phone.size() <= 20
+                    && request.resource.data.name.size() <= 80
+                    && request.resource.data.productName.size() <= 200
+                    && (!('variantLabel' in request.resource.data) || request.resource.data.variantLabel == null || request.resource.data.variantLabel.size() <= 120);
+      allow read, update, delete: if hasPerm('pedidos');
+    }
+
+    match /searchMisses/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['query','normalized','date','quiz'])
+                    && request.resource.data.query is string
+                    && request.resource.data.query.size() <= 80;
+      allow read, delete: if hasPerm('productos');
+    }
+
+    match /quizResponses/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['need','cat','extra','budget','exact','shown','date'])
+                    && request.resource.data.date is string && request.resource.data.date.size() <= 40;
+      allow read, delete: if hasPerm('estadisticas');
+    }
+
+    match /priceChangeBatches/{docId} {
+      allow read, write: if hasPerm('productos');
+    }
+
+    match /productExchanges/{docId} {
+      allow read, write: if hasPerm('pedidos');
+    }
+
+    match /customers/{docId} {
+      allow read, write: if hasPerm('clientes');
+    }
+
+    match /couponUsage/{docId} {
+      // Creación pública validada (el checkout registra el uso).
+      allow create: if request.resource.data.keys().hasOnly(['code','date','phone'])
+                    && request.resource.data.code is string && request.resource.data.code.size() <= 60
+                    && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 20));
+      // Lectura SOLO personal. Antes era pública y filtraba teléfonos de clientes.
+      // ⚠️ Esto desactiva el chequeo cliente de "cupón ya usado / límite de usos" (falla en abierto:
+      //    no bloquea el checkout, pero deja de contar usos). Fix real sin perder el límite ni la
+      //    privacidad: guardar un HASH del teléfono en vez del teléfono (cambio pequeño en el código).
+      //    Si prefieres mantener el límite ahora mismo a costa de exponer teléfonos, cambia esta
+      //    línea por:  allow read: if true;
+      allow read: if hasPerm('pedidos');
+    }
+
+    // Usos por cupón (H-06): público para leer, y solo sube de 1 en 1.
+    match /couponCounters/{code} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
+      allow update: if request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1;
+      allow delete: if isUnrestricted();
+    }
+    // "Este teléfono ya usó este cupón": id = cupón + huella del teléfono. Se consulta por id exacto
+    // (no se puede listar) y solo se puede crear.
+    match /couponClaims/{id} {
+      allow get: if true;
+      allow list: if hasPerm('pedidos');
+      allow create: if id.matches('^[A-Z0-9_-]{1,60}__[a-f0-9]{32}$')
+                    && request.resource.data.keys().hasOnly(['date'])
+                    && request.resource.data.date is string && request.resource.data.date.size() <= 40;
+      allow delete: if isUnrestricted();
+    }
+
+    match /abandonedCarts/{docId} {
+      // Borrador de carrito: id al azar de cada celular ('ac_…'), así nadie sobrescribe ni borra el
+      // de otra persona sabiendo su teléfono (H-08). Lectura solo personal.
+      allow create, update: if (docId.matches('^ac_[a-z0-9]{16,40}$')
+                              && request.resource.data.keys().hasOnly(['name','phone','address','notes','items','total','updatedAt','completed'])
+                              && request.resource.data.items is list
+                              && request.resource.data.items.size() <= 200
+                              && (!('phone' in request.resource.data) || request.resource.data.phone.size() <= 40)
+                              && (!('address' in request.resource.data) || request.resource.data.address.size() <= 500)
+                              && (!('notes' in request.resource.data) || request.resource.data.notes.size() <= 2000))
+                            || hasPerm('pedidos');
+      allow delete: if docId.matches('^ac_[a-z0-9]{16,40}$') || hasPerm('pedidos');
+      allow read: if hasPerm('pedidos');
+    }
+
+    match /cashRegisters/{docId} {
+      allow create, read, update, delete: if hasPerm('caja');
+    }
+
+    match /storeMessages/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['date','name','phone','type','message','status'])
+                    && request.resource.data.name is string && request.resource.data.name.size() <= 120
+                    && request.resource.data.phone is string && request.resource.data.phone.size() <= 30
+                    && request.resource.data.type in ['pregunta','sugerencia','queja','otro']
+                    && request.resource.data.message is string && request.resource.data.message.size() <= 2000
+                    && request.resource.data.date is string && request.resource.data.date.size() <= 40
+                    && request.resource.data.status == 'nuevo';
+      allow read, update, delete: if hasPerm('mensajes');
+    }
+
+    match /catalog/{docId} {
+      allow read: if true;
+      allow write: if isTeam();               // antes: request.auth != null
+    }
+
+    match /systemErrors/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['message','stack','source','page','userAgent','date'])
+                    && request.resource.data.message is string && request.resource.data.message.size() <= 500
+                    && request.resource.data.stack.size() <= 2000
+                    && request.resource.data.source in ['index','admin','pos'];
+      allow read, delete: if isUnrestricted();
+    }
+
+    match /cartAbandonSurveys/{docId} {
+      allow create: if request.resource.data.keys().hasOnly(['reason','cartTotal','itemCount','date'])
+                    && request.resource.data.reason is string && request.resource.data.reason.size() <= 200
+                    && request.resource.data.cartTotal is number
+                    && request.resource.data.itemCount is number;
+      allow read, delete: if hasPerm('estadisticas');
+    }
+  }
+}

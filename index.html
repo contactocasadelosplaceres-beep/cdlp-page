@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="description" content="Catálogo de La Casa de los Placeres: juguetes, lubricantes y más, con empaque sin marcas y pago al recibir en Ciudad Guzmán.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>La Casa de los Placeres — Catálogo</title>
 <link rel="icon" type="image/png" href="favicon.png">
@@ -160,7 +163,7 @@
   .card-image-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:38px;color:#fff;}
   .badge-row{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;}
   .badge{font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;letter-spacing:0.02em;color:#fff;}
-  .badge-stock{background:#FFF0F0;color:#D32F2F;font-size:10px;font-weight:600;border:1px solid #F7D2D2;}
+  .badge-stock{background:#FFF0F0;color:#B71C1C;font-size:10.5px;font-weight:600;border:1px solid #F7D2D2;}
   .badge-best{background:var(--amber);color:#3a2200;}
   .card-add{margin-top:8px;width:100%;height:38px;border-radius:8px;background:var(--rose);color:#fff;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;text-align:center;transition:transform .12s ease;}
   .card-add:active{transform:scale(.97);}
@@ -661,14 +664,14 @@
   .wishlist-fab{top:6px;right:6px;width:26px;height:26px;background:rgba(255,255,255,0.9);box-shadow:0 2px 4px rgba(0,0,0,0.1);}
   .wishlist-fab svg{width:14px;height:14px;}
   .wishlist-fab::after{content:"";position:absolute;inset:-9px;}   /* área táctil cómoda sin agrandar el círculo */
-  .card-cat{font-size:10px;text-transform:uppercase;color:#777777;}
+  .card-cat{font-size:11px;text-transform:uppercase;color:#5F5F5F;}
   .card-name{font-size:12px;color:#1F1F1F;font-weight:600;font-family:var(--font-body);line-height:1.3;-webkit-line-clamp:2;line-clamp:2;}
   .card-price{font-size:16px;color:#993477;font-weight:700;}
   .card-save{font-size:10px;color:#27AE60;font-weight:500;}
   .card-add,.card-add.alt,.rel-add,.rel-add.alt{width:100%;height:44px;background:#993477;color:#FFFFFF;font-size:13px;font-weight:600;text-align:center;border-radius:8px;border:none;display:flex;align-items:center;justify-content:center;}
   .card-add:disabled,.rel-add:disabled{background:#E7E1E4;color:#777777;}
   .card .qty-step{height:44px;border-color:#993477;} .card .qty-step button{color:#993477;}
-  .card-trust{font-size:9px;color:#0A4A5B;text-align:center;margin-top:6px;font-weight:600;}
+  .card-trust{font-size:11px;color:#0A4A5B;text-align:center;margin-top:6px;font-weight:600;}
   /* ===== Paneles laterales v2 (marca: morado #993477, encabezado #521C3E, fondo #F9F7F8) ===== */
   .btn-primary{background:#993477;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 22px -12px rgba(153,52,119,.6);}
   .btn-primary:hover{background:#86295f;}
@@ -1066,7 +1069,9 @@ async function loadData(attempt){
     if(!staticCat){
       [prodSnap, setSnap, counterSnap] = await Promise.all([
         db.collection('products').orderBy('name').limit(40).get(),
-        db.collection('settings').doc('store').get(),
+        // settings/store ya no es de lectura pública (traía datos internos, hallazgo H-03): si el
+        // catálogo estático no está, la tienda sigue con su configuración por omisión.
+        db.collection('settings').doc('store').get().catch(()=>({exists:false, data:()=>({})})),
         db.collection('counters').doc('orders').get(),
       ]);
     }
@@ -1479,15 +1484,18 @@ function captureKioskModeFromURL(){
   const params = new URLSearchParams(location.search);
   const val = params.get('vitrina');
   if(val==null) return;
+  // Solo dura esta pestaña (sessionStorage): un enlace con ?vitrina=1 ya no deja el teléfono de un
+  // cliente sin poder comprar para siempre (hallazgo H-09). Se limpia también el modo viejo guardado.
   try{
-    if(val==='0') localStorage.removeItem(KIOSK_KEY);
-    else localStorage.setItem(KIOSK_KEY,'1');
+    localStorage.removeItem(KIOSK_KEY);
+    if(val==='0') sessionStorage.removeItem(KIOSK_KEY);
+    else sessionStorage.setItem(KIOSK_KEY,'1');
   }catch(e){}
   const url = new URL(location.href); url.searchParams.delete('vitrina');
   history.replaceState(history.state, '', url.toString());
 }
 function isKioskMode(){
-  try{ return localStorage.getItem(KIOSK_KEY)==='1'; }catch(e){ return false; }
+  try{ if(localStorage.getItem(KIOSK_KEY)) localStorage.removeItem(KIOSK_KEY); return sessionStorage.getItem(KIOSK_KEY)==='1'; }catch(e){ return false; }
 }
 function isEligibleForTier(p, tier, v){
   if(!tier) return false;
@@ -1550,9 +1558,12 @@ async function applyCouponCode(){
   if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ state.couponError = 'Este cupón ya venció'; render(); return; }
   if(!cartHasCouponEligibleItem(coupon)){ state.couponError = 'Este cupón no aplica a los productos de tu carrito'; render(); return; }
   if(coupon.maxUses>0){
+    // Contador público por cupón (solo sube de 1 en 1, ver reglas): la tienda ya no puede leer
+    // couponUsage (trae teléfonos), así que antes este límite nunca se aplicaba (hallazgo H-06).
     try{
-      const used = await db.collection('couponUsage').where('code','==',code).get();
-      if(used.size >= coupon.maxUses){ state.couponError = 'Este cupón ya alcanzó su límite de usos'; render(); return; }
+      const d = await db.collection('couponCounters').doc(couponDocId(code)).get();
+      const used = d.exists ? (d.data().n||0) : 0;
+      if(used >= coupon.maxUses){ state.couponError = 'Este cupón ya alcanzó su límite de usos'; render(); return; }
     }catch(e){ console.error(e); }
   }
   // Aviso temprano para cupones de un solo uso por cliente: si ya tenemos su teléfono guardado
@@ -1568,13 +1579,32 @@ async function applyCouponCode(){
   }
   state.appliedCoupon = coupon; state.couponInput = ''; showToast(`Cupón ${code} aplicado`); render();
 }
-async function couponUsedByPhone(code, phone){
+// Cupones: id seguro del documento, huella del teléfono (no se guarda ni se publica el número) y
+// registro del uso. "couponClaims/<cupón>__<huella>" solo se puede crear, y se consulta por id
+// exacto: nadie puede listar teléfonos, pero sí saber si ESE teléfono ya usó ESE cupón.
+function couponDocId(code){ return String(code||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'_').slice(0,60) || '_'; }
+async function couponPhoneHash(code, digits){
+  const data = new TextEncoder().encode(couponDocId(code)+'|'+String(digits).slice(-10));
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
+}
+async function couponClaimRef(code, phone){
   const digits = (phone||'').replace(/\D/g,'');
-  if(!digits) return false;
+  if(digits.length<8) return null;
+  return db.collection('couponClaims').doc(couponDocId(code)+'__'+await couponPhoneHash(code, digits));
+}
+async function couponUsedByPhone(code, phone){
   try{
-    const snap = await db.collection('couponUsage').where('code','==',code).where('phone','==',digits).get();
-    return !snap.empty;
+    const ref = await couponClaimRef(code, phone); if(!ref) return false;
+    const d = await ref.get(); return d.exists;
   }catch(e){ console.error(e); return false; }
+}
+async function recordCouponUse(code, phone){
+  try{
+    const counter = db.collection('couponCounters').doc(couponDocId(code));
+    await db.runTransaction(async tx=>{ const d = await tx.get(counter); tx.set(counter, {n: (d.exists ? (d.data().n||0) : 0) + 1}); });
+  }catch(e){ console.error('No se pudo contar el uso del cupón', e); }
+  try{ const ref = await couponClaimRef(code, phone); if(ref) await ref.set({date:new Date().toISOString()}); }catch(e){ /* ya existía: mismo teléfono */ }
 }
 function removeCoupon(){ state.appliedCoupon=null; state.couponError=''; render(); }
 function couponDiscountedPrice(p, price, v){
@@ -2156,6 +2186,7 @@ async function submitOrder(formData){
   clearAbandonedCartDraft(formData.phone);
   if(couponCode){
     try{ await db.collection('couponUsage').add({code:couponCode, date:new Date().toISOString(), phone: (formData.phone||'').replace(/\D/g,'')}); }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
+    await recordCouponUse(couponCode, formData.phone);
   }
   // Mensaje de confirmación de compra, listo para que la clienta lo mande por WhatsApp al número
   // de la tienda. Lleva folio y nombre para ubicar el pedido (QA-08). Se guarda para el botón de la
@@ -4130,7 +4161,7 @@ function renderCartDrawer(){
 
 function ckErr(k){ return (state.ckErrors||{})[k] || ''; }
 function ckErrHtml(k){ const m = ckErr(k); return m ? `<div class="ck-err" id="ck-${k}-err" role="alert">${m}</div>` : ''; }
-function ckDraft(){ if(!state.ckDraft){ const p = loadCustomerProfile() || {}; state.ckDraft = {name:p.name||'', phone:p.phone||'', address:p.address||'', notes:p.notes||'', remember:p.remember!==false, terms:false}; } return state.ckDraft; }
+function ckDraft(){ if(!state.ckDraft){ const p = loadCustomerProfile() || {}; state.ckDraft = {name:p.name||'', phone:p.phone||'', address:p.address||'', notes:p.notes||'', remember:p.remember===true, terms:false}; } return state.ckDraft; }
 function ckFieldInput(k){
   const f0 = document.getElementById('ck-'+k);
   if(f0) ckDraft()[k] = (f0.type==='checkbox') ? f0.checked : f0.value;
@@ -4171,7 +4202,7 @@ function renderCheckoutDrawer(){
       <p class="ck-save-note">Guardamos estos datos en nuestro sistema para ayudarte a terminar tu pedido si se interrumpe. Solo los usamos para contactarte sobre esta compra.</p>
       <div class="ck-hp" aria-hidden="true"><label>Sitio web de tu empresa (déjalo vacío)<input id="ck-company-site" type="text" name="company_site" tabindex="-1" autocomplete="off"></label></div>
       <label class="ck-check" style="color:var(--ink-soft);margin-top:-2px;">
-        <input id="ck-remember" type="checkbox" ${p.remember!==false?'checked':''} onchange="ckFieldInput('remember')">
+        <input id="ck-remember" type="checkbox" ${p.remember===true?'checked':''} onchange="ckFieldInput('remember')">
         <span>Recordar mis datos en este celular para la próxima compra</span>
       </label>
       ${needsTermsAcceptance() ? `

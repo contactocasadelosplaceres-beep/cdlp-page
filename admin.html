@@ -2,6 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex, nofollow">
+<script>/* El panel y el POS no se pueden mostrar dentro de otra página (clickjacking, hallazgo H-14). */
+if(window.top!==window.self){ try{ window.top.location.replace(window.self.location.href); }catch(e){ document.documentElement.style.display='none'; } }</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de administración — La Casa de los Placeres</title>
 <link rel="icon" type="image/png" href="favicon.png">
@@ -14,7 +19,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js" integrity="sha384-vmcSy8TM1KhZWBIKMKTR8AxbrJQCuConAolGY+42odu9ZGIzw8L8xAT/u7ul4X2U" crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
@@ -1597,10 +1602,11 @@ async function loadData(attempt){
     if(!state.settings.coupons) state.settings.coupons = [];
     if(!state.settings.promotions) state.settings.promotions = [];
     // unen en una sola lista, ordenada por fecha, para verlos juntos en "Pedidos".
-    const tiendaOrders = ordersSnap.docs.map(d=>({id:d.id, source:'tienda', archived:false, ...d.data()}));
+    // El origen lo dice la colección, no el documento: un pedido creado desde la tienda con source:'pos' ya no se hace pasar por venta del POS (hallazgo H-04).
+    const tiendaOrders = ordersSnap.docs.map(d=>({id:d.id, archived:false, ...d.data(), source:'tienda'}));
     const posOrders = salesSnap.docs.map(d=>{
       const data = d.data();
-      return { id:d.id, source:'pos', archived:false, status:'Entregado', customer: data.customerName || 'Venta en tienda física', ...data };
+      return { id:d.id, archived:false, status:'Entregado', customer: data.customerName || 'Venta en tienda física', ...data, source:'pos' };
     });
     state.orders = [...tiendaOrders, ...posOrders].sort((a,b)=> new Date(b.date) - new Date(a.date));
     state.visits = visitsSnap.docs.map(d=>d.data());
@@ -1888,8 +1894,8 @@ async function checkForNewOrders(manual){
       // ANTES esto llamaba a loadData() completo (miles de lecturas por cada pedido nuevo). Ahora solo
       // se agregan a la memoria los documentos que acaban de llegar, que ya vienen en las consultas de arriba.
       const have = new Set(state.orders.map(o=>o.id));
-      ordersSnap.docs.forEach(d=>{ if(!have.has(d.id)){ state.orders.push({id:d.id, source:'tienda', archived:false, ...d.data()}); have.add(d.id); } });
-      salesSnap.docs.forEach(d=>{ if(!have.has(d.id)){ const data = d.data(); state.orders.push({ id:d.id, source:'pos', archived:false, status:'Entregado', customer: data.customerName || 'Venta en tienda física', ...data }); have.add(d.id); } });
+      ordersSnap.docs.forEach(d=>{ if(!have.has(d.id)){ state.orders.push({id:d.id, archived:false, ...d.data(), source:'tienda'}); have.add(d.id); } });
+      salesSnap.docs.forEach(d=>{ if(!have.has(d.id)){ const data = d.data(); state.orders.push({ id:d.id, source:'pos', archived:false, status:'Entregado', customer: data.customerName || 'Venta en tienda física', ...data, source:'pos' }); have.add(d.id); } });
       if(newCount>0) state.orders.sort((a,b)=> new Date(b.date) - new Date(a.date));
       if(newMsgCount>0){ const hm = new Set((state.storeMessages||[]).map(m=>m.id)); messagesSnap.docs.forEach(d=>{ if(!hm.has(d.id)) state.storeMessages.unshift({id:d.id, status:'nuevo', ...d.data()}); }); }
       if(newCartCount>0){
@@ -2297,6 +2303,13 @@ function paymentMethodShortLabel(o){
   const pays = salePayments(o);
   return pays.length>1 ? 'Dividido' : payMethodName(pays[0].method);
 }
+// Contador público de usos por cupón (couponCounters/<código>): solo sube de 1 en 1 (ver reglas).
+function couponDocId(code){ return String(code||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'_').slice(0,60) || '_'; }
+async function bumpCouponCounter(code){
+  if(!code) return;
+  const ref = db.collection('couponCounters').doc(couponDocId(code));
+  await db.runTransaction(async tx=>{ const d = await tx.get(ref); tx.set(ref, {n: (d.exists ? (d.data().n||0) : 0) + 1}); });
+}
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : 'Sin folio'; }
 async function getNextOrderNumber(){
   const counterRef = db.collection('counters').doc('orders');
@@ -2427,7 +2440,7 @@ async function applyOrderCoupon(id, source){
     await db.collection(source==='pos'?'sales':'orders').doc(id).update(payload);
     Object.assign(o, payload);
     try{
-      await db.collection('couponUsage').add({code, date:new Date().toISOString()});
+      await db.collection('couponUsage').add({code, date:new Date().toISOString()}); try{ await bumpCouponCounter(code); }catch(e){}
       state.couponUsage.push({code, date:new Date().toISOString()});
     }catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
     state.orderDiscountEditing = false;
@@ -12827,7 +12840,7 @@ function auditLoadQrLib(){
   if(typeof Html5Qrcode!=='undefined') return Promise.resolve();
   if(_auditQrLib) return _auditQrLib;
   _auditQrLib = new Promise((resolve,reject)=>{
-    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js'; s.integrity = 'sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+'; s.crossOrigin = 'anonymous';
     s.onload = ()=>resolve(); s.onerror = ()=>{ _auditQrLib=null; reject(new Error('lib')); };
     document.head.appendChild(s);
   });
@@ -15415,7 +15428,7 @@ function printProductLabel(id){
   const w = window.open('', '_blank', 'width=420,height=320');
   if(!w){ showToast('Tu navegador bloqueó la ventana de impresión — permite ventanas emergentes para este sitio'); return; }
   w.document.write(`<html><head><title>Etiqueta — ${(p.name||'').replace(/</g,'&lt;')}</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js" integrity="sha384-vmcSy8TM1KhZWBIKMKTR8AxbrJQCuConAolGY+42odu9ZGIzw8L8xAT/u7ul4X2U" crossorigin="anonymous"><\/script>
     <style>body{font-family:sans-serif;text-align:center;padding:16px;} .l{page-break-after:always;margin-bottom:12px;} .name{font-size:13px;font-weight:700;margin-bottom:4px;} .price{font-size:16px;font-weight:800;margin-top:6px;}</style>
     </head><body>
     ${entries.map((e,i)=>`<div class="l"><div class="name">${e.name.replace(/</g,'&lt;')}</div><svg id="lbl${i}"></svg><div class="price">${money(e.price)}</div></div>`).join('')}
@@ -15433,7 +15446,7 @@ function printProductLabelsBulk(ids){
   const w = window.open('', '_blank');
   if(!w){ showToast('Tu navegador bloqueó la ventana de impresión — permite ventanas emergentes para este sitio'); return; }
   w.document.write(`<html><head><title>Etiquetas (${withSku.length})</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js" integrity="sha384-vmcSy8TM1KhZWBIKMKTR8AxbrJQCuConAolGY+42odu9ZGIzw8L8xAT/u7ul4X2U" crossorigin="anonymous"><\/script>
     <style>
       body{font-family:sans-serif;margin:10px;}
       .sheet{display:flex;flex-wrap:wrap;gap:10px;}
@@ -16738,6 +16751,15 @@ function lyAdminCss(){
   document.head.appendChild(st);
 }
 
+/* Nombres accesibles (hallazgo H-12): un lector de pantalla anunciaba algunas casillas, selectores y
+   botones de ícono sin decir para qué son. Después de dibujar, a lo que no tenga nombre se le pone
+   uno a partir de su título, su texto cercano o su primera opción. */
+function a11yNamePass(root){
+  const hasName = el => el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || (el.id && root.querySelector('label[for="'+el.id+'"]')) || el.closest('label');
+  root.querySelectorAll('select').forEach(el=>{ if(hasName(el)) return; const t = el.getAttribute('title') || (el.options[0] && el.options[0].text) || 'Opciones'; el.setAttribute('aria-label', t.length>40 ? t.slice(0,40) : t); });
+  root.querySelectorAll('input[type=checkbox]').forEach(el=>{ if(hasName(el)) return; const row = el.closest('tr,.list-row,.product-row,.p-row,.card,li'); const txt = row ? (row.innerText||'').replace(/\s+/g,' ').trim().slice(0,50) : ''; el.setAttribute('aria-label', el.getAttribute('title') || (txt ? 'Seleccionar: '+txt : 'Seleccionar')); });
+  root.querySelectorAll('button').forEach(el=>{ if(hasName(el) || (el.textContent||'').trim()) return; const t = el.getAttribute('title'); if(t) el.setAttribute('aria-label', t); });
+}
 function render(){
   const root = document.getElementById('root');
   const focusInfo = captureFocusState(root);
@@ -16748,6 +16770,7 @@ function render(){
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
   if(state.loadFailed){ root.innerHTML = renderLoadFailedScreen(); restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
+  try{ a11yNamePass(root); }catch(e){}
   if(state.productModal && document.getElementById('pf-barcode-svg')){ drawProductBarcode(); }
   if(state.postModalProductId && document.getElementById('post-canvas')){ drawPostCanvas(); }
   toastStack();
