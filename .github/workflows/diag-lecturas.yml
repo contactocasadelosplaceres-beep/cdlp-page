@@ -2,7 +2,7 @@ name: Diagnóstico de lecturas
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
