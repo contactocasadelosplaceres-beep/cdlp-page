@@ -3472,7 +3472,7 @@ function renderPosHeader(){
     <nav class="v2-actions" aria-label="Opciones del punto de venta">
       <button class="v2-act" aria-label="Ventas de hoy" onclick="openSalesList()">${icon('receipt',18)}<span>Ventas</span></button>
       <button class="v2-act" aria-label="Apartados" onclick="openLayaways()">${icon('wallet',18)}<span>Apartados</span></button>
-      <button class="v2-act" onclick="state.cashPanelOpen=true;render()">${icon('dollar-sign',18)}<span>Caja</span></button>
+      <button class="v2-act" aria-label="Caja" onclick="state.cashPanelOpen=true;render()">${icon('dollar-sign',18)}<span>Caja</span></button>
       <div class="top-more-wrap">
         <button class="v2-act" onclick="event.stopPropagation();state.posMoreMenuOpen=!state.posMoreMenuOpen;render()" aria-label="Más opciones" aria-expanded="${!!state.posMoreMenuOpen}">${icon('menu',18)}<span>Más</span></button>
         ${state.posMoreMenuOpen ? `
