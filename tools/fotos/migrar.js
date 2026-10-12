@@ -88,8 +88,23 @@ async function waitForPages(rels) {
 
 function git(cmd) { return execSync(cmd, { cwd: ROOT, stdio: 'pipe' }).toString().trim(); }
 
-async function run({ db, sharp, commit = true }) {
-  const snap = await db.collection('products').get();
+async function run({ db, sharp, commit = true, FV, TS }) {
+  // Corrida programada: solo revisa los productos que cambiaron desde la última vez (sello _sync que
+  // ponen el panel y el POS); una vez por semana los revisa todos. Antes leía todos cada día.
+  const pubRef = db.collection('settings').doc('publish');
+  let st = {}, incremental = false;
+  if (AUTO && TS && !ONLY_IDS.length) {
+    try { const d = await pubRef.get(); st = d.exists ? d.data() : {}; } catch (e) {}
+    const ageDays = st.fotosFullAt ? (Date.now() - new Date(st.fotosFullAt).getTime()) / 864e5 : Infinity;
+    incremental = Number(st.fotosSyncMax) > 0 && ageDays < 7;
+  }
+  const snap = incremental
+    ? await db.collection('products').where('_sync', '>', TS.fromMillis(Math.max(0, Number(st.fotosSyncMax) - 120000))).get()
+    : await db.collection('products').get();
+  let syncMax = Number(st.fotosSyncMax) || 0;
+  snap.docs.forEach(d => { const v = d.data()._sync; if (v && typeof v.toMillis === 'function') syncMax = Math.max(syncMax, v.toMillis()); });
+  const saveState = async () => { if (!AUTO || !TS || ONLY_IDS.length) return; try { await pubRef.set(Object.assign({ fotosSyncMax: syncMax }, incremental ? {} : { fotosFullAt: new Date().toISOString() }), { merge: true }); } catch (e) { console.log('No se guardó el avance de la revisión:', e.message); } };
+  console.log(incremental ? `Revisión rápida: ${snap.size} producto(s) cambiaron desde la última corrida.` : `Revisión completa: ${snap.size} producto(s).`);
   let docs = snap.docs.map(d => ({ id: d.id, data: d.data() }));
   if (ONLY_IDS.length) docs = docs.filter(d => ONLY_IDS.includes(d.id));
   const pending = docs.filter(d => (d.data.images || []).some(isData));
@@ -112,7 +127,7 @@ async function run({ db, sharp, commit = true }) {
   }
   console.log(`Total: ${totImgs} fotos · ${kb(totBefore)} KB → ${kb(totAfter)} KB (miniaturas aparte)`);
 
-  if (DRY_RUN) { console.log('DRY_RUN: no se escribió ningún archivo ni se tocó Firestore.'); return { plans, applied: 0 }; }
+  if (DRY_RUN) { await saveState(); console.log('DRY_RUN: no se escribió ningún archivo ni se tocó Firestore.'); return { plans, applied: 0 }; }
   if (!plans.length) { console.log('Nada que migrar.'); }
 
   // 1) respaldo de lo original
@@ -130,25 +145,28 @@ async function run({ db, sharp, commit = true }) {
     await waitForPages(rels);
   }
   // 4) actualizar productos (solo si nadie los cambió mientras tanto)
-  let applied = 0, skipped = 0;
+  let applied = 0, skipped = 0; const appliedIds = new Set();
   for (const p of plans) {
     const ref = db.collection('products').doc(p.id);
     const ok = await db.runTransaction(async tx => {
       const cur = await tx.get(ref);
       if (!cur.exists || !sameArray(cur.data().images || [], p.original)) return false;
-      tx.update(ref, { images: p.out, imagesMigratedAt: new Date().toISOString() });
+      tx.update(ref, Object.assign({ images: p.out, imagesMigratedAt: new Date().toISOString() }, FV ? { _sync: FV.serverTimestamp() } : {}));
       return true;
     });
-    if (ok) applied++; else { skipped++; console.log(`  ${p.id} cambió mientras tanto; se reintenta en la siguiente corrida.`); }
+    if (ok) { applied++; appliedIds.add(p.id); } else { skipped++; console.log(`  ${p.id} cambió mientras tanto; se reintenta en la siguiente corrida.`); }
   }
   console.log(`Productos actualizados: ${applied} · omitidos por cambios: ${skipped}`);
   // El catálogo estático (catalogo.json) debe enterarse de las rutas nuevas de las fotos.
   if (applied > 0) { try { await db.collection('settings').doc('publish').set({ requestedAt: new Date().toISOString(), urgent: true }, { merge: true }); console.log('Se pidió publicar catalogo.json.'); } catch (e) { console.log('No se pudo pedir la publicación del catálogo:', e.message); } }
 
   // 5) limpieza opcional de archivos que ya nadie usa
-  if (CLEAN_ORPHANS && !LIMIT && !ONLY_IDS.length) {
+  if (CLEAN_ORPHANS && !LIMIT && !ONLY_IDS.length && !incremental) {
+    // Se reutiliza la lectura de arriba (ya era completa) con las fotos nuevas de los productos recién migrados.
     const used = new Set();
-    (await db.collection('products').get()).docs.forEach(d => (d.data().images || []).forEach(s => { if (typeof s === 'string' && s.startsWith(IMG_DIR + '/')) used.add(path.basename(s)); }));
+    const imgsById = new Map(snap.docs.map(d => [d.id, d.data().images || []]));
+    plans.forEach(p => { if (appliedIds.has(p.id)) imgsById.set(p.id, p.out); });
+    imgsById.forEach(list => list.forEach(s => { if (typeof s === 'string' && s.startsWith(IMG_DIR + '/')) used.add(path.basename(s)); }));
     const dir = path.join(ROOT, IMG_DIR); let removed = 0;
     if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) {
       if (!f.endsWith('.webp') || used.has(f)) continue;
@@ -157,6 +175,7 @@ async function run({ db, sharp, commit = true }) {
     if (removed && commit) { git(`git add -A ${IMG_DIR}`); git(`git commit -m "Fotos: se quitan ${removed} archivo(s) que ya ningún producto usa"`); git('git pull --rebase origin main'); git('git push origin HEAD:main'); }
     console.log(`Archivos sin uso eliminados: ${removed}`);
   }
+  await saveState();
   return { plans, applied };
 }
 
@@ -167,6 +186,6 @@ if (require.main === module) {
     if (!env.FIREBASE_SERVICE_ACCOUNT) { console.error('Falta el secreto FIREBASE_SERVICE_ACCOUNT (Settings → Secrets and variables → Actions).'); process.exit(1); }
     const admin = require('firebase-admin');
     admin.initializeApp({ credential: admin.credential.cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
-    await run({ db: admin.firestore(), sharp: require('sharp') });
+    await run({ db: admin.firestore(), sharp: require('sharp'), FV: admin.firestore.FieldValue, TS: admin.firestore.Timestamp });
   })().catch(e => { console.error(e); process.exit(1); });
 }
