@@ -125,6 +125,7 @@ async function main() {
     console.log(`Modo: lectura completa (${FORCE ? 'corrida manual' : !prev ? 'sin catálogo previo' : !pub.syncMax ? 'primera vez con sellos' : 'relectura diaria'})`);
   }
   products.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es'));
+  console.log(`::notice::Catálogo: ${incremental ? 'solo cambios' : 'lectura completa'} · ${readCount} producto(s) leídos de Firestore`);
   const settings = cleanSettings(setSnap.exists ? setSnap.data() : {});
   const orderCount = cntSnap.exists ? Math.max(0, (cntSnap.data().next || 1) - 1) : 0;
   console.log(`Productos publicados: ${products.length} · leídos de Firestore: ${readCount} · ajustes públicos: ${Object.keys(settings).length} claves · pedidos: ${orderCount}`);
