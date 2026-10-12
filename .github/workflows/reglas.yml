@@ -30,7 +30,7 @@ jobs:
         with: { distribution: temurin, java-version: '21' }
       - name: Pruebas en el emulador
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.regresar_a == '' }}
-        run: cd tools/reglas/test && npm install --no-audit --no-fund && npx firebase emulators:exec --only firestore --project demo-cdlp "node rules.test.mjs"
+        run: cd tools/reglas && npm install --prefix test --no-audit --no-fund && test/node_modules/.bin/firebase emulators:exec --only firestore --project demo-cdlp "node test/rules.test.mjs"
       - name: Publicar
         if: ${{ github.event_name == 'workflow_dispatch' && (inputs.publicar == '1' || inputs.regresar_a != '') }}
         run: npm install --prefix tools/diag --no-audit --no-fund && node tools/reglas/publicar.cjs

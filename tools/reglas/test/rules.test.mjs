@@ -3,7 +3,7 @@
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import fs from 'fs';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, addDoc, runTransaction } from 'firebase/firestore';
-const RULES = process.env.RULES_FILE || '../firestore.rules';
+const RULES = process.env.RULES_FILE || 'firestore.rules'; // se corre desde tools/reglas
 const env = await initializeTestEnvironment({ projectId: 'demo-cdlp', firestore: { rules: fs.readFileSync(RULES, 'utf8'), host: '127.0.0.1', port: 8085 } });
 await env.withSecurityRulesDisabled(async c => { const d = c.firestore();
   await setDoc(doc(d,'counters/orders'),{next:100}); await setDoc(doc(d,'orders/o1'),{status:'Nuevo',total:10,items:[],date:'x'});
