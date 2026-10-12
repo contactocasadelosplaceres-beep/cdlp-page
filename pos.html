@@ -399,6 +399,26 @@ const firebaseConfig = {
   appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
 };
 firebase.initializeApp(firebaseConfig);
+/* ============== MEDIDOR DE LECTURAS ==============
+   Cuenta las lecturas de Firestore que hace este equipo (panel y POS, por separado) en el día.
+   Firestore cobra mínimo 1 lectura por consulta aunque no traiga nada; así se cuenta aquí.
+   Va ANTES de las demás capas para contar cada lectura real una sola vez. */
+(function(){
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.Query || !F.DocumentReference) return;
+  const PAGE = /pos\.html/i.test(location.pathname) ? 'pos' : 'admin';
+  const K = 'cdlp_reads';
+  const day = ()=>{ const d = new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
+  window.__readMeter = window.__readMeter || {session:0};
+  function add(n){
+    window.__readMeter.session += n;
+    try{ const t = day(); let m = JSON.parse(localStorage.getItem(K)||'{}'); if(m.day!==t) m = {day:t}; m[PAGE] = (m[PAGE]||0) + n; localStorage.setItem(K, JSON.stringify(m)); }catch(e){}
+  }
+  window.cdlpReadsToday = ()=>{ try{ const m = JSON.parse(localStorage.getItem(K)||'{}'); return m.day===day() ? m : {day:day()}; }catch(e){ return {day:day()}; } };
+  const qg = F.Query.prototype.get, dg = F.DocumentReference.prototype.get;
+  F.Query.prototype.get = function(...a){ return Promise.resolve(qg.apply(this, a)).then(snap=>{ try{ add(Math.max(1, (snap && snap.size) || 0)); }catch(e){} return snap; }); };
+  F.DocumentReference.prototype.get = function(...a){ return Promise.resolve(dg.apply(this, a)).then(snap=>{ add(1); return snap; }); };
+})();
 /* ============== BLINDAJE: TEXTO ESCRITO POR VISITANTES (QA-01) ==============
    Pedidos, carritos abandonados, mensajes, avisos de reposición, búsquedas, encuestas, visitas y
    errores los escribe cualquier persona desde la tienda, sin sesión. El panel y el POS los pintan
@@ -592,11 +612,11 @@ firebase.initializeApp(firebaseConfig);
   const DR = F.DocumentReference.prototype, rSet = DR.set, rUpd = DR.update, rDel = DR.delete;
   const privRef = ref => ref.firestore.collection(PRIV_COL).doc(ref.id);
   DR.set = function(data, opts){
-    if(S.ok && colOf(this)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bSet.call(b, this, sp.pub, opts||{}); bSet.call(b, privRef(this), sp.priv, {merge:true}); return b.commit(); } }
+    if(S.ok && colOf(this)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bSet.call(b, this, sp.pub, opts||{}); bSet.call(b, privRef(this), (window.cdlpSyncStamp ? window.cdlpSyncStamp(sp.priv) : sp.priv), {merge:true}); return b.commit(); } }
     return rSet.call(this, data, opts);
   };
   DR.update = function(data, ...rest){
-    if(S.ok && !rest.length && colOf(this)==='products'){ const sp = split(data, true); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bUpd.call(b, this, sp.pub); bSet.call(b, privRef(this), sp.priv, {merge:true}); return b.commit(); } }
+    if(S.ok && !rest.length && colOf(this)==='products'){ const sp = split(data, true); if(sp){ remember(this.id, sp.priv); const b = this.firestore.batch(); bUpd.call(b, this, sp.pub); bSet.call(b, privRef(this), (window.cdlpSyncStamp ? window.cdlpSyncStamp(sp.priv) : sp.priv), {merge:true}); return b.commit(); } }
     return rUpd.call(this, data, ...rest);
   };
   DR.delete = function(){
@@ -604,21 +624,21 @@ firebase.initializeApp(firebaseConfig);
     return rDel.call(this);
   };
   B.set = function(ref, data, opts){
-    if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); bSet.call(this, ref, sp.pub, opts||{}); bSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+    if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); bSet.call(this, ref, sp.pub, opts||{}); bSet.call(this, privRef(ref), (window.cdlpSyncStamp ? window.cdlpSyncStamp(sp.priv) : sp.priv), {merge:true}); return this; } }
     return bSet.call(this, ref, data, opts);
   };
   B.update = function(ref, data, ...rest){
-    if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); bUpd.call(this, ref, sp.pub); bSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+    if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); bUpd.call(this, ref, sp.pub); bSet.call(this, privRef(ref), (window.cdlpSyncStamp ? window.cdlpSyncStamp(sp.priv) : sp.priv), {merge:true}); return this; } }
     return bUpd.call(this, ref, data, ...rest);
   };
   if(F.Transaction && F.Transaction.prototype){
     const T = F.Transaction.prototype, tSet = T.set, tUpd = T.update;
     T.set = function(ref, data, opts){
-      if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); tSet.call(this, ref, sp.pub, opts||{}); tSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+      if(S.ok && colOf(ref)==='products'){ const sp = split(data, !!(opts&&opts.merge)); if(sp){ remember(ref.id, sp.priv); tSet.call(this, ref, sp.pub, opts||{}); tSet.call(this, privRef(ref), (window.cdlpSyncStamp ? window.cdlpSyncStamp(sp.priv) : sp.priv), {merge:true}); return this; } }
       return tSet.call(this, ref, data, opts);
     };
     T.update = function(ref, data, ...rest){
-      if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); tUpd.call(this, ref, sp.pub); tSet.call(this, privRef(ref), sp.priv, {merge:true}); return this; } }
+      if(S.ok && !rest.length && colOf(ref)==='products'){ const sp = split(data, true); if(sp){ remember(ref.id, sp.priv); tUpd.call(this, ref, sp.pub); tSet.call(this, privRef(ref), (window.cdlpSyncStamp ? window.cdlpSyncStamp(sp.priv) : sp.priv), {merge:true}); return this; } }
       return tUpd.call(this, ref, data, ...rest);
     };
   }
@@ -628,6 +648,45 @@ firebase.initializeApp(firebaseConfig);
       if(S.ok && this.id==='products' && split(data,false)){ const ref = this.doc(); return ref.set(data).then(()=>ref); }
       return cAdd.call(this, data);
     };
+  }
+})();
+
+/* ============== SELLO DE SINCRONIZACIÓN (_sync) — ahorro de lecturas ==============
+   Cada vez que el panel o el POS escriben en estas colecciones, el documento queda con "_sync"
+   (hora del servidor). Así el panel, al abrir, pide solo lo que cambió desde la última vez en vez
+   de volver a leer todo (ver syncedList en admin.html), y el catálogo estático hace lo mismo.
+   También se anota en este equipo qué colección cambió, para que el panel no use su copia
+   guardada de esa colección. Las reglas publicadas no limitan campos en estas colecciones
+   (revisado con la Acción "Diagnóstico de reglas publicadas"). La tienda pública NO usa esto. */
+(function(){
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch || !F.FieldValue || typeof F.FieldValue.serverTimestamp!=='function') return;
+  const COLS = new Set(['products','productCosts','sales','orders','layaways','cashRegisters','transfers','audits','expenses','shrinkage',
+    'suppliers','restockItems','commissionAgents','priceChangeBatches','productExchanges','storeMessages','restockRequests','distributionCenters']);
+  const colOf = ref => { try{ return ref && ref.parent && ref.parent.id; }catch(e){ return null; } };
+  const on = ref => COLS.has(colOf(ref));
+  const isPlain = o => !!o && typeof o==='object' && !Array.isArray(o) && Object.getPrototypeOf(o)===Object.prototype;
+  const st = d => isPlain(d) ? Object.assign({}, d, {_sync: F.FieldValue.serverTimestamp()}) : d;
+  const dirty = c => { try{ const k = 'cdlp_sync_dirty'; const m = JSON.parse(localStorage.getItem(k)||'{}'); m[c] = Date.now(); localStorage.setItem(k, JSON.stringify(m)); }catch(e){} };
+  const drop = ref => { try{ if(typeof window.cdlpSyncDrop==='function') window.cdlpSyncDrop(colOf(ref), ref.id); }catch(e){} };
+  window.cdlpSyncStamp = st;
+  const DR = F.DocumentReference.prototype, B = F.WriteBatch.prototype;
+  const oSet = DR.set, oUpd = DR.update, oDel = DR.delete, bSet = B.set, bUpd = B.update, bDel = B.delete;
+  DR.set = function(d, ...r){ if(on(this)){ dirty(colOf(this)); return oSet.call(this, st(d), ...r); } return oSet.call(this, d, ...r); };
+  DR.update = function(d, ...r){ if(on(this) && !r.length){ dirty(colOf(this)); return oUpd.call(this, st(d)); } return oUpd.call(this, d, ...r); };
+  DR.delete = function(...r){ if(on(this)){ dirty(colOf(this)); drop(this); } return oDel.call(this, ...r); };
+  B.set = function(ref, d, ...r){ if(on(ref)){ dirty(colOf(ref)); return bSet.call(this, ref, st(d), ...r); } return bSet.call(this, ref, d, ...r); };
+  B.update = function(ref, d, ...r){ if(on(ref) && !r.length){ dirty(colOf(ref)); return bUpd.call(this, ref, st(d)); } return bUpd.call(this, ref, d, ...r); };
+  B.delete = function(ref, ...r){ if(on(ref)){ dirty(colOf(ref)); drop(ref); } return bDel.call(this, ref, ...r); };
+  if(F.Transaction && F.Transaction.prototype){
+    const T = F.Transaction.prototype, tSet = T.set, tUpd = T.update, tDel = T.delete;
+    T.set = function(ref, d, ...r){ if(on(ref)){ dirty(colOf(ref)); return tSet.call(this, ref, st(d), ...r); } return tSet.call(this, ref, d, ...r); };
+    T.update = function(ref, d, ...r){ if(on(ref) && !r.length){ dirty(colOf(ref)); return tUpd.call(this, ref, st(d)); } return tUpd.call(this, ref, d, ...r); };
+    if(tDel) T.delete = function(ref, ...r){ if(on(ref)){ dirty(colOf(ref)); drop(ref); } return tDel.call(this, ref, ...r); };
+  }
+  if(F.CollectionReference && F.CollectionReference.prototype){
+    const CR = F.CollectionReference.prototype, oAdd = CR.add;
+    CR.add = function(d, ...r){ if(COLS.has(this.id)){ dirty(this.id); return oAdd.call(this, st(d), ...r); } return oAdd.call(this, d, ...r); };
   }
 })();
 

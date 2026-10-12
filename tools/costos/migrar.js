@@ -50,10 +50,11 @@ async function run({ db, FieldValue }){
       const cur = await tx.get(ref); if(!cur.exists) return;
       const p = plan(cur.data()); if(!p) return;
       fs.writeFileSync(path.join(BACKUP_DIR, `${d.id}.json`), JSON.stringify({ id: d.id, name: cur.data().name || '', ...p.priv }));
-      tx.set(privRef, p.priv, { merge: true });
+      tx.set(privRef, Object.assign({}, p.priv, { _sync: FieldValue.serverTimestamp() }), { merge: true });
       const upd = {}; for(const k of PRIV_KEYS) if(k in p.priv) upd[k] = FieldValue.delete();
       if(p.variants) upd.variants = p.variants;
       if(p.tier !== null) upd.mgTier = p.tier;
+      upd._sync = FieldValue.serverTimestamp(); // el panel y el catálogo ven el cambio sin releer todo
       tx.update(ref, upd);
     });
     moved++;
