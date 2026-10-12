@@ -1818,7 +1818,10 @@ function renderCheckoutReminderDrawer(){
 function variantRepair(p){
   const vs = Array.isArray(p && p.variants) ? p.variants : [];
   if(!vs.length) return {changed:false, problems:[]};
-  const before = JSON.stringify([p.variantGroups||null, vs.map(v=>[v.id, v.combo])]);
+  // Se compara sin importar el orden de los campos: Firestore puede devolver {values, name} en vez de
+  // {name, values} y eso NO es un problema (antes hacía que productos ya reparados volvieran a la lista).
+  const stableJson = x => JSON.stringify(x, (k,v)=> (v && typeof v==='object' && !Array.isArray(v)) ? Object.keys(v).sort().reduce((o,kk)=>(o[kk]=v[kk],o),{}) : v);
+  const before = stableJson([p.variantGroups||null, vs.map(v=>[v.id, v.combo])]);
   const problems = [];
   const nk = s=>String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   let groups = (Array.isArray(p.variantGroups)?p.variantGroups:[]).filter(g=>g && String(g.name||'').trim()).map(g=>({
@@ -1855,7 +1858,8 @@ function variantRepair(p){
   groups.forEach(g=>{ g.values = g.values.filter(val=>vs.some(v=>v.combo[g.name]===val)); });
   if(mism) problems.push('las opciones de las variantes no coincidían con sus propiedades');
   p.variantGroups = groups;
-  const changed = before !== JSON.stringify([p.variantGroups, vs.map(v=>[v.id, v.combo])]);
+  const changed = before !== stableJson([p.variantGroups, vs.map(v=>[v.id, v.combo])]);
+  if(changed && !problems.length) problems.push('la lista de opciones tenía valores repetidos o sin variante');
   return {changed, problems: changed ? [...new Set(problems)] : []};
 }
 function variantRepairAll(list){ (list||[]).forEach(p=>{ try{ variantRepair(p); }catch(e){ console.warn('variantRepair', p && p.id, e); } }); return list; }
