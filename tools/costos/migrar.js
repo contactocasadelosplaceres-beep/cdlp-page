@@ -38,6 +38,7 @@ async function run({ db, FieldValue }){
   let withCost = 0, withHist = 0, withSup = 0, withVar = 0;
   todo.forEach(d => { const p = plan(d.data()); if('cost' in p.priv) withCost++; if('costHistory' in p.priv) withHist++; if('supplierId' in p.priv) withSup++; if(p.priv.variantCosts) withVar++; });
   console.log(`  con costo: ${withCost} · con historial: ${withHist} · con proveedor: ${withSup} · con costo por variante: ${withVar}`);
+  console.log(`::notice::${DRY_RUN ? 'Prueba' : 'Aplicando'}: ${todo.length} producto(s) con datos privados · costo ${withCost} · historial ${withHist} · proveedor ${withSup} · por variante ${withVar}`);
   todo.slice(0, 15).forEach(d => { const x = d.data(); const p = plan(x); console.log(`  ${d.id}  ${String(x.name || '').slice(0, 45).padEnd(45)}  costo ${p.priv.cost ?? '—'}  margen nivel ${p.tier ?? '—'}${p.priv.variantCosts ? `  variantes ${Object.keys(p.priv.variantCosts).length}` : ''}`); });
   if(todo.length > 15) console.log(`  … y ${todo.length - 15} más`);
   if(DRY_RUN){ console.log('DRY_RUN: no se tocó Firestore.'); return { moved: 0 }; }
@@ -63,6 +64,7 @@ async function run({ db, FieldValue }){
   const after = await db.collection('products').get();
   const left = after.docs.filter(d => plan(d.data())).length;
   console.log(`Productos movidos: ${moved} · quedan con datos privados en "products": ${left}`);
+  console.log(`::notice::Movidos: ${moved} · quedan con datos privados en products: ${left}`);
   return { moved, left };
 }
 module.exports = { run, plan, marginTier };
