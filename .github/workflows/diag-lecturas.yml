@@ -2,7 +2,7 @@ name: Diagnóstico de lecturas
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
@@ -12,6 +12,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm install --prefix tools/diag --no-audit --no-fund
-      - run: node tools/diag/lecturas.js
+      - run: node tools/diag/salud.js
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
