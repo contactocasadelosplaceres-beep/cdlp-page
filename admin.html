@@ -24,7 +24,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   :root{
     --bg:#FBF5F2; --surface:#FFFFFF; --surface-soft:#F6E9E6; --ink:#2B1620; --ink-soft:#6E5560;
     --primary:#993477; --primary-deep:#5C1F49; --rose:#BC355C; --coral:#ED7578; --amber:#F6A030;
-    --green:#7AB71A; --teal:#20B7CA; --navy:#0A4A5B; --border:#EBD9D3;
+    --green:#7AB71A; --green-ink:#3F6E0A; --teal:#20B7CA; --navy:#0A4A5B; --border:#EBD9D3;
     --danger-bg:#FBE2E6; --danger-ink:#A02040;
     --radius-sm:10px; --radius-md:14px; --radius-lg:18px; --radius-pill:999px;
     --shadow-sm:0 2px 8px -4px rgba(43,22,32,0.14);
@@ -38,7 +38,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   :root[data-theme="dark"]{
     --bg:#17111A; --surface:#221A26; --surface-soft:#2C2230; --ink:#F2E8F0; --ink-soft:#B7A2B4;
     --primary:#B8478E; --primary-deep:#F3B4DE; --rose:#E36E8E; --coral:#F0968F; --amber:#F6B85B;
-    --green:#93CC49; --teal:#4FD2E2; --navy:#0D2E38; --border:#3B2E3A;
+    --green:#93CC49; --green-ink:#93CC49; --teal:#4FD2E2; --navy:#0D2E38; --border:#3B2E3A;
     --danger-bg:#3D2229; --danger-ink:#F3A0B4;
     --shadow-sm:0 2px 8px -4px rgba(0,0,0,0.45);
     --shadow-md:0 12px 28px -12px rgba(0,0,0,0.55);
@@ -136,7 +136,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   .stat-label{font-size:11px;color:var(--ink-soft);margin-bottom:6px;line-height:1.3;font-weight:600;}
   .stat-value{font-size:22px;font-weight:800;font-family:'League Spartan',sans-serif;color:var(--primary-deep);}
   .stat-delta{font-size:11px;margin-top:4px;font-weight:700;}
-  .stat-delta.up{color:var(--green);}
+  .stat-delta.up{color:var(--green-ink,#3F6E0A);}
   .stat-delta.down{color:var(--rose);}
 
   .panel{border:1px solid var(--border);border-radius:var(--radius-md);padding:18px;margin-bottom:20px;background:var(--surface);box-shadow:var(--shadow-sm);}
@@ -363,7 +363,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   .order-products-toggle{display:flex;align-items:center;gap:4px;color:var(--primary);font-weight:700;cursor:pointer;background:none;border:none;font-size:13px;padding:0;}
   .order-products-toggle .chev{transition:transform .15s ease;}
   .order-products-toggle.open .chev{transform:rotate(180deg);}
-  .order-pay-pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--green);background:#EAF3D8;padding:4px 9px;border-radius:var(--radius-pill);white-space:nowrap;}
+  .order-pay-pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:#3F6E0A;background:#EAF3D8;padding:4px 9px;border-radius:var(--radius-pill);white-space:nowrap;}
   .order-pay-pill.split{color:var(--teal);background:#DFF4F6;cursor:help;}
   .order-ship-sub{font-size:11px;color:var(--ink-soft);margin-top:3px;white-space:normal;max-width:180px;}
   .order-actions-cell{position:relative;text-align:right;}
@@ -4391,7 +4391,7 @@ function renderOrderEditModal(){
         <div class="list-row" style="align-items:center;flex-wrap:wrap;gap:8px;">
           <div class="row-main" style="min-width:140px;"><div class="row-title">${escDescHtml(it.name)}</div>
             <div class="row-sub"><input type="number" min="0" step="0.01" inputmode="decimal" value="${Number(it.price)||0}" style="width:84px;padding:4px 6px;" onchange="setEditOrderPrice(${i},this.value)"> c/u</div></div>
-          <div style="display:flex;align-items:center;gap:6px;"><button class="icon-btn" onclick="setEditOrderQty(${i},${it.qty-1})">−</button><strong style="min-width:22px;text-align:center;">${it.qty}</strong><button class="icon-btn" onclick="setEditOrderQty(${i},${it.qty+1})">+</button></div>
+          <div style="display:flex;align-items:center;gap:6px;"><button class="icon-btn" aria-label="Quitar una pieza" onclick="setEditOrderQty(${i},${it.qty-1})">−</button><strong style="min-width:22px;text-align:center;">${it.qty}</strong><button class="icon-btn" aria-label="Agregar una pieza" onclick="setEditOrderQty(${i},${it.qty+1})">+</button></div>
           <strong style="min-width:70px;text-align:right;">${money((Number(it.price)||0)*it.qty)}</strong>
           <button class="icon-btn danger" aria-label="Quitar" onclick="setEditOrderQty(${i},0)">${icon('trash',14)}</button>
         </div>`).join('')}
@@ -7721,8 +7721,8 @@ function renderNeedsManagePanel(){
       <div class="panel-sub" style="margin-top:0;">Estas mismas etiquetas aparecen como filtro en tu tienda pública. Puedes cambiar el nombre, el orden, agregar nuevas o borrarlas.</div>
       ${needs.map((n,idx)=>`
         <div class="list-row" style="margin-bottom:6px;">
-          <button class="icon-btn" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveNeed(${idx},-1)">${icon('arrow-up')}</button>
-          <button class="icon-btn" ${idx===needs.length-1?'disabled style="opacity:.3;"':''} onclick="moveNeed(${idx},1)">${icon('arrow-down')}</button>
+          <button class="icon-btn" aria-label="Subir" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveNeed(${idx},-1)">${icon('arrow-up')}</button>
+          <button class="icon-btn" aria-label="Bajar" ${idx===needs.length-1?'disabled style="opacity:.3;"':''} onclick="moveNeed(${idx},1)">${icon('arrow-down')}</button>
           <input value="${(n.label||'').replace(/"/g,'&quot;')}" style="flex:1;padding:9px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="renameNeed('${n.key}',this.value)">
           <button class="icon-btn danger" onclick="removeNeed('${n.key}')">${icon('trash')}</button>
         </div>
@@ -7742,8 +7742,8 @@ function renderCategoriesManagePanel(){
       <div class="panel-sub" style="margin-top:0;">Estas categorías aparecen como filtro en tu tienda pública y en el menú del encabezado. Puedes cambiar el nombre, el orden, agregar nuevas, borrarlas, o marcarlas como ocultas para que no aparezcan en la tienda (los productos siguen existiendo, solo no se muestra el filtro).</div>
       ${cats.map((c,idx)=>{ const isHidden = hidden.includes(c); return `
         <div class="list-row" style="margin-bottom:6px;${isHidden?'opacity:.6;':''}">
-          <button class="icon-btn" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},-1)">${icon('arrow-up')}</button>
-          <button class="icon-btn" ${idx===cats.length-1?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},1)">${icon('arrow-down')}</button>
+          <button class="icon-btn" aria-label="Subir" ${idx===0?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},-1)">${icon('arrow-up')}</button>
+          <button class="icon-btn" aria-label="Bajar" ${idx===cats.length-1?'disabled style="opacity:.3;"':''} onclick="moveCategory(${idx},1)">${icon('arrow-down')}</button>
           <input value="${c.replace(/"/g,'&quot;')}" style="flex:1;padding:9px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:16px;" onchange="renameCategory('${c.replace(/'/g,"\\'")}',this.value)">
           <button class="visibility-toggle ${isHidden?'off':'on'}" onclick="toggleCategoryHidden('${c.replace(/'/g,"\\'")}')">${isHidden?'Oculta':'Visible'}</button>
           <button class="icon-btn" title="Copiar enlace directo a esta categoría" onclick="copyCategoryLink('${c.replace(/'/g,"\\'")}')">${icon('link',16)}</button>
@@ -8151,7 +8151,7 @@ function renderProductRow(p, isSelected, catFilter, needFilter, canReorder, canU
               <button onclick="state.productRowMenuOpenId=null;copyProductLink('${p.id}')">${icon('link',15)} Copiar enlace</button>
             </div>` : ''}
           </div>
-          <button class="icon-btn" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
+          <button class="icon-btn" aria-label="Editar producto" onclick='state.productModal=JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(p))}"));render()'>${icon('edit')}</button>
           <button class="icon-btn danger" title="Enviar a la papelera" onclick="deleteProduct('${p.id}')">${icon('trash')}</button>
         </div>
       </div>`;
@@ -9874,7 +9874,7 @@ function renderReturnModal(){
       ${(o.items||[]).map((it,idx)=>{ if(!it.id || it.id==='promo_buyxpayy') return ''; const max = Math.max(0,(it.qty||0)-orderReturnedQty(o,idx)); return `
         <div class="list-row" style="align-items:center;">
           <div class="row-main"><div class="row-title">${escDescHtml(it.name)}</div><div class="row-sub">${money(it.price)} c/u · ${max} por devolver${orderReturnedQty(o,idx)?` (ya regresaron ${orderReturnedQty(o,idx)})`:''}</div></div>
-          ${max>0 ? `<div style="display:flex;align-items:center;gap:6px;"><button class="icon-btn" onclick="setReturnQty(${idx},${(Number(m.qty[idx])||0)-1})">−</button><strong style="min-width:18px;text-align:center;">${Number(m.qty[idx])||0}</strong><button class="icon-btn" onclick="setReturnQty(${idx},${(Number(m.qty[idx])||0)+1})">+</button></div>` : '<span class="row-sub">—</span>'}
+          ${max>0 ? `<div style="display:flex;align-items:center;gap:6px;"><button class="icon-btn" aria-label="Quitar una pieza" onclick="setReturnQty(${idx},${(Number(m.qty[idx])||0)-1})">−</button><strong style="min-width:18px;text-align:center;">${Number(m.qty[idx])||0}</strong><button class="icon-btn" aria-label="Agregar una pieza" onclick="setReturnQty(${idx},${(Number(m.qty[idx])||0)+1})">+</button></div>` : '<span class="row-sub">—</span>'}
         </div>`; }).join('')}
       <div class="form-field" style="margin-top:12px;"><label>¿En qué estado regresan?</label>
         <label class="checkbox-row" style="margin-bottom:6px;"><input type="radio" name="retcond" ${m.condition!=='merma'?'checked':''} onchange="state.returnModal.condition='bueno';render()"><span>Buen estado — regresan al inventario</span></label>
@@ -11228,7 +11228,7 @@ function renderMayoreo(){
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div class="row-title">${t.name} <span class="status-badge" style="background:${t.active?'var(--green)':'#8a6b78'};">${t.active?'Activa':'Inactiva'}</span></div>
             <div class="row-actions">
-              <button class="icon-btn" onclick="toggleWholesaleActive('${t.id}')">${t.active?'⏸':'▶'}</button>
+              <button class="icon-btn" aria-label="Activar o pausar" onclick="toggleWholesaleActive('${t.id}')">${t.active?'⏸':'▶'}</button>
               <button class="icon-btn" onclick="openWholesaleModal('${t.id}')">${icon('edit')}</button>
               <button class="icon-btn danger" onclick="deleteWholesaleTier('${t.id}')">${icon('trash')}</button>
             </div>
