@@ -109,6 +109,29 @@ function msUntilOpen(t) {
   return open > t ? open - t : open + 86400000 - t;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* VIGILANTE DEL CATÁLOGO: el horario "cada 20 min" de catalogo.yml también lo corre GitHub con horas de
+   retraso (se vio pasar 11 h sin publicar), así que los cambios de productos tardaban en verse en la
+   tienda. Esta misma corrida continua lee settings/publish (1 lectura) cada CATALOGO_CADA_MIN minutos
+   en horario (CATALOGO_NOCHE_MIN de noche) y, si el panel pidió publicar o ya toca el refresco de
+   existencias, lanza "Catálogo estático" al momento. build.js decide igual que siempre (no fuerza nada). */
+const CAT_EVERY = Math.max(2, Number(env.CATALOGO_CADA_MIN || 5)) * 60000;
+const CAT_NIGHT = Math.max(5, Number(env.CATALOGO_NOCHE_MIN || 30)) * 60000;
+const CAT_MIN_GAP = Number(env.MIN_GAP_MINUTOS || 45), CAT_MAX_AGE_H = Number(env.MAX_AGE_HORAS || 6);
+let catNext = 0, catLastDispatch = 0;
+async function catalogWatch() {
+  const t = Date.now(); if (t < catNext) return; catNext = t + (inWindow(t) ? CAT_EVERY : CAT_NIGHT);
+  const repo = env.GITHUB_REPOSITORY, token = env.GITHUB_TOKEN; if (!repo || !token) return;
+  if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
+  const pub = (await admin.firestore().collection('settings').doc('publish').get()).data() || {};
+  const ageMin = pub.publishedAt ? (t - new Date(pub.publishedAt).getTime()) / 60000 : Infinity;
+  const requested = pub.requestedAt && (!pub.publishedAt || pub.requestedAt > pub.publishedAt) && (pub.urgent === true || ageMin >= CAT_MIN_GAP);
+  const why = requested ? 'el panel pidió publicar' : ageMin >= CAT_MAX_AGE_H * 60 ? 'refresco de existencias' : null;
+  if (!why || t - catLastDispatch < 12 * 60000) return; // no relanzar mientras la anterior aún corre
+  const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/catalogo.yml/dispatches`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, body: JSON.stringify({ ref: env.GITHUB_REF_NAME || 'main', inputs: { force: '0', dry_run: '0' } }) });
+  catLastDispatch = t;
+  console.log(`Catálogo: ${why} → ${r.status === 204 ? 'publicación lanzada' : 'no se pudo lanzar (' + r.status + ')'}`);
+}
+const catSafe = async () => { try { await catalogWatch(); } catch (e) { console.log('Vigilante del catálogo:', e.message); } };
 (async () => {
   const loopMin = Number(env.LOOP_MINUTES || 0), every = Math.max(30, Number(env.INTERVAL_SEC || 60)) * 1000;
   if (!loopMin) { if (inWindow(Date.now()) || env.FORZAR === '1') await main(); else console.log('Fuera del horario de avisos; no se revisa.'); return; }
@@ -116,11 +139,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   let fails = 0;
   while (Date.now() < end) {
     if (!inWindow(Date.now())) {
-      const wait = Math.min(msUntilOpen(Date.now()), end - Date.now());
-      console.log(`Fuera del horario de avisos (${H_START}:00–${H_END}:00). Espero ${Math.round(wait / 60000)} min sin leer nada.`);
+      await catSafe();
+      const wait = Math.min(msUntilOpen(Date.now()), end - Date.now(), CAT_NIGHT);
+      console.log(`Fuera del horario de avisos (${H_START}:00–${H_END}:00). Sin avisos; espero ${Math.round(wait / 60000)} min (solo se revisa el catálogo).`);
       await sleep(Math.max(1000, wait));
       continue;
     }
+    await catSafe();
     try { await main(); fails = 0; } catch (e) { fails++; console.error('Revisión fallida:', e.message); if (fails >= 10) break; }
     await sleep(every);
   }
