@@ -1,21 +1,27 @@
-/* AUDITORÍA (rama audit/*, solo lectura): guarda las reglas publicadas CIFRADAS con una llave pública
-   de la auditoría en la rama audit-reglas (nadie más puede leerlas). No toca datos. */
-const admin = require('firebase-admin'); const crypto = require('crypto'); const { execSync } = require('child_process'); const fs = require('fs');
+/* AUDITORÍA (rama audit/*, solo lectura). Solo imprime nombres de claves y conteos, nunca valores. */
+const admin = require('firebase-admin');
 const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({ credential: admin.credential.cert(sa) });
-const PUB = "-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEApyZWQddGFbfuB+InD4yp\n29FF6sM66efRga/ErDPpPjONTYM3b/DVX2tqHiCWE8otamoXyh7uh/4emzWkj3V/\nVEnY2Ky+XOWNl7gl3Fm4Ah84PdNF/+4xOUGo/fRZluKcUyCIYvuEsdP9T6fKXSPB\n7qDXVvK8k5w8UQko7+2BUQE7YhYYZAj4hHN50ub4DZTDt2sVo8cFtwC2XyrXY6mZ\n/wyS6rrTSgMJZN/O5MoK4/Zm+1tnfFrNmAhSt0pme7kg+9c3ifbGTIVne0J4373x\ne2XUHmJogni73RrRREDaY3Naz2pdnvKx4pYH3Vt9FNM3OXu0bVxVZPccWIMMMacg\nXSSZpIhUEAaTIZIU3RZrMT5COYodQ47XxLXqEtEykhLDAbGsRmKPnRXny1maR2fQ\ns83Davucdm3Yy2IsbBvE3HkZ5QmBHG8ke+UbI5lfOuHCyS5dDt0Y5ZLVv6UmzHfv\n6DStN5Gs4+/M5hRdDSuUs/BdRjJPe32JD9DF43Hz0HdDAgMBAAE=\n-----END PUBLIC KEY-----";
+const db = admin.firestore();
+const note = s => console.log('::notice::' + s);
 (async () => {
-  const { access_token } = await admin.app().options.credential.getAccessToken();
-  const H = { Authorization: 'Bearer ' + access_token };
-  const rel = await (await fetch('https://firebaserules.googleapis.com/v1/projects/' + sa.project_id + '/releases/cloud.firestore', { headers: H })).json();
-  const rs = await (await fetch('https://firebaserules.googleapis.com/v1/' + rel.rulesetName, { headers: H })).json();
-  const content = (rs.source.files || []).map(f => f.content).join('\n');
-  const key = crypto.randomBytes(32), iv = crypto.randomBytes(12);
-  const c = crypto.createCipheriv('aes-256-gcm', key, iv); const enc = Buffer.concat([c.update(content, 'utf8'), c.final()]); const tag = c.getAuthTag();
-  const ek = crypto.publicEncrypt({ key: PUB, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, key);
-  fs.writeFileSync('reglas.enc.json', JSON.stringify({ ek: ek.toString('base64'), iv: iv.toString('base64'), tag: tag.toString('base64'), data: enc.toString('base64'), updateTime: rel.updateTime }));
-  const sh = c => execSync(c, { stdio: 'pipe' }).toString();
-  sh('git config user.name "cdlp-audit[bot]"'); sh('git config user.email "actions@users.noreply.github.com"');
-  sh('git checkout --orphan audit-reglas'); sh('git rm -rf --cached . >/dev/null'); sh('git add reglas.enc.json'); sh('git commit -m "reglas cifradas (auditoría)"'); sh('git push -f origin audit-reglas');
-  console.log('::notice::Reglas cifradas subidas (' + content.length + ' caracteres, publicadas ' + rel.updateTime + ')');
+  const st = (await db.collection('settings').doc('store').get()).data() || {};
+  const SENS = ['slackWebhookUrl','ai','recurringExpenses','salesGoalMonthly','deliveryWhatsapp','storeAddress','repurchaseProductIds','churnRiskDays','dashboardNotes','checklists','monthCloses','repurchaseNotified','churnRiskNotified','coupons','wholesaleTiers','historicalOrderCountOffset','dismissedHealthItems','duplicatesIgnored','deliverySurveyQuestions'];
+  const present = SENS.filter(k => k in st).map(k => { const v = st[k]; const n = Array.isArray(v) ? v.length : (v && typeof v === 'object') ? Object.keys(v).length : (v === '' || v == null ? 0 : 1); return `${k}(${n})`; });
+  note('settings/store PÚBLICO contiene: ' + present.join(', '));
+  const secretish = Object.keys(st).filter(k => /(secret|token|password|webhook|apikey|api_key|key)$/i.test(k));
+  note('claves con nombre de secreto en settings/store: ' + (secretish.join(', ') || 'ninguna'));
+  const others = (await db.collection('settings').listDocuments()).map(d => d.id);
+  note('documentos en settings: ' + others.join(', '));
+  // Llave web de Firebase: ¿tiene restricciones?
+  try {
+    const { access_token } = await admin.app().options.credential.getAccessToken();
+    const r = await fetch(`https://apikeys.googleapis.com/v2/projects/${sa.project_id}/locations/global/keys`, { headers: { Authorization: 'Bearer ' + access_token } });
+    const j = await r.json();
+    if (j.keys) j.keys.forEach(k => note(`LLAVE ${k.displayName || '(sin nombre)'} · restricción navegador=${!!(k.restrictions && k.restrictions.browserKeyRestrictions)} · APIs limitadas=${k.restrictions && k.restrictions.apiTargets ? k.restrictions.apiTargets.length : 0}`));
+    else note('LLAVES: no se pudo consultar (' + (j.error ? j.error.status : r.status) + ')');
+  } catch (e) { note('LLAVES error ' + e.message); }
+  const cnt = async q => { try { return (await q.count().get()).data().count; } catch (e) { return 'err'; } };
+  note(`VOLUMEN público-escribible · storeMessages=${await cnt(db.collection('storeMessages'))} · visits=${await cnt(db.collection('visits'))} · analyticsEvents=${await cnt(db.collection('analyticsEvents'))} · abandonedCarts=${await cnt(db.collection('abandonedCarts'))} · systemErrors=${await cnt(db.collection('systemErrors'))} · searchMisses=${await cnt(db.collection('searchMisses'))} · orders=${await cnt(db.collection('orders'))}`);
+  note(`PEDIDOS raros · status≠Nuevo creados por tienda: ${await cnt(db.collection('orders').where('source','==','tienda').where('status','in',['Entregado','Pagado','Enviado']))} · sin source: ${await cnt(db.collection('orders').where('source','==',null))}`);
 })().catch(e => { console.log('::error::' + e.message); process.exit(1); });
