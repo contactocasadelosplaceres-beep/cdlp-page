@@ -2,6 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex, nofollow">
+<script>/* El panel y el POS no se pueden mostrar dentro de otra página (clickjacking, hallazgo H-14). */
+if(window.top!==window.self){ try{ window.top.location.replace(window.self.location.href); }catch(e){ document.documentElement.style.display='none'; } }</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Punto de venta — La Casa de los Placeres</title>
 <link rel="icon" type="image/png" href="favicon.png">
@@ -734,6 +739,13 @@ async function getNextOrderNumber(){
     return null;
   }
 }
+// Contador público de usos por cupón (couponCounters/<código>): solo sube de 1 en 1 (ver reglas).
+function couponDocId(code){ return String(code||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'_').slice(0,60) || '_'; }
+async function bumpCouponCounter(code){
+  if(!code) return;
+  const ref = db.collection('couponCounters').doc(couponDocId(code));
+  await db.runTransaction(async tx=>{ const d = await tx.get(ref); tx.set(ref, {n: (d.exists ? (d.data().n||0) : 0) + 1}); });
+}
 function formatFolio(n){ return n ? '#' + String(n).padStart(4,'0') : ''; }
 const auth = firebase.auth();
 
@@ -1197,7 +1209,7 @@ function loadHtml5QrcodeLib(){
   if(html5QrcodeLoadPromise) return html5QrcodeLoadPromise;
   html5QrcodeLoadPromise = new Promise((resolve, reject)=>{
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js'; s.integrity = 'sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+'; s.crossOrigin = 'anonymous';
     s.onload = ()=> resolve();
     s.onerror = ()=>{ html5QrcodeLoadPromise = null; reject(new Error('No se pudo descargar el lector')); };
     document.head.appendChild(s);
@@ -2658,7 +2670,7 @@ async function trySyncOfflineQueue(){
         touchedProductIds.add(upd.id);
       }
       if(sale.couponCode){
-        try{ await db.collection('couponUsage').add({code: sale.couponCode, date:new Date().toISOString()}); }catch(e){}
+        try{ await db.collection('couponUsage').add({code: sale.couponCode, date:new Date().toISOString()}); }catch(e){} try{ await bumpCouponCounter(sale.couponCode); }catch(e){}
       }
       queue.shift();
       saveOfflineQueue(queue);
@@ -2706,7 +2718,7 @@ function posFefoConsume(batches, qty){
   for(const i of order){ if(left<=0) break; const take = Math.min(list[i].qty||0, left); list[i].qty = (list[i].qty||0) - take; left -= take; }
   return list.filter(b=>(b.qty||0)>0);
 }
-async function reserveStockForSale(items, centerId){
+async function reserveStockForSale(items, centerId, withSale){
   const demandByDoc = new Map(); // docId -> {center: qty, variants: Map(variantId->qty)}
   function addCenterDemand(docId, qty){
     const d = demandByDoc.get(docId) || {center:0, variants:new Map()};
@@ -2728,10 +2740,15 @@ async function reserveStockForSale(items, centerId){
     addCenterDemand(it.id, it.qty);
   });
   const docIds = Array.from(demandByDoc.keys());
-  if(!docIds.length) return {};
+  if(!docIds.length && !withSale) return {};
+  // Con withSale ({saleRef, sale}) la venta, su folio y el descuento de existencias se guardan en la
+  // MISMA transacción: o queda todo, o no queda nada (antes, si fallaba guardar la venta, las piezas
+  // ya se habían descontado sin venta y el reintento las descontaba otra vez — hallazgo H-05).
+  const counterRef = withSale ? db.collection('counters').doc('orders') : null;
   return await db.runTransaction(async (tx)=>{
     const refs = docIds.map(id=>db.collection('products').doc(id));
     const snaps = await Promise.all(refs.map(r=>tx.get(r)));
+    const cSnap = counterRef ? await tx.get(counterRef) : null;
     const insufficient = [];
     const updates = [];
     snaps.forEach((snap, idx)=>{
@@ -2783,6 +2800,12 @@ async function reserveStockForSale(items, centerId){
     updates.forEach(u=> tx.update(u.ref, u.payload));
     const map = {};
     updates.forEach(u=>{ map[u.docId] = u.payload; });
+    if(withSale){
+      const orderNumber = cSnap && cSnap.exists ? (cSnap.data().next || 1) : 1;
+      tx.set(counterRef, {next: orderNumber + 1}, {merge:true});
+      tx.set(withSale.saleRef, {...withSale.sale, orderNumber, source:'pos'});
+      Object.defineProperty(map, '__orderNumber', {value: orderNumber, enumerable:false});
+    }
     return map;
   });
 }
@@ -2849,6 +2872,21 @@ async function chargeSale(){
     else manualDiscountPayload.value = state.manualDiscount.value;
   }
   const isOffline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  const couponCode = state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null;
+  const saleFields = {
+    date: new Date().toISOString(),
+    cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
+    centerId, centerName: state.activeCenter.name,
+    cashRegisterId: state.activeCashRegister.id,
+    items, subtotal, total, paymentMethod: state.payMethod, payments,
+    manualDiscount: manualDiscountPayload, couponCode,
+    customerId: state.activeCustomer ? state.activeCustomer.id : null,
+    customerName: state.activeCustomer ? state.activeCustomer.name : null,
+    customerPhone: state.activeCustomer ? (state.activeCustomer.phone||'') : null,
+    customerAddress: state.activeCustomer ? (state.activeCustomer.address||'') : null,
+    notes: state.saleNotes || '',
+  };
+  let reservedOrderNumber = null;
   // Con conexión, antes de tocar nada en memoria, se reserva el stock en una transacción de
   // Firestore: así, si dos ventas chocan por la misma última pieza (dos cajeros, dos centros,
   // al mismo tiempo), sólo una gana y la otra se cancela limpiamente en vez de dejar el
@@ -2856,7 +2894,8 @@ async function chargeSale(){
   // flujo de siempre (descuento en memoria + cola para sincronizar después).
   if(!isOffline){
     try{
-      await reserveStockForSale(items, centerId);
+      const res = await reserveStockForSale(items, centerId, {saleRef: db.collection('sales').doc(), sale: saleFields});
+      reservedOrderNumber = res && res.__orderNumber != null ? res.__orderNumber : null;
     }catch(e){
       if(e instanceof InsufficientStockError){
         const names = e.insufficientItems.map(i=>i.name).join(', ');
@@ -2934,30 +2973,16 @@ async function chargeSale(){
       const kitsToRefresh = state.products.filter(k=>k.isKit && (k.kitItems||[]).some(ki=>touchedComponentIds.has(ki.productId)));
       kitsToRefresh.forEach(k=>{ k.stock = computeKitStock(k); if(!isOffline) kitCacheUpdates.push({id:k.id, payload:{stock:k.stock}}); });
     }
-    const couponCode = state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null;
-    const saleFields = {
-      date: new Date().toISOString(),
-      cashierId: state.activeCashier.id, cashierName: state.activeCashier.name,
-      centerId, centerName: state.activeCenter.name,
-      cashRegisterId: state.activeCashRegister.id,
-      items, subtotal, total, paymentMethod: state.payMethod, payments,
-      manualDiscount: manualDiscountPayload, couponCode,
-      customerId: state.activeCustomer ? state.activeCustomer.id : null,
-      customerName: state.activeCustomer ? state.activeCustomer.name : null,
-      customerPhone: state.activeCustomer ? (state.activeCustomer.phone||'') : null,
-      customerAddress: state.activeCustomer ? (state.activeCustomer.address||'') : null,
-      notes: state.saleNotes || '',
-    };
     let orderNumber = null;
     if(isOffline){
       queueOfflineSale({...saleFields, stockUpdates});
       showToast('Sin conexión: la venta se guardó en este dispositivo y se subirá sola cuando regrese el internet');
     } else {
-      orderNumber = await getNextOrderNumber();
-      // Los productos/variantes/componentes ya se descontaron de forma atómica en reserveStockForSale;
-      // aquí sólo falta refrescar el stock cacheado de los kits afectados (no es sensible a carreras).
-      await Promise.all(kitCacheUpdates.map(u=>db.collection('products').doc(u.id).update(u.payload)));
-      await db.collection('sales').add({...saleFields, orderNumber, source:"pos"});
+      // La venta, su folio y las existencias ya quedaron guardados juntos en reserveStockForSale.
+      // Aquí sólo falta refrescar el stock cacheado de los kits afectados (no es sensible a carreras).
+      orderNumber = reservedOrderNumber;
+      try{ await Promise.all(kitCacheUpdates.map(u=>db.collection('products').doc(u.id).update(u.payload))); }catch(e){ console.warn('Existencias de kits: se actualizarán en la siguiente venta', e); }
+      try{ await bumpCouponCounter(couponCode); }catch(e){}
       if(couponCode){
         try{ await db.collection('couponUsage').add({code: couponCode, date:new Date().toISOString()}); }
         catch(e){ console.error('No se pudo registrar el uso del cupón', e); }
@@ -3441,8 +3466,8 @@ function renderPosHeader(){
       </div>
     </div>
     <nav class="v2-actions" aria-label="Opciones del punto de venta">
-      <button class="v2-act" onclick="openSalesList()">${icon('receipt',18)}<span>Ventas</span></button>
-      <button class="v2-act" onclick="openLayaways()">${icon('wallet',18)}<span>Apartados</span></button>
+      <button class="v2-act" aria-label="Ventas de hoy" onclick="openSalesList()">${icon('receipt',18)}<span>Ventas</span></button>
+      <button class="v2-act" aria-label="Apartados" onclick="openLayaways()">${icon('wallet',18)}<span>Apartados</span></button>
       <button class="v2-act" onclick="state.cashPanelOpen=true;render()">${icon('dollar-sign',18)}<span>Caja</span></button>
       <div class="top-more-wrap">
         <button class="v2-act" onclick="event.stopPropagation();state.posMoreMenuOpen=!state.posMoreMenuOpen;render()" aria-label="Más opciones" aria-expanded="${!!state.posMoreMenuOpen}">${icon('menu',18)}<span>Más</span></button>
