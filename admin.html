@@ -13090,8 +13090,9 @@ function auditCountControls(key, n){
 }
 // Ubicación en almacén editable desde la auditoría (se guarda en el producto: product.location).
 // No re-renderiza al guardar para que la fila no salte de lugar (la lista se ordena por ubicación).
+// Se guarda al salir del campo, con Enter o al elegir de la lista; lleva id para que un redibujado no borre lo escrito.
 function auditLocInput(p){
-  return `<div style="flex-basis:100%;display:flex;align-items:center;gap:6px;">${icon('map-pin',14)}<input list="audit-loc-list" data-audit-loc="${p.id}" placeholder="Ubicación en almacén (ej. Estante B, repisa 3)" value="${escapeHtmlAudit(p.location||'')}" maxlength="80" style="flex:1;min-width:0;padding:7px 9px;border-radius:8px;border:1px solid var(--border);font-size:13px;" onchange="setProductLocationAudit('${p.id}', this.value)"></div>`;
+  return `<div style="flex-basis:100%;display:flex;align-items:center;gap:6px;">${icon('map-pin',14)}<input list="audit-loc-list" id="audit-loc-${p.id}" data-audit-loc="${p.id}" aria-label="Ubicación en almacén de ${escapeHtmlAudit(p.name||'')}" enterkeyhint="done" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="setProductLocationAudit('${p.id}', this.value)" placeholder="Ubicación en almacén (ej. Estante B, repisa 3)" value="${escapeHtmlAudit(p.location||'')}" maxlength="80" style="flex:1;min-width:0;padding:7px 9px;border-radius:8px;border:1px solid var(--border);font-size:13px;" onchange="setProductLocationAudit('${p.id}', this.value)"></div>`;
 }
 async function setProductLocationAudit(id, v){
   const p = state.products.find(x=>x.id===id); if(!p) return;
