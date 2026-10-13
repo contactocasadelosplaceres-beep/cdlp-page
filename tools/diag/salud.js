@@ -39,7 +39,7 @@ const ts = v => v && typeof v.toDate === 'function' ? v.toDate().toISOString() :
       return { name: it.name, sold, counted: it.countedQty, system: it.systemQty, now, movesAfter: after, ok: now === it.countedQty || now === it.countedQty + after || now === it.countedQty - sold || now === it.countedQty + after - sold };
     }) }));
   const out = { generatedAt: new Date().toISOString(), products: ps.size, withLocation: Object.values(P).filter(p => (p.location || '').trim()).length,
-    locationLogs: locAll.length, locationProducts: Object.keys(locLast).length, locMismatch, moveSample: mv.slice(0, 2).map(m => Object.keys(m).sort()), movesErr: moves.err || null, auditCheck };
+    locationLogs: locAll.length, locAll: locAll.map(x => ({ ...x, name: (P[x.id] || {}).name })), auditIds: audits.map(a => ({ date: a.date, ids: (a.items || []).map(i => i.productId) })), locationProducts: Object.keys(locLast).length, locMismatch, moveSample: mv.slice(0, 2).map(m => Object.keys(m).sort()), movesErr: moves.err || null, auditCheck };
   console.log('::notice::' + `Productos ${out.products} · con ubicación ${out.withLocation} · ubicaciones registradas ${out.locationProducts} · NO coinciden hoy ${locMismatch.length}`);
   console.log('::notice::' + auditCheck.map(a => `${a.date.slice(0, 16)} ${a.applied ? 'aplicada' : 'sin aplicar'} ${a.items} prod, no cuadran ${a.rows.filter(r => !r.ok).length}`).join(' | '));
   const dir = path.join(process.cwd(), 'diag'); fs.mkdirSync(dir, { recursive: true });
