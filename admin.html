@@ -146,6 +146,8 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
     :root .prod-filters .prod-search{flex:1 1 0;width:0;min-width:0;}
     .prod-filters:not(.adv-open) .prod-select{display:none;}
     .prod-filter-toggle{align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;}
+    /* Letra de 16px en campos de texto: con menos, el iPhone hace zoom al tocarlos. */
+    :root input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),:root select,:root textarea{font-size:16px;}
     .prod-filter-toggle.is-set{border-color:var(--primary);color:var(--primary-deep);}
   }
   /* Inicio (Resumen): tarjeta "Hoy", accesos rápidos y secciones plegables. */
@@ -6537,10 +6539,10 @@ function renderTodayPanel(){
   return `<div class="panel" id="today-panel">
     <div class="panel-title" style="margin:0;">Qué hacer hoy</div>
     <div class="panel-sub" style="margin:2px 0 0;text-transform:capitalize;">${dateTxt}</div>
-    ${tasks.length ? `<div class="today-list">${tasks.map(x=>`
+    ${tasks.length ? `<div class="today-list">${(state.todayShowAll ? tasks : tasks.slice(0,4)).map(x=>`
       <button type="button" class="today-item" onclick="${x.go.replace(/"/g,'&quot;')}">
         <span class="today-dot ${x.tone}"></span><span class="today-n">${x.n}</span><span class="today-text">${x.text}</span><span class="today-go">Ir ›</span>
-      </button>`).join('')}</div>` : `<div class="today-ok">Todo al día: no hay pedidos, mensajes ni avisos pendientes.</div>`}
+      </button>`).join('')}</div>${tasks.length>4 ? `<button class="btn-tertiary" style="margin-top:8px;width:100%;" onclick="state.todayShowAll=${!state.todayShowAll};render()">${state.todayShowAll ? 'Ver menos' : `Ver ${tasks.length-4} pendiente${tasks.length-4===1?'':'s'} más`}</button>` : ''}` : `<div class="today-ok">Todo al día: no hay pedidos, mensajes ni avisos pendientes.</div>`}
   </div>`;
 }
 function computeBusinessHealth(){
