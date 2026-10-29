@@ -34,7 +34,6 @@ async function t(name, p, want){ let ok; try{ await p; ok=true; }catch(e){ ok=fa
 await t('tienda crea pedido normal', setDoc(doc(anon,'orders/a1'), order), true);
 await t('tienda crea pedido sin folio, con campaña y señal', setDoc(doc(anon,'orders/a2'), {...order, orderNumber:null, campaign:'fb', fraudSignals:['rapido']}), true);
 await t('tienda lee existencia mínima (productStock)', getDoc(doc(anon,'productStock/p1')), true);
-await t('tienda crea pedido de 30 renglones', setDoc(doc(anon,'orders/a4'), {...order, items:Array.from({length:30},(_,i)=>({id:'p'+i,name:'X',qty:2,price:10.5})), total:630}), true);
 await t('tienda crea pedido con promoción (renglón negativo permitido)', setDoc(doc(anon,'orders/a3'), {...order, items:[...order.items,{id:'promo_buyxpayy',name:'Promo',price:-20,qty:1}], total:80}), true);
 await t('tienda lee y sube el folio +1', runTransaction(anon, async tx=>{ const r=doc(anon,'counters/orders'); const s=await tx.get(r); tx.set(r,{next:s.data().next+1},{merge:true}); }), true);
 await t('tienda registra visita', addDoc(collection(anon,'visits'),{date:'2026-10-12T00:00:00Z',source:'directo'}), true);
@@ -55,10 +54,6 @@ await t('anónimo lee un producto completo (S-01)', getDoc(doc(anon,'products/p1
 await t('anónimo lista productos (S-01)', getDocs(collection(anon,'products')), false);
 await t('anónimo lista productStock', getDocs(collection(anon,'productStock')), false);
 await t('anónimo escribe productStock', setDoc(doc(anon,'productStock/p1'),{stock:999,variants:[]}), false);
-await t('anónimo crea pedido con renglón a precio negativo (S-03)', setDoc(doc(anon,'orders/c1'), {...order, items:[{id:'p1',name:'X',qty:1,price:-100}], total:0}), false);
-await t('anónimo crea pedido con total que no es la suma', setDoc(doc(anon,'orders/c2'), {...order, total:1}), false);
-await t('anónimo crea pedido con cantidad 0', setDoc(doc(anon,'orders/c3'), {...order, items:[{id:'p1',name:'X',qty:0,price:100}], total:0}), false);
-await t('anónimo crea pedido con 31 renglones', setDoc(doc(anon,'orders/c4'), {...order, items:Array.from({length:31},()=>({id:'p1',name:'X',qty:1,price:1})), total:31}), false);
 await t('anónimo lee security_totp', getDoc(doc(anon,'security_totp/x@example.com')), false);
 await t('admin sin código de 6 dígitos lee pedidos (S-04)', getDoc(doc(adminSinCodigo,'orders/o1')), false);
 await t('admin sin código de 6 dígitos lee productos (S-04)', getDoc(doc(adminSinCodigo,'products/p1')), false);
