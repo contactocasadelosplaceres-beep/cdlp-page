@@ -102,6 +102,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   @media(max-width:760px){
     .admin-top,.admin-nav-mobile{display:none!important;}
     :root .m-only{display:flex;}
+    :root .m-hide{display:none;}
     .m-top{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:25;background:var(--navy);color:#fff;padding:8px 10px 8px 16px;padding-top:calc(8px + env(safe-area-inset-top));box-shadow:0 4px 14px -10px rgba(0,0,0,.5);}
     .m-top .m-brand{flex:1;min-width:0;}
     .m-top .m-brand b{display:block;font-family:'League Spartan',sans-serif;font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -110,6 +111,9 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
     .m-icon:disabled{opacity:.5;}
     .m-bottom-nav{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -8px 20px -14px rgba(43,22,32,.35);}
     .m-bottom-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;font-size:11px;font-weight:700;color:var(--ink-soft);position:relative;}
+    .m-bottom-nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;font-size:11px;font-weight:700;color:var(--ink-soft);text-decoration:none;}
+    .m-bottom-nav a.m-pos{color:var(--primary);}
+    .m-grid.m-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));}
     .m-bottom-nav button.active{color:var(--primary);}
     .m-bottom-nav button.active::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--primary);}
     .m-badge{position:absolute;top:6px;left:calc(50% + 5px);background:var(--rose);color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:999px;padding:0 5px;display:flex;align-items:center;justify-content:center;line-height:1;}
@@ -147,6 +151,16 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
     .prod-filters:not(.adv-open) .prod-select{display:none;}
     .prod-filter-toggle{align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;}
     /* Letra de 16px en campos de texto: con menos, el iPhone hace zoom al tocarlos. */
+    /* Estadísticas: un botón con el reporte actual; la lista de 20 reportes se abre al tocarlo. */
+    .stats-picker{width:100%;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;margin-bottom:14px;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--surface);text-align:left;min-height:56px;}
+    .stats-picker small{display:block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+    .stats-picker b{font-size:16px;color:var(--primary-deep);font-family:'League Spartan',sans-serif;}
+    .stats-picker-cta{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;color:var(--primary);white-space:nowrap;}
+    :root .stats-subtabs-wrap:not(.m-open){display:none;}
+    :root .stats-subtabs-wrap{border:1px solid var(--border);border-radius:var(--radius-md);margin:-6px 0 14px;padding:4px 12px;}
+    :root .stats-subtabs-wrap .stats-tab-group-row{flex-direction:column;gap:2px;}
+    :root .stats-subtabs-wrap .stats-tab-group-row .admin-tab{text-align:left;background:transparent;min-height:44px;font-size:14px;}
+    :root .stats-subtabs-wrap .stats-tab-group-row .admin-tab.active{background:var(--surface-soft);color:var(--primary-deep);box-shadow:none;}
     :root input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),:root select,:root textarea{font-size:16px;}
     .prod-filter-toggle.is-set{border-color:var(--primary);color:var(--primary-deep);}
   }
@@ -162,7 +176,8 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   .hoy-pipe button{background:rgba(255,255,255,.13);border-radius:12px;padding:10px 8px;color:#fff;text-align:left;min-height:56px;}
   .hoy-pipe button b{display:block;font-size:22px;font-family:'League Spartan',sans-serif;line-height:1;}
   .hoy-pipe button span{font-size:11.5px;color:rgba(255,255,255,.85);}
-  .quick-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:18px;}
+  .quick-actions{display:flex;gap:8px;margin-bottom:18px;}
+  .quick-actions > *{flex:1 1 0;min-width:0;}
   .quick-actions a,.quick-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:70px;border-radius:var(--radius-md);background:var(--surface);border:1.5px solid var(--border);font-size:12.5px;font-weight:700;color:var(--primary-deep);text-decoration:none;text-align:center;padding:8px;}
   .dash-sec{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);margin-bottom:12px;box-shadow:var(--shadow-sm);}
   .dash-sec > summary{list-style:none;display:flex;align-items:center;gap:10px;padding:15px 16px;cursor:pointer;min-height:52px;}
@@ -196,7 +211,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   .sidebar-nav{flex:1;overflow-y:auto;}
   .sidebar-group-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,0.4);margin:16px 10px 6px;}
   .sidebar-group-label:first-child{margin-top:0;}
-  .sidebar-link{display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.82);text-align:left;background:transparent;transition:background .15s ease,color .15s ease;margin-bottom:2px;}
+  .sidebar-link{text-decoration:none;display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.82);text-align:left;background:transparent;transition:background .15s ease,color .15s ease;margin-bottom:2px;}
   .sidebar-link svg{flex-shrink:0;opacity:0.85;}
   .sidebar-link:hover{background:rgba(255,255,255,0.08);color:#fff;}
   .sidebar-link.active{background:var(--primary);color:#fff;font-weight:700;}
@@ -1285,7 +1300,7 @@ let state = {
   products:[], trashProducts:[], trashOpen:false, duplicatesOpen:false, duplicateGroups:null, orders:[], visits:[], analyticsEvents:[], cashiers:[], settings:{...DEFAULT_SETTINGS},
   statsSubview:"general", visitsPeriod:"hoy",
   lyList:[], lyLoaded:false, lyLoading:false, lyDetailId:null, lyFilter:'activos', lySearch:'', lyPay:null, lyCancel:null, lyReceipt:null, lyVoid:null, lyCust:null, lyContact:null, lyBulk:null, lyItems:null, lyNew:null, lyBusy:false, checklistsModal:null,
-  adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:"Todos", orderSourceFilter:"Todos", orderSearch:"", showArchived:false, loaded:false,
+  adminTab:"resumen", productModal:null, orderDetail:null, orderDetailModal:null, orderActionsMenu:null, orderStatusFilter:orderDefaultStatus(), orderSourceFilter:"Todos", orderSearch:"", showArchived:false, loaded:false,
   selectedOrders:[], selectedProducts:[], selectedCustomers:[], r21:null, noteEditId:null, noteEditText:'',
   importOpen:false, importPreview:[], importText:"", importFileName:"", importResult:null, newCatInput:"",
   cashierModal:null, cropOpen:false, productSearch:"",
@@ -2252,7 +2267,7 @@ function renderAssignCommissionModal(){
    editar permisos, podría dárselos a sí mismo. Administrar usuarios queda reservado a
    cuentas sin restricciones (las que no tienen un documento de colaborador con ese correo). */
 const PAGE_HEADS = {
-  resumen:['Resumen','Cómo va tu negocio hoy'],
+  resumen:['Inicio','Cómo va tu negocio hoy'],
   'estadísticas':['Estadísticas','Ventas, productos, clientes y operación en números'],
   caja:['Caja','Aperturas y cierres del Punto de Venta'],
   centros:['Centros','Sucursales, inventario, transferencias y reabasto'],
@@ -5517,21 +5532,21 @@ function renderLogin(){
 // inventario con Marketing (7 herramientas propias) y Diseño (apariencia pública), y "Personas"
 // mezclaba clientes con el equipo interno (cajeros/usuarios). Mismas pestañas, mismo adminTab,
 // cero cambio de función — solo reordenado y re-etiquetado.
+// Mismo orden en computadora y celular: arriba lo de todos los días (Inicio, Pedidos, Productos y
+// el Punto de venta), luego tres grupos. Mismas pestañas, mismo adminTab, mismas funciones.
 const ADMIN_NAV_GROUPS = [
-  {label:'Ventas', tabs:['resumen','pedidos','apartados','caja']},
-  {label:'Catálogo', tabs:['productos','centros']},
-  {label:'Clientes', tabs:['clientes','mensajes']},
-  {label:'Marketing', tabs:['marketing']},
-  {label:'Analítica', tabs:['estadísticas']},
-  {label:'Configuración', tabs:['diseño','cajeros','configuración']},
+  {label:'', tabs:['resumen','pedidos','productos']},
+  {label:'Día a día', tabs:['caja','apartados','centros']},
+  {label:'Clientes y promociones', tabs:['clientes','marketing','mensajes']},
+  {label:'Tienda y números', tabs:['estadísticas','diseño','cajeros','configuración']},
 ];
 const TAB_ICON = {
-  resumen:'grid', apartados:'bag', pedidos:'receipt', caja:'dollar-sign', productos:'package', centros:'map-pin',
+  resumen:'home', apartados:'bag', pedidos:'receipt', caja:'dollar-sign', productos:'package', centros:'map-pin',
   marketing:'star', diseño:'palette', clientes:'user', mensajes:'message-square',
   cajeros:'users', estadísticas:'bar-chart', configuración:'sliders',
 };
 function adminTabLabel(t){
-  const base = t==='cajeros' ? 'Usuarios' : t[0].toUpperCase()+t.slice(1);
+  const base = adminTabName(t);
   if(t==='pedidos' && state.newOrderCount>0) return `${base} <span class="tab-badge">${state.newOrderCount}</span>`;
   if(t==='apartados' && lyOverdueCount()>0) return `${base} <span class="tab-badge">${lyOverdueCount()}</span>`;
   if(t==='mensajes' && state.newMessageCount>0) return `${base} <span class="tab-badge">${state.newMessageCount}</span>`;
@@ -5570,7 +5585,7 @@ function expirationBadge(p){
 function adminGoTabJs(t){
   return `state.adminTab='${t}';state.designSubpanel=null;state.marketingSubpanel=null;state.configSubpanel=null;state.adminNavOpen=false;${t==='pedidos'?'state.newOrderCount=0;':''}${t==='mensajes'?'state.newMessageCount=0;':''}render();window.scrollTo(0,0)`;
 }
-function adminTabName(t){ return t==='cajeros' ? 'Usuarios' : t[0].toUpperCase()+t.slice(1); }
+function adminTabName(t){ return t==='cajeros' ? 'Usuarios' : t==='resumen' ? 'Inicio' : t[0].toUpperCase()+t.slice(1); }
 function adminTabBadgeN(t){
   if(t==='pedidos') return state.newOrderCount||0;
   if(t==='apartados') return lyOverdueCount()||0;
@@ -5578,17 +5593,18 @@ function adminTabBadgeN(t){
   return 0;
 }
 // Barra inferior del celular: lo que se usa a diario. El resto vive en "Más".
+// El 4.º lugar es el Punto de venta (casi todas las ventas salen de ahí); para colaboradores sin
+// acceso al POS ese lugar lo ocupa Clientes.
 const MOBILE_PRIMARY = [
   {t:'resumen', label:'Inicio', ic:'home'},
   {t:'pedidos', label:'Pedidos', ic:'receipt'},
   {t:'productos', label:'Productos', ic:'package'},
-  {t:'clientes', label:'Clientes', ic:'user'},
 ];
-const MOBILE_MORE_GROUPS = [
-  {label:'Operación', tabs:[['apartados','Abonos y entregas'],['caja','Aperturas y cortes'],['centros','Sucursales y reabasto']]},
-  {label:'Vender más', tabs:[['marketing','Cupones y promos'],['estadísticas','Reportes'],['mensajes','Buzón de clientes']]},
-  {label:'Tienda y equipo', tabs:[['diseño','Cómo se ve tu tienda'],['cajeros','Equipo y accesos'],['configuración','Ajustes y datos']]},
-];
+const TAB_HINT = {
+  caja:'Aperturas y cortes', apartados:'Abonos y entregas', centros:'Inventario y reabasto',
+  clientes:'Historial y contacto', marketing:'Cupones y promos', mensajes:'Buzón de clientes',
+  'estadísticas':'Reportes', 'diseño':'Cómo se ve tu tienda', cajeros:'Equipo y accesos', 'configuración':'Ajustes y datos',
+};
 function renderMobileTop(){
   const sub = 'Panel de administración';
   return `<div class="m-top">
@@ -5598,8 +5614,10 @@ function renderMobileTop(){
   </div>`;
 }
 function renderMobileNav(){
-  const prim = MOBILE_PRIMARY.filter(x=>canAccessTab(x.t));
-  const groups = MOBILE_MORE_GROUPS.map(g=>({...g, tabs:g.tabs.filter(([t])=>canAccessTab(t))})).filter(g=>g.tabs.length);
+  const posInBar = !state.myPermissions;
+  const prim = [...MOBILE_PRIMARY, ...(posInBar ? [] : [{t:'clientes', label:'Clientes', ic:'user'}])].filter(x=>canAccessTab(x.t));
+  const inBar = new Set(prim.map(x=>x.t));
+  const groups = ADMIN_NAV_GROUPS.filter(g=>g.label).map(g=>({...g, tabs:g.tabs.filter(t=>canAccessTab(t) && !inBar.has(t)).map(t=>[t, TAB_HINT[t]||''])})).filter(g=>g.tabs.length);
   const inMore = !prim.some(x=>x.t===state.adminTab);
   const moreBadge = groups.reduce((n,g)=>n+g.tabs.reduce((a,[t])=>a+adminTabBadgeN(t),0),0);
   const badge = (n)=> n>0 ? `<span class="m-badge">${n>99?'99+':n}</span>` : '';
@@ -5608,18 +5626,18 @@ function renderMobileNav(){
   <div class="m-sheet" role="dialog" aria-label="Más secciones">
     <div class="m-grip"></div>
     ${groups.map(g=>`<div class="m-group-label">${g.label}</div>
-      <div class="m-grid">${g.tabs.map(([t,hint])=>`<button class="m-tile ${state.adminTab===t?'active':''}" onclick="${adminGoTabJs(t)}">
+      <div class="m-grid ${g.tabs.length===4?'m-grid-2':''}">${g.tabs.map(([t,hint])=>`<button class="m-tile ${state.adminTab===t?'active':''}" onclick="${adminGoTabJs(t)}">
         <span class="m-tile-ic">${icon(TAB_ICON[t]||'grid',17)}</span><b>${adminTabName(t)}</b><small>${hint}</small>${badge(adminTabBadgeN(t))}</button>`).join('')}</div>`).join('')}
     <div class="m-tools">
-      ${!state.myPermissions ? `<a href="pos.html" target="_blank">${icon('bag',18)} Punto de venta</a>` : ''}
       <button onclick="refreshNow()" ${state.refreshing?'disabled':''}>${icon('refresh-cw',18)} Actualizar datos <span class="m-tools-sub">${refreshLabel()}</span></button>
       ${!state.myPermissions ? `<button onclick="state.adminNavOpen=false;state.adminTab='configuración';state.configSubpanel='herramientas';render();window.scrollTo(0,0)">${icon('activity',18)} Lecturas de Firebase hoy <span class="m-tools-sub">${readsTodayLabel()}</span></button>` : ''}
       <button onclick="toggleTheme()">${isDarkTheme()?icon('sun',18):icon('moon',18)} ${isDarkTheme()?'Tema claro':'Tema oscuro'}</button>
       <button class="m-danger" onclick="handleLogout()">${icon('log-out',18)} Cerrar sesión</button>
     </div>
   </div>` : ''}
-  <nav class="m-bottom-nav" style="--n:${prim.length+1}" aria-label="Secciones">
+  <nav class="m-bottom-nav" style="--n:${prim.length+(posInBar?2:1)}" aria-label="Secciones">
     ${prim.map(x=>`<button class="${state.adminTab===x.t?'active':''}" ${state.adminTab===x.t?'aria-current="page"':''} onclick="${adminGoTabJs(x.t)}">${icon(x.ic,21)}<span>${x.label}</span>${badge(adminTabBadgeN(x.t))}</button>`).join('')}
+    ${posInBar ? `<a class="m-pos" href="pos.html" target="_blank">${icon('bag',21)}<span>Vender</span></a>` : ''}
     <button class="${inMore||state.adminNavOpen?'active':''}" aria-expanded="${state.adminNavOpen?'true':'false'}" onclick="state.adminNavOpen=!state.adminNavOpen;render()">${icon('menu',21)}<span>Más</span>${badge(moreBadge)}</button>
   </nav>`;
 }
@@ -5638,9 +5656,10 @@ function renderAdmin(){
         <div class="brand-sub">Panel de administración</div>
       </div>
       <nav class="sidebar-nav">
-        ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map(g=>`
-          <div class="sidebar-group-label">${g.label}</div>
+        ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map((g,gi)=>`
+          ${g.label ? `<div class="sidebar-group-label">${g.label}</div>` : ''}
           ${g.tabs.map(t=>`<button class="sidebar-link ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${icon(TAB_ICON[t]||'grid',16)}<span>${adminTabLabel(t)}</span></button>`).join('')}
+          ${gi===0 && !state.myPermissions ? `<a class="sidebar-link" href="pos.html" target="_blank">${icon('bag',16)}<span>Punto de venta</span></a>` : ''}
         `).join('')}
       </nav>
       <div class="sidebar-footer">
@@ -5648,7 +5667,6 @@ function renderAdmin(){
         <button onclick="refreshNow()" ${state.refreshing?'disabled':''}>${icon('refresh-cw',15)}<span>${refreshLabel()}</span></button>
         ${!state.myPermissions ? `<button onclick="state.adminTab='configuración';state.configSubpanel='herramientas';render()" title="Lecturas de Firebase gastadas hoy en este equipo (panel + punto de venta). Límite gratis: 50,000 al día entre todos.">${icon('activity',15)}<span>${readsTodayLabel()} lecturas hoy</span></button>` : ''}
         <button onclick="openGlobalSearch()">${icon('search',15)}<span>Buscar</span></button>
-        ${!state.myPermissions ? `<a href="pos.html" target="_blank">${icon('bag',15)}<span>Punto de venta</span></a>` : ''}
         <button onclick="handleLogout()">${icon('x',15)}<span>Cerrar sesión</span></button>
       </div>
     </aside>
@@ -5674,7 +5692,7 @@ function renderAdmin(){
       ${state.adminNavOpen ? `
       <div class="admin-nav-mobile-sheet">
         ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map(g=>`
-          <div class="admin-nav-group-label">${g.label}</div>
+          ${g.label ? `<div class="admin-nav-group-label">${g.label}</div>` : ''}
           <div class="admin-nav-group-row">
             ${g.tabs.map(t=>`<button class="admin-tab ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${adminTabLabel(t)}</button>`).join('')}
           </div>
@@ -6519,31 +6537,40 @@ function computeTodayTasks(){
     if(pend) t.push({tone:'ambar', n:pend, text:`producto${pend===1?'':'s'} por reponer para ${sPlan.season.ev.name} (${sPlan.season.daysLeft===0?'es hoy':`faltan ${sPlan.season.daysLeft} día${sPlan.season.daysLeft===1?'':'s'}`})`, go:"state.adminTab='centros';state.centersSubview='reabasto';render()"});
   }
   const mcl = pendingMonthClose();
-  if(mcl) t.push({tone:'info', n:mcl.pending, text: mcl.pending ? `${mcl.pending===1?'pendiente':'pendientes'} para cerrar ${monthLabelOf(mcl.key)}` : `todo listo para cerrar ${monthLabelOf(mcl.key)}`, go:"state.adminTab='estadísticas';state.statsSubview='cierre';state.closeMonth='"+mcl.key+"';render()"});
+  if(mcl) t.push({maint:true, tone:'info', n:mcl.pending, text: mcl.pending ? `${mcl.pending===1?'pendiente':'pendientes'} para cerrar ${monthLabelOf(mcl.key)}` : `todo listo para cerrar ${monthLabelOf(mcl.key)}`, go:"state.adminTab='estadísticas';state.statsSubview='cierre';state.closeMonth='"+mcl.key+"';render()"});
   const liqN = computeLiquidation().rows.filter(r=>!r.onPromo && !r.sellsOut && r.days<=15).length;
   if(liqN) t.push({tone:'ambar', n:liqN, text:`producto${liqN===1?'':'s'} caduca${liqN===1?'':'n'} en 15 días o menos y no alcanza${liqN===1?'':'n'} a venderse — ponlo${liqN===1?'':'s'} en oferta`, go:"state.adminTab='estadísticas';state.statsSubview='productos';render();var e=document.getElementById('liq-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   if(auditHasDraft()) t.push({tone:'ambar', n:Object.keys(state.auditCounts).length, text:'producto'+(Object.keys(state.auditCounts).length===1?'':'s')+' contado'+(Object.keys(state.auditCounts).length===1?'':'s')+' en un conteo sin terminar — retómalo y finalízalo', go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='contar';render()"});
-  else { const dc = defaultCenterId(); if(dc){ const cp = computeCountPlan(dc); if(cp.todayLeft>0 && cp.dueCount>0) t.push({tone: cp.overdueA?'ambar':'info', n:Math.min(cp.todayLeft, cp.dueCount), text:`producto${Math.min(cp.todayLeft,cp.dueCount)===1?'':'s'} te toca contar hoy (conteo cíclico)`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='calendario';render()"}); } }
-  { const oa = computeAuditStats().open; if(oa) t.push({tone:'ambar', n:oa, text:`diferencia${oa===1?'':'s'} de inventario sin resolver`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='seguimiento';render()"}); }
-  if(catalogReviewDue()){ const n = catalogReviewPending(); t.push({tone:'info', n, text:`cosa${n===1?'':'s'} por corregir en productos — revisión semanal`, go:"goToCatalogReview()"}); }
+  else { const dc = defaultCenterId(); if(dc){ const cp = computeCountPlan(dc); if(cp.todayLeft>0 && cp.dueCount>0) t.push({maint:true, tone: cp.overdueA?'ambar':'info', n:Math.min(cp.todayLeft, cp.dueCount), text:`producto${Math.min(cp.todayLeft,cp.dueCount)===1?'':'s'} te toca contar hoy (conteo cíclico)`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='calendario';render()"}); } }
+  { const oa = computeAuditStats().open; if(oa) t.push({maint:true, tone:'ambar', n:oa, text:`diferencia${oa===1?'':'s'} de inventario sin resolver`, go:"state.adminTab='centros';state.centersSubview='auditorias';state.auditSub='seguimiento';render()"}); }
+  if(catalogReviewDue()){ const n = catalogReviewPending(); t.push({maint:true, tone:'info', n, text:`cosa${n===1?'':'s'} por corregir en productos — revisión semanal`, go:"goToCatalogReview()"}); }
   lyTodayTasks().forEach(x=>t.push(x));
   ckTodayTasks().forEach(x=>t.push(x));
   const m = computeMetrics();
-  if(m.lowStock.length) t.push({tone:'ambar', n:m.lowStock.length, text:`producto${m.lowStock.length===1?'':'s'} con poco stock o agotado${m.lowStock.length===1?'':'s'}`, go:"var e=document.getElementById('resumen-reabasto');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
+  if(m.lowStock.length) t.push({maint:true, tone:'ambar', n:m.lowStock.length, text:`producto${m.lowStock.length===1?'':'s'} con poco stock o agotado${m.lowStock.length===1?'':'s'}`, go:"setDashOpen('reabasto',true);render();var e=document.getElementById('resumen-reabasto');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   if(m.expiringOrExpired) t.push({tone:'ambar', n:m.expiringOrExpired, text:`producto${m.expiringOrExpired===1?'':'s'} por caducar o caducado${m.expiringOrExpired===1?'':'s'}`, go:"state.adminTab='estadísticas';state.statsSubview='productos';state.healthOpen='expiringSoon';state.healthShowDismissed=false;resetShowMore('healthListShowMore');render()"});
   return t;
 }
+function todayTaskRow(x){
+  return `<button type="button" class="today-item" onclick="${x.go.replace(/"/g,'&quot;')}">
+        <span class="today-dot ${x.tone}"></span><span class="today-n">${x.n}</span><span class="today-text">${x.text}</span><span class="today-go">Ir ›</span>
+      </button>`;
+}
+// "Qué hacer hoy" solo con lo del día (pedidos, cobros, clientes esperando, temporada, checklist
+// diario…). Lo que es de mantenimiento (correcciones, conteos, diferencias, stock bajo, checklists
+// semanal/mensual) va en el plegable "Mantenimiento de la semana" (renderMaintenancePanel).
 function renderTodayPanel(){
-  const tasks = computeTodayTasks();
+  const tasks = computeTodayTasks().filter(x=>!x.maint);
   const dateTxt = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
   return `<div class="panel" id="today-panel">
     <div class="panel-title" style="margin:0;">Qué hacer hoy</div>
     <div class="panel-sub" style="margin:2px 0 0;text-transform:capitalize;">${dateTxt}</div>
-    ${tasks.length ? `<div class="today-list">${(state.todayShowAll ? tasks : tasks.slice(0,4)).map(x=>`
-      <button type="button" class="today-item" onclick="${x.go.replace(/"/g,'&quot;')}">
-        <span class="today-dot ${x.tone}"></span><span class="today-n">${x.n}</span><span class="today-text">${x.text}</span><span class="today-go">Ir ›</span>
-      </button>`).join('')}</div>${tasks.length>4 ? `<button class="btn-tertiary" style="margin-top:8px;width:100%;" onclick="state.todayShowAll=${!state.todayShowAll};render()">${state.todayShowAll ? 'Ver menos' : `Ver ${tasks.length-4} pendiente${tasks.length-4===1?'':'s'} más`}</button>` : ''}` : `<div class="today-ok">Todo al día: no hay pedidos, mensajes ni avisos pendientes.</div>`}
+    ${tasks.length ? `<div class="today-list">${tasks.map(todayTaskRow).join('')}</div>` : `<div class="today-ok">Todo al día: no hay pedidos, cobros ni clientes esperando.</div>`}
   </div>`;
+}
+function maintenanceTasks(){ return computeTodayTasks().filter(x=>x.maint); }
+function renderMaintenancePanel(tasks){
+  return `<div class="today-list" style="padding:0 4px 12px;">${tasks.map(todayTaskRow).join('')}</div>`;
 }
 function computeBusinessHealth(){
   const issues = [];
@@ -6643,6 +6670,7 @@ function renderResumen(){
   const week = m.dayRevenue.reduce((s,d)=>s+d.value,0);
   const notesPending = (state.settings.dashboardNotes||[]).filter(n=>!n.done).length;
   const ckCount = ckLists().length;
+  const maint = maintenanceTasks();
   const goTo = (status)=> `state.adminTab='pedidos';state.orderStatusFilter='${status}';render();window.scrollTo(0,0)`;
   return `
     ${state.loadWarnings && state.loadWarnings.length ? `<div class="note-box" style="background:#FDEBD3;color:#8a5a1a;">${icon('alert-triangle',14)} No se pudo cargar: ${state.loadWarnings.join(', ')}. Casi seguro falta publicar las reglas de Firestore más recientes (Firebase → Firestore → Reglas → pegar el archivo → Publicar).</div>` : ''}
@@ -6660,10 +6688,11 @@ function renderResumen(){
     </div>
     <div class="quick-actions">
       ${canAccessTab('productos') ? `<button onclick="state.adminTab='productos';state.productModal={images:[], sku:generateSKU({})};render()">${icon('package',20)} Nuevo producto</button>` : ''}
-      ${!state.myPermissions ? `<a href="pos.html" target="_blank">${icon('bag',20)} Punto de venta</a>` : ''}
+      ${!state.myPermissions ? `<a class="m-hide" href="pos.html" target="_blank">${icon('bag',20)} Punto de venta</a>` : ''}
       <button onclick="openGlobalSearch()">${icon('search',20)} Buscar</button>
     </div>
     ${renderTodayPanel()}
+    ${maint.length ? dashSec('mant', 'Mantenimiento de la semana', `${maint.length} pendiente${maint.length===1?'':'s'}`, renderMaintenancePanel(maint), false) : ''}
     ${health.level!=='verde' ? `<div id="salud-panel"><div class="panel" style="border-left:5px solid ${healthColor};">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:${health.issues.length?'10px':'0'};">
         <span style="width:12px;height:12px;border-radius:50%;background:${healthColor};display:inline-block;"></span>
@@ -7119,9 +7148,14 @@ const STATS_SUBTAB_GROUPS = [
 ];
 function renderEstadisticas(){
   const sub = state.statsSubview || 'general';
-  const goSub = (s) => `state.statsSubview='${s}';render()`;
+  const goSub = (s) => `state.statsSubview='${s}';state.statsPickerOpen=false;render();window.scrollTo(0,0)`;
+  const cur = STATS_SUBTAB_GROUPS.flatMap(g=>g.items.map(it=>({...it, group:g.label}))).find(it=>it.key===sub);
   return `
-    <div class="stats-subtabs-wrap">
+    <button class="m-only stats-picker" aria-expanded="${state.statsPickerOpen?'true':'false'}" onclick="state.statsPickerOpen=!state.statsPickerOpen;render()">
+      <span><small>${cur?cur.group:'Reporte'}</small><b>${cur?cur.label:'General'}</b></span>
+      <span class="stats-picker-cta">Cambiar reporte ${icon('chevron-down',16)}</span>
+    </button>
+    <div class="stats-subtabs-wrap ${state.statsPickerOpen?'m-open':''}">
       ${STATS_SUBTAB_GROUPS.map(g=>`
         <div class="stats-tab-group">
           <div class="stats-tab-group-label">${g.label}</div>
@@ -8481,12 +8515,17 @@ function onOrderSearchInput(v){
   if(i){ i.focus(); i.setSelectionRange(v.length, v.length); }
 }
 function resetOrderFilters(){
-  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter='Todos'; state.orderRiskOnly=false; state.orderUnpaidOnly=false;
+  state.orderSearch=''; state.orderSourceFilter='Todos'; state.orderStatusFilter=orderDefaultStatus(); state.orderRiskOnly=false; state.orderUnpaidOnly=false;
   state.selectedOrders=[]; resetShowMore('ordersShowMore'); render();
 }
 function setOrderFilter(key, val){
   state[key]=val; state.selectedOrders=[]; resetShowMore('ordersShowMore'); render();
 }
+// En celular Pedidos abre en "Por atender" (Nuevo, Preparando y En camino): lo que pide acción.
+// El historial completo sigue a un toque en "Todos". En computadora abre en "Todos" como antes.
+const ORDER_OPEN_STATUSES = ['Nuevo','Preparando','En camino'];
+function orderDefaultStatus(){ try{ return window.matchMedia('(max-width:760px)').matches ? 'Por atender' : 'Todos'; }catch(e){ return 'Todos'; } }
+function orderStatusMatches(o, f){ return f==='Todos' || (f==='Por atender' ? ORDER_OPEN_STATUSES.includes(o.status) : o.status===f); }
 const ORDER_NEXT_STATUS = {"Nuevo":"Preparando","Preparando":"En camino","En camino":"Entregado"};
 function renderPedidos(){
   const q = (state.orderSearch||'').trim().toLowerCase();
@@ -8502,11 +8541,11 @@ function renderPedidos(){
   const riskIds = new Set(riskOrders().map(o=>o.id));
   const unpaidList = state.orders.filter(orderIsUnpaidDelivered);
   const unpaidSum = unpaidList.reduce((a,o)=>a+(o.total||0),0);
-  const shown = base.filter(o=> (statusF==='Todos' || o.status===statusF) && (!riskOnly || riskIds.has(o.id)) && (!unpaidOnly || orderIsUnpaidDelivered(o)));
+  const shown = base.filter(o=> orderStatusMatches(o, statusF) && (!riskOnly || riskIds.has(o.id)) && (!unpaidOnly || orderIsUnpaidDelivered(o)));
   const abandonedCount = pendingAbandonedCarts().length;
-  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!=='Todos'?1:0) + (riskOnly?1:0) + (unpaidOnly?1:0);
-  const chips = ["Todos", ...STATUS_FLOW].map(f=>{
-    const n = f==='Todos' ? base.length : base.filter(o=>o.status===f).length;
+  const filterCount = (q?1:0) + (source!=='Todos'?1:0) + (statusF!==orderDefaultStatus()?1:0) + (riskOnly?1:0) + (unpaidOnly?1:0);
+  const chips = ["Por atender", "Todos", ...STATUS_FLOW].map(f=>{
+    const n = base.filter(o=>orderStatusMatches(o, f)).length;
     return `<button class="${statusF===f?'active':''}" onclick="setOrderFilter('orderStatusFilter','${f}')">${f} <span class="chip-n">${n}</span></button>`;
   }).join('') + (riskIds.size || riskOnly ? `<button class="${riskOnly?'active':''}" onclick="state.orderRiskOnly=!state.orderRiskOnly;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Revisar <span class="chip-n">${riskIds.size}</span></button>` : '') + (unpaidList.length || unpaidOnly ? `<button class="${unpaidOnly?'active':''}" onclick="state.orderUnpaidOnly=!state.orderUnpaidOnly;state.selectedOrders=[];resetShowMore('ordersShowMore');render()">Sin cobrar <span class="chip-n">${unpaidList.length}</span></button>` : '');
   return `
@@ -8534,7 +8573,7 @@ function renderPedidos(){
       ${filterCount ? `<button class="prod-clear" onclick="resetOrderFilters()">${icon('x',14)} Limpiar</button>` : ''}
     </div>
     <div class="prod-count">${filterCount ? `${shown.length} de ${scope.length} pedidos` : `${shown.length} pedido${shown.length===1?'':'s'}`}${state.showArchived?' archivados':''}</div>
-    ${shown.length===0 ? `<div class="empty-state">No hay pedidos que coincidan con este filtro${q?` ("${escDescHtml(state.orderSearch)}")`:''}.</div>` : (()=>{
+    ${shown.length===0 ? (statusF==='Por atender' && !q && !riskOnly && !unpaidOnly ? `<div class="empty-state">${icon('check',18)} Nada por atender: no hay pedidos nuevos, en preparación ni en camino.<div style="margin-top:12px;"><button class="btn-outline" style="width:auto;padding:0 18px;" onclick="setOrderFilter('orderStatusFilter','Todos')">Ver historial (${base.length})</button></div></div>` : `<div class="empty-state">No hay pedidos que coincidan con este filtro${q?` ("${escDescHtml(state.orderSearch)}")`:''}.</div>`) : (()=>{
       const {shown:visible, remaining} = showMoreSlice('ordersShowMore', shown);
       const visibleIds = visible.map(o=>o.id);
       const selected = state.selectedOrders||[];
@@ -16876,7 +16915,7 @@ function ckTodayTasks(){
   ckLists().forEach(l=>{
     if(!l.items.length) return;
     const pr = ckProgress(l), pend = pr.total - pr.done;
-    if(pend>0) t.push({tone:'info', n:pend, text:`pendiente${pend===1?'':'s'} en el checklist “${lyEsc(l.name)}” (${CK_FREQ[l.freq].toLowerCase()})`, go:"var e=document.getElementById('checklists-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
+    if(pend>0) t.push({maint: l.freq!=='diaria', tone:'info', n:pend, text:`pendiente${pend===1?'':'s'} en el checklist “${lyEsc(l.name)}” (${CK_FREQ[l.freq].toLowerCase()})`, go:"setDashOpen('equipo',true);render();var e=document.getElementById('checklists-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})"});
   });
   return t;
 }
