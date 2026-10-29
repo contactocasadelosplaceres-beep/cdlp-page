@@ -1,7 +1,8 @@
 /* Activa el segundo factor (codigo de 6 digitos / TOTP) de Firebase Authentication.
    Requiere que el proyecto este actualizado a "Firebase Auth con Identity Platform"
    (plan Spark sirve). Solo toca la configuracion de Auth, no lee Firestore.
-   DRY_RUN=1 -> solo muestra la configuracion actual · DRY_RUN=0 -> activa TOTP. */
+   DRY_RUN=1 -> solo muestra la configuracion actual · DRY_RUN=0 -> activa TOTP.
+   Siempre muestra quien del equipo (claim admin/staff) ya tiene el codigo y quien no. */
 const admin = require('firebase-admin');
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
 const DRY = String(process.env.DRY_RUN || '1') !== '0';
@@ -19,6 +20,20 @@ const QUITAR = String(process.env.QUITAR_A || '').trim().toLowerCase();
     console.log('OK: se quito el codigo de 6 digitos de', QUITAR, '. Ya puede entrar solo con contrasena y volver a activarlo.');
     return;
   }
+  // Reporte (S-04): quién del equipo ya tiene el código. Las reglas lo exigen para leer o escribir datos.
+  let page, sin = [], con = [];
+  do {
+    const r = await admin.auth().listUsers(1000, page);
+    r.users.forEach(u => {
+      const c = u.customClaims || {};
+      if (c.admin !== true && c.staff !== true) return;
+      const n = ((u.multiFactor || {}).enrolledFactors || []).length;
+      (n ? con : sin).push(`${u.email || u.uid} (${c.admin ? 'admin' : 'staff'})`);
+    });
+    page = r.pageToken;
+  } while (page);
+  console.log(`::notice::Equipo con código de 6 dígitos (${con.length}): ${con.join(', ') || 'nadie'}`);
+  console.log(`::${sin.length ? 'warning' : 'notice'}::Equipo SIN código (${sin.length}): ${sin.join(', ') || 'nadie — listo para publicar las reglas'}`);
   const mgr = admin.auth().projectConfigManager();
   const cur = await mgr.getProjectConfig();
   console.log('Configuracion actual de MFA:', JSON.stringify(cur.multiFactorConfig || null));
