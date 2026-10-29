@@ -6,11 +6,17 @@ service cloud.firestore {
     // Antes: "autenticado y sin doc en staffPermissions" = admin total (cualquiera que lograra
     // autenticarse era admin). Ahora: SOLO quien tiene el claim 'admin' o 'staff' (se asignan con
     // tools/claims/setClaims.js). Un desconocido autenticado no tiene claim -> no puede nada.
+    // S-04: además del claim, la sesión debe haber pasado por el código de 6 dígitos de Firebase
+    // (MFA) y tener menos de 30 días desde que se escribió la contraseña.
+    function strongSession() {
+      return request.auth.token.firebase.sign_in_second_factor != null
+        && request.time < timestamp.value(request.auth.token.auth_time * 1000) + duration.value(30, 'd');
+    }
     function isUnrestricted() {
-      return request.auth != null && request.auth.token.admin == true;
+      return request.auth != null && request.auth.token.admin == true && strongSession();
     }
     function isStaff() {
-      return request.auth != null && request.auth.token.staff == true;
+      return request.auth != null && request.auth.token.staff == true && strongSession();
     }
     function isTeam() {
       return isUnrestricted() || isStaff();
@@ -19,14 +25,58 @@ service cloud.firestore {
     function myStaffDoc() {
       return get(/databases/$(database)/documents/staffPermissions/$(request.auth.token.email.lower()));
     }
+    // Renglón de un pedido de la tienda (S-03): precio numérico no negativo (salvo el descuento de la
+    // promoción "lleva X y paga Y") y cantidad entera de 1 a 999. Las reglas no tienen ciclos, así
+    // que se revisan las posiciones 0–29 y el pedido admite hasta 30 renglones.
+    function okLine(items, i) {
+      return i >= items.size() || (
+        items[i] is map && items[i].price is number && items[i].qty is int
+        && items[i].qty >= 1 && items[i].qty <= 999
+        && (items[i].price >= 0 || (items[i].id == 'promo_buyxpayy' && items[i].qty == 1))
+        && items[i].price <= 1000000);
+    }
+    function lineTotal(items, i) {
+      return i < items.size() ? items[i].price * items[i].qty : 0;
+    }
     // Pedido que crea la tienda en línea (sin sesión): solo estos campos, estado "Nuevo", origen
-    // "tienda" y total no negativo (hallazgo H-04). Los precios por renglón no se pueden revisar
-    // aquí; el panel avisa si el total no cuadra con los productos.
+    // "tienda", renglones válidos y total igual a la suma de los renglones. Que cada precio sea el del
+    // catálogo lo revisa el panel antes de confirmar (no deja avanzar sin aviso).
     function validStoreOrder() {
       let d = request.resource.data;
       return d.keys().hasOnly(['date','orderNumber','source','customer','phone','address','notes','items','total','status','couponCode','campaign','fraudSignals'])
         && d.source == 'tienda' && d.status == 'Nuevo'
-        && d.items is list && d.items.size() > 0 && d.items.size() <= 200
+        && d.items is list && d.items.size() > 0 && d.items.size() <= 30
+        && okLine(d.items, 0)
+        && okLine(d.items, 1)
+        && okLine(d.items, 2)
+        && okLine(d.items, 3)
+        && okLine(d.items, 4)
+        && okLine(d.items, 5)
+        && okLine(d.items, 6)
+        && okLine(d.items, 7)
+        && okLine(d.items, 8)
+        && okLine(d.items, 9)
+        && okLine(d.items, 10)
+        && okLine(d.items, 11)
+        && okLine(d.items, 12)
+        && okLine(d.items, 13)
+        && okLine(d.items, 14)
+        && okLine(d.items, 15)
+        && okLine(d.items, 16)
+        && okLine(d.items, 17)
+        && okLine(d.items, 18)
+        && okLine(d.items, 19)
+        && okLine(d.items, 20)
+        && okLine(d.items, 21)
+        && okLine(d.items, 22)
+        && okLine(d.items, 23)
+        && okLine(d.items, 24)
+        && okLine(d.items, 25)
+        && okLine(d.items, 26)
+        && okLine(d.items, 27)
+        && okLine(d.items, 28)
+        && okLine(d.items, 29)
+        && math.abs(d.total - (lineTotal(d.items, 0) + lineTotal(d.items, 1) + lineTotal(d.items, 2) + lineTotal(d.items, 3) + lineTotal(d.items, 4) + lineTotal(d.items, 5) + lineTotal(d.items, 6) + lineTotal(d.items, 7) + lineTotal(d.items, 8) + lineTotal(d.items, 9) + lineTotal(d.items, 10) + lineTotal(d.items, 11) + lineTotal(d.items, 12) + lineTotal(d.items, 13) + lineTotal(d.items, 14) + lineTotal(d.items, 15) + lineTotal(d.items, 16) + lineTotal(d.items, 17) + lineTotal(d.items, 18) + lineTotal(d.items, 19) + lineTotal(d.items, 20) + lineTotal(d.items, 21) + lineTotal(d.items, 22) + lineTotal(d.items, 23) + lineTotal(d.items, 24) + lineTotal(d.items, 25) + lineTotal(d.items, 26) + lineTotal(d.items, 27) + lineTotal(d.items, 28) + lineTotal(d.items, 29))) < 1
         && d.total is number && d.total >= 0 && d.total <= 1000000
         && d.date is string && d.date.size() <= 40
         && (!('orderNumber' in d) || d.orderNumber == null || d.orderNumber is number)
@@ -45,9 +95,22 @@ service cloud.firestore {
           && myStaffDoc().data.permissions.get(p, false) == true );
     }
 
+    // S-01: los productos completos (existencias por centro, lotes, notas, ocultos…) solo los lee el
+    // equipo. La tienda usa catalogo.json y, al enviar un pedido, productStock.
     match /products/{docId} {
-      allow read: if true;
+      allow read: if isTeam();
       allow write: if hasPerm('productos');
+    }
+
+    // Existencia pública mínima por producto: {stock, variants:[{id, stock}], updatedAt}. Solo por id.
+    match /productStock/{docId} {
+      allow get: if true;
+      allow list: if isTeam();
+      allow create, update: if isTeam()
+                    && request.resource.data.keys().hasOnly(['stock','variants','updatedAt'])
+                    && request.resource.data.stock is number
+                    && request.resource.data.variants is list && request.resource.data.variants.size() <= 300;
+      allow delete: if isTeam();
     }
 
     match /settings/{docId} {
@@ -99,8 +162,9 @@ service cloud.firestore {
       allow read, write: if isUnrestricted();
     }
 
+    // security_totp: verificación anterior (solo en el navegador), reemplazada por el MFA de Firebase.
     match /security_totp/{docId} {
-      allow read, write: if request.auth != null && request.auth.token.email.lower() == docId;
+      allow read, write: if false;
     }
 
     match /admin_sessions/{docId} {
