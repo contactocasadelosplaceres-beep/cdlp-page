@@ -25,58 +25,14 @@ service cloud.firestore {
     function myStaffDoc() {
       return get(/databases/$(database)/documents/staffPermissions/$(request.auth.token.email.lower()));
     }
-    // Renglón de un pedido de la tienda (S-03): precio numérico no negativo (salvo el descuento de la
-    // promoción "lleva X y paga Y") y cantidad entera de 1 a 999. Las reglas no tienen ciclos, así
-    // que se revisan las posiciones 0–29 y el pedido admite hasta 30 renglones.
-    function okLine(items, i) {
-      return i >= items.size() || (
-        items[i] is map && items[i].price is number && items[i].qty is int
-        && items[i].qty >= 1 && items[i].qty <= 999
-        && (items[i].price >= 0 || (items[i].id == 'promo_buyxpayy' && items[i].qty == 1))
-        && items[i].price <= 1000000);
-    }
-    function lineTotal(items, i) {
-      return i < items.size() ? items[i].price * items[i].qty : 0;
-    }
     // Pedido que crea la tienda en línea (sin sesión): solo estos campos, estado "Nuevo", origen
-    // "tienda", renglones válidos y total igual a la suma de los renglones. Que cada precio sea el del
-    // catálogo lo revisa el panel antes de confirmar (no deja avanzar sin aviso).
+    // "tienda" y total no negativo. Que los precios por renglón coincidan con el catálogo lo revisa
+    // el panel: no deja avanzar un pedido que no cuadra sin confirmarlo (S-03).
     function validStoreOrder() {
       let d = request.resource.data;
       return d.keys().hasOnly(['date','orderNumber','source','customer','phone','address','notes','items','total','status','couponCode','campaign','fraudSignals'])
         && d.source == 'tienda' && d.status == 'Nuevo'
-        && d.items is list && d.items.size() > 0 && d.items.size() <= 30
-        && okLine(d.items, 0)
-        && okLine(d.items, 1)
-        && okLine(d.items, 2)
-        && okLine(d.items, 3)
-        && okLine(d.items, 4)
-        && okLine(d.items, 5)
-        && okLine(d.items, 6)
-        && okLine(d.items, 7)
-        && okLine(d.items, 8)
-        && okLine(d.items, 9)
-        && okLine(d.items, 10)
-        && okLine(d.items, 11)
-        && okLine(d.items, 12)
-        && okLine(d.items, 13)
-        && okLine(d.items, 14)
-        && okLine(d.items, 15)
-        && okLine(d.items, 16)
-        && okLine(d.items, 17)
-        && okLine(d.items, 18)
-        && okLine(d.items, 19)
-        && okLine(d.items, 20)
-        && okLine(d.items, 21)
-        && okLine(d.items, 22)
-        && okLine(d.items, 23)
-        && okLine(d.items, 24)
-        && okLine(d.items, 25)
-        && okLine(d.items, 26)
-        && okLine(d.items, 27)
-        && okLine(d.items, 28)
-        && okLine(d.items, 29)
-        && math.abs(d.total - (lineTotal(d.items, 0) + lineTotal(d.items, 1) + lineTotal(d.items, 2) + lineTotal(d.items, 3) + lineTotal(d.items, 4) + lineTotal(d.items, 5) + lineTotal(d.items, 6) + lineTotal(d.items, 7) + lineTotal(d.items, 8) + lineTotal(d.items, 9) + lineTotal(d.items, 10) + lineTotal(d.items, 11) + lineTotal(d.items, 12) + lineTotal(d.items, 13) + lineTotal(d.items, 14) + lineTotal(d.items, 15) + lineTotal(d.items, 16) + lineTotal(d.items, 17) + lineTotal(d.items, 18) + lineTotal(d.items, 19) + lineTotal(d.items, 20) + lineTotal(d.items, 21) + lineTotal(d.items, 22) + lineTotal(d.items, 23) + lineTotal(d.items, 24) + lineTotal(d.items, 25) + lineTotal(d.items, 26) + lineTotal(d.items, 27) + lineTotal(d.items, 28) + lineTotal(d.items, 29))) < 1
+        && d.items is list && d.items.size() > 0 && d.items.size() <= 200
         && d.total is number && d.total >= 0 && d.total <= 1000000
         && d.date is string && d.date.size() <= 40
         && (!('orderNumber' in d) || d.orderNumber == null || d.orderNumber is number)
