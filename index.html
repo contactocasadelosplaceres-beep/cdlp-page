@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com https://www.google.com; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="description" content="Catálogo de La Casa de los Placeres: juguetes, lubricantes y más, con empaque sin marcas y pago al recibir en Ciudad Guzmán.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -24,6 +24,7 @@
 <link rel="preconnect" href="https://firestore.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700;800&family=Lora:wght@400;500;600&family=Poppins:wght@500;600;700;800&family=Fraunces:wght@500;600;700&family=Nunito+Sans:wght@400;500;600;700&family=Bebas+Neue&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style id="custom-css-injected"></style>
 <style>
@@ -847,6 +848,12 @@
     html:not(.search-open) .suggest{display:none!important;}
     .card-desc{display:none;}
   }
+  /* R-02: ningún texto por debajo de 12 px. R-04: el carrusel no corta el primer botón. */
+  .brand-sub,.trust-item,.trust-top,.badge,.badge-stock,.cart-count,.card-cat,.detail-cat,.card-save,.card-trust,.dw-tag,.ck-steps,
+  .cat-chip.chip-out small,.rel-tags span,.suggestion-add,.qty-step small,.fl-prices small,.sg-title,.cmp-label,.foot-pay-label,.pay-badge,.mobile-cart-bar-count,.suggestion-name,.dw-foot-note{font-size:12px !important;}
+  .needs-row{padding-inline:16px !important;scroll-padding-inline:16px;margin-inline:-16px;}
+  /* R-01: el nombre del producto en la tarjeta también se puede tocar cómodamente. */
+  .card-name{min-height:32px;}
 </style>
 </head>
 <body>
@@ -862,6 +869,16 @@ const firebaseConfig = {
   appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
 };
 firebase.initializeApp(firebaseConfig);
+/* App Check (S-03): cada lectura/escritura a Firestore lleva una prueba de que viene de esta página y
+   no de un script. Clave del sitio de reCAPTCHA v3 (pública). Vacía = desactivado. Mientras no se
+   active "Aplicar" en Firebase Console → App Check, solo mide; no bloquea a nadie. */
+const APP_CHECK_SITE_KEY = '';
+try{
+  if(APP_CHECK_SITE_KEY && firebase.appCheck){
+    const ac = firebase.appCheck();
+    ac.activate(firebase.appCheck.ReCaptchaV3Provider ? new firebase.appCheck.ReCaptchaV3Provider(APP_CHECK_SITE_KEY) : APP_CHECK_SITE_KEY, true);
+  }
+}catch(e){ console.warn('App Check no se pudo activar', e); }
 // Escapa texto para pintarlo dentro del HTML (QA-13: el buscador ya no interpreta etiquetas).
 // Fotos convertidas a archivo (img/p/NOMBRE.webp) tienen miniatura en img/p/t/NOMBRE.webp.
 function thumbSrc(src){ return (typeof src==='string' && src.startsWith('img/p/') && !src.startsWith('img/p/t/')) ? 'img/p/t/'+src.slice(6) : src; }
@@ -1061,35 +1078,15 @@ async function loadData(attempt){
   attempt = attempt || 1;
   try{
     // CATÁLOGO ESTÁTICO: productos, ajustes públicos y número de pedidos vienen de catalogo.json
-    // (lo genera una GitHub Action, ver tools/catalogo) y NO cuestan lecturas de Firestore. Solo si
-    // el archivo todavía no existe o no se puede bajar (primera vez, sin señal) se usa Firestore como antes.
-    let staticCat = null;
-    try{ staticCat = await loadCatalogFile(); }catch(e){ console.warn('catalogo.json no disponible, se usa Firestore', e && e.message); }
-    let prodSnap=null, setSnap=null, counterSnap=null;
-    if(!staticCat){
-      [prodSnap, setSnap, counterSnap] = await Promise.all([
-        db.collection('products').orderBy('name').limit(40).get(),
-        // settings/store ya no es de lectura pública (traía datos internos, hallazgo H-03): si el
-        // catálogo estático no está, la tienda sigue con su configuración por omisión.
-        db.collection('settings').doc('store').get().catch(()=>({exists:false, data:()=>({})})),
-        db.collection('counters').doc('orders').get(),
-      ]);
-    }
-    // "counters/orders" es de lectura pública (lo usa también el checkout para sacar el
-    // folio) y se incrementa en cada pedido de la tienda y cada venta del Punto de Venta,
-    // así que sirve como número real de pedidos para el rating-line, sin exponer ningún
-    // dato de pedidos individuales (eso sigue protegido detrás del permiso "pedidos").
-    if(staticCat){
-      state.orderCount = Math.max(0, Number(staticCat.orderCount)||0);
-      state.products = variantRepairAll(staticCat.products.filter(p=>!p.hidden && !p.deletedAt));
-      state.settings = {...DEFAULT_SETTINGS, ...(staticCat.settings||{})};
-      state.catalogStatic = true; state.catalogGeneratedAt = staticCat.generatedAt || '';
-      state.fullCatalogLoaded = true; state.catalogIncomplete = false;
-    } else {
-      state.orderCount = counterSnap.exists ? Math.max(0, (counterSnap.data().next||1) - 1) : 0;
-      state.products = variantRepairAll(prodSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt));
-      state.settings = setSnap.exists ? {...DEFAULT_SETTINGS, ...setSnap.data()} : {...DEFAULT_SETTINGS};
-    }
+    // (lo genera una GitHub Action, ver tools/catalogo) y NO cuestan lecturas de Firestore.
+    // La colección "products" ya no es de lectura pública (S-01): la tienda solo usa catalogo.json.
+    // Si no se puede bajar, se reintenta abajo (catch) y al final se muestra el aviso de error.
+    const staticCat = await loadCatalogFile();
+    state.orderCount = Math.max(0, Number(staticCat.orderCount)||0);
+    state.products = variantRepairAll(staticCat.products.filter(p=>!p.hidden && !p.deletedAt));
+    state.settings = {...DEFAULT_SETTINGS, ...(staticCat.settings||{})};
+    state.catalogStatic = true; state.catalogGeneratedAt = staticCat.generatedAt || '';
+    state.fullCatalogLoaded = true; state.catalogIncomplete = false;
     if(!state.settings.categories || !state.settings.categories.length) state.settings.categories = [...DEFAULT_CATEGORIES];
     if(!state.settings.hiddenCategories) state.settings.hiddenCategories = [];
     if(!state.settings.needs || !state.settings.needs.length) state.settings.needs = JSON.parse(JSON.stringify(DEFAULT_NEEDS));
@@ -1122,18 +1119,7 @@ async function loadData(attempt){
   applyThemeVars();
   trackVisit();
   openProductFromURL();
-  if(!state.loadError && !state.catalogStatic) loadSavedCartProducts();
   if(state.catalogStatic){ state.catalogIncomplete = false; state.fullCatalogLoaded = true; pruneUnavailableCartItems(); clampCartToStock(); render(); }
-  // En segundo plano, sin bloquear la primera pantalla: trae el resto del catálogo completo
-  // (arriba solo se cargaron los primeros 40, para que la primera pantalla aparezca rápido).
-  // Antes, si esto fallaba (señal débil, la app pasó a segundo plano, etc.) no se reintentaba
-  // ni se avisaba nada — la persona se quedaba viendo solo esos 40 productos (los primeros en
-  // orden alfabético) para siempre, sin enterarse. Si por casualidad ninguno de esos 40 coincidía
-  // con la categoría que tenía abierta, o con nada relacionado a lo que llevaba en el carrito,
-  // se sentía como si "no hubiera productos" o "no aparecieran sugerencias" — cuando en realidad
-  // sí existían, solo que no habían terminado de cargar. Ahora si falla, reintenta solo unas
-  // cuantas veces, y si de plano no puede, avisa con un botón para intentar de nuevo a mano.
-  if(!state.loadError && !state.catalogStatic) loadFullCatalogWithRetry();
 }
 // Enlace directo a un producto (ej. compartido por WhatsApp): ?producto=ID en la URL. Si ese
 // producto no viene entre los primeros 40 que se cargaron de entrada, se trae solo, sin esperar
@@ -1154,43 +1140,11 @@ async function openProductFromURL(){
     else showToast('Esa categoría ya no está disponible');
   }
   if(!id) return;
-  let p = state.products.find(x=>x.id===id);
-  if(!p && !state.catalogStatic){
-    try{
-      const doc = await db.collection('products').doc(id).get();
-      if(doc.exists && !doc.data().deletedAt){
-        p = {id: doc.id, ...doc.data()};
-        if(!state.products.find(x=>x.id===p.id)) state.products.push(p);
-      }
-    }catch(e){ console.error('No se pudo cargar el producto del enlace directo', e); }
-  }
+  const p = state.products.find(x=>x.id===id);
   const url = new URL(location.href); url.searchParams.delete('producto');
   history.replaceState(history.state, '', url.toString());
   if(p && !p.hidden){ openProductDetail(p.id); }
   else { showToast('Ese producto ya no está disponible'); }
-}
-// Lo que la persona ya tenía en su carrito o en favoritos (guardado en su teléfono) se trae
-// de inmediato, sin esperar al catálogo completo: antes, si esos productos no venían entre los
-// primeros 40 (en orden alfabético), el carrito se veía VACÍO al recargar o al regresar de
-// contestar un WhatsApp, hasta que terminaba de bajar todo — y con señal lenta parecía borrado.
-async function loadSavedCartProducts(){
-  const ids = new Set([
-    ...Object.keys(state.cart).map(k=>k.split('::')[0]),
-    ...loadWishlist(),
-  ]);
-  const missing = [...ids].filter(id=>id && !state.products.some(p=>p.id===id));
-  if(!missing.length) return;
-  try{
-    const docs = await Promise.all(missing.map(id=>db.collection('products').doc(id).get().catch(()=>null)));
-    let added = 0;
-    docs.forEach(d=>{
-      if(!d || !d.exists) return;
-      const data = d.data();
-      if(data.hidden || data.deletedAt) return;
-      if(!state.products.some(p=>p.id===d.id)){ state.products.push({id:d.id, ...data}); added++; }
-    });
-    if(added){ clampCartToStock(); render(); }
-  }catch(e){ console.error('No se pudieron traer los productos del carrito', e); }
 }
 // Cuando ya está el catálogo completo, lo que siga en el carrito sin existir (se ocultó o se
 // eliminó desde el admin) se quita del carrito con aviso, en vez de quedarse "fantasma" sumando
@@ -1202,24 +1156,14 @@ function pruneUnavailableCartItems(){
   saveCart();
   showToast(gone.length===1 ? 'Un producto de tu carrito ya no está disponible' : `${gone.length} productos de tu carrito ya no están disponibles`);
 }
-async function loadFullCatalogWithRetry(attempt){
-  attempt = attempt || 1;
+// Reintento manual del catálogo (botón "Reintentar"): vuelve a bajar catalogo.json.
+async function loadFullCatalogWithRetry(){
   try{
-    const fullSnap = await db.collection('products').orderBy('name').get();
-    state.products = variantRepairAll(fullSnap.docs.map(d=>({id:d.id, ...d.data()})).filter(p=>!p.hidden && !p.deletedAt));
+    const c = await loadCatalogFile();
+    state.products = variantRepairAll(c.products.filter(p=>!p.hidden && !p.deletedAt));
     state.catalogIncomplete = false; state.fullCatalogLoaded = true;
-    pruneUnavailableCartItems();
-    clampCartToStock();
-    render();
-  }catch(e){
-    console.error(`No se pudo completar el catálogo en segundo plano (intento ${attempt})`, e);
-    if(attempt < 3){
-      setTimeout(()=>loadFullCatalogWithRetry(attempt+1), 2000*attempt);
-    } else {
-      state.catalogIncomplete = true;
-      render();
-    }
-  }
+    pruneUnavailableCartItems(); clampCartToStock(); render();
+  }catch(e){ console.error('No se pudo bajar el catálogo', e); state.catalogIncomplete = true; render(); }
 }
 /* ============== CAMPAÑAS (?ref=nombre) ==============
    Un enlace como .../index.html?ref=instagram-bio marca de dónde llegó la persona. La visita se
@@ -1773,11 +1717,8 @@ function reminderProductsNotInCart(){
 }
 function proceedToCheckout(){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); return; }
-  if(!state.checkoutReminderShown && reminderProductsNotInCart().length){
-    state.checkoutReminderOpen = true;
-    render();
-    return;
-  }
+  // U-02: ya no hay pantalla intermedia "¿Se te olvidó algo?"; las sugerencias van en una fila
+  // compacta dentro del formulario de entrega (renderCheckoutAddOns).
   state.cartOpen=false; state.checkoutOpen=true; state.checkoutOpenedAt=Date.now(); trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
 }
 function addReminderProductToCart(id, vid){
@@ -1785,6 +1726,18 @@ function addReminderProductToCart(id, vid){
   state.checkoutReminderShown = true;
   state.checkoutReminderOpen = false;
   render();
+}
+function renderCheckoutAddOns(){
+  const items = reminderProductsNotInCart().slice(0,3);
+  if(!items.length) return '';
+  return `<div class="dw-card" style="padding:10px 12px;">
+    <div class="dw-card-t" style="margin-bottom:6px;">¿Le agregas algo?</div>
+    ${items.map(p=>`<div class="reminder-row" style="padding:6px 0;">
+      ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(p.images[0])}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)};display:flex;align-items:center;justify-content:center;">${catIcon(p.cat)}</div>`}
+      <div class="r-name">${escHtml(p.name)}<div class="r-price">${money(effectivePrice(p))}</div></div>
+      <button class="reminder-add" onclick="addToCart('${p.id}'${p._fv?`,'${p._fv}'`:''});render()">+ Agregar</button>
+    </div>`).join('')}
+  </div>`;
 }
 function continueCheckoutWithoutReminder(){
   state.checkoutReminderShown = true;
@@ -2138,7 +2091,8 @@ async function submitOrder(formData){
   try{
     const fresh = {}; 
     await Promise.all([...new Set(Object.keys(state.cart).map(k=>parseCartKey(k).p&&parseCartKey(k).p.id).filter(Boolean))].map(async id=>{
-      const d = await db.collection('products').doc(id).get(); if(d.exists) fresh[id] = d.data();
+      // productStock/{id}: solo {stock, variants:[{id,stock}]}, lo escriben el panel y el POS (S-01).
+      const d = await db.collection('productStock').doc(id).get(); if(d.exists) fresh[id] = d.data();
     }));
     const adjusted = [];
     Object.entries(state.cart).forEach(([key,qty])=>{
@@ -2177,9 +2131,15 @@ async function submitOrder(formData){
   if(gift){
     items.push({id:gift.pid, variantId:gift.vid||null, name:`${gift.product.name} (regalo)`, price:0, qty:1});
   }
+  if(items.length > 30){
+    // Las reglas aceptan hasta 30 renglones por pedido (S-03).
+    showToast('Tu pedido tiene más de 30 productos distintos. Escríbenos por WhatsApp y lo armamos contigo.');
+    state.submittingOrder=false; render(); return;
+  }
   const orderNumber = await getNextOrderNumber();
   const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
-  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:formData.address, notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
+  const zoneTxt = ckZone()==='local' ? `${localShippingCity()} (envío ${money(localShippingCost())})` : 'Otra ciudad (envío por cotizar)';
+  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:`[${zoneTxt}] ${formData.address}`.slice(0,500), notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
   const orderCampaign = activeCampaign(); if(orderCampaign) order.campaign = orderCampaign;
   if(fraudGuardOn() && state.checkoutOpenedAt && (Date.now()-state.checkoutOpenedAt) < 4000) order.fraudSignals = ['rapido'];
   try{ await db.collection('orders').add(order); }
@@ -2198,7 +2158,7 @@ async function submitOrder(formData){
   // que se abre sola después de esperar al servidor, y sin ese botón no había cómo enviarlo.
   const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
   const folioTxt = orderNumber ? ` ${formatFolio(orderNumber)}` : '';
-  const msg = `Hola, soy ${formData.name}. Quiero confirmar mi pedido${folioTxt}:\n${productLines}\nDirección: ${formData.address}\nTotal: ${money(order.total)} (el total no incluye el costo del envío)\n\n¡Gracias!`;
+  const msg = `Hola, soy ${formData.name}. Quiero confirmar mi pedido${folioTxt}:\n${productLines}\nDirección: ${formData.address}\nEntrega: ${zoneTxt}\nProductos: ${money(order.total)}${ckZone()==='local' ? `\nTotal con envío: ${money(order.total + localShippingCost())}` : ' (más envío por cotizar)'}\n\n¡Gracias!`;
   state.lastOrderWaMsg = state.settings.whatsapp ? msg : '';
   state.cart = {}; saveCart(); state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; state.ckErrors={}; state.ckDraft=null; render();
   if(state.settings.whatsapp){
@@ -2619,7 +2579,7 @@ function renderProductDetailDrawer(){
           <div class="qty-val">${qty} en tu carrito</div>
           <button class="qty-btn" ${stockLeft<=qty?'disabled style="opacity:.4"':''} onclick="changeQty('${key}',1)">+</button>
         </div>
-        <button class="btn-primary" onclick="closeProductDetail();state.cartOpen=true;render()">Ver carrito</button>
+        <button class="btn-primary" onclick="closeProductDetail();state.cartOpen=true;render()">Ver carrito y pagar · ${money(cartTotal())} ${icon('chevron-right',17)}</button>
       ` : `
         <button class="btn-primary" ${stockLeft<=0?'disabled style="opacity:.5"':''} onclick="addToCart('${p.id}'${matchedVariant?`,'${matchedVariant.id}'`:''})">${stockLeft<=0?'Agotado':'Agregar al carrito · '+money(price)}</button>
         ${stockLeft<=0 ? renderNotifyMeBlock(p, matchedVariant) : ''}
@@ -3155,7 +3115,7 @@ function quizBudgetOptions(a){
 }
 /* La categoría que elige la persona NUNCA se relaja. Lo que se amplía, en orden: la pregunta extra,
    el presupuesto (±30 %) y, solo si hace falta, "para quién". Se ordena por coincidencia, más vendidos,
-   foto, cercanía al presupuesto, tipo de uso (solo / pareja / regalo) y, a igual relevancia, mejor margen. */
+   foto, cercanía al presupuesto y tipo de uso (solo / pareja / regalo). */
 function quizResults(){
   const a = state.quizAnswers, b = quizBudgetOf(a.budget), ex = quizExtraFn(a);
   const pool = quizPool();
@@ -3167,9 +3127,7 @@ function quizResults(){
   const mid = b ? (b.max==null ? b.min*1.3 : (b.min+b.max)/2) : null;
   const score = p=>{
     const pr = productDisplayPrice(p).price;
-    // El costo ya no es público (QA-03): se usa el nivel de margen aproximado (mgTier 0–3) que guarda el panel.
-    const margin = (p.cost>0 && pr>0) ? Math.max(0, Math.min(1, (pr-p.cost)/pr))*0.5 : (p.mgTier!=null ? [0.2,0.37,0.52,0.68][p.mgTier]*0.5 : 0);
-    return (pop.has(p.id)?2:0) + ((p.images&&p.images.length)?1:0) - (mid?Math.abs(pr-mid)/mid:0) + margin;
+    return (pop.has(p.id)?2:0) + ((p.images&&p.images.length)?1:0) - (mid?Math.abs(pr-mid)/mid:0);
   };
   const rank = (x,y)=>score(y)-score(x);
   const catTxt = a.cat||'la tienda';
@@ -3412,7 +3370,7 @@ function renderPromoBannerSection(){
   if(!p || (!p.title && !p.text && !p.image)) return '';
   return `
   <div class="promo-banner">
-    ${p.image ? `<img class="promo-banner-img" src="${p.image}">` : ''}
+    ${p.image ? `<img class="promo-banner-img" src="${p.image}" alt="${escHtml(p.title||'Promoción')}">` : ''}
     <div class="promo-banner-body">
       ${p.title ? `<div class="promo-banner-title">${p.title}</div>` : ''}
       ${p.text ? `<div class="promo-banner-text">${p.text}</div>` : ''}
@@ -3432,7 +3390,7 @@ function renderKitsSection(){
     <div class="kits-row">
       ${items.map(p=>`
         <div class="kit-card">
-          <div class="kit-thumb">${p.images&&p.images.length?`<img src="${thumbSrc(p.images[0])}">`:catIcon(p.cat)}</div>
+          <div class="kit-thumb">${p.images&&p.images.length?`<img src="${thumbSrc(p.images[0])}" alt="${escHtml(p.name)}">`:catIcon(p.cat)}</div>
           <div class="kit-info">
             <div class="kit-name">${p.name}</div>
             ${p.desc?`<div class="kit-desc">${p.desc}</div>`:''}
@@ -4184,6 +4142,13 @@ function renderCheckoutSummary(){
   return `<details class="ck-summary"><summary><span class="ck-sum-l">${icon('bag',15)} ${count} artículo${count===1?'':'s'} · <b>${money(cartTotal())}</b></span> <span class="ck-sum-r">Ver</span></summary>
     <ul>${lines.map(l=>`<li>${dwThumb(l.p,l.v)}<span>${l.qty} × ${escHtml(l.name)}</span><b>${money(l.price*l.qty)}</b></li>`).join('')}</ul></details>`;
 }
+/* U-03: zona de entrega. El envío local se suma al total que ve la clienta y va en el mensaje de
+   WhatsApp y en la dirección del pedido; el total guardado del pedido sigue siendo el de productos. */
+function localShippingCost(){ const n = Number(state.settings.localShippingCost); return n>0 ? n : 35; }
+function localShippingCity(){ return state.settings.localShippingCity || 'Cd. Guzmán'; }
+function ckZone(){ const d = ckDraft(); return d.zone==='foraneo' ? 'foraneo' : 'local'; }
+function setCkZone(z){ const d = ckDraft(); d.zone = z; state.ckDraft = d; render(); }
+function checkoutGrandTotal(){ return cartTotal() + (ckZone()==='local' ? localShippingCost() : 0); }
 function renderCheckoutDrawer(){
   const p = ckDraft();
   return `
@@ -4198,11 +4163,16 @@ function renderCheckoutDrawer(){
       ${renderCheckoutSummary()}
       <div class="dw-card">
       <div class="dw-card-t">¿A dónde te lo llevamos?</div>
+      <div class="form-field" role="radiogroup" aria-label="Zona de entrega">
+        <label class="ck-check" style="margin:0 0 6px;"><input type="radio" name="ck-zone" value="local" ${ckZone()==='local'?'checked':''} onchange="setCkZone('local')"><span><b>${escHtml(localShippingCity())}</b> · envío ${money(localShippingCost())}</span></label>
+        <label class="ck-check" style="margin:0;"><input type="radio" name="ck-zone" value="foraneo" ${ckZone()==='foraneo'?'checked':''} onchange="setCkZone('foraneo')"><span><b>Otra ciudad</b> · el envío se cotiza por WhatsApp</span></label>
+      </div>
       <div class="form-field"><label for="ck-name">Nombre completo</label><input id="ck-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${escHtml(p.name||'')}" oninput="ckFieldInput('name')" ${ckErr('name')?'aria-invalid="true" aria-describedby="ck-name-err"':''}>${ckErrHtml('name')}</div>
       <div class="form-field"><label for="ck-phone">WhatsApp / Teléfono</label><input id="ck-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${escHtml(p.phone||'')}" oninput="ckFieldInput('phone')" ${ckErr('phone')?'aria-invalid="true" aria-describedby="ck-phone-err"':''}>${ckErrHtml('phone')}</div>
       <div class="form-field"><label for="ck-address">Dirección de entrega</label><textarea id="ck-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="ckFieldInput('address')" ${ckErr('address')?'aria-invalid="true" aria-describedby="ck-address-err"':''}>${escHtml(p.address||'')}</textarea>${ckErrHtml('address')}</div>
       <div class="form-field" style="margin-bottom:0;"><label for="ck-notes">Notas <small>(opcional)</small></label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="ckFieldInput('notes')">${escHtml(p.notes||'')}</textarea></div>
       </div>
+      ${renderCheckoutAddOns()}
       <p class="ck-save-note">Guardamos estos datos en nuestro sistema para ayudarte a terminar tu pedido si se interrumpe. Solo los usamos para contactarte sobre esta compra.</p>
       <div class="ck-hp" aria-hidden="true"><label>Sitio web de tu empresa (déjalo vacío)<input id="ck-company-site" type="text" name="company_site" tabindex="-1" autocomplete="off"></label></div>
       <label class="ck-check" style="color:var(--ink-soft);margin-top:-2px;">
@@ -4216,8 +4186,9 @@ function renderCheckoutDrawer(){
       </label>${ckErrHtml('terms')}` : ''}
     </div>
     <div class="drawer-foot">
-      <div class="total-row"><span>Total a pagar</span><span>${money(cartTotal())}</span></div>
-      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':icon('lock',16)+' Finalizar pedido ('+money(cartTotal())+')'}</button>
+      ${ckZone()==='local' ? `<div class="total-row" style="font-weight:600;font-size:14px;"><span>Productos ${money(cartTotal())} + envío ${money(localShippingCost())}</span></div>` : ''}
+      <div class="total-row"><span>Total a pagar${ckZone()==='local'?'':' <small style="font-weight:600;">(+ envío por cotizar)</small>'}</span><span>${money(checkoutGrandTotal())}</span></div>
+      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':icon('lock',16)+' Finalizar pedido ('+money(checkoutGrandTotal())+')'}</button>
       <div class="dw-foot-note">No pagas nada ahora · te confirmamos por WhatsApp</div>
       <button class="btn-link" onclick="state.checkoutOpen=false;state.cartOpen=true;render()">Volver al carrito</button>
     </div>`;
@@ -4228,8 +4199,8 @@ function renderSuccess(){
     <div class="mark">${icon('check',26)}</div>
     <h2>¡Pedido recibido!</h2>
     ${state.lastOrderNumber ? `<div style="font-weight:800;color:var(--primary-deep);font-size:15px;margin-bottom:4px;">Pedido ${formatFolio(state.lastOrderNumber)}</div>` : ''}
-    ${state.lastOrderWaMsg ? `<p>Último paso: envíanos tu confirmación por WhatsApp para coordinar la entrega. Pago contra entrega, empaque discreto.</p>
-    <a class="btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:10px;" href="${waLink(state.lastOrderWaMsg)}" target="_blank" rel="noopener">${icon('whatsapp',18)} Enviar confirmación por WhatsApp</a>
+    ${state.lastOrderWaMsg ? `<p><b>Tu pedido ya quedó registrado.</b> Te escribimos por WhatsApp para coordinar la entrega. Si quieres que te atendamos más rápido, mándanos el mensaje. Pago contra entrega, empaque discreto.</p>
+    <a class="btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;margin-bottom:10px;" href="${waLink(state.lastOrderWaMsg)}" target="_blank" rel="noopener">${icon('whatsapp',18)} Mandar mensaje por WhatsApp (opcional)</a>
     <button class="btn-link" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>` : `<p>Te contactaremos por WhatsApp para confirmar tu pedido y coordinar la entrega. Pago contra entrega, empaque discreto.</p>
     <button class="btn-primary" style="width:auto;display:inline-block;padding:13px 22px;" onclick="state.orderPlaced=false;render()">Seguir explorando el catálogo</button>`}
   </div></div>`;

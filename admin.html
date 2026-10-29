@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com https://www.google.com; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<script>/* S-08: el panel no se puede mostrar dentro de otra página (evita clickjacking). */
+if(window.top!==window.self){document.documentElement.style.display='none';try{window.top.location=window.self.location;}catch(e){}}</script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex, nofollow">
 <script>/* El panel y el POS no se pueden mostrar dentro de otra página (clickjacking, hallazgo H-14). */
@@ -17,6 +19,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js" integrity="sha384-vmcSy8TM1KhZWBIKMKTR8AxbrJQCuConAolGY+42odu9ZGIzw8L8xAT/u7ul4X2U" crossorigin="anonymous"></script>
@@ -817,6 +820,16 @@ const firebaseConfig = {
   appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
 };
 firebase.initializeApp(firebaseConfig);
+/* App Check (S-03): cada lectura/escritura a Firestore lleva una prueba de que viene de esta página y
+   no de un script. Clave del sitio de reCAPTCHA v3 (pública). Vacía = desactivado. Mientras no se
+   active "Aplicar" en Firebase Console → App Check, solo mide; no bloquea a nadie. */
+const APP_CHECK_SITE_KEY = '';
+try{
+  if(APP_CHECK_SITE_KEY && firebase.appCheck){
+    const ac = firebase.appCheck();
+    ac.activate(firebase.appCheck.ReCaptchaV3Provider ? new firebase.appCheck.ReCaptchaV3Provider(APP_CHECK_SITE_KEY) : APP_CHECK_SITE_KEY, true);
+  }
+}catch(e){ console.warn('App Check no se pudo activar', e); }
 /* ============== MEDIDOR DE LECTURAS ==============
    Cuenta las lecturas de Firestore que hace este equipo (panel y POS, por separado) en el día.
    Firestore cobra mínimo 1 lectura por consulta aunque no traiga nada; así se cuenta aquí.
@@ -1106,6 +1119,61 @@ firebase.initializeApp(firebaseConfig);
   if(F.CollectionReference && F.CollectionReference.prototype){
     const CR = F.CollectionReference.prototype, oAdd = CR.add;
     CR.add = function(d, ...r){ if(COLS.has(this.id)){ dirty(this.id); return oAdd.call(this, st(d), ...r); } return oAdd.call(this, d, ...r); };
+  }
+})();
+
+/* ============== ESPEJO DE EXISTENCIAS (productStock) — S-01 ==============
+   "products" ya no es de lectura pública. La tienda solo necesita la existencia al momento de enviar
+   un pedido, así que cada vez que el panel o el POS escriben un producto se copia aquí solo
+   {stock, variants:[{id,stock}]}. La tienda lo consulta por id (no puede listar la colección).
+   Se hace después de que la escritura se guarda; si falla, el catálogo estático lo corrige al publicar. */
+(function(){
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch) return;
+  const isProd = ref => { try{ return ref && ref.parent && ref.parent.id === 'products'; }catch(e){ return false; } };
+  const pend = new Set(); let timer = null;
+  // Solo importa si la escritura toca existencias, variantes o visibilidad (ahorra lecturas en cambios masivos de precio, etc.).
+  const rel = d => !d || typeof d !== 'object' || ['stock','variants','hidden','deletedAt'].some(k=>k in d);
+  const queue = id => { if(!id) return; pend.add(id); clearTimeout(timer); timer = setTimeout(flush, 800); };
+  const view = d => {
+    if(!d || d.hidden || d.deletedAt) return { stock: 0, variants: [] };
+    return { stock: Math.max(0, Number(d.stock)||0),
+      variants: (Array.isArray(d.variants) ? d.variants : []).filter(v=>v && v.id!=null).map(v=>({ id: String(v.id), stock: Math.max(0, Number(v.stock)||0) })) };
+  };
+  async function flush(){
+    const ids = [...pend]; pend.clear();
+    const fs = firebase.firestore();
+    for(const id of ids){
+      try{
+        const snap = await fs.collection('products').doc(id).get();
+        const ref = fs.collection('productStock').doc(id);
+        if(!snap.exists) await ref.delete();
+        else await ref.set(Object.assign(view(snap.data()), { updatedAt: new Date().toISOString() }));
+      }catch(e){ console.warn('productStock: no se pudo copiar la existencia de', id, e && e.message); }
+    }
+  }
+  window.cdlpStockMirror = queue;
+  const DR = F.DocumentReference.prototype, B = F.WriteBatch.prototype;
+  const oSet = DR.set, oUpd = DR.update, oDel = DR.delete;
+  const after = (ref, p) => { if(isProd(ref) && p && typeof p.then === 'function') p.then(()=>queue(ref.id), ()=>{}); return p; };
+  DR.set = function(...a){ return after(this, oSet.apply(this, a)); };
+  DR.update = function(...a){ const p = oUpd.apply(this, a); return (a.length > 1 || rel(a[0])) ? after(this, p) : p; };
+  DR.delete = function(...a){ return after(this, oDel.apply(this, a)); };
+  const bSet = B.set, bUpd = B.update, bDel = B.delete, bCommit = B.commit;
+  const note = (b, ref) => { if(isProd(ref)){ (b.__cdlpPs = b.__cdlpPs || []).push(ref.id); } };
+  B.set = function(ref, ...a){ note(this, ref); return bSet.call(this, ref, ...a); };
+  B.update = function(ref, ...a){ if(a.length > 1 || rel(a[0])) note(this, ref); return bUpd.call(this, ref, ...a); };
+  B.delete = function(ref, ...a){ note(this, ref); return bDel.call(this, ref, ...a); };
+  B.commit = function(...a){ const ids = this.__cdlpPs || []; return bCommit.apply(this, a).then(r=>{ ids.forEach(queue); return r; }); };
+  if(F.Transaction && F.Transaction.prototype && F.Firestore && F.Firestore.prototype && F.Firestore.prototype.runTransaction){
+    const T = F.Transaction.prototype, txIds = new Set();
+    ['set','update','delete'].forEach(m=>{ const o = T[m]; if(o) T[m] = function(ref, ...a){ if(isProd(ref)) txIds.add(ref.id); return o.call(this, ref, ...a); }; });
+    const oRun = F.Firestore.prototype.runTransaction;
+    F.Firestore.prototype.runTransaction = function(...a){ return oRun.apply(this, a).then(r=>{ [...txIds].forEach(queue); txIds.clear(); return r; }); };
+  }
+  if(F.CollectionReference && F.CollectionReference.prototype){
+    const CR = F.CollectionReference.prototype, oAdd = CR.add;
+    CR.add = function(...a){ const p = oAdd.apply(this, a); if(this.id === 'products' && p && p.then) p.then(ref=>queue(ref && ref.id), ()=>{}); return p; };
   }
 })();
 
@@ -3385,7 +3453,7 @@ function renderTotpSubpanel(){
   const myDeviceId = getDeviceId();
   return `
   ${renderNativeMfaPanel()}
-  ${(enabled && !mfaEnrolledFactors(state.user).length) ? `  <div class="panel">
+  ${false ? `  <div class="panel">
     <div class="panel-title">Verificación anterior (solo en el navegador)</div>
     <div class="note-box" style="font-weight:700;">Esta es la verificación vieja. Al activar arriba el código de 6 dígitos de Firebase, esta se apaga sola.</div>
     <div class="note-box">Le agrega, a <strong>tu</strong> cuenta (${escDescHtml(state.user.email)}), un código de 6 dígitos de una app como Google Authenticator, además de tu contraseña normal. Una vez que lo confirmes en este navegador, no te lo vuelve a pedir aquí durante 30 días — pasado ese tiempo, o si inicias sesión desde otro dispositivo, te lo pide de nuevo. Cada persona con acceso al panel activa esto por separado, para su propia cuenta. <strong>Importante:</strong> como esta tienda no tiene servidor propio, esto es un obstáculo adicional en el navegador, no algo que Firebase mismo exija — alguien que ya tenga tu contraseña y sepa usar las herramientas de desarrollador del navegador podría saltárselo. Sí frena a alguien que solo consiguió tu contraseña sin más.</div>
@@ -3582,12 +3650,9 @@ async function mfaSetupConfirm(){
   try{
     await state.user.multiFactor.enroll(mfaTotpEnrollAssertion(s.sessionInfo, code), 'App autenticador');
     state.mfaSetup = null;
-    // La verificación anterior (solo en el navegador) ya no hace falta: se apaga para no pedir dos códigos.
-    if(state.totpRequired){
-      try{ await db.collection('security_totp').doc(totpDocId(state.user.email)).update({ enabled:false, replacedByFirebaseMfa:true, updatedAt:new Date().toISOString() }); }catch(e){ console.warn(e); }
-      state.totpRequired = false;
-    }
-    showToast('Listo: Firebase pedirá el código de 6 dígitos en cada inicio de sesión');
+    // La sesión actual no pasó por el código: se cierra para entrar de nuevo con contraseña + código.
+    await auth.signOut(); state.loaded = false;
+    state.loginError = 'Código activado. Entra de nuevo con tu contraseña y el código de 6 dígitos.';
     render();
   }catch(e){ console.error(e); s.busy = false; s.code = ''; s.error = mfaErrorText(e); render(); }
 }
@@ -3673,16 +3738,41 @@ function renderNativeMfaPanel(){
     ${body}
   </div>`;
 }
+const SESSION_DAYS = 30;
+let _sessionWatch = null;
+function startSessionExpiryWatch(authMs){
+  clearInterval(_sessionWatch);
+  if(!authMs) return;
+  _sessionWatch = setInterval(async ()=>{
+    if(Date.now() - authMs > SESSION_DAYS*86400000){
+      clearInterval(_sessionWatch);
+      await auth.signOut(); state.loaded = false;
+      state.loginError = `Por seguridad, la sesión se cierra cada ${SESSION_DAYS} días. Entra de nuevo con tu contraseña y tu código.`;
+      render();
+    }
+  }, 10*60*1000);
+}
+function renderMfaEnrollScreen(){
+  return `
+  <div class="login-screen">
+    <div class="login-card" style="max-width:520px;text-align:left;">
+      <h2>Activa tu código de 6 dígitos</h2>
+      <p>Para entrar al sistema ahora es obligatorio el código de una app de autenticación (Google Authenticator, Microsoft Authenticator…). Actívalo una vez; después Firebase lo pedirá al iniciar sesión, y la sesión se mantiene ${SESSION_DAYS} días en este dispositivo.</p>
+      ${renderNativeMfaPanel()}
+      <button class="btn-tertiary" style="margin-top:12px;" onclick="handleLogout()">Cerrar sesión</button>
+    </div>
+  </div>`;
+}
 auth.onAuthStateChanged(async user=>{
-  state.user = user; state.authChecked = true;
+  state.user = user; state.authChecked = true; state.mfaEnrollRequired = false;
   state.mfaSetup=null; state.mfaRemove=null; if(user){ state.mfaResolver=null; state.mfaError=""; }
   state.totpRequired=false; state.totpVerified=false; state.totpSecretForChallenge=null; state.totpSetup=null; state.totpDisableCode='';
   if(!user){ render(); return; }
   // Candado por claim: solo entra personal con claim admin o staff. getIdTokenResult(true)
   // refresca el token para recoger claims recien asignados (ya no hace falta incognito).
-  let _claims = {};
-  try { _claims = (await user.getIdTokenResult(true)).claims; }
-  catch(e){ try { _claims = (await user.getIdTokenResult(false)).claims; } catch(_){} }
+  let _claims = {}, _tokRes = null;
+  try { _tokRes = await user.getIdTokenResult(true); _claims = _tokRes.claims; }
+  catch(e){ try { _tokRes = await user.getIdTokenResult(false); _claims = _tokRes.claims; } catch(_){} }
   if (_claims.admin !== true && _claims.staff !== true) {
     await auth.signOut();
     state.user = null; state.authChecked = true;
@@ -3690,17 +3780,24 @@ auth.onAuthStateChanged(async user=>{
     render(); return;
   }
   state.isAdmin = _claims.admin === true;
-  // Con el código de Firebase (MFA nativo) ya activado, la verificación anterior del navegador sobra.
-  if(mfaEnrolledFactors(user).length){ recordAdminSession(user.email); if(!state.loaded) loadData(); else render(); return; }
-  try{
-    const doc = await db.collection('security_totp').doc(totpDocId(user.email)).get();
-    if(doc.exists && doc.data().enabled){
-      state.totpRequired = true; state.totpSecretForChallenge = doc.data().secret;
-      if(isTotpTrusted(user.email)){ state.totpVerified = true; recordAdminSession(user.email); }
-      else{ render(); return; }
-    }
-  }catch(e){ console.error('No se pudo verificar la configuración de dos pasos, se deja pasar para no bloquear el acceso a la tienda', e); }
-  if(!state.totpRequired) recordAdminSession(user.email);
+  // S-04: el código de 6 dígitos de Firebase es obligatorio y la sesión dura 30 días. Las reglas de
+  // Firestore exigen lo mismo, así que esto solo explica al usuario qué hacer.
+  const _tok = _tokRes || {};
+  const _authMs = Date.parse(_tok.authTime || '') || 0;
+  if(_authMs && Date.now() - _authMs > SESSION_DAYS*86400000){
+    await auth.signOut(); state.user = null;
+    state.loginError = `Por seguridad, la sesión se cierra cada ${SESSION_DAYS} días. Entra de nuevo con tu contraseña y tu código.`;
+    render(); return;
+  }
+  if(!mfaEnrolledFactors(user).length){ state.mfaEnrollRequired = true; render(); return; }
+  if(!_tok.signInSecondFactor){
+    await auth.signOut(); state.user = null;
+    state.loginError = 'Vuelve a entrar con tu contraseña y el código de 6 dígitos.';
+    render(); return;
+  }
+  state.mfaEnrollRequired = false;
+  startSessionExpiryWatch(_authMs);
+  recordAdminSession(user.email);
   if(!state.loaded) loadData(); else render();
 });
 async function handleLogin(){
@@ -4587,6 +4684,11 @@ async function updateOrderStatus(id,status,fromUndo){
   const o=state.orders.find(x=>x.id===id); if(!o) return;
   if(status==='Cancelado' && o.status!=='Cancelado' && !fromUndo){ state.cancelModal = {id, reason:CANCEL_REASONS[0], note:''}; state.orderActionsMenu=null; render(); return; }
   const prevStatus = o.status;
+  // S-03: un pedido de la tienda con precios o cupón que no cuadran no se confirma sin revisarlo.
+  if(!fromUndo && prevStatus==='Nuevo' && status!=='Cancelado' && status!=='Nuevo'){
+    const is = orderPriceIssues(o);
+    if(is.length && !window.confirm(`Este pedido tiene precios que no cuadran:\n\n• ${is.join('\n• ')}\n\nConfírmalo con la clienta por WhatsApp. ¿Avanzarlo de todos modos?`)){ render(); return false; }
+  }
   // Primero se guarda; si falla, ni el pedido ni el inventario cambian (antes la pantalla y el
   // stock se movían aunque el estado no se hubiera guardado).
   if(!(await saveOrdersStatus(id,status,o.source))){ render(); return false; }
@@ -6502,7 +6604,20 @@ function orderPriceIssues(o){
     let list = Number(p.price)||0;
     if(it.variantId){ const v=(p.variants||[]).find(x=>x.id===it.variantId); if(v && v.priceOverride>0) list = v.priceOverride; }
     if(list>0 && Number(it.price) < list*0.4 && !o.couponCode) issues.push(`${it.name}: se cobró ${money(it.price)} y hoy cuesta ${money(list)}.`);
+    if(Number(it.price) < 0) issues.push(`${it.name}: precio negativo (${money(it.price)}).`);
   });
+  // S-06: el contador público de usos se puede inflar o saltar; aquí se revisa con los pedidos reales.
+  if(o.couponCode){
+    const c = (state.settings.coupons||[]).find(x=>String(x.code||'').toUpperCase()===String(o.couponCode).toUpperCase());
+    if(!c) issues.push(`El cupón ${o.couponCode} no existe en Configuración.`);
+    else {
+      if(c.active===false) issues.push(`El cupón ${c.code} está desactivado.`);
+      if(c.maxUses>0){
+        const before = state.orders.filter(x=>x.id!==o.id && x.status!=='Cancelado' && x.couponCode && String(x.couponCode).toUpperCase()===String(c.code).toUpperCase() && String(x.date||'') < String(o.date||'')).length;
+        if(before >= c.maxUses) issues.push(`El cupón ${c.code} ya tenía ${before} uso(s) y su límite es ${c.maxUses}.`);
+      }
+    }
+  }
   return issues;
 }
 function priceCheckHtml(o){
@@ -17025,7 +17140,7 @@ function render(){
   const scrollPositions = captureScrollPositions(root);
   if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
   if(!state.user){ root.innerHTML = renderLogin(); restoreFocusState(root, focusInfo); return; }
-  if(state.totpRequired && !state.totpVerified){ root.innerHTML = renderTotpChallenge(); restoreFocusState(root, focusInfo); return; }
+  if(state.mfaEnrollRequired){ root.innerHTML = renderMfaEnrollScreen(); restoreFocusState(root, focusInfo); return; }
   if(!state.loaded){ root.innerHTML = `<div class="loading-screen">Cargando panel…</div>`; restoreFocusState(root, focusInfo); return; }
   if(state.loadFailed){ root.innerHTML = renderLoadFailedScreen(); restoreFocusState(root, focusInfo); return; }
   root.innerHTML = renderAdmin();
@@ -17092,7 +17207,7 @@ const NAV_ADMIN_MODALS = [
 ];
 function navLayers(){
   const s = state, L = [];
-  if(!s.loaded || !s.user || s.loadFailed || (s.totpRequired && !s.totpVerified)) return L;
+  if(!s.loaded || !s.user || s.loadFailed || s.mfaEnrollRequired) return L;
   NAV_ADMIN_MODALS.forEach(([k, fn])=>{
     const v = s[k];
     if(v!==null && v!==undefined && v!==false && v!=='') L.push(()=>{

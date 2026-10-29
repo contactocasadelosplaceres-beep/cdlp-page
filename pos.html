@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com https://www.google.com; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<script>/* S-08: el panel no se puede mostrar dentro de otra página (evita clickjacking). */
+if(window.top!==window.self){document.documentElement.style.display='none';try{window.top.location=window.self.location;}catch(e){}}</script>
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex, nofollow">
 <script>/* El panel y el POS no se pueden mostrar dentro de otra página (clickjacking, hallazgo H-14). */
@@ -13,6 +15,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
@@ -404,6 +407,16 @@ const firebaseConfig = {
   appId: "1:689677749733:web:3cc2900d04a78b652cf30c"
 };
 firebase.initializeApp(firebaseConfig);
+/* App Check (S-03): cada lectura/escritura a Firestore lleva una prueba de que viene de esta página y
+   no de un script. Clave del sitio de reCAPTCHA v3 (pública). Vacía = desactivado. Mientras no se
+   active "Aplicar" en Firebase Console → App Check, solo mide; no bloquea a nadie. */
+const APP_CHECK_SITE_KEY = '';
+try{
+  if(APP_CHECK_SITE_KEY && firebase.appCheck){
+    const ac = firebase.appCheck();
+    ac.activate(firebase.appCheck.ReCaptchaV3Provider ? new firebase.appCheck.ReCaptchaV3Provider(APP_CHECK_SITE_KEY) : APP_CHECK_SITE_KEY, true);
+  }
+}catch(e){ console.warn('App Check no se pudo activar', e); }
 /* ============== MEDIDOR DE LECTURAS ==============
    Cuenta las lecturas de Firestore que hace este equipo (panel y POS, por separado) en el día.
    Firestore cobra mínimo 1 lectura por consulta aunque no traiga nada; así se cuenta aquí.
@@ -692,6 +705,61 @@ firebase.initializeApp(firebaseConfig);
   if(F.CollectionReference && F.CollectionReference.prototype){
     const CR = F.CollectionReference.prototype, oAdd = CR.add;
     CR.add = function(d, ...r){ if(COLS.has(this.id)){ dirty(this.id); return oAdd.call(this, st(d), ...r); } return oAdd.call(this, d, ...r); };
+  }
+})();
+
+/* ============== ESPEJO DE EXISTENCIAS (productStock) — S-01 ==============
+   "products" ya no es de lectura pública. La tienda solo necesita la existencia al momento de enviar
+   un pedido, así que cada vez que el panel o el POS escriben un producto se copia aquí solo
+   {stock, variants:[{id,stock}]}. La tienda lo consulta por id (no puede listar la colección).
+   Se hace después de que la escritura se guarda; si falla, el catálogo estático lo corrige al publicar. */
+(function(){
+  let F; try{ F = firebase.firestore; }catch(e){ return; }
+  if(!F || !F.DocumentReference || !F.WriteBatch) return;
+  const isProd = ref => { try{ return ref && ref.parent && ref.parent.id === 'products'; }catch(e){ return false; } };
+  const pend = new Set(); let timer = null;
+  // Solo importa si la escritura toca existencias, variantes o visibilidad (ahorra lecturas en cambios masivos de precio, etc.).
+  const rel = d => !d || typeof d !== 'object' || ['stock','variants','hidden','deletedAt'].some(k=>k in d);
+  const queue = id => { if(!id) return; pend.add(id); clearTimeout(timer); timer = setTimeout(flush, 800); };
+  const view = d => {
+    if(!d || d.hidden || d.deletedAt) return { stock: 0, variants: [] };
+    return { stock: Math.max(0, Number(d.stock)||0),
+      variants: (Array.isArray(d.variants) ? d.variants : []).filter(v=>v && v.id!=null).map(v=>({ id: String(v.id), stock: Math.max(0, Number(v.stock)||0) })) };
+  };
+  async function flush(){
+    const ids = [...pend]; pend.clear();
+    const fs = firebase.firestore();
+    for(const id of ids){
+      try{
+        const snap = await fs.collection('products').doc(id).get();
+        const ref = fs.collection('productStock').doc(id);
+        if(!snap.exists) await ref.delete();
+        else await ref.set(Object.assign(view(snap.data()), { updatedAt: new Date().toISOString() }));
+      }catch(e){ console.warn('productStock: no se pudo copiar la existencia de', id, e && e.message); }
+    }
+  }
+  window.cdlpStockMirror = queue;
+  const DR = F.DocumentReference.prototype, B = F.WriteBatch.prototype;
+  const oSet = DR.set, oUpd = DR.update, oDel = DR.delete;
+  const after = (ref, p) => { if(isProd(ref) && p && typeof p.then === 'function') p.then(()=>queue(ref.id), ()=>{}); return p; };
+  DR.set = function(...a){ return after(this, oSet.apply(this, a)); };
+  DR.update = function(...a){ const p = oUpd.apply(this, a); return (a.length > 1 || rel(a[0])) ? after(this, p) : p; };
+  DR.delete = function(...a){ return after(this, oDel.apply(this, a)); };
+  const bSet = B.set, bUpd = B.update, bDel = B.delete, bCommit = B.commit;
+  const note = (b, ref) => { if(isProd(ref)){ (b.__cdlpPs = b.__cdlpPs || []).push(ref.id); } };
+  B.set = function(ref, ...a){ note(this, ref); return bSet.call(this, ref, ...a); };
+  B.update = function(ref, ...a){ if(a.length > 1 || rel(a[0])) note(this, ref); return bUpd.call(this, ref, ...a); };
+  B.delete = function(ref, ...a){ note(this, ref); return bDel.call(this, ref, ...a); };
+  B.commit = function(...a){ const ids = this.__cdlpPs || []; return bCommit.apply(this, a).then(r=>{ ids.forEach(queue); return r; }); };
+  if(F.Transaction && F.Transaction.prototype && F.Firestore && F.Firestore.prototype && F.Firestore.prototype.runTransaction){
+    const T = F.Transaction.prototype, txIds = new Set();
+    ['set','update','delete'].forEach(m=>{ const o = T[m]; if(o) T[m] = function(ref, ...a){ if(isProd(ref)) txIds.add(ref.id); return o.call(this, ref, ...a); }; });
+    const oRun = F.Firestore.prototype.runTransaction;
+    F.Firestore.prototype.runTransaction = function(...a){ return oRun.apply(this, a).then(r=>{ [...txIds].forEach(queue); txIds.clear(); return r; }); };
+  }
+  if(F.CollectionReference && F.CollectionReference.prototype){
+    const CR = F.CollectionReference.prototype, oAdd = CR.add;
+    CR.add = function(...a){ const p = oAdd.apply(this, a); if(this.id === 'products' && p && p.then) p.then(ref=>queue(ref && ref.id), ()=>{}); return p; };
   }
 })();
 
@@ -1672,17 +1740,27 @@ auth.onAuthStateChanged(async user=>{
   if(user){ state.mfaResolver=null; state.mfaError=""; }
   if(!user){ render(); return; }
   // Candado por claim: solo personal autorizado (admin o staff).
-  let _claims = {};
-  try { _claims = (await user.getIdTokenResult(true)).claims; }
-  catch(e){ try { _claims = (await user.getIdTokenResult(false)).claims; } catch(_){} }
+  let _claims = {}, _tokRes = null;
+  try { _tokRes = await user.getIdTokenResult(true); _claims = _tokRes.claims; }
+  catch(e){ try { _tokRes = await user.getIdTokenResult(false); _claims = _tokRes.claims; } catch(_){} }
   if (_claims.admin !== true && _claims.staff !== true) {
     await auth.signOut();
     state.user = null; state.authChecked = true;
     state.loginError = 'Esta cuenta no tiene acceso.';
     render(); return;
   }
+  // S-04: código de 6 dígitos obligatorio y sesión de 30 días (las reglas de Firestore exigen lo mismo).
+  const _tok = _tokRes || {};
+  const _authMs = Date.parse(_tok.authTime || '') || 0;
+  const _out = async msg => { await auth.signOut(); state.user = null; state.loaded = false; state.loginError = msg; render(); };
+  if(_authMs && Date.now() - _authMs > SESSION_DAYS*86400000) return _out(`Por seguridad, la sesión se cierra cada ${SESSION_DAYS} días. Entra de nuevo con tu contraseña y tu código.`);
+  if(!mfaEnrolledFactors(user).length) return _out('Esta cuenta aún no tiene el código de 6 dígitos. Actívalo en el panel (Configuración → Seguridad) y vuelve a entrar aquí.');
+  if(!_tok.signInSecondFactor) return _out('Vuelve a entrar con tu contraseña y el código de 6 dígitos.');
+  clearInterval(window.__cdlpSessWatch);
+  if(_authMs) window.__cdlpSessWatch = setInterval(()=>{ if(Date.now() - _authMs > SESSION_DAYS*86400000){ clearInterval(window.__cdlpSessWatch); handleLogout(); state.loginError = `Por seguridad, la sesión se cierra cada ${SESSION_DAYS} días. Entra de nuevo con tu contraseña y tu código.`; } }, 10*60*1000);
   if(!state.loaded){ loadData(); } else { render(); }
 });
+const SESSION_DAYS = 30;
 async function handleLogin(){
   state.loginError='';
   try{ await auth.signInWithEmailAndPassword(state.loginEmail.trim(), state.loginPassword); }
