@@ -28,7 +28,8 @@ const SITE_URL = env.SITE_URL || 'https://contactocasadelosplaceres-beep.github.
 
 // Campos de producto que NO salen en el JSON público.
 const PRIV_PRODUCT = ['cost', 'costHistory', 'supplierId', 'stockByCenter', 'batches', 'expirationDate',
-  'lowStockThreshold', 'location', 'createdBy', 'updatedBy', 'deletedBy', 'deletedAt', 'internalNotes', 'internalNote', '_sync'];
+  'lowStockThreshold', 'location', 'createdBy', 'updatedBy', 'deletedBy', 'deletedAt', 'internalNotes', 'internalNote', '_sync',
+  'mgTier', 'promoCandidate']; // mgTier = nivel de margen (S-02): no se publica
 const PRIV_VARIANT = ['cost', 'stockByCenter', 'supplierId'];
 // Ajustes que son solo del panel (la tienda no los usa).
 const PRIV_SETTINGS = ['recurringExpenses', 'salesGoalMonthly', 'duplicatesIgnored', 'deliveryWhatsapp', 'storeAddress',
@@ -58,6 +59,23 @@ function cleanSettings(s) {
   const out = {};
   Object.keys(s || {}).forEach(k => { if (!PRIV_SETTINGS.includes(k) && !SECRET_KEY.test(k)) out[k] = s[k]; });
   return out;
+}
+// productStock/{id} (S-01): lo único que la tienda lee de Firestore, para revisar existencias al enviar el pedido.
+// El panel y el POS lo actualizan al guardar; aquí se corrige por si alguna copia falló.
+function stockView(d) {
+  if (!d || d.hidden || d.deletedAt) return { stock: 0, variants: [] };
+  return { stock: Math.max(0, Number(d.stock) || 0),
+    variants: (Array.isArray(d.variants) ? d.variants : []).filter(v => v && v.id != null).map(v => ({ id: String(v.id), stock: Math.max(0, Number(v.stock) || 0) })) };
+}
+async function writeStock(db, docs) {
+  if (DRY_RUN || !docs.length) return;
+  const now = new Date().toISOString();
+  for (let i = 0; i < docs.length; i += 400) {
+    const b = db.batch();
+    docs.slice(i, i + 400).forEach(d => b.set(db.collection('productStock').doc(d.id), Object.assign(stockView(d.data()), { updatedAt: now })));
+    await b.commit();
+  }
+  console.log(`productStock: ${docs.length} existencia(s) copiadas.`);
 }
 function stable(o) { return JSON.stringify(o); }
 function git(cmd) { return execSync(cmd, { cwd: ROOT, stdio: 'pipe' }).toString().trim(); }
@@ -113,10 +131,12 @@ async function main() {
     Object.keys(tomb).forEach(id => { if (map.has(id) && !chSnap.docs.some(d => d.id === id && msOf(d.data()._sync) > msOf(tomb[id]))) map.delete(id); });
     products = [...map.values()];
     readCount = chSnap.size;
+    await writeStock(db, chSnap.docs);
     console.log(`Modo: solo cambios · ${chSnap.size} producto(s) cambiaron desde la última publicación`);
   } else {
     const prodSnap = await db.collection('products').get();
     prodSnap.docs.forEach(d => { syncMax = Math.max(syncMax, msOf(d.data()._sync)); });
+    await writeStock(db, prodSnap.docs);
     products = prodSnap.docs
       .map(d => ({ id: d.id, data: d.data() }))
       .filter(x => !x.data.hidden && !x.data.deletedAt)
