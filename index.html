@@ -2092,7 +2092,9 @@ async function submitOrder(formData){
     const fresh = {}; 
     await Promise.all([...new Set(Object.keys(state.cart).map(k=>parseCartKey(k).p&&parseCartKey(k).p.id).filter(Boolean))].map(async id=>{
       // productStock/{id}: solo {stock, variants:[{id,stock}]}, lo escriben el panel y el POS (S-01).
-      const d = await db.collection('productStock').doc(id).get(); if(d.exists) fresh[id] = d.data();
+      // Si no se puede leer (sin señal, reglas sin publicar), se usa la existencia del catálogo: no se bloquea el pedido.
+      try{ const d = await db.collection('productStock').doc(id).get(); if(d.exists) fresh[id] = d.data(); }
+      catch(e){ console.warn('productStock no disponible para', id, e && e.code); }
     }));
     const adjusted = [];
     Object.entries(state.cart).forEach(([key,qty])=>{
