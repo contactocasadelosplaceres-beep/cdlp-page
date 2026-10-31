@@ -17,8 +17,17 @@ const money = n => '$' + Number(Math.round(Number(n) || 0)).toLocaleString('es-M
 const folio = n => (n ? `#${n}` : '');
 const lines = items => (items || []).map(it => `• ${it.qty}x ${it.name}`).join('\n');
 
+// La tienda antepone la zona a la dirección: "[Cd. Guzmán (envío $35 MXN)] Calle…" u "[Otra ciudad (envío por cotizar)] …".
+function shippingOf(address) {
+  const m = /^\[[^\]]*envío \$([\d.,]+)[^\]]*\]/.exec(String(address || ''));
+  return m ? Number(m[1].replace(/[^\d.]/g, '')) || 0 : null;
+}
 function orderText(o) {
-  return `🛒 *Nuevo pedido* ${folio(o.orderNumber)}\nCliente: ${o.customer || 'Sin nombre'} (${o.phone || 's/t'})\nProducto:\n${lines(o.items)}\nDirección: ${o.address || '—'}\nTotal: ${money(o.total)} (no incluye envío)`;
+  const ship = shippingOf(o.address);
+  const tot = ship != null
+    ? `Productos: ${money(o.total)} + envío ${money(ship)}\n*Total con envío: ${money((Number(o.total) || 0) + ship)}*`
+    : `Total: ${money(o.total)} (más envío por cotizar)`;
+  return `🛒 *Nuevo pedido* ${folio(o.orderNumber)}\nCliente: ${o.customer || 'Sin nombre'} (${o.phone || 's/t'})\nProducto:\n${lines(o.items)}\nDirección: ${o.address || '—'}\n${tot}`;
 }
 function saleText(s) {
   const cli = s.customerName ? `\nCliente: ${s.customerName}${s.customerPhone ? ` (${s.customerPhone})` : ''}` : '';
@@ -31,6 +40,8 @@ async function post(url, text) {
 }
 
 let CUR = null; // cursor en memoria: en el modo continuo solo se lee notifyState/slack una vez
+let LAST_SWEEP = 0;
+const SWEEP_MIN = Number(env.SWEEP_MIN || 10), LOOKBACK_H = Number(env.LOOKBACK_HORAS || 3), KEEP_H = Math.max(LOOKBACK_H * 2, 6);
 async function main() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
   const db = admin.firestore();
@@ -47,14 +58,35 @@ async function main() {
     CUR = st.data();
   }
   const cur = CUR;
-  const [oSnap, sSnap] = await Promise.all([
+  /* La fecha "date" la pone el celular o la computadora de quien compra/cobra. Si su reloj está
+     adelantado, antes el cursor saltaba al futuro y los pedidos siguientes (con fecha "menor") ya no se
+     avisaban; si está atrasado, el pedido quedaba antes del cursor y nunca se avisaba. Ahora:
+       · el cursor nunca pasa de la hora real,
+       · cada SWEEP_MIN minutos se revisan las últimas LOOKBACK_H horas por si algo quedó atrás,
+       · y se recuerda qué ids ya se avisaron (notified) para no repetir. */
+  const notified = Object.assign({}, cur.notified || {});
+  if (!cur.sweepFloor) cur.sweepFloor = nowIso; // al estrenar esto no se revisa hacia atrás (ya se avisó)
+  const t = Date.now();
+  const doSweep = !LAST_SWEEP || t - LAST_SWEEP >= SWEEP_MIN * 60000;
+  const floorIso = new Date(t - LOOKBACK_H * 3600000).toISOString();
+  const sweepFrom = floorIso > cur.sweepFloor ? floorIso : cur.sweepFloor;
+  const qs = [
     db.collection('orders').where('date', '>', cur.ordersCursor).orderBy('date').limit(MAX_PER_RUN).get(),
     db.collection('sales').where('date', '>', cur.salesCursor).orderBy('date').limit(MAX_PER_RUN).get(),
-  ]);
-  const pend = [
-    ...oSnap.docs.map(d => ({ kind: 'order', id: d.id, d: d.data() })),
-    ...sSnap.docs.map(d => ({ kind: 'sale', id: d.id, d: d.data() })),
-  ].sort((a, b) => String(a.d.date).localeCompare(String(b.d.date)));
+  ];
+  if (doSweep) qs.push(
+    db.collection('orders').where('date', '>', sweepFrom).orderBy('date').limit(200).get(),
+    db.collection('sales').where('date', '>', sweepFrom).orderBy('date').limit(200).get());
+  const snaps = await Promise.all(qs);
+  if (doSweep) LAST_SWEEP = t;
+  const seen = new Set();
+  const pend = [];
+  snaps.forEach((sn, i) => sn.docs.forEach(d => {
+    const kind = i % 2 === 0 ? 'order' : 'sale', key = kind + ':' + d.id;
+    if (seen.has(key) || notified[key]) return; seen.add(key);
+    pend.push({ kind, id: d.id, key, d: d.data() });
+  }));
+  pend.sort((a, b) => String(a.d.date).localeCompare(String(b.d.date)));
   if (!pend.length && (cur.webhookMigrated || !String(env.SLACK_WEBHOOK_URL || '').trim())) { console.log('Nada nuevo.'); return; }
 
   let url = (env.SLACK_WEBHOOK_URL || '').trim();
@@ -68,14 +100,27 @@ async function main() {
   const upd = {};
   let sent = 0;
   if (!url && pend.length) console.log('AVISO: no hay webhook de Slack (ni secreto SLACK_WEBHOOK_URL ni en settings/store). Se omiten los avisos.');
+  const capNow = d => (String(d) > nowIso ? nowIso : String(d)); // el cursor nunca pasa de la hora real
+  const advance = p => {
+    const k = p.kind === 'order' ? 'ordersCursor' : 'salesCursor';
+    const v = capNow(p.d.date); if (v > (upd[k] || cur[k] || '')) upd[k] = v;
+    notified[p.key] = nowIso;
+  };
   for (const p of pend) {
-    if (p.d.historical || p.d.importedFrom) { upd[p.kind === 'order' ? 'ordersCursor' : 'salesCursor'] = p.d.date; continue; }
+    if (p.d.historical || p.d.importedFrom) { advance(p); continue; }
     if (url) {
       try { await post(url, p.kind === 'order' ? orderText(p.d) : saleText(p.d)); sent++; }
       catch (e) { console.log('Falló el aviso, se reintenta en la siguiente corrida:', e.message); break; }
-    }
-    upd[p.kind === 'order' ? 'ordersCursor' : 'salesCursor'] = p.d.date;
+    } else break; // sin webhook no se marca como avisado
+    advance(p);
+    if (String(p.d.date) > nowIso || String(p.d.date) < cur[p.kind === 'order' ? 'ordersCursor' : 'salesCursor'])
+      console.log(`::notice::Aviso con reloj desfasado en el dispositivo: ${p.kind} ${folio(p.d.orderNumber)} fecha ${p.d.date}, hora real ${nowIso}`);
   }
+  // Se guardan solo los avisos de las últimas KEEP_H horas (alcanza para no repetir en la revisión hacia atrás).
+  const keepFrom = new Date(t - KEEP_H * 3600000).toISOString();
+  Object.keys(notified).forEach(k => { if (notified[k] < keepFrom) delete notified[k]; });
+  if (pend.length) upd.notified = notified;
+  if (!cur.sweepFloorSaved) { upd.sweepFloor = cur.sweepFloor; upd.sweepFloorSaved = true; }
   // Con el secreto ya configurado, el webhook deja de estar en el documento público.
   if (usingSecret && storeData && storeData.slackWebhookUrl) {
     await storeRef.update({ slackWebhookUrl: admin.firestore.FieldValue.delete() });
