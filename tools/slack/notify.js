@@ -15,6 +15,9 @@ const MAX_PER_RUN = 25;
 
 const money = n => '$' + Number(Math.round(Number(n) || 0)).toLocaleString('es-MX') + ' MXN';
 const folio = n => (n ? `#${n}` : '');
+// @canal al inicio: Slack notifica cada mención aunque lleguen varios mensajes seguidos (si no, a veces
+// junta los avisos y el celular solo suena una vez). MENCION_SLACK vacío = sin mención.
+const MENTION = env.MENCION_SLACK === undefined ? '<!channel> ' : (env.MENCION_SLACK ? env.MENCION_SLACK + ' ' : '');
 const lines = items => (items || []).map(it => `• ${it.qty}x ${it.name}`).join('\n');
 
 // La tienda antepone la zona a la dirección: "[Cd. Guzmán (envío $35 MXN)] Calle…" u "[Otra ciudad (envío por cotizar)] …".
@@ -27,11 +30,11 @@ function orderText(o) {
   const tot = ship != null
     ? `Productos: ${money(o.total)} + envío ${money(ship)}\n*Total con envío: ${money((Number(o.total) || 0) + ship)}*`
     : `Total: ${money(o.total)} (más envío por cotizar)`;
-  return `🛒 *Nuevo pedido* ${folio(o.orderNumber)}\nCliente: ${o.customer || 'Sin nombre'} (${o.phone || 's/t'})\nProducto:\n${lines(o.items)}\nDirección: ${o.address || '—'}\n${tot}`;
+  return `${MENTION}🛒 *Nuevo pedido* ${folio(o.orderNumber)}\nCliente: ${o.customer || 'Sin nombre'} (${o.phone || 's/t'})\nProducto:\n${lines(o.items)}\nDirección: ${o.address || '—'}\n${tot}`;
 }
 function saleText(s) {
   const cli = s.customerName ? `\nCliente: ${s.customerName}${s.customerPhone ? ` (${s.customerPhone})` : ''}` : '';
-  return `💰 *Nueva venta* ${folio(s.orderNumber)} — ${s.centerName || 'POS'}\nAtendió: ${s.cashierName || '—'}\nProducto:\n${lines(s.items)}${cli}\nTotal: ${money(s.total)}`;
+  return `${MENTION}💰 *Nueva venta* ${folio(s.orderNumber)} — ${s.centerName || 'POS'}\nAtendió: ${s.cashierName || '—'}\nProducto:\n${lines(s.items)}${cli}\nTotal: ${money(s.total)}`;
 }
 
 async function post(url, text) {
