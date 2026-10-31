@@ -408,13 +408,14 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 /* App Check (S-03): cada lectura/escritura a Firestore lleva una prueba de que viene de esta página y
-   no de un script. Clave del sitio de reCAPTCHA v3 (pública). Vacía = desactivado. Mientras no se
+   no de un script. Clave del sitio de reCAPTCHA (pública). Vacía = desactivado. Mientras no se
    active "Aplicar" en Firebase Console → App Check, solo mide; no bloquea a nadie. */
-const APP_CHECK_SITE_KEY = '';
+const APP_CHECK_SITE_KEY = '6Lf4IgkuAAAAAIbhKbQWUElyDqU-d-K5H-mus_Ez';
 try{
   if(APP_CHECK_SITE_KEY && firebase.appCheck){
     const ac = firebase.appCheck();
-    ac.activate(firebase.appCheck.ReCaptchaV3Provider ? new firebase.appCheck.ReCaptchaV3Provider(APP_CHECK_SITE_KEY) : APP_CHECK_SITE_KEY, true);
+    // Proveedor: Fraud Defense (reCAPTCHA Enterprise), registrado en Firebase Console → App Check.
+    ac.activate(new firebase.appCheck.ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY), true);
   }
 }catch(e){ console.warn('App Check no se pudo activar', e); }
 /* ============== MEDIDOR DE LECTURAS ==============
