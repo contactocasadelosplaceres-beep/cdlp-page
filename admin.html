@@ -202,7 +202,7 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   .admin-main{min-width:0;}
   @media(min-width:761px){
     .app-shell{display:flex;align-items:flex-start;max-width:1400px;margin:0 auto;}
-    .admin-sidebar{display:flex;flex-direction:column;width:240px;flex-shrink:0;background:var(--navy);min-height:100vh;position:sticky;top:0;padding:20px 12px;}
+    .admin-sidebar{display:flex;flex-direction:column;width:240px;flex-shrink:0;background:var(--navy);height:100vh;height:100dvh;position:sticky;top:0;padding:20px 12px;overflow:hidden;}
     .admin-main{flex:1;min-width:0;}
     .app{max-width:none;}
     .admin-top{display:none;}
@@ -211,7 +211,8 @@ if(window.top!==window.self){ try{ window.top.location.replace(window.self.locat
   .sidebar-brand{padding:8px 10px 18px;border-bottom:1px solid rgba(255,255,255,0.14);margin-bottom:14px;}
   .sidebar-brand .brand-name{font-size:16px;font-weight:700;font-family:'League Spartan',sans-serif;color:#fff;letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .sidebar-brand .brand-sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
-  .sidebar-nav{flex:1;overflow-y:auto;}
+  .sidebar-nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;margin-right:-6px;padding-right:6px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent;}
+  .sidebar-footer{flex-shrink:0;}
   .sidebar-group-label{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,0.4);margin:16px 10px 6px;}
   .sidebar-group-label:first-child{margin-top:0;}
   .sidebar-link{text-decoration:none;display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:600;color:rgba(255,255,255,0.82);text-align:left;background:transparent;transition:background .15s ease,color .15s ease;margin-bottom:2px;}
@@ -2111,8 +2112,8 @@ const SETTINGS_FIELD_LABELS = {
   featuredProductIds:'Productos destacados', recurringExpenses:'Gastos fijos mensuales', testimonials:'Testimonios', socialInstagram:'Instagram',
   socialFacebook:'Facebook', contactEmail:'Correo de contacto', customCss:'CSS personalizado',
   storeAddress:'Dirección de origen', deliveryWhatsapp:'WhatsApp del repartidor', slackWebhookUrl:'Webhook de notificaciones',
-  shippingNote:'Nota de envío', wholesaleTiers:'Precios de mayoreo', coupons:'Cupones', promotions:'Promociones',
-  logoUrl:'Logo', salesGoalMonthly:'Meta de venta mensual', checkoutReminderProducts:'Recordatorio de checkout',
+  shippingNote:'Nota de envío', localShippingCity:'Ciudad de envío local', localShippingCost:'Costo de envío local', checkoutReminderCategories:'Categorías de venta complementaria', checkoutReminderTitle:'Título de venta complementaria', checkoutReminderText:'Texto de venta complementaria', wholesaleTiers:'Precios de mayoreo', coupons:'Cupones', promotions:'Promociones',
+  logoUrl:'Logo', salesGoalMonthly:'Meta de venta mensual', checkoutReminderProducts:'Productos sugeridos al pagar',
   faqItems:'Preguntas frecuentes', seasonCustomEvents:'Temporadas personalizadas', seasonHidden:'Temporadas ocultas',
   theme:'Apariencia (colores/tipografía)', deliverySurveyQuestions:'Preguntas de la encuesta post-entrega',
   repurchaseProductIds:'Productos de recordatorio de recompra', repurchaseDays:'Días para recordatorio de recompra',
@@ -2309,7 +2310,7 @@ function renderAssignCommissionModal(){
     <div class="modal">
       <h3>Asignar comisionista</h3>
       <div class="panel-sub">${formatFolio(o.orderNumber)} · ${money(o.total)}</div>
-      ${state.commissionAgents.length===0 ? `<div class="empty-state">Aún no tienes comisionistas — agrega uno primero en Usuarios → Comisionistas.</div>` : `
+      ${state.commissionAgents.length===0 ? `<div class="empty-state">Aún no tienes comisionistas — agrega uno primero en Usuarios y permisos → Comisionistas.</div>` : `
         ${state.commissionAgents.map(ag=>`
           <label class="checkbox-row" style="justify-content:space-between;">
             <span><input type="radio" name="commission-agent" ${currentAgent===ag.id?'checked':''} onchange="document.getElementById('commission-pct-input').value=${ag.defaultPct}" value="${ag.id}"> ${ag.name}</span>
@@ -2339,12 +2340,12 @@ function renderAssignCommissionModal(){
    cuentas sin restricciones (las que no tienen un documento de colaborador con ese correo). */
 const PAGE_HEADS = {
   resumen:['Inicio','Cómo va tu negocio hoy'],
-  'estadísticas':['Estadísticas','Ventas, productos, clientes y operación en números'],
-  caja:['Caja','Aperturas y cierres del Punto de Venta'],
-  centros:['Centros','Sucursales, inventario, transferencias y reabasto'],
-  marketing:['Marketing','Mayoreo, cupones, promociones y recordatorios'],
-  'diseño':['Diseño','La apariencia de tu tienda en línea'],
-  'configuración':['Configuración','Ajustes de operación, seguridad y datos'],
+  'estadísticas':['Estadísticas','Reportes de ventas, productos, clientes y finanzas'],
+  caja:['Caja y cortes','Aperturas y cierres del Punto de Venta'],
+  centros:['Inventario','Existencias por centro, transferencias, conteos, mermas y reabasto'],
+  marketing:['Marketing','Promociones, venta complementaria y clientes que vuelven'],
+  'diseño':['Diseño de la tienda','Apariencia, contenido y buscador de tu tienda en línea'],
+  'configuración':['Configuración','Datos de la tienda, envíos, seguridad y herramientas'],
 };
 function pageHead(tab){
   const h = PAGE_HEADS[tab]; if(!h) return '';
@@ -2357,7 +2358,7 @@ const PERMISSION_DEFS = [
   {key:'productos', label:'Productos (editar catálogo e inventario)'},
   {key:'clientes', label:'Clientes'},
   {key:'caja', label:'Caja (apertura/cierre del Punto de Venta)'},
-  {key:'centros', label:'Centros de distribución y transferencias'},
+  {key:'centros', label:'Inventario (existencias por centro, transferencias, conteos, mermas y reabasto)'},
   {key:'estadisticas', label:'Estadísticas'},
   {key:'mensajes', label:'Mensajes (buzón de quejas y sugerencias de clientes)'},
   {key:'config', label:'Configuración de la tienda (mayoreo, cupones, promociones, diseño, ajustes)'},
@@ -5650,11 +5651,15 @@ function renderLogin(){
 // cero cambio de función — solo reordenado y re-etiquetado.
 // Mismo orden en computadora y celular: arriba lo de todos los días (Inicio, Pedidos, Productos y
 // el Punto de venta), luego tres grupos. Mismas pestañas, mismo adminTab, mismas funciones.
+// Orden del menú (oct 2026): agrupado por lo que haces, no por cómo se programó cada sección.
+// Las claves internas (centros, cajeros…) no cambian, así los permisos y los enlaces siguen igual.
 const ADMIN_NAV_GROUPS = [
-  {label:'', tabs:['resumen','pedidos','productos']},
-  {label:'Día a día', tabs:['caja','apartados','centros']},
-  {label:'Clientes y promociones', tabs:['clientes','marketing','mensajes']},
-  {label:'Tienda y números', tabs:['estadísticas','diseño','cajeros','configuración']},
+  {label:'Vender', tabs:['resumen','pedidos','apartados','caja'], pos:true},
+  {label:'Catálogo', tabs:['productos','centros']},
+  {label:'Clientes', tabs:['clientes','mensajes','marketing']},
+  {label:'Tienda en línea', tabs:['diseño']},
+  {label:'Números', tabs:['estadísticas']},
+  {label:'Ajustes', tabs:['cajeros','configuración']},
 ];
 const TAB_ICON = {
   resumen:'home', apartados:'bag', pedidos:'receipt', caja:'dollar-sign', productos:'package', centros:'map-pin',
@@ -5701,7 +5706,8 @@ function expirationBadge(p){
 function adminGoTabJs(t){
   return `state.adminTab='${t}';state.designSubpanel=null;state.marketingSubpanel=null;state.configSubpanel=null;state.adminNavOpen=false;${t==='pedidos'?'state.newOrderCount=0;':''}${t==='mensajes'?'state.newMessageCount=0;':''}render();window.scrollTo(0,0)`;
 }
-function adminTabName(t){ return t==='cajeros' ? 'Usuarios' : t==='resumen' ? 'Inicio' : t[0].toUpperCase()+t.slice(1); }
+const TAB_NAMES = {resumen:'Inicio', cajeros:'Usuarios y permisos', centros:'Inventario', caja:'Caja y cortes', 'diseño':'Diseño de la tienda'};
+function adminTabName(t){ return TAB_NAMES[t] || (t[0].toUpperCase()+t.slice(1)); }
 function adminTabBadgeN(t){
   if(t==='pedidos') return state.newOrderCount||0;
   if(t==='apartados') return lyOverdueCount()||0;
@@ -5717,9 +5723,9 @@ const MOBILE_PRIMARY = [
   {t:'productos', label:'Productos', ic:'package'},
 ];
 const TAB_HINT = {
-  caja:'Aperturas y cortes', apartados:'Abonos y entregas', centros:'Inventario y reabasto',
-  clientes:'Historial y contacto', marketing:'Cupones y promos', mensajes:'Buzón de clientes',
-  'estadísticas':'Reportes', 'diseño':'Cómo se ve tu tienda', cajeros:'Equipo y accesos', 'configuración':'Ajustes y datos',
+  caja:'Aperturas y cortes', apartados:'Abonos y entregas', centros:'Existencias, conteos y reabasto',
+  clientes:'Historial y contacto', marketing:'Promos, sugerencias y retención', mensajes:'Buzón de clientes',
+  'estadísticas':'Reportes y finanzas', 'diseño':'Cómo se ve tu tienda', cajeros:'Equipo y accesos', 'configuración':'Datos, envíos y seguridad',
 };
 function renderMobileTop(){
   const sub = 'Panel de administración';
@@ -5775,7 +5781,7 @@ function renderAdmin(){
         ${ADMIN_NAV_GROUPS.map((g)=>({...g, tabs:g.tabs.filter(canAccessTab)})).filter(g=>g.tabs.length).map((g,gi)=>`
           ${g.label ? `<div class="sidebar-group-label">${g.label}</div>` : ''}
           ${g.tabs.map(t=>`<button class="sidebar-link ${state.adminTab===t?'active':''}" onclick="${goTab(t)}">${icon(TAB_ICON[t]||'grid',16)}<span>${adminTabLabel(t)}</span></button>`).join('')}
-          ${gi===0 && !state.myPermissions ? `<a class="sidebar-link" href="pos.html" target="_blank">${icon('bag',16)}<span>Punto de venta</span></a>` : ''}
+          ${g.pos && !state.myPermissions ? `<a class="sidebar-link" href="pos.html" target="_blank">${icon('bag',16)}<span>Punto de venta ↗</span></a>` : ''}
         `).join('')}
       </nav>
       <div class="sidebar-footer">
@@ -6713,7 +6719,7 @@ function computeBusinessHealth(){
   const g = computeMonthProgress();
   if(g.goal>0 && !g.onTrack) issues.push({level:'ambar', text:'Vas un poco atrás de tu meta de venta de este mes.'});
   const waitingReady = computeRestockDemand().filter(g=>g.stock>0).reduce((s,g)=>s+g.people.length,0);
-  if(waitingReady>0) issues.push({level:'ambar', text:`${waitingReady} persona(s) esperan productos que ya repusiste — avísales desde Centros → Reabasto.`});
+  if(waitingReady>0) issues.push({level:'ambar', text:`${waitingReady} persona(s) esperan productos que ya repusiste — avísales desde Inventario → Reabasto.`});
   const anomaly = computeSalesAnomaly();
   if(anomaly && anomaly.kind==='baja') issues.push({level:'ambar', text:`Venta de hoy más baja de lo normal: ${money(anomaly.todayRevenue)} contra un promedio de ${money(anomaly.avg)} para un ${anomaly.dayName} a esta hora.`});
   if(anomaly && anomaly.kind==='alta') issues.push({level:'ambar', text:`¡Venta de hoy muy por arriba de lo normal! ${money(anomaly.todayRevenue)} contra un promedio de ${money(anomaly.avg)} para un ${anomaly.dayName} a esta hora.`});
@@ -6846,7 +6852,7 @@ function renderResumen(){
         </div>
       `).join('')}
       ${renderShowMoreButton('lowStockShowMore', showMoreSlice('lowStockShowMore', m.lowStock).remaining)}
-      <div class="row-sub" style="margin-top:6px;">Los que agregues aparecen en Centros → Reabasto, listos para armar el pedido por proveedor.</div>
+      <div class="row-sub" style="margin-top:6px;">Los que agregues aparecen en Inventario → Reabasto, listos para armar el pedido por proveedor.</div>
     </div></div>`, false) : ''}
     ${dashSec('numeros', 'Números del negocio', `Ticket ${money(m.avgOrder)}`, `
     <div class="stat-grid">
@@ -7249,10 +7255,13 @@ const STATS_SUBTAB_GROUPS = [
   {label:'Ventas', items:[
     {key:'general', label:'General'},
     {key:'calendario', label:'Calendario'},
-    {key:'cierre', label:'Cierre de mes'},
-    {key:'pagos', label:'Pagos'},
-    {key:'comisiones', label:'Comisiones'},
     {key:'carritoabandonado', label:'Carrito abandonado'},
+  ]},
+  {label:'Finanzas', items:[
+    {key:'gastos', label:'Gastos y utilidad'},
+    {key:'pagos', label:'Pagos y conciliación'},
+    {key:'comisiones', label:'Comisiones'},
+    {key:'cierre', label:'Cierre de mes'},
   ]},
   {label:'Productos', items:[
     {key:'productos', label:'Productos'},
@@ -7271,7 +7280,6 @@ const STATS_SUBTAB_GROUPS = [
   {label:'Operación', items:[
     {key:'tiemporeal', label:'Tiempo real'},
     {key:'mapacalor', label:'Mapa de calor'},
-    {key:'gastos', label:'Gastos y utilidad'},
     {key:'horaspico', label:'Horas pico por cajero'},
   ]},
 ];
@@ -11555,33 +11563,45 @@ function kioskModeLink(off){
    con el mismo patrón de lista + "volver" que ya usa Diseño, para que el menú de arriba no
    se llene de botones. El contenido de cada una (renderMayoreo/renderCupones/renderPromociones)
    no cambió, solo dónde se cuelga. */
-const MARKETING_SUBPANELS = [
-  {key:'mayoreo', icon:icon('package'), label:'Precios de mayoreo'},
-  {key:'cupones', icon:icon('tag'), label:'Cupones de descuento'},
-  {key:'promociones', icon:icon('star'), label:'Promociones automáticas'},
-  {key:'relampago', icon:icon('clock'), label:'Ofertas relámpago'},
-  {key:'recordatorio', icon:icon('bell'), label:'Recordatorio al cobrar (POS)'},
-  {key:'recompra', icon:icon('history'), label:'Recordatorio de recompra'},
-  {key:'riesgo', icon:icon('alert-triangle'), label:'Clientes en riesgo de fuga'},
-  {key:'temporadas', icon:icon('calendar'), label:'Calendario de temporadas'},
+const MARKETING_SUBPANEL_GROUPS = [
+  {title:'Descuentos y promociones', items:[
+    {key:'cupones', icon:icon('tag'), label:'Cupones de descuento'},
+    {key:'promociones', icon:icon('star'), label:'Promociones automáticas (2x1, lleva X paga Y, regalos)'},
+    {key:'relampago', icon:icon('clock'), label:'Ofertas relámpago'},
+    {key:'mayoreo', icon:icon('package'), label:'Precios de mayoreo'},
+  ]},
+  {title:'Venta complementaria', items:[
+    {key:'recordatorio', icon:icon('bag'), label:'Productos sugeridos al pagar (tienda en línea y POS)'},
+  ]},
+  {title:'Que vuelvan a comprar', items:[
+    {key:'recompra', icon:icon('history'), label:'Recordatorio de recompra'},
+    {key:'riesgo', icon:icon('alert-triangle'), label:'Clientes en riesgo de fuga'},
+    {key:'encuesta', icon:icon('message-square'), label:'Encuesta después de la entrega'},
+  ]},
+  {title:'Planeación', items:[
+    {key:'temporadas', icon:icon('calendar'), label:'Calendario de temporadas'},
+  ]},
 ];
+const MARKETING_SUBPANELS = MARKETING_SUBPANEL_GROUPS.flatMap(g=>g.items);
 function renderMarketing(){
   if(state.marketingSubpanel) return renderMarketingSubpanel(state.marketingSubpanel);
   return `
     <div class="note-box intro-note" title="Toca para leer completo" onclick="this.classList.toggle('open')" style="margin-bottom:16px;">Herramientas para impulsar ventas: precios especiales para mayoristas, cupones de descuento y promociones automáticas (2x1, regalo por compra, etc.).</div>
+    ${MARKETING_SUBPANEL_GROUPS.map(g=>`
     <div class="panel">
-      ${MARKETING_SUBPANELS.map(sp=>`
+      <div class="panel-title">${g.title}</div>
+      ${g.items.map(sp=>`
         <div class="subpanel-item" onclick="state.marketingSubpanel='${sp.key}';render()">
           <span>${sp.icon}&nbsp;&nbsp;${sp.label}</span>
           <span class="chev">›</span>
         </div>
       `).join('')}
-    </div>
+    </div>`).join('')}
   `;
 }
 function renderMarketingSubpanel(key){
   const back = `<button class="subpanel-back" onclick="state.marketingSubpanel=null;render()">‹ Volver a Marketing</button>`;
-  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, recompra: renderRepurchaseSubpanel, riesgo: renderChurnRiskSubpanel, temporadas: renderSeasonsSubpanel, relampago: renderFlashSubpanel};
+  const map = {mayoreo: renderMayoreo, cupones: renderCupones, promociones: renderPromociones, recordatorio: renderCheckoutReminderSubpanel, encuesta: renderSurveySubpanel, recompra: renderRepurchaseSubpanel, riesgo: renderChurnRiskSubpanel, temporadas: renderSeasonsSubpanel, relampago: renderFlashSubpanel};
   return back + (map[key] ? map[key]() : '');
 }
 
@@ -12602,16 +12622,16 @@ function renderCenterPerformance(){
   </div>`;
 }
 function renderCentros(){
-  const sub = state.centersSubview || 'centros';
+  const sub = state.centersSubview || 'inventario';
   return `
     <div class="admin-tabs" style="padding:0 0 14px;border-bottom:none;">
-      <button class="admin-tab ${sub==='centros'?'active':''}" onclick="state.centersSubview='centros';render()">Centros</button>
+      <button class="admin-tab ${sub==='inventario'?'active':''}" onclick="state.centersSubview='inventario';render()">Existencias por centro</button>
       <button class="admin-tab ${sub==='transferencias'?'active':''}" onclick="state.centersSubview='transferencias';render()">Transferencias</button>
-      <button class="admin-tab ${sub==='inventario'?'active':''}" onclick="state.centersSubview='inventario';render()">Inventario por centro</button>
-      <button class="admin-tab ${sub==='auditorias'?'active':''}" onclick="state.centersSubview='auditorias';render()">Auditorías</button>
+      <button class="admin-tab ${sub==='auditorias'?'active':''}" onclick="state.centersSubview='auditorias';render()">Conteos (auditorías)</button>
       <button class="admin-tab ${sub==='mermas'?'active':''}" onclick="state.centersSubview='mermas';render()">Mermas</button>
       <button class="admin-tab ${sub==='reabasto'?'active':''}" onclick="state.centersSubview='reabasto';render()">Reabasto${state.restockItems.length?` <span class="tab-badge">${state.restockItems.length}</span>`:''}</button>
       <button class="admin-tab ${sub==='rendimiento'?'active':''}" onclick="state.centersSubview='rendimiento';render()">Rendimiento</button>
+      <button class="admin-tab ${sub==='centros'?'active':''}" onclick="state.centersSubview='centros';render()">Centros y sucursales</button>
     </div>
     ${sub==='centros' ? renderCentrosList() : ''}
     ${sub==='transferencias' ? renderTransferencias() : ''}
@@ -13755,6 +13775,9 @@ const DESIGN_SUBPANEL_GROUPS = [
     {key:"faq", icon:icon('help-circle'), label:"Preguntas frecuentes sobre discreción"},
     {key:"footer", icon:icon('arrow-down'), label:"Pie de página"},
   ]},
+  { title: "Buscador de la tienda", items: [
+    {key:"sinonimos", icon:icon('search'), label:"Sinónimos del buscador"},
+  ]},
   { title: "Avanzado", items: [
     {key:"css", icon:icon('code'), label:"Código avanzado (CSS)"},
   ]},
@@ -13823,11 +13846,11 @@ function sectionDrop(e, idx){
 }
 
 function renderDesignSubpanel(key){
-  const back = `<button class="subpanel-back" onclick="state.designSubpanel=null;render()">‹ Volver a Diseño</button>`;
+  const back = `<button class="subpanel-back" onclick="state.designSubpanel=null;render()">‹ Volver a Diseño de la tienda</button>`;
   const map = {
     brand: renderBrandSubpanel, appearance: renderAppearanceSubpanel, hero: renderHeroSubpanel, header: renderHeaderSubpanel,
     categories: renderCategoriesSubpanel, promo: renderPromoSubpanel, featured: renderFeaturedSubpanel,
-    testimonials: renderTestimonialsSubpanel, footer: renderFooterSubpanel, announce: renderAnnounceSubpanel, css: renderCssSubpanel, faq: renderFaqSubpanel,
+    testimonials: renderTestimonialsSubpanel, footer: renderFooterSubpanel, announce: renderAnnounceSubpanel, css: renderCssSubpanel, faq: renderFaqSubpanel, sinonimos: renderSynonymsSubpanel,
   };
   return back + (map[key] ? map[key]() : '');
 }
@@ -14370,15 +14393,35 @@ function toggleCheckoutReminderProduct(id, checked){
   state.settings.checkoutReminderProducts = ids;
   saveSettings(); render();
 }
+function toggleReminderCategory(c, checked){
+  let a = state.settings.checkoutReminderCategories || [];
+  a = checked ? [...new Set([...a, c])] : a.filter(x=>x!==c);
+  state.settings.checkoutReminderCategories = a;
+  saveSettings(); render();
+}
 function renderCheckoutReminderSubpanel(){
   const ids = state.settings.checkoutReminderProducts || [];
   const q = (state.checkoutReminderSearch||'').trim().toLowerCase();
   const chosen = refPidsOf(ids.filter(refValid)).map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   const results = q ? searchProducts(q, state.products).slice(0,30) : chosen;
+  const cats = state.settings.checkoutReminderCategories || [];
+  const derived = (()=>{ const st = new Set(); chosen.forEach(p=>((p.categories&&p.categories.length)?p.categories:[p.cat]).forEach(c=>c&&st.add(c))); return [...st]; })();
+  const esc = c => c.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   return `
   <div class="panel">
-    <div class="panel-title">Recordatorio al cobrar (Punto de Venta)</div>
-    <div class="panel-sub">Si una venta no lleva ninguno de estos productos, el Punto de Venta se detiene un momento — antes de marcar el método de pago — para sugerirle al cajero ofrecerlos. Útil para no dejar de ofrecer lubricante u otros básicos.</div>
+    <div class="panel-title">Productos sugeridos al pagar (tienda en línea y Punto de Venta)</div>
+    <div class="panel-sub">Se ofrecen <b>solo cuando la compra no lleva nada de las categorías de abajo</b> (por ejemplo, sin lubricante ni condón). En la <b>tienda en línea</b> aparecen como un bloque destacado en el carrito y una fila corta en el formulario de entrega. En el <b>Punto de Venta</b>, el sistema se detiene un momento antes de elegir el método de pago para recordarle al cajero ofrecerlos.</div>
+    <div class="form-field"><label>1. ¿Qué categorías cuentan como "ya lo lleva"?</label>
+      <div class="pm-chips">${(state.settings.categories||[]).map(c=>`<label><input type="checkbox" ${cats.includes(c)?'checked':''} onchange="toggleReminderCategory('${esc(c)}',this.checked)"> ${escDescHtml(c)}</label>`).join('')}</div>
+      ${!cats.length ? `<div class="panel-sub" style="margin-top:6px;">Sin elegir: se usan las categorías de los productos sugeridos${derived.length?` (${derived.map(escDescHtml).join(', ')})`:''}.</div>` : ''}
+    </div>
+    <div class="form-field"><label>2. Título del bloque en la tienda</label>
+      <input value="${escHtml(state.settings.checkoutReminderTitle||'')}" placeholder="¿Ya tienes lubricante?" maxlength="60" onchange="state.settings.checkoutReminderTitle=this.value.trim();saveSettings();">
+    </div>
+    <div class="form-field"><label>3. Texto de apoyo</label>
+      <input value="${escHtml(state.settings.checkoutReminderText||'')}" placeholder="La mayoría lo lleva junto con su pedido. Agrégalo con un toque." maxlength="120" onchange="state.settings.checkoutReminderText=this.value.trim();saveSettings();">
+    </div>
+    <div class="form-field" style="margin-bottom:0;"><label>4. Productos que se sugieren (en la tienda se muestran máximo 3)</label></div>
     <input id="checkout-reminder-search" placeholder="Buscar producto por nombre..." value="${state.checkoutReminderSearch||''}" oninput="state.checkoutReminderSearch=this.value;render()" style="margin:10px 0;">
     <div style="max-height:320px;overflow-y:auto;">
       ${results.length===0 ? `<div class="empty-state">${q?'Sin resultados.':'Aún no has agregado ninguno — busca arriba para empezar.'}</div>` :
@@ -14708,13 +14751,11 @@ function saveCustomCss(){
 // Agrupado igual que ya se hizo en Diseño — antes era una lista plana de 7 ítems sin ningún
 // orden. Mismas claves, mismo renderConfigSubpanel, cero cambio de función.
 const CONFIG_SUBPANEL_GROUPS = [
-  { title: "Operación de tienda", items: [
-    {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos)'},
-    {key:'encuesta', icon:icon('message-square'), label:'Encuesta post-entrega'},
-    {key:'sinonimos', icon:icon('search'), label:'Sinónimos del buscador'},
+  { title: "Datos de la tienda", items: [
+    {key:'operativo', icon:icon('sliders'), label:'Datos operativos (WhatsApp, horario, envíos, avisos y apartados)'},
   ]},
   { title: "Seguridad", items: [
-    {key:'seguridad', icon:icon('shield'), label:'Verificación en dos pasos'},
+    {key:'seguridad', icon:icon('shield'), label:'Código de 6 dígitos y sesiones abiertas'},
   ]},
   { title: "Avanzado", items: [
     {key:'herramientas', icon:icon('package'), label:'Herramientas e importación', ownerOnly:true},
@@ -15023,7 +15064,10 @@ function renderOperativoSubpanel(){
     <div class="form-field"><label>Horario mostrado en la tienda</label><input id="set-sched" value="${s.schedule}" oninput="state.settings.schedule=this.value"></div>
     <div class="form-field"><label>Dirección de origen (de donde sale cada pedido)</label><input id="set-store-address" value="${s.storeAddress||''}" placeholder="Ej. Miguel Hidalgo 815 interior 22" oninput="state.settings.storeAddress=this.value"></div>
     <div class="form-field"><label>WhatsApp del repartidor (con código de país)</label><input id="set-delivery-wa" value="${s.deliveryWhatsapp||''}" placeholder="523413292207" oninput="state.settings.deliveryWhatsapp=this.value"></div>
-    <div class="form-field"><label>Aviso de costo de envío (se muestra en el carrito y al confirmar el pedido)</label><input id="set-shipping-note" value="${s.shippingNote||''}" placeholder="El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán." oninput="state.settings.shippingNote=this.value"></div>
+    <div class="form-field"><label>Envío local: ciudad y costo (se suma al total en la tienda cuando la clienta elige su ciudad)</label>
+      <div style="display:flex;gap:8px;"><input id="set-ship-city" style="flex:2;" value="${escHtml(s.localShippingCity||'Cd. Guzmán')}" placeholder="Cd. Guzmán" oninput="state.settings.localShippingCity=this.value"><input id="set-ship-cost" style="flex:1;" type="number" inputmode="numeric" min="0" value="${s.localShippingCost!=null&&s.localShippingCost!==''?s.localShippingCost:35}" oninput="state.settings.localShippingCost=this.value"></div>
+    </div>
+    <div class="form-field"><label>Aviso de costo de envío (se muestra en la ficha del producto y el carrito)</label><input id="set-shipping-note" value="${s.shippingNote||''}" placeholder="El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán." oninput="state.settings.shippingNote=this.value"></div>
     <div class="form-field">
       <label>Avisos a Slack</label>
       <div class="note-box" style="margin-top:6px;">Cada pedido nuevo de la tienda y cada venta del Punto de Venta llegan a Slack con un retraso de unos 5 minutos (los manda una GitHub Action, ya no el navegador, para que el webhook no sea público). El webhook se guarda como secreto <strong>SLACK_WEBHOOK_URL</strong> en GitHub → Settings → Secrets and variables → Actions. En cuanto exista, el webhook que estaba aquí se borra solo de la configuración pública.</div>
@@ -15267,6 +15311,8 @@ function handleSaveSettings(){
     storeAddress: document.getElementById('set-store-address').value.trim(),
     deliveryWhatsapp: document.getElementById('set-delivery-wa').value.trim(),
     shippingNote: document.getElementById('set-shipping-note').value.trim(),
+    localShippingCity: (document.getElementById('set-ship-city').value||'').trim() || 'Cd. Guzmán',
+    localShippingCost: Math.max(0, Number(document.getElementById('set-ship-cost').value)||0),
     slackWebhookUrl: state.settings.slackWebhookUrl || '',
     historicalOrderCountOffset: Math.max(0, Number(document.getElementById('set-hist-offset').value)||0),
     layawayMinPct: Math.min(100, Math.max(20, Number(document.getElementById('set-ly-pct').value)||20)),

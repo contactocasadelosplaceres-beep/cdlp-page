@@ -752,6 +752,9 @@
   .ck-summary li .dw-thumb{flex:0 0 38px;width:38px;height:38px;border-radius:8px;}
   .ck-summary li span{flex:1;}
   .drawer .ck-check input{accent-color:#993477;}
+  .cart-complement{border:1.5px solid var(--rose);background:#FDF3F7;border-radius:14px;padding:12px 12px 6px;margin:12px 0 4px;}
+  .cart-complement-t{display:flex;align-items:center;gap:6px;font-weight:800;color:var(--primary-deep);font-size:15px;}
+  .cart-complement-s{font-size:13px;color:var(--ink-soft);margin:2px 0 6px;}
   .ck-zone .ck-check{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;}
   .ck-zone .ck-check input{width:22px !important;height:22px;min-height:0;padding:0;margin:0;flex:0 0 22px;border:0;box-shadow:none;}
   /* mis datos */
@@ -1711,7 +1714,38 @@ function itemStock(p, v){ return v ? (v.stock||0) : (p ? p.stock : 0); }
 // y se perdía la oportunidad de sugerir los demás (por ejemplo: ya lleva condones, pero nunca se
 // le ofrece el lubricante porque "ya llevaba algo de la lista"). Ahora se detecta, producto por
 // producto, cuál ya lleva y cuál no, y solo se le sugiere algo DIFERENTE a lo que ya tiene.
+/* VENTA COMPLEMENTARIA: se sugieren los productos de "Productos sugeridos al pagar" solo cuando el
+   carrito NO lleva nada de esas categorías (p. ej. sin lubricante ni condón). Si ya lo lleva, ofrecerlo
+   estorba. Las categorías se eligen en el panel; si no hay, se usan las de los productos sugeridos. */
+function reminderCategories(){
+  const set = state.settings.checkoutReminderCategories;
+  if(Array.isArray(set) && set.length) return set;
+  const cats = new Set();
+  (state.settings.checkoutReminderProducts||[]).forEach(r=>{ const p = state.products.find(x=>x.id===refParse(r).pid); if(p) productCats(p).forEach(c=>cats.add(c)); });
+  return [...cats];
+}
+function cartCoversReminder(){
+  const cats = new Set(reminderCategories());
+  const ids = new Set((state.settings.checkoutReminderProducts||[]).map(r=>refParse(r).pid));
+  return Object.keys(state.cart).some(k=>{ const {p} = parseCartKey(k); return p && (ids.has(p.id) || productCats(p).some(c=>cats.has(c))); });
+}
+function reminderTitle(){ return state.settings.checkoutReminderTitle || '¿Ya tienes lubricante?'; }
+function reminderText(){ return state.settings.checkoutReminderText || 'La mayoría lo lleva junto con su pedido. Agrégalo con un toque.'; }
+function renderCartComplement(){
+  const items = reminderProductsNotInCart().slice(0,3);
+  if(!items.length) return '';
+  return `<div class="cart-complement">
+    <div class="cart-complement-t">${icon('gift',16)} ${escHtml(reminderTitle())}</div>
+    <div class="cart-complement-s">${escHtml(reminderText())}</div>
+    ${items.map(p=>`<div class="reminder-row">
+      ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(p.images[0])}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)};display:flex;align-items:center;justify-content:center;">${catIcon(p.cat)}</div>`}
+      <div class="r-name">${escHtml(p.name)}<div class="r-price">${money(effectivePrice(p))}</div></div>
+      <button class="reminder-add" onclick="addToCart('${p.id}'${p._fv?`,'${p._fv}'`:''})">+ Agregar</button>
+    </div>`).join('')}
+  </div>`;
+}
 function reminderProductsNotInCart(){
+  if(cartCoversReminder()) return [];
   const reminderIds = state.settings.checkoutReminderProducts || [];
   const inCartKeys = new Set(Object.keys(state.cart));
   const inCartPids = new Set(Object.keys(state.cart).map(key=>parseCartKey(key).p).filter(Boolean).map(p=>p.id));
@@ -1734,7 +1768,7 @@ function renderCheckoutAddOns(){
   const items = reminderProductsNotInCart().slice(0,3);
   if(!items.length) return '';
   return `<div class="dw-card" style="padding:10px 12px;">
-    <div class="dw-card-t" style="margin-bottom:6px;">¿Le agregas algo?</div>
+    <div class="dw-card-t" style="margin-bottom:6px;">${escHtml(reminderTitle())}</div>
     ${items.map(p=>`<div class="reminder-row" style="padding:6px 0;">
       ${p.images&&p.images.length ? `<img class="cart-item-swatch" src="${thumbSrc(p.images[0])}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="cart-item-swatch" style="background:${catColor(p.cat)};display:flex;align-items:center;justify-content:center;">${catIcon(p.cat)}</div>`}
       <div class="r-name">${escHtml(p.name)}<div class="r-price">${money(effectivePrice(p))}</div></div>
@@ -4084,7 +4118,8 @@ function renderCartDrawer(){
           <button class="cross-sell-add" onclick="addToCart('${product.id}'${product._fv?`,'${product._fv}'`:''})">Agregar</button>
         </div>
       `).join('')}
-      ${entries.length>0 && genericCartSuggestions().length>0 ? `
+      ${entries.length>0 ? renderCartComplement() : ''}
+      ${entries.length>0 && !reminderProductsNotInCart().length && genericCartSuggestions().length>0 ? `
         <div class="cart-suggestions">
           <div class="cart-suggestions-label">También te puede interesar</div>
           <div class="cart-suggestions-row">
@@ -4149,7 +4184,7 @@ function renderCheckoutSummary(){
 }
 /* U-03: zona de entrega. El envío local se suma al total que ve la clienta y va en el mensaje de
    WhatsApp y en la dirección del pedido; el total guardado del pedido sigue siendo el de productos. */
-function localShippingCost(){ const n = Number(state.settings.localShippingCost); return n>0 ? n : 35; }
+function localShippingCost(){ const v = state.settings.localShippingCost; if(v===undefined||v===null||v==='') return 35; const n = Number(v); return n>=0 ? n : 35; }
 function localShippingCity(){ return state.settings.localShippingCity || 'Cd. Guzmán'; }
 function ckZone(){ const d = ckDraft(); return d.zone==='foraneo' ? 'foraneo' : 'local'; }
 function setCkZone(z){ const d = ckDraft(); d.zone = z; state.ckDraft = d; render(); }

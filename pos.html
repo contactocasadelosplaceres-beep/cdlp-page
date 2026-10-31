@@ -2287,9 +2287,14 @@ function parseCartKey(key){
 function cartHasReminderProduct(){
   const reminderIds = state.settings.checkoutReminderProducts || [];
   if(!reminderIds.length) return true; // sin lista configurada, no hay nada que recordar
+  // Misma regla que la tienda: si la venta ya lleva algo de esas categorías (p. ej. lubricante o condón), no se interrumpe.
+  const catsOf = p => (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []);
+  let cats = state.settings.checkoutReminderCategories;
+  if(!Array.isArray(cats) || !cats.length){ const s = new Set(); reminderIds.forEach(r=>{ const p = state.products.find(x=>x.id===String(r).split('::')[0]); if(p) catsOf(p).forEach(c=>s.add(c)); }); cats = [...s]; }
+  const catSet = new Set(cats), pids = new Set(reminderIds.map(r=>String(r).split('::')[0]));
   return Object.keys(state.cart).some(key=>{
-    const {p, v} = parseCartKey(key);
-    return p && (reminderIds.includes(p.id) || (v && reminderIds.includes(p.id+'::'+v.id)));
+    const {p} = parseCartKey(key);
+    return p && (pids.has(p.id) || catsOf(p).some(c=>catSet.has(c)));
   });
 }
 function selectPayMethod(m){
@@ -3133,7 +3138,7 @@ function renderCenterSelect(){
   if(state.centers.length===0){
     return `<div class="select-screen"><div class="card">
       <h2>Sin centros configurados</h2>
-      <p>Ve al panel de administración → pestaña Centros, y crea al menos uno.</p>
+      <p>Ve al panel de administración → Inventario → Centros y sucursales, y crea al menos uno.</p>
       <button class="btn-primary" onclick="handleLogout()">Cerrar sesión</button>
     </div></div>`;
   }
