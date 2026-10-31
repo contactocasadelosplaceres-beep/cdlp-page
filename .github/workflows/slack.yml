@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { fetch-depth: 1, sparse-checkout: tools/slack }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: tools/slack/package-lock.json
       - run: npm ci --prefix tools/slack --no-audit --no-fund
