@@ -752,6 +752,8 @@
   .ck-summary li .dw-thumb{flex:0 0 38px;width:38px;height:38px;border-radius:8px;}
   .ck-summary li span{flex:1;}
   .drawer .ck-check input{accent-color:#993477;}
+  .ck-zone .ck-check{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;}
+  .ck-zone .ck-check input{width:22px !important;height:22px;min-height:0;padding:0;margin:0;flex:0 0 22px;border:0;box-shadow:none;}
   /* mis datos */
   .pf-perks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
   .pf-perks div{background:#fff;border:1px solid #EAEAEA;border-radius:12px;padding:10px 6px;text-align:center;font-size:11.5px;font-weight:600;color:#521C3E;line-height:1.3;}
@@ -4161,12 +4163,11 @@ function renderCheckoutDrawer(){
       <div class="ck-pills">
         <div class="ck-pill"><span class="ic">${icon('banknote',16)}</span><span><b>Pagas al recibir.</b> En efectivo, o con tarjeta/transferencia que coordinamos por WhatsApp.</span></div>
         <div class="ck-pill"><span class="ic">${icon('package',16)}</span><span><b>Empaque sin marcas.</b> Nadie sabe qué pediste.</span></div>
-        ${state.settings.shippingNote ? `<div class="ck-pill"><span class="ic">${icon('truck',16)}</span><span>${state.settings.shippingNote}</span></div>` : ''}
       </div>
       ${renderCheckoutSummary()}
       <div class="dw-card">
       <div class="dw-card-t">¿A dónde te lo llevamos?</div>
-      <div class="form-field" role="radiogroup" aria-label="Zona de entrega">
+      <div class="form-field ck-zone" role="radiogroup" aria-label="Zona de entrega">
         <label class="ck-check" style="margin:0 0 6px;"><input type="radio" name="ck-zone" value="local" ${ckZone()==='local'?'checked':''} onchange="setCkZone('local')"><span><b>${escHtml(localShippingCity())}</b> · envío ${money(localShippingCost())}</span></label>
         <label class="ck-check" style="margin:0;"><input type="radio" name="ck-zone" value="foraneo" ${ckZone()==='foraneo'?'checked':''} onchange="setCkZone('foraneo')"><span><b>Otra ciudad</b> · el envío se cotiza por WhatsApp</span></label>
       </div>
