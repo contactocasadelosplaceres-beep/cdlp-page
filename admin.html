@@ -1629,8 +1629,24 @@ async function syncAllNow(){
 async function publishStoreNow(){
   state.publishBusy = true; render();
   const ok = await cdlpRequestPublish(true);
+  let instant = false, why = '';
+  if(ok){
+    // Botón al instante (Cloudflare → GitHub): sin esto, GitHub corre la revisión programada con
+    // horas de retraso. Si no está disponible (p. ej. desde la dirección vieja de github.io o sin
+    // GITHUB_TOKEN en Cloudflare), queda la petición marcada y sale en la siguiente revisión.
+    try{
+      const tok = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const r = await fetch('/api/publicar', {method:'POST', headers:{Authorization:'Bearer '+tok}});
+      const j = await r.json().catch(()=>({}));
+      instant = !!(r.ok && j.ok);
+      if(!instant) why = j.mensaje || j.error || ('HTTP '+r.status);
+    }catch(e){ why = 'sin conexión con /api/publicar'; }
+  }
   state.publishBusy = false;
-  showToast(ok ? 'Listo: la tienda se actualizará en unos 20–25 minutos como máximo' : 'No se pudo pedir la publicación (revisa permisos de configuración)');
+  state.publishInstantAt = instant ? new Date().toISOString() : null;
+  if(!ok) showToast('No se pudo pedir la publicación (revisa permisos de configuración)');
+  else if(instant) showToast('Publicando: en 2–3 minutos se verá en la tienda');
+  else { console.warn('Publicación inmediata no disponible:', why); showToast('Quedó pedida, pero no se pudo publicar al momento: saldrá en la siguiente revisión automática'); }
   loadPublishStatus(true);
 }
 async function loadPublishStatus(force){
@@ -1650,7 +1666,18 @@ function renderPublishPanel(){
   return `
     <div class="panel">
       <div class="panel-title">Publicar tienda (catálogo estático)</div>
-      <div class="note-box">La tienda pública ya no lee Firestore: carga <strong>catalogo.json</strong>, que genera una GitHub Action con tus productos visibles y los ajustes públicos (sin costos, proveedores ni existencias por centro). Se actualiza sola cuando guardas productos o ajustes, y como mínimo cada 6 horas (para refrescar existencias). Si cambiaste algo y quieres que salga ya, usa el botón.</div>
+      <div class="note-box">La tienda pública ya no lee Firestore: carga <strong>catalogo.json</strong>, que genera una GitHub Action con tus productos visibles y los ajustes públicos (sin costos, proveedores ni existencias por centro). <strong>"Publicar tienda ahora"</strong> lo genera al momento: en 2–3 minutos se ve en casaplaceres.com. Sin el botón, GitHub lo revisa solo, pero puede tardar horas.</div>
+      <div class="note-box" style="margin-top:8px;">
+        <strong>Usa el botón después de cambiar:</strong>
+        <ul style="margin:6px 0 0 18px;padding:0;line-height:1.5;">
+          <li>Productos nuevos, o el nombre, <strong>precio</strong>, precio promocional, fotos, descripción, categorías, variantes o etiquetas "para quién"</li>
+          <li>Ocultar, mostrar o eliminar productos</li>
+          <li>Promociones, cupones, ofertas relámpago y niveles de mayoreo</li>
+          <li>Diseño de la tienda: banners, secciones, destacados, testimonios, colores y textos</li>
+          <li>Categorías, horario, número de WhatsApp y demás ajustes de la tienda</li>
+        </ul>
+        <div style="margin-top:6px;"><strong>No hace falta para:</strong> existencias (al pagar, la tienda revisa el stock real), pedidos, ventas del punto de venta, clientes ni costos (los costos nunca se publican).</div>
+      </div>
       <div class="preview-count">Última publicación: <strong>${state.publishStatusLoading&&!state.publishStatus?'consultando…':fmt(s.publishedAt)}</strong>${s.productCount?` · ${s.productCount} productos · ${s.sizeKb} KB`:''}</div>
       <div class="preview-count">Último aviso desde el panel: ${fmt(s.requestedAt)} ${pending?'· <strong style="color:var(--amber,#b26a00);">en espera de publicarse</strong>':(s.publishedAt?'· ya publicado':'')}</div>
       ${s.error?`<div class="note-box" style="color:var(--rose);">No se pudo leer el estado (¿falta permiso?).</div>`:''}
@@ -8398,6 +8425,8 @@ function renderProductos(){
           ${state.productToolsOpen ? `
           <div class="row-more-overlay" onclick="state.productToolsOpen=false;render()"></div>
           <div class="row-more-menu tools-menu" onclick="event.stopPropagation()">
+            <div class="tools-menu-label">Tienda en línea</div>
+            <button onclick="state.productToolsOpen=false;publishStoreNow()">${icon('refresh-cw',15)} Publicar cambios en la tienda ahora</button>
             <div class="tools-menu-label">Organizar</div>
             <button onclick="state.productToolsOpen=false;state.catManageOpen=true;render()">${icon('edit',15)} Categorías</button>
             <button onclick="state.productToolsOpen=false;state.needsManageOpen=true;render()">${icon('tag',15)} Etiquetas "para quién"</button>
