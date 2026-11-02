@@ -9,6 +9,15 @@ if(window.top!==window.self){document.documentElement.style.display='none';try{w
 <meta name="robots" content="noindex, nofollow">
 <script>/* El panel y el POS no se pueden mostrar dentro de otra página (clickjacking, hallazgo H-14). */
 if(window.top!==window.self){ try{ window.top.location.replace(window.self.location.href); }catch(e){ document.documentElement.style.display='none'; } }</script>
+<script>
+/* La rueda del mouse (o el trackpad) cambiaba el valor de un campo numérico enfocado al hacer scroll
+   (ej. un costo de 5 bajaba a 4 sin darse cuenta). Al girar la rueda sobre un campo numérico enfocado
+   se le quita el foco: la página se desplaza normal y el número no cambia. */
+document.addEventListener('wheel', function(e){
+  var el = document.activeElement;
+  if(el && el.tagName === 'INPUT' && el.type === 'number' && el.contains(e.target)) el.blur();
+}, {passive:true, capture:true});
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de administración — La Casa de los Placeres</title>
 <link rel="icon" type="image/png" href="favicon.png">
@@ -3988,7 +3997,7 @@ async function togglePromoVariant(pid, vid){
   catch(e){ console.error(e); showToast('No se pudo actualizar'); }
 }
 function promoPickText(){
-  const base = location.href.replace(/admin\.html.*$/, 'index.html');
+  const base = location.href.replace(/admin(\.html)?([?#].*)?$/, '');
   const priceTxt = (list, promo)=> promo>0 && promo<list ? `${money(promo)} (antes ${money(list)})` : money(list);
   return state.products.filter(p=>p.promoCandidate).map(p=>{
     const link = `${base}?producto=${encodeURIComponent(p.id)}`;
@@ -5995,7 +6004,7 @@ async function deleteFlashSale(id){
   showUndo(`Oferta "${f.name}" eliminada`, async()=>{ state.settings.flashSales = [...(state.settings.flashSales||[]), f]; await saveSettings(); render(); });
 }
 function flashMessage(f){
-  const link = `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html`;
+  const link = `${location.origin}${location.pathname.replace(/admin(\.html)?$/,'')}`;
   const n = flashProducts(f).length;
   const e = new Date(f.end).toLocaleString('es-MX',{weekday:'long',hour:'numeric',minute:'2-digit'});
   return `⚡ ${f.name}\n${f.percent}% de descuento en ${n} producto${n===1?'':'s'} hasta el ${e}\nEnvío discreto y pago contra entrega 💕\n👉 ${link}`;
@@ -7800,7 +7809,7 @@ const CAMP_PRESETS = ['instagram-bio','instagram-historias','facebook','tiktok',
 function campaignSlug(s){
   return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
 }
-function storeIndexUrl(){ return `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html`; }
+function storeIndexUrl(){ return `${location.origin}${location.pathname.replace(/admin(\.html)?$/,'')}`; }
 function buildCampaignLink(name, destCat, prodName){
   const slug = campaignSlug(name);
   if(!slug) return '';
@@ -8543,14 +8552,14 @@ function duplicateProduct(id){
   render();
 }
 function copyProductLink(id){
-  const url = location.href.replace(/admin\.html.*$/, 'index.html') + '?producto=' + encodeURIComponent(id);
+  const url = location.href.replace(/admin(\.html)?([?#].*)?$/, '') + '?producto=' + encodeURIComponent(id);
   try{
     navigator.clipboard.writeText(url);
     showToast('Enlace copiado — pégalo donde quieras compartirlo');
   }catch(e){ showToast('No se pudo copiar el enlace'); }
 }
 function copyCategoryLink(cat){
-  const url = location.href.replace(/admin\.html.*$/, 'index.html') + '?categoria=' + encodeURIComponent(cat);
+  const url = location.href.replace(/admin(\.html)?([?#].*)?$/, '') + '?categoria=' + encodeURIComponent(cat);
   try{
     navigator.clipboard.writeText(url);
     showToast('Enlace de la categoría copiado');
@@ -9963,7 +9972,7 @@ function renderMermas(){
    "AVÍSAME CUANDO LLEGUE" — lado del panel
    ================================================================ */
 function waNumberMX(phone){ const d = (phone||'').replace(/\D/g,''); return d.length===10 ? '52'+d : d; }
-function productShareLink(id){ return location.href.replace(/admin\.html.*$/, 'index.html') + '?producto=' + encodeURIComponent(id); }
+function productShareLink(id){ return location.href.replace(/admin(\.html)?([?#].*)?$/, '') + '?producto=' + encodeURIComponent(id); }
 // Variante que pidió la persona: por su variantId o, en avisos viejos, por el texto "(Azul)" que quedó en el nombre.
 function restockVariantOf(r, p){
   if(!p || !(p.variants||[]).length) return null;
@@ -11550,13 +11559,13 @@ async function toggleWholesaleActive(id){
   t.active = !t.active; await saveSettings(); render();
 }
 function wholesaleLink(code){
-  return `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html?mayoreo=${code}`;
+  return `${location.origin}${location.pathname.replace(/admin(\.html)?$/,'')}?mayoreo=${code}`;
 }
 function copyWholesaleLink(code){
   navigator.clipboard.writeText(wholesaleLink(code)).then(()=>showToast('Enlace copiado')).catch(()=>showToast('No se pudo copiar, cópialo manualmente'));
 }
 function kioskModeLink(off){
-  return `${location.origin}${location.pathname.replace(/admin\.html$/,'')}index.html?vitrina=${off?'0':'1'}`;
+  return `${location.origin}${location.pathname.replace(/admin(\.html)?$/,'')}?vitrina=${off?'0':'1'}`;
 }
 /* ============== MARKETING (mayoreo, cupones, promociones) ==============
    Antes eran 3 pestañas separadas en el menú principal; se agrupan en una sola ("Marketing")

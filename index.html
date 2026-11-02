@@ -1135,6 +1135,10 @@ async function loadData(attempt){
 // También soporta ?categoria=NombreDeCategoria, para compartir el catálogo ya filtrado a una
 // categoría completa (ej. "todo lo de Ropa femenina") en vez de un solo producto.
 async function openProductFromURL(){
+  // Lee ?producto= / ?categoria= ANTES de que syncProductUrl() pueda tocar la dirección: el primer
+  // render() de loadData() corre antes que esta función y, sin esta marca, borraba ?producto= de la
+  // URL (el producto todavía no estaba abierto), así que el enlace compartido nunca abría el producto.
+  state.deepLinkChecked = true;
   const params = new URLSearchParams(location.search);
   const id = params.get('producto');
   const catParam = params.get('categoria');
@@ -4546,7 +4550,7 @@ function navLayers(){
    recargar sin perderlo. Se usa replaceState para no crear pasos extra en el historial. */
 function syncProductUrl(){
   try{
-    if(!state.loaded) return;
+    if(!state.loaded || !state.deepLinkChecked) return;
     const u = new URL(location.href); const cur = u.searchParams.get('producto');
     const want = state.detailProductId || null;
     if((cur||null)===want) return;

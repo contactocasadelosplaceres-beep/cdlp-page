@@ -9,6 +9,15 @@ if(window.top!==window.self){document.documentElement.style.display='none';try{w
 <meta name="robots" content="noindex, nofollow">
 <script>/* El panel y el POS no se pueden mostrar dentro de otra página (clickjacking, hallazgo H-14). */
 if(window.top!==window.self){ try{ window.top.location.replace(window.self.location.href); }catch(e){ document.documentElement.style.display='none'; } }</script>
+<script>
+/* La rueda del mouse (o el trackpad) cambiaba el valor de un campo numérico enfocado al hacer scroll
+   (ej. un costo de 5 bajaba a 4 sin darse cuenta). Al girar la rueda sobre un campo numérico enfocado
+   se le quita el foco: la página se desplaza normal y el número no cambia. */
+document.addEventListener('wheel', function(e){
+  var el = document.activeElement;
+  if(el && el.tagName === 'INPUT' && el.type === 'number' && el.contains(e.target)) el.blur();
+}, {passive:true, capture:true});
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Punto de venta — La Casa de los Placeres</title>
 <link rel="icon" type="image/png" href="favicon.png">
