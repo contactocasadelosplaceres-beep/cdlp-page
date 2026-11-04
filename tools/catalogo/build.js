@@ -22,6 +22,7 @@ const OUT = path.join(ROOT, 'catalogo.json');
 const MAX_AGE_H = Number(env.MAX_AGE_HORAS || 6);
 const MIN_GAP_MIN = Number(env.MIN_GAP_MINUTOS || 45); // entre publicaciones automáticas (las urgentes del botón no esperan)
 const FORCE = env.FORCE === '1';
+const EXISTENCIAS = env.EXISTENCIAS === '1'; // el punto de venta agotó un producto que la tienda mostraba disponible
 const FULL_H = Number(env.FULL_HORAS || 24); // relectura completa de productos como máximo cada FULL_H horas; entre tanto, solo los que cambiaron (sello _sync)
 const DRY_RUN = env.DRY_RUN === '1';
 const SITE_URL = env.SITE_URL || 'https://contactocasadelosplaceres-beep.github.io/cdlp-page/';
@@ -89,6 +90,17 @@ async function requestPagesBuild() {
   } catch (e) { console.log('No se pudo pedir la publicación a Pages:', e.message); }
 }
 
+// sitemap.xml para Google: la tienda y cada producto (casaplaceres.com/?producto=ID). Se reescribe
+// junto con catalogo.json, así siempre coincide con lo que la tienda muestra (sin ocultos ni papelera).
+const SITE = (env.SITE_URL || 'https://casaplaceres.com').replace(/\/+$/, '');
+function writeSitemap(products, when) {
+  const day = String(when || new Date().toISOString()).slice(0, 10);
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const urls = [`  <url><loc>${SITE}/</loc><lastmod>${day}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`]
+    .concat((products || []).map(p => `  <url><loc>${esc(SITE + '/?producto=' + encodeURIComponent(p.id))}</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>`));
+  fs.writeFileSync(path.join(ROOT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`);
+}
+
 async function main() {
   admin.initializeApp({ credential: admin.credential.cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
   const db = admin.firestore();
@@ -99,7 +111,7 @@ async function main() {
   const requestedRaw = pub.requestedAt && (!pub.publishedAt || pub.requestedAt > pub.publishedAt);
   const requested = requestedRaw && (pub.urgent === true || ageH * 60 >= MIN_GAP_MIN);
   if (requestedRaw && !requested) console.log(`Hay una petición automática en espera (mínimo ${MIN_GAP_MIN} min entre publicaciones; han pasado ${(ageH * 60).toFixed(0)}).`);
-  const why = FORCE ? 'corrida manual' : !fs.existsSync(OUT) ? 'catalogo.json no existe' : requested ? 'el panel pidió publicar' : ageH >= MAX_AGE_H ? `pasaron ${ageH.toFixed(1)} h (refresco de existencias)` : null;
+  const why = FORCE ? 'corrida manual' : !fs.existsSync(OUT) ? 'catalogo.json no existe' : requested ? 'el panel pidió publicar' : EXISTENCIAS ? 'el punto de venta agotó un producto' : ageH >= MAX_AGE_H ? `pasaron ${ageH.toFixed(1)} h (refresco de existencias)` : null;
   if (!why) { console.log(`Sin cambios por publicar (última publicación hace ${ageH.toFixed(1)} h). Fin: 1 lectura.`); return; }
   console.log('Regenerando catálogo:', why);
 
@@ -160,9 +172,10 @@ async function main() {
 
   if (!same) {
     fs.writeFileSync(OUT, JSON.stringify({ generatedAt: startedAt, ...body }));
+    writeSitemap(products, startedAt);
     git('git config user.name "cdlp-catalogo[bot]"');
     git('git config user.email "actions@users.noreply.github.com"');
-    git('git add catalogo.json');
+    git('git add catalogo.json sitemap.xml');
     git(`git commit -m "Catálogo estático: ${products.length} productos (${why})"`);
     let pushed = false;
     for (let i = 0; i < 4 && !pushed; i++) {
