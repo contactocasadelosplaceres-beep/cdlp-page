@@ -81,6 +81,32 @@ async function writeStock(db, docs) {
 function stable(o) { return JSON.stringify(o); }
 function git(cmd) { return execSync(cmd, { cwd: ROOT, stdio: 'pipe' }).toString().trim(); }
 
+// Cloudflare Pages (plan gratis) permite 500 compilaciones al mes por cuenta y cada "push" a main
+// es una compilación. Contamos los commits de main desde el día 1 del mes (UTC) como aproximación
+// (un push con varios commits cuenta de más, nunca de menos). Si no se puede contar, devuelve null.
+const BUILDS_LIMIT = 500;
+const BUILDS_SOFT = Number(env.BUILDS_SOFT || 450); // desde aquí se pausan las publicaciones automáticas
+const BUILDS_HARD = Number(env.BUILDS_HARD || 490); // desde aquí ni el botón publica (deja margen para arreglos)
+async function countBuildsThisMonth() {
+  const repo = env.GITHUB_REPOSITORY, token = env.GITHUB_TOKEN;
+  if (!repo || typeof fetch !== 'function') return null;
+  const now = new Date();
+  const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  let n = 0;
+  try {
+    for (let page = 1; page <= 10; page++) {
+      const r = await fetch(`https://api.github.com/repos/${repo}/commits?sha=main&since=${since}&per_page=100&page=${page}`, {
+        headers: Object.assign({ Accept: 'application/vnd.github+json', 'User-Agent': 'cdlp-catalogo' }, token ? { Authorization: `Bearer ${token}` } : {}),
+      });
+      if (!r.ok) { console.log('No se pudieron contar las compilaciones del mes:', r.status); return null; }
+      const arr = await r.json();
+      n += arr.length;
+      if (arr.length < 100) break;
+    }
+  } catch (e) { console.log('No se pudieron contar las compilaciones del mes:', e.message); return null; }
+  return { count: n, month: since.slice(0, 7) };
+}
+
 async function requestPagesBuild() {
   const repo = env.GITHUB_REPOSITORY, token = env.GITHUB_TOKEN;
   if (!repo || !token || typeof fetch !== 'function') return;
@@ -112,6 +138,22 @@ async function main() {
   const requested = requestedRaw && (pub.urgent === true || ageH * 60 >= MIN_GAP_MIN);
   if (requestedRaw && !requested) console.log(`Hay una petición automática en espera (mínimo ${MIN_GAP_MIN} min entre publicaciones; han pasado ${(ageH * 60).toFixed(0)}).`);
   const why = FORCE ? 'corrida manual' : !fs.existsSync(OUT) ? 'catalogo.json no existe' : requested ? 'el panel pidió publicar' : EXISTENCIAS ? 'el punto de venta agotó un producto' : ageH >= MAX_AGE_H ? `pasaron ${ageH.toFixed(1)} h (refresco de existencias)` : null;
+  // Contador de compilaciones de Cloudflare del mes (se muestra en el panel) y freno para no pasar de 500.
+  const builds = await countBuildsThisMonth();
+  if (builds && (pub.buildsMonth !== builds.count || pub.buildsMonthKey !== builds.month)) {
+    await pubRef.set({ buildsMonth: builds.count, buildsMonthKey: builds.month, buildsLimit: BUILDS_LIMIT, buildsCheckedAt: new Date().toISOString() }, { merge: true });
+  }
+  if (why && !FORCE && builds) {
+    const urgent = requested && pub.urgent === true;
+    let block = null;
+    if (builds.count >= BUILDS_HARD) block = `ya van ${builds.count} de ${BUILDS_LIMIT} compilaciones este mes (tope de seguridad ${BUILDS_HARD})`;
+    else if (builds.count >= BUILDS_SOFT && !urgent && !EXISTENCIAS) block = `ya van ${builds.count} de ${BUILDS_LIMIT} compilaciones este mes: las publicaciones automáticas se pausan (el botón del panel sí publica)`;
+    if (block) {
+      console.log('No se publica:', block);
+      await pubRef.set({ buildsPausedAt: new Date().toISOString(), buildsPausedWhy: block }, { merge: true });
+      return;
+    }
+  }
   if (!why) { console.log(`Sin cambios por publicar (última publicación hace ${ageH.toFixed(1)} h). Fin: 1 lectura.`); return; }
   console.log('Regenerando catálogo:', why);
 
@@ -185,7 +227,9 @@ async function main() {
     if (!pushed) throw new Error('No se pudo subir catalogo.json');
     await requestPagesBuild();
   }
-  await pubRef.set(Object.assign({ publishedAt: startedAt, urgent: false, productCount: products.length, sizeKb: kb, syncMax }, incremental ? {} : { fullAt: startedAt }), { merge: true });
+  await pubRef.set(Object.assign({ publishedAt: startedAt, urgent: false, productCount: products.length, sizeKb: kb, syncMax, buildsPausedWhy: null },
+    incremental ? {} : { fullAt: startedAt },
+    (builds && !same) ? { buildsMonth: builds.count + 1, buildsMonthKey: builds.month, buildsCheckedAt: new Date().toISOString() } : {}), { merge: true });
   console.log('Listo.');
 }
 main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });

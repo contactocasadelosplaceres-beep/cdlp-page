@@ -1635,6 +1635,11 @@ async function syncAllNow(){
   B.commit = function(...a){ const p = bc.apply(this, a); if(this.__cdlpPub) Promise.resolve(p).then(schedule, ()=>{}); return p; };
 })();
 async function publishStoreNow(){
+  const ps = state.publishStatus || {};
+  if(ps.buildsMonthKey===new Date().toISOString().slice(0,7) && Number(ps.buildsMonth)>=490){
+    showToast('Este mes ya van '+ps.buildsMonth+' de 500 publicaciones: para no pasarte, los cambios saldrán el día 1');
+    return;
+  }
   state.publishBusy = true; render();
   const ok = await cdlpRequestPublish(true);
   let instant = false, why = '';
@@ -1688,6 +1693,17 @@ function renderPublishPanel(){
       </div>
       <div class="preview-count">Última publicación: <strong>${state.publishStatusLoading&&!state.publishStatus?'consultando…':fmt(s.publishedAt)}</strong>${s.productCount?` · ${s.productCount} productos · ${s.sizeKb} KB`:''}</div>
       <div class="preview-count">Último aviso desde el panel: ${fmt(s.requestedAt)} ${pending?'· <strong style="color:var(--amber,#b26a00);">en espera de publicarse</strong>':(s.publishedAt?'· ya publicado':'')}</div>
+      ${(()=>{ // Contador de compilaciones de Cloudflare (plan gratis: 500 al mes). Lo actualiza la GitHub Action del catálogo.
+        const thisMonth = new Date().toISOString().slice(0,7);
+        if(!s.buildsMonthKey) return `<div class="preview-count">Publicaciones de la página este mes: <strong>se cuentan en la siguiente publicación</strong></div>`;
+        const n = s.buildsMonthKey===thisMonth ? (Number(s.buildsMonth)||0) : 0, lim = Number(s.buildsLimit)||500;
+        const pct = Math.min(100, Math.round(n/lim*100));
+        const col = n>=450 ? 'var(--rose,#C0392B)' : n>=350 ? 'var(--amber,#b26a00)' : 'var(--green,#3B8A3E)';
+        return `<div class="preview-count" style="margin-top:8px;">Publicaciones de la página este mes (Cloudflare): <strong style="color:${col};">${n} de ${lim}</strong> <span style="color:var(--ink-soft);">· aprox., se reinicia el día 1</span></div>
+          <div style="height:8px;border-radius:6px;background:var(--line,#eee);overflow:hidden;margin:4px 0 6px;"><div style="height:100%;width:${Math.max(1,pct)}%;background:${col};"></div></div>
+          <div style="font-size:12px;color:var(--ink-soft);">Cada cambio que sale a la página (publicar catálogo, fotos o mejoras al sistema) cuenta 1. Desde 450 se pausan las publicaciones automáticas y solo publica el botón; desde 490 se detiene todo hasta el día 1 para no pasarte. Si te pasaras, la página <strong>sigue funcionando y recibiendo pedidos</strong>, pero los cambios no se verían hasta el siguiente mes.</div>
+          ${s.buildsPausedWhy ? `<div class="note-box" style="margin-top:6px;color:var(--amber,#b26a00);">En pausa: ${escDescHtml(s.buildsPausedWhy)}</div>` : ''}`;
+      })()}
       ${s.error?`<div class="note-box" style="color:var(--rose);">No se pudo leer el estado (¿falta permiso?).</div>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
         <button class="btn-primary" style="width:auto;" ${state.publishBusy?'disabled':''} onclick="publishStoreNow()">${state.publishBusy?'Enviando…':'Publicar tienda ahora'}</button>
