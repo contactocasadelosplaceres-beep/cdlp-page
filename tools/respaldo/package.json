@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-respaldo",
+  "private": true,
+  "description": "Respaldo semanal cifrado de Firestore (plan gratuito, sin Blaze)",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}

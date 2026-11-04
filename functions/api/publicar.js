@@ -106,6 +106,9 @@ export async function onRequestPost({ request, env }) {
   if (!team) return json(403, { ok: false, error: 'sin-permiso' });
   if (!mfa || !fresh) return json(403, { ok: false, error: 'sesion-debil', mensaje: 'Vuelve a iniciar sesión con tu código de 6 dígitos.' });
 
+  let agotado = false;
+  try { const b = await request.clone().json(); agotado = !!(b && b.motivo === 'agotado'); } catch (_) {}
+
   const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/catalogo.yml/dispatches`, {
     method: 'POST',
     headers: {
@@ -117,7 +120,9 @@ export async function onRequestPost({ request, env }) {
     },
     // force=0: el workflow regenera porque el panel acaba de marcar la petición como urgente
     // (settings/publish); si no hay nada pendiente, termina sin gastar nada.
-    body: JSON.stringify({ ref: 'main', inputs: { force: '0', dry_run: '0' } }),
+    // existencias=1: el punto de venta acaba de agotar un producto que la tienda muestra disponible
+    // (el POS no tiene permiso de escribir settings/publish, así que lo avisa por aquí).
+    body: JSON.stringify({ ref: 'main', inputs: { force: '0', dry_run: '0', existencias: agotado ? '1' : '0' } }),
   });
 
   if (r.status === 204) return json(200, { ok: true });

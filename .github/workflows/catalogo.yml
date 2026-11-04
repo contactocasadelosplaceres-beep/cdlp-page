@@ -2,6 +2,7 @@ name: Catálogo estático (catalogo.json)
 # Genera catalogo.json con los productos y ajustes PÚBLICOS para que la tienda no lea Firestore.
 # Se revisa cada 20 min (cuesta 1 lectura si no hay nada que publicar) y regenera cuando:
 #   · el panel pidió publicar (botón "Publicar tienda" o al guardar productos/ajustes), o
+#   · el punto de venta agotó un producto que la tienda mostraba disponible, o
 #   · pasaron 6 h desde la última publicación (refresca existencias), o
 #   · lo lanzas a mano: Actions → "Catálogo estático" → Run workflow.
 on:
@@ -13,6 +14,10 @@ on:
         required: false
       dry_run:
         description: '1 = solo reporte (no escribe nada)'
+        default: '0'
+        required: false
+      existencias:
+        description: '1 = el punto de venta agotó un producto (publica aunque el panel no lo haya pedido)'
         default: '0'
         required: false
   schedule:
@@ -43,4 +48,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force || '0' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
+          EXISTENCIAS: ${{ github.event_name == 'workflow_dispatch' && inputs.existencias || '0' }}
           MAX_AGE_HORAS: '6'

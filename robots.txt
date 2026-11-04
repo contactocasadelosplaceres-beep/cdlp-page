@@ -1,0 +1,11 @@
+# La Casa de los Placeres — casaplaceres.com
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /pos
+Disallow: /api/
+Disallow: /catalogo
+Disallow: /tools/
+Disallow: /manifest-
+
+Sitemap: https://casaplaceres.com/sitemap.xml

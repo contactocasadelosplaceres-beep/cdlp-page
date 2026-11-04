@@ -21,6 +21,14 @@ document.addEventListener('wheel', function(e){
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Punto de venta — La Casa de los Placeres</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<!-- App instalable (PWA): cada plataforma tiene SU manifest, con id y alcance propios
+     (/catalogo, /pos, /admin) para que en Android se instalen como 3 apps separadas. -->
+<link rel="manifest" href="/manifest-pos.json">
+<meta name="theme-color" content="#20B7CA">
+<link rel="apple-touch-icon" href="/assets/apps/pos-apple-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CDLP POS">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -434,7 +442,7 @@ try{
 (function(){
   let F; try{ F = firebase.firestore; }catch(e){ return; }
   if(!F || !F.Query || !F.DocumentReference) return;
-  const PAGE = /pos\.html/i.test(location.pathname) ? 'pos' : 'admin';
+  const PAGE = /\/pos(\.html)?\/?$/i.test(location.pathname) ? 'pos' : 'admin'; // también /pos (sin .html) en casaplaceres.com
   const K = 'cdlp_reads';
   const day = ()=>{ const d = new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
   window.__readMeter = window.__readMeter || {session:0};
@@ -745,6 +753,7 @@ try{
         const ref = fs.collection('productStock').doc(id);
         if(!snap.exists) await ref.delete();
         else await ref.set(Object.assign(view(snap.data()), { updatedAt: new Date().toISOString() }));
+        try{ if(typeof window.cdlpOnStockView==='function') window.cdlpOnStockView(id, snap.exists ? view(snap.data()) : null); }catch(e){}
       }catch(e){ console.warn('productStock: no se pudo copiar la existencia de', id, e && e.message); }
     }
   }
@@ -968,6 +977,7 @@ async function loadData(attempt){
       const match = state.centers.find(c=>c.id===savedCenterId);
       if(match) state.activeCenter = match;
     }
+    if(!state.activeCashier) posTrustRestore();
   }catch(e){
     console.error(e);
     // Antes: un solo fallo de conexión dejaba el punto de venta abierto pero SIN productos ni
@@ -1784,6 +1794,7 @@ async function handleLogin(){
   }
 }
 function handleLogout(){
+  posTrustClear();
   auth.signOut(); state.loaded=false; state.activeCashier=null; state.pinConfirmed=false;
   state.activeCashRegister=null; state.cashRegisterChecked=false;
 }
@@ -1796,6 +1807,28 @@ function selectCashier(c){ if(typeof c==='string') c = state.cashiers.find(x=>x.
 const PIN_LOCK_KEY = 'cdlp_pos_pin_lock';
 function pinLockState(){ try{ return JSON.parse(localStorage.getItem(PIN_LOCK_KEY)||'{}')||{}; }catch(e){ return {}; } }
 function savePinLockState(v){ try{ localStorage.setItem(PIN_LOCK_KEY, JSON.stringify(v)); }catch(e){} }
+/* Recordar al cajero en este equipo 30 días: así, al abrir el punto de venta ya no se elige
+   cajero ni se escribe el PIN cada vez (igual que el panel no pide entrar cada vez). Se guarda
+   SOLO en este celular (localStorage, sin lecturas ni escrituras extra en Firestore) y se olvida si:
+   pasan 30 días, alguien toca "Cambiar cajero" o "Cerrar sesión", el cajero se desactiva, le
+   cambian el PIN desde el panel, o entra otra cuenta de Firebase en este equipo. */
+const POS_TRUST_KEY = 'cdlp_pos_cashier_trust';
+const POS_TRUST_DAYS = 30;
+function posTrustRead(){ try{ return JSON.parse(localStorage.getItem(POS_TRUST_KEY)||'null'); }catch(e){ return null; } }
+function posTrustSave(c){
+  try{ localStorage.setItem(POS_TRUST_KEY, JSON.stringify({ id:c.id, pin:c.pinHash||'', uid:(state.user&&state.user.uid)||'', until:Date.now()+POS_TRUST_DAYS*86400000 })); }catch(e){}
+}
+function posTrustClear(){ try{ localStorage.removeItem(POS_TRUST_KEY); }catch(e){} }
+// Se llama al terminar de cargar: si este equipo recuerda a un cajero válido, entra directo.
+function posTrustRestore(){
+  const t = posTrustRead(); if(!t) return false;
+  const c = (state.cashiers||[]).find(x=>x.id===t.id);
+  const ok = c && t.until > Date.now() && (!t.uid || !state.user || t.uid===state.user.uid) && (c.pinHash||'')===(t.pin||'') && !!c.pinHash;
+  if(!ok){ posTrustClear(); return false; }
+  state.activeCashier = c; state.pinConfirmed = true; state.pinInput=''; state.pinError='';
+  if(state.activeCenter) restorePosCart();
+  return true;
+}
 async function hashCashierPin(pin, salt){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(salt)+':'+String(pin)));
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -1828,6 +1861,7 @@ async function confirmCashierPin(){
   if(ok){
     savePinLockState({});
     state.pinConfirmed=true; state.pinInput=''; state.pinError='';
+    if(state.pinRemember!==false) posTrustSave(state.activeCashier); else posTrustClear();
     // El centro ya se restauró solo (si lo había) antes de llegar aquí, así que en este punto ya
     // se sabe cajero + centro: si una venta se quedó a medias por un refresh accidental, se
     // recupera el carrito justo aquí, antes de que se vea la pantalla principal del POS.
@@ -1901,6 +1935,7 @@ async function clearActivePosSession(){
   try{ await db.collection('activePosSessions').doc(docId).delete(); }catch(e){ console.error('No se pudo cerrar la sesión activa del POS', e); }
 }
 function changeCashier(){
+  posTrustClear();
   clearActivePosSession();
   clearPosCart();
   state.activeCashier=null; state.pinConfirmed=false; state.cart={};
@@ -3139,6 +3174,7 @@ function renderPinScreen(){
     <p>Ingresa tu PIN</p>
     <input class="pin" type="password" inputmode="numeric" maxlength="6" value="${state.pinInput}" oninput="state.pinInput=this.value" onkeydown="if(event.key==='Enter')confirmCashierPin()">
     <div class="err">${state.pinError}</div>
+    <label style="display:flex;align-items:center;gap:8px;justify-content:center;margin:4px 0 12px;font-size:14px;color:var(--ink-soft);cursor:pointer;"><input type="checkbox" ${state.pinRemember!==false?'checked':''} onchange="state.pinRemember=this.checked" style="width:18px;height:18px;"> No volver a pedirlo en este equipo por ${POS_TRUST_DAYS} días</label>
     <button class="btn-primary" onclick="confirmCashierPin()">Entrar</button>
   </div></div>`;
 }
@@ -3425,6 +3461,7 @@ async function posLoadProducts(){
       if(r.ok){
         const j = await r.json();
         if(j && Array.isArray(j.products) && j.products.length){
+          posRememberPublicStock(j.products);
           const prods = j.products.map(p=>posMarkApprox(posSlim(p)));
           // Los ocultos de la tienda no vienen en el catálogo, pero en el mostrador sí se venden.
           try{
@@ -3466,6 +3503,43 @@ async function posEnsureFresh(ids, maxAgeMs){
     state.products.filter(k=>k.isKit).forEach(k=>{ try{ k.stock = computeKitStock(k); }catch(e){} });
     return true;
   }catch(e){ console.warn('No se pudieron leer existencias frescas', e); return false; }
+}
+/* ============== LA TIENDA SE ENTERA CUANDO EL POS AGOTA UN PRODUCTO ==============
+   La tienda muestra las existencias de catalogo.json (se regenera con cambios del panel o cada 6 h).
+   Antes, una venta del POS que dejaba un producto en 0 seguía viéndose "disponible" en la tienda
+   hasta la siguiente publicación. Ahora, si una venta deja en 0 algo que la tienda muestra con
+   existencia (o una de sus variantes), se pide publicar al momento (botón "al instante": Cloudflare →
+   GitHub). La publicación es incremental: solo relee los productos que cambiaron, así que cuesta
+   unas pocas lecturas. Se juntan varias ventas seguidas en una sola petición (espera 30 s).
+   Sin gasto extra en ventas normales: solo se dispara cuando algo se agota. */
+let posPublicStock = null;
+function posRememberPublicStock(list){
+  try{
+    posPublicStock = new Map();
+    (list||[]).forEach(p=>{ if(!p || p.id==null) return; posPublicStock.set(String(p.id), { s:Number(p.stock)||0, v:new Map((Array.isArray(p.variants)?p.variants:[]).filter(v=>v&&v.id!=null).map(v=>[String(v.id), Number(v.stock)||0])) }); });
+  }catch(e){ posPublicStock = null; }
+}
+let posSoldOutTimer = null, posSoldOutIds = new Set();
+window.cdlpOnStockView = function(id, v){
+  if(!posPublicStock) return;
+  const pub = posPublicStock.get(String(id)); if(!pub) return; // ocultos o nuevos: no salen en la tienda
+  const nowOut = !v || v.stock<=0 && pub.s>0;
+  const varOut = v && (v.variants||[]).some(x=>x.stock<=0 && (pub.v.get(String(x.id))||0)>0);
+  if(!nowOut && !varOut) return;
+  posSoldOutIds.add(String(id));
+  // que no se vuelva a pedir por el mismo producto en esta sesión
+  pub.s = v ? v.stock : 0; if(v) (v.variants||[]).forEach(x=>pub.v.set(String(x.id), x.stock));
+  clearTimeout(posSoldOutTimer);
+  posSoldOutTimer = setTimeout(posPublishSoldOut, 30000);
+};
+async function posPublishSoldOut(){
+  const n = posSoldOutIds.size; posSoldOutIds = new Set(); if(!n) return;
+  try{
+    const tok = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+    const r = await fetch('/api/publicar', {method:'POST', headers:{Authorization:'Bearer '+tok, 'Content-Type':'application/json'}, body: JSON.stringify({motivo:'agotado'})});
+    const j = await r.json().catch(()=>({}));
+    if(!(r.ok && j.ok)) console.warn('No se pudo avisar a la tienda del producto agotado:', j.mensaje || j.error || r.status);
+  }catch(e){ console.warn('No se pudo avisar a la tienda del producto agotado', e); }
 }
 // Aviso si el catálogo podría estar atrasado (1 lectura al abrir).
 async function posCheckPublish(){

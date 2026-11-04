@@ -8,16 +8,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>La Casa de los Placeres — Catálogo</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<!-- App instalable (PWA): cada plataforma tiene SU manifest, con id y alcance propios
+     (/catalogo, /pos, /admin) para que en Android se instalen como 3 apps separadas. -->
+<link rel="manifest" href="/manifest-catalogo.json">
+<meta name="theme-color" content="#5C1F49">
+<link rel="apple-touch-icon" href="/assets/apps/catalogo-apple-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CDLP Catálogo">
 <!-- Vista previa al compartir el enlace (WhatsApp, redes, etc.) — antes no existía ninguna,
      así que un enlace compartido se veía como un cuadro gris sin nombre ni descripción. -->
 <meta property="og:title" content="La Casa de los Placeres">
 <meta property="og:description" content="Tu catálogo con total discreción. Explora, arma tu pedido y recíbelo en la puerta de tu casa.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://contactocasadelosplaceres-beep.github.io/cdlp-page/logo.png">
+<meta property="og:image" content="https://casaplaceres.com/logo.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="La Casa de los Placeres">
 <meta name="twitter:description" content="Tu catálogo con total discreción. Explora, arma tu pedido y recíbelo en la puerta de tu casa.">
-<meta name="twitter:image" content="https://contactocasadelosplaceres-beep.github.io/cdlp-page/logo.png">
+<meta name="twitter:image" content="https://casaplaceres.com/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://www.gstatic.com">
@@ -859,10 +867,16 @@
   .needs-row{padding-inline:16px !important;scroll-padding-inline:16px;margin-inline:-16px;}
   /* R-01: el nombre del producto en la tarjeta también se puede tocar cómodamente. */
   .card-name{min-height:32px;}
+  /* Aviso de carga del catálogo (sale desde el primer instante, antes de que termine de bajar todo). */
+  .sk-msg{display:flex;align-items:center;justify-content:center;gap:10px;margin:4px auto 14px;padding:11px 18px;max-width:340px;border-radius:999px;background:#fff;border:1px solid var(--border);color:var(--primary-deep);font-family:var(--font-heading);font-weight:700;font-size:16px;box-shadow:var(--shadow-sm);}
+  .sk-msg-boot{margin-top:38vh;}
+  .sk-spin{width:18px;height:18px;border-radius:50%;border:2.5px solid #EBD9D3;border-top-color:var(--primary);animation:skspin .8s linear infinite;flex-shrink:0;}
+  @keyframes skspin{to{transform:rotate(360deg);}}
+  @media(prefers-reduced-motion:reduce){.sk-spin{animation:skspin 1.6s linear infinite!important;}}
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div class="sk-msg sk-msg-boot" role="status"><span class="sk-spin" aria-hidden="true"></span>Se está cargando el catálogo…</div></div>
 <script>
 /* ============== FIREBASE ============== */
 const firebaseConfig = {
@@ -1255,10 +1269,12 @@ function scheduleAbandonedCartSave(){
 function saveAbandonedCartDraft(){
   try{
     const nameEl = document.getElementById('ck-name'), phoneEl = document.getElementById('ck-phone');
-    const addressEl = document.getElementById('ck-address'), notesEl = document.getElementById('ck-notes');
+    const notesEl = document.getElementById('ck-notes');
     if(!nameEl || !phoneEl) return;
     const name = nameEl.value.trim(), phone = phoneEl.value.trim();
-    const address = addressEl ? addressEl.value.trim() : '', notes = notesEl ? notesEl.value.trim() : '';
+    const fv = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    const address = (fv('ck-street') || fv('ck-colonia')) ? composeAddress({street:fv('ck-street'), colonia:fv('ck-colonia'), city:fv('ck-city')}, ckZone()).slice(0,500) : '';
+    const notes = notesEl ? notesEl.value.trim() : '';
     const phoneDigits = phone.replace(/\D/g,'');
     if(!name || phoneDigits.length<8 || cartCount()===0) return;
     const items = Object.entries(state.cart).map(([key,qty])=>{
@@ -2103,13 +2119,48 @@ function pickMysteryBoxItems(box, qty){
    el panel de administración con los pedidos ya guardados. */
 const ORDER_LOG_KEY = 'cdlp_order_log';
 function fraudGuardOn(){ return state.settings.fraudGuardEnabled!==false; }
-function fraudMaxPerDay(){ const n = state.settings.fraudMaxOrdersPerDay; return (n===undefined||n===null||n==='') ? 3 : Math.max(0, Number(n)||0); }
+function fraudMaxPerDay(){ const n = state.settings.fraudMaxOrdersPerDay; return (n===undefined||n===null||n==='') ? 5 : Math.max(0, Number(n)||0); }
 function recentOrderLog(){
   try{ const arr = JSON.parse(localStorage.getItem(ORDER_LOG_KEY)||'[]'); const cut = Date.now()-24*3600*1000; return arr.filter(t=>typeof t==='number' && t>cut); }
   catch(e){ return []; }
 }
 function recordOrderInLog(){
   try{ const arr = recentOrderLog(); arr.push(Date.now()); localStorage.setItem(ORDER_LOG_KEY, JSON.stringify(arr)); }catch(e){}
+}
+/* Existencias al ABRIR el carrito (no solo al pagar): el catálogo puede tener unas horas, así que
+   al abrir el carrito se consulta productStock de lo que trae (1 lectura por producto distinto,
+   como mucho una vez cada 3 min por producto). Si algo ya se vendió, se ajusta el carrito y se
+   avisa ahí mismo, antes de que la clienta llene sus datos. La revisión al enviar se queda igual. */
+let cartStockWasOpen = false, cartStockBusy = false;
+const cartStockSeen = {};
+async function checkCartStock(){
+  if(cartStockBusy || !state.cart || !Object.keys(state.cart).length) return;
+  const ids = [...new Set(Object.keys(state.cart).map(k=>{ const r = parseCartKey(k); return r.p && r.p.id; }).filter(Boolean))]
+    .filter(id => !cartStockSeen[id] || Date.now()-cartStockSeen[id] > 3*60000).slice(0, 15);
+  if(!ids.length) return;
+  cartStockBusy = true;
+  const fresh = {};
+  try{
+    await Promise.all(ids.map(async id=>{
+      try{ const d = await db.collection('productStock').doc(id).get(); cartStockSeen[id] = Date.now(); if(d.exists) fresh[id] = d.data(); }
+      catch(e){ /* sin señal o sin permiso: se queda la existencia del catálogo */ }
+    }));
+  }finally{ cartStockBusy = false; }
+  if(!Object.keys(fresh).length) return;
+  const adjusted = [];
+  Object.entries(state.cart).forEach(([key,qty])=>{
+    const {p,v} = parseCartKey(key); if(!p || !fresh[p.id]) return;
+    const fp = fresh[p.id];
+    const avail = v ? (((fp.variants||[]).find(x=>String(x.id)===String(v.id))||{stock:0}).stock||0) : (fp.stock||0);
+    const live = state.products.find(x=>x.id===p.id);
+    if(live){ live.stock = fp.stock||0; (fp.variants||[]).forEach(fv=>{ const lv = (live.variants||[]).find(x=>String(x.id)===String(fv.id)); if(lv) lv.stock = fv.stock||0; }); }
+    if(avail < qty){ adjusted.push(p.name); if(avail<=0) delete state.cart[key]; else state.cart[key] = avail; }
+  });
+  if(adjusted.length){
+    saveCart();
+    showToast(`Ya no quedan suficientes piezas de: ${adjusted.slice(0,2).join(', ')}${adjusted.length>2?'…':''}. Ajustamos tu carrito.`);
+  }
+  render();
 }
 async function submitOrder(formData){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); state.submittingOrder=false; render(); return; }
@@ -2181,8 +2232,7 @@ async function submitOrder(formData){
   }
   const orderNumber = await getNextOrderNumber();
   const couponCode = state.appliedCoupon ? state.appliedCoupon.code : null;
-  const zoneTxt = ckZone()==='local' ? `${localShippingCity()} (envío ${money(localShippingCost())})` : 'Otra ciudad (envío por cotizar)';
-  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:`[${zoneTxt}] ${formData.address}`.slice(0,500), notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
+  const order = { date:new Date().toISOString(), orderNumber, source:"tienda", customer:formData.name, phone:formData.phone, address:String(formData.address||'').slice(0,500), notes:formData.notes, items, total: items.reduce((s,it)=>s+it.price*it.qty,0), status:"Nuevo", couponCode };
   const orderCampaign = activeCampaign(); if(orderCampaign) order.campaign = orderCampaign;
   if(fraudGuardOn() && state.checkoutOpenedAt && (Date.now()-state.checkoutOpenedAt) < 4000) order.fraudSignals = ['rapido'];
   try{ await db.collection('orders').add(order); }
@@ -2201,7 +2251,8 @@ async function submitOrder(formData){
   // que se abre sola después de esperar al servidor, y sin ese botón no había cómo enviarlo.
   const productLines = items.map(it=>`• ${it.qty}x ${it.name}`).join('\n');
   const folioTxt = orderNumber ? ` ${formatFolio(orderNumber)}` : '';
-  const msg = `Hola, soy ${formData.name}. Quiero confirmar mi pedido${folioTxt}:\n${productLines}\nDirección: ${formData.address}\nEntrega: ${zoneTxt}\nProductos: ${money(order.total)}${ckZone()==='local' ? `\nTotal con envío: ${money(order.total + localShippingCost())}` : ' (más envío por cotizar)'}\n\n¡Gracias!`;
+  const notesTxt = formData.notes ? `\nReferencias: ${formData.notes}` : '';
+  const msg = `Hola, soy ${formData.name}. Quiero confirmar mi pedido${folioTxt}:\n${productLines}\nDirección: ${formData.address}${notesTxt}\nProductos: ${money(order.total)}${ckZone()==='local' ? `\nEnvío: ${money(localShippingCost())}\nTotal con envío: ${money(order.total + localShippingCost())}` : '\nEnvío: por cotizar'}\n\n¡Gracias!`;
   state.lastOrderWaMsg = state.settings.whatsapp ? msg : '';
   state.cart = {}; saveCart(); state.checkoutOpen=false; state.cartOpen=false; state.orderPlaced=true; state.lastOrderNumber=orderNumber; state.submittingOrder=false; state.appliedCoupon=null; state.ckErrors={}; state.ckDraft=null; render();
   if(state.settings.whatsapp){
@@ -2219,8 +2270,11 @@ function handleCheckoutSubmit(){
   }
   const name = document.getElementById('ck-name').value.trim();
   const phone = document.getElementById('ck-phone').value.trim();
-  const address = document.getElementById('ck-address').value.trim();
-  const notes = document.getElementById('ck-notes').value.trim();
+  const val = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const street = val('ck-street'), colonia = val('ck-colonia'), city = val('ck-city');
+  const zone = ckZone();
+  const address = composeAddress({street, colonia, city}, zone);
+  const notes = val('ck-notes');
   const remember = document.getElementById('ck-remember').checked;
   // QA-16: cada error se muestra bajo su campo y se queda hasta corregirlo; el foco va al primero.
   const errs = {};
@@ -2228,21 +2282,23 @@ function handleCheckoutSubmit(){
   const phoneDigits = phone.replace(/\D/g,'');
   if(!phone) errs.phone = 'Escribe tu WhatsApp para poder contactarte.';
   else if(phoneDigits.length < 10) errs.phone = 'Tu WhatsApp debe tener 10 dígitos.';
-  if(!address) errs.address = 'Escribe la dirección de entrega.';
+  if(!street) errs.street = 'Escribe la calle y el número.';
+  if(!colonia) errs.colonia = 'Escribe la colonia.';
+  if(zone==='foraneo' && !city) errs.city = 'Escribe la ciudad.';
   if(needsTermsAcceptance()){
     const termsEl = document.getElementById('ck-terms');
     if(!termsEl || !termsEl.checked) errs.terms = 'Acepta el aviso de privacidad para continuar.';
   }
   state.ckErrors = errs;
   if(Object.keys(errs).length){
-    const first = ['name','phone','address','terms'].find(k=>errs[k]);
+    const first = ['name','phone','street','colonia','city','terms'].find(k=>errs[k]);
     render();
     const el = document.getElementById(first==='terms' ? 'ck-terms' : 'ck-'+first);
     if(el){ try{ el.focus(); el.scrollIntoView({block:'center'}); }catch(e){} }
     return;
   }
   if(needsTermsAcceptance()) markTermsAccepted();
-  if(remember){ saveCustomerProfile({name,phone,address,notes,remember:true}); }
+  if(remember){ saveCustomerProfile({name,phone,street,colonia,city,zone,address,notes,remember:true}); }
   else{ clearCustomerProfile(); }
   state.submittingOrder = true; render();
   submitOrder({name,phone,address,notes});
@@ -2375,9 +2431,11 @@ function handleSaveProfile(){
   state.ckDraft = null; // el checkout toma los datos recién guardados
   const name = (state.profileDraft.name||'').trim();
   const phone = (state.profileDraft.phone||'').trim();
-  const address = (state.profileDraft.address||'').trim();
+  const a = addrParts(state.profileDraft);
+  const prev = loadCustomerProfile() || {};
+  const zone = prev.zone==='foraneo' ? 'foraneo' : 'local';
   if(!name || !phone){ showToast('Ponle al menos tu nombre y teléfono'); return; }
-  saveCustomerProfile({name, phone, address, notes:'', remember:true});
+  saveCustomerProfile({name, phone, street:a.street, colonia:a.colonia, city:a.city, zone, address:composeAddress(a, zone), notes:'', remember:true});
   showToast('Tus datos quedaron guardados en este celular');
   closeProfile();
 }
@@ -2408,7 +2466,8 @@ function renderProfileDrawer(){
         <div class="dw-card-t">Datos para tus pedidos</div>
         <div class="form-field"><label for="pf-cli-name">Nombre completo</label><input id="pf-cli-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${(p.name||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.name=this.value"></div>
         <div class="form-field"><label for="pf-cli-phone">WhatsApp / Teléfono</label><input id="pf-cli-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${(p.phone||'').replace(/"/g,'&quot;')}" oninput="state.profileDraft.phone=this.value"></div>
-        <div class="form-field" style="margin-bottom:0;"><label for="pf-cli-address">Dirección de entrega</label><textarea id="pf-cli-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="state.profileDraft.address=this.value">${escHtml(p.address||'')}</textarea></div>
+        ${(()=>{ const a = addrParts(p); return `<div class="form-field"><label for="pf-cli-street">Calle y número</label><input id="pf-cli-street" type="text" autocomplete="address-line1" placeholder="Ej. Av. Juárez 120" value="${escHtml(a.street)}" oninput="state.profileDraft.street=this.value"></div>
+        <div class="form-field" style="margin-bottom:0;"><label for="pf-cli-colonia">Colonia</label><input id="pf-cli-colonia" type="text" autocomplete="address-level3" placeholder="Ej. Centro" value="${escHtml(a.colonia)}" oninput="state.profileDraft.colonia=this.value"></div>`; })()}
         <div class="dw-mini">${icon('lock',12)} No se comparten con nadie: solo quedan guardados en este celular.</div>
       </div>
       <details class="dw-card pf-wh" ${tier?'open':''}>
@@ -3035,7 +3094,8 @@ document.addEventListener('keydown', (e)=>{
 /* ============== COMPARTIR FAVORITOS POR WHATSAPP ============== */
 function wishlistShareText(){
   const products = wishlistProducts();
-  const base = location.href.split(/[?#]/)[0];
+  // Desde la app instalada la página está en /catalogo: el enlace que se comparte usa la dirección normal de la tienda.
+  const base = location.origin + location.pathname.replace(/^\/catalogo\/?$/,'/');
   const lines = products.slice(0,15).map(p=>`• ${p.name} — ${money(automaticDiscountedPrice(p))}\n${base}?producto=${encodeURIComponent(p.id)}`);
   const more = products.length>15 ? `\n…y ${products.length-15} más` : '';
   return `Mira mis favoritos en ${state.settings.storeName||'La Casa de los Placeres'}:\n\n${lines.join('\n')}${more}`;
@@ -4167,7 +4227,7 @@ function renderCartDrawer(){
 
 function ckErr(k){ return (state.ckErrors||{})[k] || ''; }
 function ckErrHtml(k){ const m = ckErr(k); return m ? `<div class="ck-err" id="ck-${k}-err" role="alert">${m}</div>` : ''; }
-function ckDraft(){ if(!state.ckDraft){ const p = loadCustomerProfile() || {}; state.ckDraft = {name:p.name||'', phone:p.phone||'', address:p.address||'', notes:p.notes||'', remember:p.remember===true, terms:false}; } return state.ckDraft; }
+function ckDraft(){ if(!state.ckDraft){ const p = loadCustomerProfile() || {}; const a = addrParts(p); state.ckDraft = {name:p.name||'', phone:p.phone||'', street:a.street, colonia:a.colonia, city:a.city, notes:p.notes||'', remember:p.remember===true, terms:false, zone:p.zone==='foraneo'?'foraneo':undefined}; } return state.ckDraft; }
 function ckFieldInput(k){
   const f0 = document.getElementById('ck-'+k);
   if(f0) ckDraft()[k] = (f0.type==='checkbox') ? f0.checked : f0.value;
@@ -4190,8 +4250,24 @@ function renderCheckoutSummary(){
    WhatsApp y en la dirección del pedido; el total guardado del pedido sigue siendo el de productos. */
 function localShippingCost(){ const v = state.settings.localShippingCost; if(v===undefined||v===null||v==='') return 35; const n = Number(v); return n>=0 ? n : 35; }
 function localShippingCity(){ return state.settings.localShippingCity || 'Cd. Guzmán'; }
+/* Dirección en partes (calle y número · colonia · ciudad). Se guarda en el pedido como UNA línea
+   en orden natural — "Av. Juárez 120, Col. Centro, Cd. Guzmán" — sin corchetes ni costo de envío,
+   para que el panel y el mensaje al repartidor muestren una dirección con sentido. Los datos
+   guardados antes (un solo campo "address") se reparten solos: todo queda en "Calle y número". */
+function addrParts(d){
+  d = d || {};
+  let street = String(d.street==null ? '' : d.street).trim(), colonia = String(d.colonia||'').trim(), city = String(d.city||'').trim();
+  if(!street && !colonia && d.address) street = String(d.address).trim();
+  return {street, colonia, city};
+}
+function colLabel(c){ c = String(c||'').trim(); return !c ? '' : (/^(col\.?|colonia|fracc\.?|fraccionamiento|barrio|ejido|rancho|unidad|u\.?\s?h\.?)\b/i.test(c) ? c : 'Col. '+c); }
+function composeAddress(d, zone){
+  const a = addrParts(d);
+  const city = zone==='foraneo' ? a.city : localShippingCity();
+  return [a.street, colLabel(a.colonia), city].map(x=>String(x||'').trim()).filter(Boolean).join(', ');
+}
 function ckZone(){ const d = ckDraft(); return d.zone==='foraneo' ? 'foraneo' : 'local'; }
-function setCkZone(z){ const d = ckDraft(); d.zone = z; state.ckDraft = d; render(); }
+function setCkZone(z){ const d = ckDraft(); ['name','phone','street','colonia','city','notes'].forEach(k=>{ const el = document.getElementById('ck-'+k); if(el) d[k] = el.value; }); d.zone = z; state.ckDraft = d; if(state.ckErrors) delete state.ckErrors.city; render(); }
 function checkoutGrandTotal(){ return cartTotal() + (ckZone()==='local' ? localShippingCost() : 0); }
 function renderCheckoutDrawer(){
   const p = ckDraft();
@@ -4212,8 +4288,10 @@ function renderCheckoutDrawer(){
       </div>
       <div class="form-field"><label for="ck-name">Nombre completo</label><input id="ck-name" type="text" autocomplete="name" placeholder="Tu nombre" value="${escHtml(p.name||'')}" oninput="ckFieldInput('name')" ${ckErr('name')?'aria-invalid="true" aria-describedby="ck-name-err"':''}>${ckErrHtml('name')}</div>
       <div class="form-field"><label for="ck-phone">WhatsApp / Teléfono</label><input id="ck-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="33 1234 5678" value="${escHtml(p.phone||'')}" oninput="ckFieldInput('phone')" ${ckErr('phone')?'aria-invalid="true" aria-describedby="ck-phone-err"':''}>${ckErrHtml('phone')}</div>
-      <div class="form-field"><label for="ck-address">Dirección de entrega</label><textarea id="ck-address" autocomplete="street-address" placeholder="Calle, número, colonia, referencias" oninput="ckFieldInput('address')" ${ckErr('address')?'aria-invalid="true" aria-describedby="ck-address-err"':''}>${escHtml(p.address||'')}</textarea>${ckErrHtml('address')}</div>
-      <div class="form-field" style="margin-bottom:0;"><label for="ck-notes">Notas <small>(opcional)</small></label><textarea id="ck-notes" placeholder="Horario preferido, indicaciones extra..." oninput="ckFieldInput('notes')">${escHtml(p.notes||'')}</textarea></div>
+      <div class="form-field"><label for="ck-street">Calle y número</label><input id="ck-street" type="text" autocomplete="address-line1" placeholder="Ej. Av. Juárez 120" value="${escHtml(p.street||'')}" oninput="ckFieldInput('street')" ${ckErr('street')?'aria-invalid="true" aria-describedby="ck-street-err"':''}>${ckErrHtml('street')}</div>
+      <div class="form-field"><label for="ck-colonia">Colonia</label><input id="ck-colonia" type="text" autocomplete="address-level3" placeholder="Ej. Centro" value="${escHtml(p.colonia||'')}" oninput="ckFieldInput('colonia')" ${ckErr('colonia')?'aria-invalid="true" aria-describedby="ck-colonia-err"':''}>${ckErrHtml('colonia')}</div>
+      ${ckZone()==='foraneo' ? `<div class="form-field"><label for="ck-city">Ciudad</label><input id="ck-city" type="text" autocomplete="address-level2" placeholder="Ej. Sayula, Jal." value="${escHtml(p.city||'')}" oninput="ckFieldInput('city')" ${ckErr('city')?'aria-invalid="true" aria-describedby="ck-city-err"':''}>${ckErrHtml('city')}</div>` : ''}
+      <div class="form-field" style="margin-bottom:0;"><label for="ck-notes">Referencias y notas <small>(opcional)</small></label><textarea id="ck-notes" placeholder="Entre qué calles, color de la casa, horario preferido…" oninput="ckFieldInput('notes')">${escHtml(p.notes||'')}</textarea></div>
       </div>
       ${renderCheckoutAddOns()}
       <p class="ck-save-note">Guardamos estos datos en nuestro sistema para ayudarte a terminar tu pedido si se interrumpe. Solo los usamos para contactarte sobre esta compra.</p>
@@ -4371,6 +4449,7 @@ function renderSkeleton(){
   return `<div role="status" aria-label="Cargando catálogo">
     <div class="sk-top"><div class="sk" style="height:22px;width:150px;"></div><div class="sk" style="height:34px;width:104px;"></div></div>
     <div class="sk-wrap">
+      <div class="sk-msg"><span class="sk-spin" aria-hidden="true"></span>Se está cargando el catálogo…</div>
       <div class="sk sk-hero"></div>
       <div class="sk-chips">${'<div class="sk sk-chip"></div>'.repeat(5)}</div>
       <div class="sk-grid">${card.repeat(6)}</div>
@@ -4382,6 +4461,8 @@ function render(){
   const scrollPositions = captureScrollPositions(root);
   if(!state.loaded){ root.innerHTML = renderSkeleton(); restoreFocusState(root, focusInfo); return; }
   if(state.settings.ageGateEnabled!==false && !hasConfirmedAge()){ root.innerHTML = renderAgeGate(); restoreFocusState(root, focusInfo); return; }
+  if(state.cartOpen && !cartStockWasOpen) setTimeout(checkCartStock, 0);
+  cartStockWasOpen = !!state.cartOpen;
   root.innerHTML = state.orderPlaced ? renderSuccess() : renderStore();
   toastStack();
   adjustTopbarSpacer();
@@ -4602,7 +4683,7 @@ document.addEventListener('keydown', (e)=>{
 window.addEventListener('beforeunload', (e)=>{
   if(state.orderPlaced || state.submittingOrder) return;
   const v = id => { const el = document.getElementById(id); return !!(el && el.value && el.value.trim()); };
-  const dirty = (state.checkoutOpen && (v('ck-name')||v('ck-phone')||v('ck-address')))
+  const dirty = (state.checkoutOpen && (v('ck-name')||v('ck-phone')||v('ck-street')||v('ck-colonia')))
     || (state.messageDrawerOpen && !state.messageSent && state.messageDraft && state.messageDraft.text && state.messageDraft.text.trim());
   if(dirty){ e.preventDefault(); e.returnValue = ''; return ''; }
 });

@@ -1,0 +1,38 @@
+name: Respaldo semanal de Firestore (cifrado)
+# Cada domingo a las 3:17 am (hora de Ciudad Guzmán) guarda una copia CIFRADA de toda la base de
+# datos como artefacto de la corrida (se conserva 90 días). También se puede lanzar a mano:
+# Actions → "Respaldo semanal de Firestore" → Run workflow.
+# Requiere el secreto RESPALDO_CLAVE. Para abrir un respaldo: node tools/respaldo/descifrar.js archivo.cdlp
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 0'
+permissions:
+  contents: read
+concurrency:
+  group: respaldo
+  cancel-in-progress: false
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/respaldo }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/respaldo --no-audit --no-fund
+      - name: Respaldar
+        run: node tools/respaldo/respaldo.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          RESPALDO_CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+          # Estadísticas que crecen mucho y no hacen falta para recuperar la tienda (ahorra lecturas):
+          SALTAR: 'visits,analyticsEvents,searchMisses,systemErrors,activePosSessions'
+          OUT_DIR: respaldo-out
+      - uses: actions/upload-artifact@v5
+        with:
+          name: respaldo-firestore-${{ github.run_number }}
+          path: respaldo-out/*.cdlp
+          retention-days: 90
+          compression-level: 0

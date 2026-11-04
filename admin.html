@@ -21,6 +21,14 @@ document.addEventListener('wheel', function(e){
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de administración — La Casa de los Placeres</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<!-- App instalable (PWA): cada plataforma tiene SU manifest, con id y alcance propios
+     (/catalogo, /pos, /admin) para que en Android se instalen como 3 apps separadas. -->
+<link rel="manifest" href="/manifest-admin.json">
+<meta name="theme-color" content="#0A4A5B">
+<link rel="apple-touch-icon" href="/assets/apps/admin-apple-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CDLP Admin">
 <script>
   // Se aplica antes de pintar nada, para que no haya un parpadeo de claro→oscuro al cargar.
   try{ if(localStorage.getItem('adminTheme')==='dark') document.documentElement.setAttribute('data-theme','dark'); }catch(e){}
@@ -848,7 +856,7 @@ try{
 (function(){
   let F; try{ F = firebase.firestore; }catch(e){ return; }
   if(!F || !F.Query || !F.DocumentReference) return;
-  const PAGE = /pos\.html/i.test(location.pathname) ? 'pos' : 'admin';
+  const PAGE = /\/pos(\.html)?\/?$/i.test(location.pathname) ? 'pos' : 'admin'; // también /pos (sin .html) en casaplaceres.com
   const K = 'cdlp_reads';
   const day = ()=>{ const d = new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); };
   window.__readMeter = window.__readMeter || {session:0};
@@ -2735,11 +2743,23 @@ function logCustomerMessageForOrder(orderId){
 }
 // Dirección de contacto del pedido: la de la tienda online (o.address) o, si la venta se hizo
 // en el Punto de Venta con un cliente asignado, la que tiene guardada ese cliente (o.customerAddress).
-function orderContactAddress(o){ return o.address || o.customerAddress || ''; }
+function orderContactAddress(o){ return cleanOrderAddress(o.address || o.customerAddress || ''); }
+/* Pedidos de la tienda guardados antes de noviembre 2026 traían la zona al inicio entre corchetes:
+   "[Cd. Guzmán (envío $35)] Calle 5 #10 col. Centro". Aquí se muestra como dirección normal —
+   "Calle 5 #10 col. Centro, Cd. Guzmán" — sin el costo del envío. Los nuevos ya llegan limpios. */
+function cleanOrderAddress(a){
+  a = String(a||'').trim();
+  const m = /^\[([^\]]*)\]\s*/.exec(a); if(!m) return a;
+  const rest = a.slice(m[0].length).trim();
+  const zone = m[1].replace(/\s*\(.*$/,'').trim();
+  if(!zone || /^otra ciudad/i.test(zone) || rest.toLowerCase().includes(zone.toLowerCase())) return rest;
+  return rest ? `${rest}, ${zone}` : zone;
+}
 function buildDeliveryMessage(o){
   const origen = state.settings.storeAddress || '(configura tu dirección de origen en Configuración)';
   const direccion = orderContactAddress(o) || (o.source==='pos' ? 'Retirado en Punto de Venta' : '(sin dirección)');
-  const destino = [direccion, o.notes].filter(Boolean).join(' — ');
+  const notas = String(o.notes||'').trim();
+  const destino = direccion + (notas ? `\nReferencias: ${notas}` : '');
   const telefono = orderContactPhone(o);
   return `*PEDIDO ${o.orderNumber || ''}*\n\n` +
          `*De* ${origen}\n\n` +
@@ -2988,7 +3008,7 @@ function openCustomerModalFromOrderMismatch(customerId, orderId){
   const isPos = o.source==='pos';
   state.customerModal.name = (isPos ? o.customerName : o.customer) || state.customerModal.name;
   state.customerModal.phone = orderContactPhone(o) || state.customerModal.phone;
-  const newAddress = isPos ? orderContactAddress(o) : o.address;
+  const newAddress = isPos ? orderContactAddress(o) : cleanOrderAddress(o.address);
   if(newAddress) state.customerModal.address = newAddress;
   render();
 }
@@ -3071,7 +3091,7 @@ function renderOrderDetailModal(){
       ` : `
         <div class="order-detail" style="margin-bottom:14px;">
           <div><span>Teléfono</span><span>${o.phone||'—'}</span></div>
-          <div><span>Dirección</span><span style="text-align:right;">${o.address||'—'}</span></div>
+          <div><span>Dirección</span><span style="text-align:right;">${escDescHtml(cleanOrderAddress(o.address))||'—'}</span></div>
           ${o.notes?`<div><span>Notas</span><span style="text-align:right;">${o.notes}</span></div>`:''}
         </div>
       `}
@@ -3196,7 +3216,7 @@ function printOrderReceipt(id){
       <div class="meta">
         <strong>Cliente:</strong> ${o.customer || o.customerName || 'Venta en tienda física'}<br>
         ${orderContactPhone(o) ? `<strong>Teléfono:</strong> ${orderContactPhone(o)}<br>` : ''}
-        ${!isPos ? `<strong>Dirección:</strong> ${o.address||'—'}<br>` : ''}
+        ${!isPos ? `<strong>Dirección:</strong> ${escDescHtml(cleanOrderAddress(o.address))||'—'}<br>` : ''}
         <strong>Forma de pago:</strong> ${paymentMethodLabel(o)}
       </div>
       <table>
@@ -8838,7 +8858,7 @@ function renderOrderRow(o){
   const menuOpen = state.orderActionsMenu===o.id;
   const isSelected = (state.selectedOrders||[]).includes(o.id);
   const itemCount = (o.items||[]).reduce((s,it)=>s+it.qty,0);
-  const shipSub = isPos ? '' : (o.address || '');
+  const shipSub = isPos ? '' : cleanOrderAddress(o.address);
   const isSplitPay = isPos && salePayments(o).length > 1;
   const _ps = orderPayState(o);
   const payLabel = isPos ? paymentMethodShortLabel(o) : (_ps==='pagado' ? `Pagado · ${o.paymentMethod||'Efectivo'}` : _ps==='por_conciliar' ? 'Por conciliar' : (o.status==='Entregado' ? 'Sin cobrar' : 'Contra entrega'));
@@ -8906,7 +8926,7 @@ function renderOrderRow(o){
       ${isPos
         ? `<div class="pd-extra"><span>Método de pago</span><span>${escDescHtml(paymentMethodLabel(o))}</span></div>`
         : `<div class="pd-extra"><span>Teléfono</span><span>${escDescHtml(o.phone||'—')}</span></div>
-           <div class="pd-extra"><span>Dirección</span><span>${escDescHtml(o.address||'—')}</span></div>
+           <div class="pd-extra"><span>Dirección</span><span>${escDescHtml(cleanOrderAddress(o.address)||'—')}</span></div>
            ${o.notes?`<div class="pd-extra"><span>Notas</span><span>${escDescHtml(o.notes)}</span></div>`:''}`
       }
     </td></tr>`;
@@ -9567,7 +9587,7 @@ function _computeCustomersList(){
     const c = byPhone[key];
     // La dirección y el nombre se toman del pedido más reciente (es lo que el
     // cliente escribió al pagar, así que es lo más actualizado que tenemos de él).
-    if(new Date(o.date) > new Date(c.lastDate||0)){ c.name = o.customer||c.name; c.address = o.address||c.address; c.lastDate = o.date; c.lastFolio = o.orderNumber; }
+    if(new Date(o.date) > new Date(c.lastDate||0)){ c.name = o.customer||c.name; c.address = cleanOrderAddress(o.address)||c.address; c.lastDate = o.date; c.lastFolio = o.orderNumber; }
     if(o.status!=='Cancelado'){ c.totalSpent += (o.total||0); c.purchases.push(o); }
   });
   // 2) Se combinan con los perfiles que tú creas/editas a mano (colección "customers").
@@ -15073,7 +15093,7 @@ function renderOperativoSubpanel(){
       <span>Activar protección y marcas de revisión</span>
     </label>
     <div class="form-field" style="margin-top:8px;"><label>Máximo de pedidos por celular en 24 horas (0 = sin límite)</label>
-      <input id="set-fraud-max" type="number" inputmode="numeric" min="0" max="20" step="1" value="${s.fraudMaxOrdersPerDay==null?3:s.fraudMaxOrdersPerDay}" onchange="state.settings.fraudMaxOrdersPerDay=Math.max(0,Math.min(20,parseInt(this.value,10)||0));saveSettings();showToast('Límite guardado');render()">
+      <input id="set-fraud-max" type="number" inputmode="numeric" min="0" max="20" step="1" value="${s.fraudMaxOrdersPerDay==null?5:s.fraudMaxOrdersPerDay}" onchange="state.settings.fraudMaxOrdersPerDay=Math.max(0,Math.min(20,parseInt(this.value,10)||0));saveSettings();showToast('Límite guardado');render()">
     </div>
   `})}
   ${pmSection('op_stock','Inventario de pedidos de la tienda',{icon:'package', collapsible:true, open:false, badge:autoDeductOnlineOn()?'Al entregar':'A mano', hint:'El stock baja al marcar "Entregado"', body:`
