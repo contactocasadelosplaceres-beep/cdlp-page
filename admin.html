@@ -604,7 +604,10 @@ document.addEventListener('wheel', function(e){
   .img-thumb:active .img-thumb-actions, .img-thumb:hover .img-thumb-actions{opacity:1;}
   .img-thumb-actions button{width:26px;height:26px;border-radius:6px;background:var(--surface);color:var(--primary-deep);font-size:12.5px;display:flex;align-items:center;justify-content:center;}
   .add-thumb{display:flex;align-items:center;justify-content:center;background:var(--surface-soft);color:var(--primary-deep);font-size:22px;cursor:pointer;}
-  .crop-box{width:280px;height:280px;max-width:100%;margin:0 auto;overflow:hidden;position:relative;border-radius:12px;background:#000;touch-action:none;cursor:grab;}
+  .crop-box{width:280px;height:280px;max-width:100%;margin:0 auto;overflow:hidden;position:relative;border-radius:12px;background:#fff;border:1px solid var(--border);box-sizing:content-box;touch-action:none;cursor:grab;}
+  .crop-presets{display:flex;gap:8px;justify-content:center;margin:0 0 12px;}
+  .crop-presets button{flex:1;min-height:40px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-soft);font-weight:700;font-size:13px;}
+  .crop-presets button.on{border-color:var(--primary);background:rgba(153,52,119,.08);color:var(--primary-deep);}
   #crop-img{position:absolute;top:0;left:0;user-select:none;pointer-events:none;}
 
   .section-row{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);margin-bottom:8px;background:var(--surface);transition:box-shadow .15s ease;flex-wrap:wrap;row-gap:8px;}
@@ -5091,11 +5094,13 @@ async function deleteCashier(id){
 /* ============== IMÁGENES + RECORTE ============== */
 const CROP_SIZE = 280, CROP_OUT = 700;
 let cropCtx = null;
+// Se puede alejar hasta ver la foto COMPLETA (minZoom < 1): lo que sobra queda en blanco. Antes el
+// mínimo era llenar el cuadro, así que de una foto alargada solo cabía la mitad.
 function clampCropOffsets(){
   const scale = cropCtx.baseScale*cropCtx.zoom;
   const dw = cropCtx.natW*scale, dh = cropCtx.natH*scale;
-  cropCtx.offX = Math.min(0, Math.max(CROP_SIZE-dw, cropCtx.offX));
-  cropCtx.offY = Math.min(0, Math.max(CROP_SIZE-dh, cropCtx.offY));
+  cropCtx.offX = dw <= CROP_SIZE ? (CROP_SIZE-dw)/2 : Math.min(0, Math.max(CROP_SIZE-dw, cropCtx.offX));
+  cropCtx.offY = dh <= CROP_SIZE ? (CROP_SIZE-dh)/2 : Math.min(0, Math.max(CROP_SIZE-dh, cropCtx.offY));
 }
 function updateCropImgTransform(){
   const el = document.getElementById('crop-img'); if(!el || !cropCtx) return;
@@ -5111,9 +5116,12 @@ function handleImageFileSelected(input){
     const img = new Image();
     img.onload = ()=>{
       const baseScale = CROP_SIZE/Math.min(img.naturalWidth, img.naturalHeight);
-      cropCtx = { img, natW:img.naturalWidth, natH:img.naturalHeight, zoom:1, baseScale, offX:0, offY:0 };
-      cropCtx.offX = (CROP_SIZE - cropCtx.natW*baseScale)/2;
-      cropCtx.offY = (CROP_SIZE - cropCtx.natH*baseScale)/2;
+      const minZoom = Math.min(img.naturalWidth, img.naturalHeight)/Math.max(img.naturalWidth, img.naturalHeight);
+      // Foto casi cuadrada: llena el cuadro. Foto alargada: empieza completa, sin cortar nada.
+      const zoom = minZoom < 0.9 ? minZoom : 1;
+      cropCtx = { img, natW:img.naturalWidth, natH:img.naturalHeight, zoom, minZoom, baseScale, offX:0, offY:0 };
+      cropCtx.offX = (CROP_SIZE - cropCtx.natW*baseScale*zoom)/2;
+      cropCtx.offY = (CROP_SIZE - cropCtx.natH*baseScale*zoom)/2;
       clampCropOffsets();
       state.cropOpen = true; render();
     };
@@ -5144,8 +5152,17 @@ document.addEventListener('touchmove', cropPointerMove, {passive:false});
 document.addEventListener('touchend', cropPointerUp);
 function cropSetZoom(val){
   if(!cropCtx) return;
-  cropCtx.zoom = parseFloat(val);
+  const old = cropCtx.baseScale*cropCtx.zoom;
+  cropCtx.zoom = Math.max(cropCtx.minZoom||1, Math.min(3, parseFloat(val)));
+  // Acercar/alejar desde el centro del cuadro, no desde la esquina.
+  const k = (cropCtx.baseScale*cropCtx.zoom)/old, c = CROP_SIZE/2;
+  cropCtx.offX = c - (c - cropCtx.offX)*k; cropCtx.offY = c - (c - cropCtx.offY)*k;
   clampCropOffsets(); updateCropImgTransform();
+}
+function cropPreset(mode){
+  if(!cropCtx) return;
+  cropSetZoom(mode==='fit' ? (cropCtx.minZoom||1) : 1);
+  render();
 }
 const MAX_IMG_BYTES = 90*1024; // peso máximo por imagen — más ajustado que antes para que el catálogo pese bastante menos en total, sin recurrir a un servicio de imágenes aparte
 function dataUrlBytes(dataUrl){
@@ -5458,7 +5475,8 @@ function renderRecompressModal(){
 }
 function applyCrop(){
   const scale = cropCtx.baseScale*cropCtx.zoom;
-  const sx = -cropCtx.offX/scale, sy = -cropCtx.offY/scale, ssize = CROP_SIZE/scale;
+  // Se dibuja la foto donde se ve en el cuadro (puede quedar más chica que el cuadro: el resto, blanco).
+  const draw = (ctx, size)=>{ const k = size/CROP_SIZE; ctx.drawImage(cropCtx.img, 0, 0, cropCtx.natW, cropCtx.natH, cropCtx.offX*k, cropCtx.offY*k, cropCtx.natW*scale*k, cropCtx.natH*scale*k); };
   // Primero se intenta con la resolución normal (700x700) bajando la calidad; solo si una imagen
   // muy detallada no cabe ni en la calidad más baja, se reduce el tamaño y se repite.
   // Se rellena el canvas de blanco antes de dibujar: el formato de salida es JPEG (sin canal
@@ -5469,7 +5487,7 @@ function applyCrop(){
     const canvas = document.createElement('canvas'); canvas.width=outSize; canvas.height=outSize;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,outSize,outSize);
-    ctx.drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, outSize, outSize);
+    draw(ctx, outSize);
     dataUrl = canvasToLimitedJpeg(canvas, MAX_IMG_BYTES);
     if(!dataUrl) outSize = Math.round(outSize*0.85);
   }
@@ -5478,7 +5496,7 @@ function applyCrop(){
     const canvas = document.createElement('canvas'); canvas.width=300; canvas.height=300;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,300,300);
-    ctx.drawImage(cropCtx.img, sx, sy, ssize, ssize, 0, 0, 300, 300);
+    draw(ctx, 300);
     dataUrl = canvas.toDataURL('image/jpeg', 0.2);
   }
   if(!state.productModal.images) state.productModal.images = [];
@@ -16359,11 +16377,15 @@ function renderCropModal(){
   <div class="modal-overlay">
     <div class="modal" style="max-width:340px;text-align:center;">
       <h3>Ajusta el encuadre</h3>
-      <div class="panel-sub" style="margin-bottom:12px;">Arrastra para mover, usa la barra para acercar. Así puedes dejar fuera lo que no quieras mostrar.</div>
+      <div class="panel-sub" style="margin-bottom:12px;">Así se verá en la tienda. Arrastra para mover y usa la barra para acercar o alejar.</div>
+      ${(cropCtx.minZoom||1) < 0.98 ? `<div class="crop-presets">
+        <button type="button" class="${cropCtx.zoom<=(cropCtx.minZoom||1)+0.001?'on':''}" onclick="cropPreset('fit')">Foto completa</button>
+        <button type="button" class="${Math.abs(cropCtx.zoom-1)<0.001?'on':''}" onclick="cropPreset('fill')">Llenar el cuadro</button>
+      </div>` : ''}
       <div class="crop-box" onmousedown="cropPointerDown(event)" ontouchstart="cropPointerDown(event)">
         <img id="crop-img" src="${cropCtx.img.src}" style="width:${cropCtx.natW*cropCtx.baseScale*cropCtx.zoom}px;height:${cropCtx.natH*cropCtx.baseScale*cropCtx.zoom}px;transform:translate(${cropCtx.offX}px, ${cropCtx.offY}px);">
       </div>
-      <input type="range" min="1" max="3" step="0.01" value="${cropCtx.zoom}" oninput="cropSetZoom(this.value)" style="width:100%;margin-top:14px;">
+      <input type="range" aria-label="Acercar o alejar" min="${(cropCtx.minZoom||1).toFixed(3)}" max="3" step="0.01" value="${cropCtx.zoom}" oninput="cropSetZoom(this.value)" style="width:100%;margin-top:14px;">
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.cropOpen=false;cropCtx=null;render()">Cancelar</button>
         <button class="btn-primary" onclick="applyCrop()">Usar esta imagen</button>

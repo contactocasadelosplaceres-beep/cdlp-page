@@ -34,7 +34,15 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<style id="custom-css-injected"></style>
+<style id="custom-css-injected">  /* ---- Fotos de producto completas ----
+     Antes las fotos se recortaban para llenar el recuadro ("cover"): en la tarjeta (4:5) se cortaban
+     los lados de las fotos cuadradas y en la ficha se cortaba arriba y abajo de las fotos altas.
+     Casi la mitad de las fotos importadas no son cuadradas. Ahora se ve el producto completo sobre
+     fondo blanco, y la tarjeta es cuadrada como las fotos que se suben desde el panel. */
+  .card-image-wrap{aspect-ratio:1/1;}
+  .card-image-wrap:has(img),.detail-main-img-wrap:has(img),.rel-img:has(img),.fl-img:has(img),.kit-thumb:has(img),.detail-thumb{background:#fff;}
+  .card-image-wrap img,.detail-main-img-wrap img,.rel-img img,.fl-img img,.kit-thumb img,.detail-thumb img{object-fit:contain;}
+</style>
 <style>
   :root{
     --bg: #F9F6F8; --surface: #FFFFFF; --surface-soft: #F6E9E6;
