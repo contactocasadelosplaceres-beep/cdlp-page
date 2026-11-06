@@ -66,7 +66,7 @@ document.addEventListener('wheel', function(e){
      2-3 filas, empujando los productos hacia abajo. Ahora solo "Caja" y "Ventas" (las de uso
      frecuente durante una venta) quedan a la vista; el resto vive en un menú "Más". */
   .top-more-wrap{position:relative;}
-  .top-more-menu{position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:180px;padding:6px;}
+  .top-more-menu{position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:20;min-width:250px;padding:6px;}
   .top-more-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:11px 10px;min-height:44px;border-radius:8px;font-size:13px;font-weight:600;color:var(--ink);}
   .top-more-menu button:hover{background:var(--surface-soft);}
   .top-more-menu hr{border:none;border-top:1px solid var(--border);margin:5px 0;}
@@ -115,6 +115,7 @@ document.addEventListener('wheel', function(e){
   .modal{background:var(--surface);width:100%;max-width:420px;max-height:88vh;overflow-y:auto;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:22px 20px;box-shadow:0 -20px 50px -20px rgba(43,22,32,0.35);}
   @media(min-width:600px){.modal{border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);}}
   .modal h3{font-size:17.5px;color:var(--primary-deep);margin-bottom:6px;font-weight:700;font-family:'League Spartan',sans-serif;}
+  .modal .panel-sub{font-size:12.5px;line-height:1.45;margin-top:-2px;}
   .order-detail{background:var(--bg);border-radius:var(--radius-sm);padding:12px;font-size:12.5px;border:1px solid var(--border);}
   .order-detail div{display:flex;justify-content:space-between;padding:3px 0;gap:10px;}
   .field-input{width:100%;padding:12px 14px;border-radius:var(--radius-sm);border:1.5px solid var(--border);margin-bottom:10px;font-size:16px;transition:border-color .15s ease;}
@@ -334,6 +335,48 @@ document.addEventListener('wheel', function(e){
   .pt-badge{position:absolute;top:8px;right:8px;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:var(--primary);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none;}
   .pt-info{position:absolute;right:6px;bottom:6px;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--ink-soft);font:italic 700 13px Georgia,serif;display:flex;align-items:center;justify-content:center;}
   .pt-info:hover{border-color:var(--primary);color:var(--primary-deep);}
+  /* ---- Almacén (POS) ---- */
+  .wh-modal{max-width:560px;padding:0;display:flex;flex-direction:column;overflow:hidden;max-height:92vh;}
+  .wh-head{display:flex;align-items:center;gap:12px;padding:18px 18px 16px;background:linear-gradient(135deg,#0A4A5B,#1b7f93);color:#fff;}
+  .wh-head-ico{flex:0 0 auto;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;}
+  .wh-head-txt{flex:1;min-width:0;} .wh-head-txt h3{margin:0;font-size:19px;color:#fff;} .wh-head-txt p{margin:2px 0 0;font-size:12.5px;opacity:.85;}
+  .wh-x{flex:0 0 auto;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;}
+  .wh-tools{display:flex;gap:8px;padding:12px 14px 6px;background:var(--surface);}
+  .wh-search{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 6px 0 12px;border:1.5px solid var(--border);border-radius:var(--radius-md);background:var(--bg);color:var(--ink-soft);}
+  .wh-search:focus-within{border-color:#1b7f93;box-shadow:0 0 0 3px rgba(32,183,202,.18);}
+  .wh-search input{flex:1;min-width:0;border:0;background:transparent;font-size:16px;padding:12px 0;color:var(--ink);outline:none;}
+  .wh-search button{width:36px;height:36px;border-radius:9px;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;}
+  .wh-scan{flex:0 0 auto;width:48px;border-radius:var(--radius-md);background:#E8F4F7;color:#0A4A5B;display:flex;align-items:center;justify-content:center;}
+  .wh-warn{margin:6px 14px 0;padding:9px 12px;border-radius:10px;background:#FEF3E2;color:#7a4a05;font-size:12.5px;line-height:1.4;}
+  .wh-warn button{font-weight:800;color:#7a4a05;text-decoration:underline;margin-left:4px;}
+  .wh-body{flex:1;min-height:0;overflow-y:auto;padding:10px 14px 14px;}
+  .wh-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:6px;}
+  .wh-stats>*{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px;border-radius:12px;background:var(--surface-soft);text-align:left;font:inherit;color:var(--ink);border:1.5px solid transparent;}
+  .wh-stats b{font-size:20px;line-height:1;} .wh-stats span{font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+  .wh-stats button{cursor:pointer;} .wh-stats button.warn{background:#FEF3E2;border-color:#f6c77a;} .wh-stats button.warn b{color:#b5650a;}
+  .wh-section-title{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);margin:14px 2px 8px;}
+  .wh-locs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+  .wh-locbtn{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;padding:10px 12px;border-radius:12px;background:var(--surface);border:1.5px solid var(--border);text-align:left;font:inherit;font-size:13px;font-weight:700;color:#0A4A5B;cursor:pointer;}
+  .wh-locbtn:hover{border-color:#1b7f93;background:#F2FAFC;}
+  .wh-locbtn span{min-width:0;overflow-wrap:anywhere;line-height:1.3;}
+  .wh-locbtn em{flex:0 0 auto;font-style:normal;font-size:12px;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:#E8F4F7;display:inline-flex;align-items:center;justify-content:center;}
+  .wh-more,.wh-back{display:inline-flex;align-items:center;gap:6px;margin-top:10px;min-height:44px;padding:0 14px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--primary-deep);font-weight:700;font-size:13px;}
+  .wh-back{margin:0 0 4px;}
+  .wh-card{border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--surface);box-shadow:var(--shadow-sm);}
+  .wh-card-top{display:flex;align-items:flex-start;gap:10px;} .wh-card-main{flex:1;min-width:0;}
+  .wh-card-name{font-weight:700;font-size:14.5px;line-height:1.3;color:var(--ink);overflow-wrap:anywhere;}
+  .wh-card-sku{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .wh-loc{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:12px;background:#E8F4F7;color:#0A4A5B;}
+  .wh-loc small{display:block;font-size:11px;font-weight:700;opacity:.75;} .wh-loc b{font-size:15.5px;overflow-wrap:anywhere;}
+  .wh-loc.none{background:#FEF3E2;color:#8a5208;}
+  .wh-stock{margin-top:8px;font-size:12.5px;color:var(--ink-soft);}
+  .wh-note{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+  .wh-note label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;}
+  .wh-note .btn-primary{padding:12px;font-size:14px;}
+  .wh-empty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:28px 10px;color:var(--ink-soft);font-size:13.5px;line-height:1.45;}
+  .wh-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--surface);font-size:11.5px;color:var(--ink-soft);}
+  .wh-refresh{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border-radius:var(--radius-sm);background:var(--surface-soft);color:var(--primary-deep);font-weight:700;font-size:12.5px;}
+  .wh-refresh[disabled]{opacity:.6;}
   .v2-loc{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#E8F4F7;color:#0A4A5B;} .v2-loc small{display:block;font-size:11px;font-weight:700;opacity:.8;} .v2-loc b{font-size:15px;}
   .v2-banner.info{background:#E8F4F7;color:#0A4A5B;}
   .v2-info-price{font-family:'League Spartan',sans-serif;font-size:28px;font-weight:800;color:var(--primary-deep);margin:4px 0 10px;} .v2-info-price s{font-size:15px;color:var(--ink-soft);font-weight:500;} .v2-info-price small{font-size:13px;color:var(--ink-soft);}
@@ -876,7 +919,7 @@ let state = {
   salesListOpen:false, salesListLoading:false, salesListItems:[], salesListDetailId:null,
   exchangeModalOpen:false, exchangeSearchOut:'', exchangeSearchIn:'', exchangeOut:null, exchangeIn:null, exchangeMode:'cambio', exchangeVarPick:null, exchangeCondition:'bueno', exchangeReason:'', exchangeMethod:'Efectivo', exchangeBusy:false,
   checkoutReminderOpen:false, checkoutReminderShown:false, pendingPayMethod:null,
-  warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'',
+  warehouseOpen:false, warehouseSearch:'', warehouseNoteProductId:null, warehouseNoteText:'', warehouseLocFilter:null, warehouseShowAllLocs:false, warehouseLoading:false, warehouseLoadFailed:false,
   scannerContext:'checkout',
   posSessionReported:false,
   posMoreMenuOpen:false,
@@ -1231,10 +1274,76 @@ function renderExchangeModal(){
 }
 let posScannerInstance = null;
 /* ---- Almacén: dónde está ubicado cada producto (la ubicación se edita solo desde el panel de
-   administración; aquí el cajero solo la consulta y puede dejar una nota si algo no cuadra) ---- */
-function openWarehouseView(){
-  state.warehouseOpen = true; state.warehouseSearch=''; state.warehouseNoteProductId=null; state.warehouseNoteText='';
-  render();
+   administración; aquí el cajero solo la consulta y puede dejar una nota si algo no cuadra) ----
+   Las ubicaciones NO vienen en catalogo.json (es público y no debe decir dónde se guarda cada cosa).
+   Antes había que tocar "Ver ubicación" producto por producto y no se podía buscar por ubicación.
+   Ahora el POS guarda en este equipo una copia de las ubicaciones:
+   · la primera vez (y una vez por semana) lee solo los productos que tienen ubicación (~200 lecturas);
+   · las demás veces que abres Almacén lee solo los productos que cambiaron desde la última vez
+     (sello _sync), normalmente unas pocas lecturas o ninguna. */
+const POS_LOC_KEY = 'cdlp_pos_loc_v1';
+const POS_LOC_FULL_MS = 7*864e5;
+function posLocMs(v){
+  if(!v) return 0;
+  if(typeof v.toMillis==='function') return v.toMillis();
+  if(typeof v.seconds==='number') return v.seconds*1000;
+  return 0;
+}
+function posLocApply(map){
+  (state.products||[]).forEach(p=>{
+    if(Object.prototype.hasOwnProperty.call(map, p.id)) p.location = map[p.id];
+    else if(!p._fresh) p.location = '';
+  });
+}
+async function posLoadLocations(force){
+  let c = null; try{ c = JSON.parse(localStorage.getItem(POS_LOC_KEY)||'null'); }catch(e){}
+  if(c && (c.v!==1 || !c.map)) c = null;
+  // No se confía solo en navigator.onLine: algunos navegadores dicen "sin conexión" aunque sí hay.
+  // Se intenta leer y, si falla de verdad, se usa la copia guardada.
+  const now = Date.now();
+  try{
+    if(!c || force || (now-(c.fullAt||0)) > POS_LOC_FULL_MS){
+      const snap = await db.collection('products').where('location','>','').get();
+      const map = {}; let maxM = 0;
+      snap.docs.forEach(d=>{ const x = d.data()||{}; maxM = Math.max(maxM, posLocMs(x._sync)); if(!x.deletedAt && String(x.location||'').trim()) map[d.id] = String(x.location).trim(); });
+      c = {v:1, fullAt:now, at:now, maxM, map};
+    } else {
+      const since = firebase.firestore.Timestamp.fromMillis(Math.max(0, (c.maxM||0) - 120000));
+      const snap = await db.collection('products').where('_sync','>',since).get();
+      snap.docs.forEach(d=>{
+        const x = d.data()||{}; c.maxM = Math.max(c.maxM||0, posLocMs(x._sync));
+        const loc = String(x.location||'').trim();
+        if(loc && !x.deletedAt) c.map[d.id] = loc; else delete c.map[d.id];
+        // De paso, el producto queda al día en el POS (precio, existencias, nombre).
+        const cur = state.products.find(y=>y.id===d.id);
+        if(x.deletedAt){ if(cur) state.products = state.products.filter(y=>y.id!==d.id); return; }
+        const fresh = posSlim({id:d.id, ...x}); delete fresh._sync; try{ variantRepair(fresh); }catch(e){} fresh._fresh = Date.now();
+        if(cur){ Object.keys(cur).forEach(k=>{ if(!(k in fresh)) delete cur[k]; }); Object.assign(cur, fresh); }
+        else state.products.push(fresh);
+      });
+      c.at = now;
+    }
+    try{ localStorage.setItem(POS_LOC_KEY, JSON.stringify(c)); }catch(e){}
+    posLocApply(c.map);
+    return true;
+  }catch(e){
+    console.warn('No se pudieron leer las ubicaciones', e);
+    if(c) posLocApply(c.map);
+    return false;
+  }
+}
+async function openWarehouseView(){
+  state.warehouseOpen = true; state.warehouseSearch=''; state.warehouseLocFilter=null; state.warehouseShowAllLocs=false;
+  state.warehouseNoteProductId=null; state.warehouseNoteText='';
+  state.warehouseLoading = true; state.warehouseLoadFailed = false; render();
+  const ok = await posLoadLocations(false);
+  state.warehouseLoading = false; state.warehouseLoadFailed = !ok; render();
+}
+async function warehouseRefresh(){
+  state.warehouseLoading = true; render();
+  const ok = await posLoadLocations(true);
+  state.warehouseLoading = false; state.warehouseLoadFailed = !ok;
+  showToast(ok ? 'Ubicaciones actualizadas' : 'No se pudieron actualizar las ubicaciones'); render();
 }
 function closeWarehouseView(){ state.warehouseOpen = false; render(); }
 async function sendWarehouseNote(productId){
@@ -1251,40 +1360,101 @@ async function sendWarehouseNote(productId){
     state.warehouseNoteProductId = null; state.warehouseNoteText=''; render();
   }catch(e){ console.error('No se pudo enviar la nota', e); showToast('No se pudo enviar la nota'); }
 }
-function renderWarehouseModal(){
-  const q = state.warehouseSearch.trim().toLowerCase();
-  const results = q ? searchProducts(q).slice(0,30) : [];
+// "Anaquel 1, repisa 3" y "anaquel 1 repisa 3" son el mismo lugar: se agrupan sin importar comas,
+// puntos, mayúsculas ni espacios de más.
+function warehouseLocKey(loc){ return String(loc||'').toLowerCase().replace(/[.,;:\-_/]+/g,' ').replace(/\s+/g,' ').trim(); }
+function warehouseLocGroups(){
+  const m = new Map();
+  (state.products||[]).forEach(p=>{
+    const loc = String(p.location||'').trim(); if(!loc) return;
+    const key = warehouseLocKey(loc);
+    if(!m.has(key)) m.set(key, {loc, n:0});
+    m.get(key).n++;
+  });
+  return [...m.values()].sort((a,b)=>a.loc.localeCompare(b.loc,'es',{numeric:true}));
+}
+function warehouseStockLine(p){
+  const cid = state.activeCenter && state.activeCenter.id;
+  if((p.variants||[]).length) return p.variants.map(v=>`${escHtml(variantLabel(v))}: <b>${vCenterStock(v, cid)}</b>`).join(' · ');
+  const n = centerStock(p, cid);
+  return `${p._fresh ? 'Hay' : 'Aprox.'} <b>${n}</b> en ${escHtml((state.activeCenter&&state.activeCenter.name)||'este centro')}`;
+}
+function warehouseCard(p){
+  const loc = String(p.location||'').trim();
+  const noteOpen = state.warehouseNoteProductId===p.id;
   return `
-  <div class="modal-overlay">
-    <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto;">
-      <h3>Almacén</h3>
-      <p class="panel-sub">Busca un producto para ver dónde está ubicado. Si no coincide con lo que ves, deja una nota — le llega directo a Mensajes.</p>
-      <div class="form-field"><label>Buscar producto</label>
-        <input id="warehouse-search-input" class="field-input" placeholder="Nombre o SKU..." value="${state.warehouseSearch}" oninput="state.warehouseSearch=this.value;render()">
+  <div class="wh-card">
+    <div class="wh-card-top">
+      <div class="wh-card-main">
+        <div class="wh-card-name">${escHtml(p.name||'')}</div>
+        ${p.sku ? `<div class="wh-card-sku">${escHtml(p.sku)}</div>` : ''}
       </div>
-      <button class="btn-outline" style="width:100%;margin-top:8px;" onclick="openBarcodeScanner('warehouse')">${icon('camera',16)} Escanear código de barras</button>
-      <div style="margin-top:10px;">
-        ${!q ? '' : results.length===0 ? `<div style="padding:14px 0;color:var(--ink-soft);font-size:12.5px;">Sin resultados.</div>` :
-          results.map(p=>`
-            <div class="list-row" style="flex-direction:column;align-items:stretch;padding:10px 0;">
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <div>
-                  <div style="font-weight:700;">${p.name}</div>
-                  <div class="panel-sub" style="margin:2px 0 0;">${p._fresh ? (p.location ? `${icon('map-pin',13)} ${escHtml(p.location)}` : 'Sin ubicación registrada') : `<button class="v2-mini" onclick="posEnsureFresh(['${p.id}'],0).then(()=>render())">${icon('map-pin',13)} Ver ubicación</button>`}</div>
-                  ${(p.variants||[]).length ? `<div class="panel-sub" style="margin:4px 0 0;">${p.variants.map(v=>`${escHtml(variantLabel(v))}: <b>${vCenterStock(v, state.activeCenter.id)}</b>`).join(' · ')}</div>` : ''}
-                </div>
-                <button class="icon-btn" title="Dejar una nota sobre este producto" onclick="state.warehouseNoteProductId=state.warehouseNoteProductId==='${p.id}'?null:'${p.id}';state.warehouseNoteText='';render()">${icon('message-circle',18)}</button>
-              </div>
-              ${state.warehouseNoteProductId===p.id ? `
-                <div class="form-field" style="margin-top:8px;margin-bottom:0;"><label>Nota sobre este producto</label>
-                  <textarea class="field-input" rows="2" placeholder="Ej. lo encontré en el estante 4, no en el 2..." oninput="state.warehouseNoteText=this.value">${state.warehouseNoteText}</textarea>
-                  <button class="btn-primary" style="width:100%;margin-top:6px;" onclick="sendWarehouseNote('${p.id}')">Enviar nota</button>
-                </div>
-              ` : ''}
-            </div>
-          `).join('')}
+      <button class="icon-btn" title="Dejar una nota sobre este producto" aria-label="Dejar una nota sobre ${escHtml(p.name||'')}" onclick="state.warehouseNoteProductId=state.warehouseNoteProductId==='${p.id}'?null:'${p.id}';state.warehouseNoteText='';render()">${icon('message-circle',18)}</button>
+    </div>
+    <div class="wh-loc ${loc?'':'none'}">${icon('map-pin',16)}<div><small>Ubicación</small><b>${loc ? escHtml(loc) : 'Sin ubicación registrada'}</b></div></div>
+    <div class="wh-stock">${warehouseStockLine(p)}</div>
+    ${noteOpen ? `
+      <div class="wh-note">
+        <label for="wh-note-${p.id}">¿Algo no cuadra? Avísale al panel</label>
+        <textarea id="wh-note-${p.id}" class="field-input" rows="2" placeholder="Ej. lo encontré en el anaquel 3, no en el 2" oninput="state.warehouseNoteText=this.value">${escHtml(state.warehouseNoteText)}</textarea>
+        <button class="btn-primary" onclick="sendWarehouseNote('${p.id}')">Enviar nota</button>
+      </div>` : ''}
+  </div>`;
+}
+function renderWarehouseModal(){
+  const q = state.warehouseSearch.trim();
+  const lf = state.warehouseLocFilter;
+  const all = state.products||[];
+  const withLoc = all.filter(p=>String(p.location||'').trim()).length;
+  const groups = warehouseLocGroups();
+  let body = '';
+  if(state.warehouseLoading && !withLoc){
+    body = `<div class="wh-empty">${icon('map-pin',22)}<div>Cargando ubicaciones…</div></div>`;
+  } else if(q){
+    const results = searchProducts(q).slice(0,30);
+    body = results.length
+      ? `<div class="wh-section-title">${results.length===30?'Primeros 30 resultados':results.length+' resultado'+(results.length===1?'':'s')}</div>${results.map(warehouseCard).join('')}`
+      : `<div class="wh-empty">${icon('search',22)}<div>No encontré "${escHtml(q)}".<br><small>Busca por nombre, SKU o ubicación (ej. "anaquel 2").</small></div></div>`;
+  } else if(lf!=null){
+    const list = lf==='' ? all.filter(p=>!String(p.location||'').trim()) : all.filter(p=>String(p.location||'').trim() && warehouseLocKey(p.location)===lf);
+    const label = lf==='' ? 'Sin ubicación' : ((groups.find(g=>warehouseLocKey(g.loc)===lf)||{}).loc || lf);
+    list.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+    body = `
+      <button class="wh-back" onclick="state.warehouseLocFilter=null;render()">${icon('chevron-left',16)} Todas las ubicaciones</button>
+      <div class="wh-section-title">${escHtml(label)} · ${list.length} producto${list.length===1?'':'s'}</div>
+      ${list.slice(0,200).map(warehouseCard).join('') || `<div class="wh-empty"><div>No hay productos aquí.</div></div>`}`;
+  } else {
+    const shown = state.warehouseShowAllLocs ? groups : groups.slice(0,24);
+    const without = all.length - withLoc;
+    body = `
+      <div class="wh-stats">
+        <div><b>${withLoc}</b><span>con ubicación</span></div>
+        <div><b>${groups.length}</b><span>lugares</span></div>
+        <button class="${without?'warn':''}" onclick="state.warehouseLocFilter='';render()"><b>${without}</b><span>sin ubicación</span></button>
       </div>
-      <button class="btn-secondary" style="margin-top:10px;" onclick="closeWarehouseView()">Cerrar</button>
+      <div class="wh-section-title">Explorar por ubicación</div>
+      ${groups.length ? `<div class="wh-locs">${shown.map(g=>`<button class="wh-locbtn" onclick="state.warehouseLocFilter=${escHtml(JSON.stringify(warehouseLocKey(g.loc)))};render()"><span>${escHtml(g.loc)}</span><em>${g.n}</em></button>`).join('')}</div>
+        ${groups.length>24 && !state.warehouseShowAllLocs ? `<button class="wh-more" onclick="state.warehouseShowAllLocs=true;render()">Ver las ${groups.length} ubicaciones</button>` : ''}`
+        : `<div class="wh-empty"><div>Todavía no hay ubicaciones registradas.<br><small>Se capturan en el panel, al editar cada producto.</small></div></div>`}`;
+  }
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this)closeWarehouseView()">
+    <div class="modal wh-modal" role="dialog" aria-labelledby="wh-title">
+      <div class="wh-head">
+        <div class="wh-head-ico">${icon('map-pin',22)}</div>
+        <div class="wh-head-txt"><h3 id="wh-title">Almacén</h3><p>Encuentra dónde está guardado cada producto</p></div>
+        <button class="wh-x" aria-label="Cerrar" onclick="closeWarehouseView()">${icon('x',20)}</button>
+      </div>
+      <div class="wh-tools">
+        <div class="wh-search">${icon('search',18)}<input id="warehouse-search-input" type="search" autocomplete="off" placeholder="Nombre, SKU o ubicación…" value="${escHtml(state.warehouseSearch)}" oninput="state.warehouseSearch=this.value;render()">${q?`<button aria-label="Borrar búsqueda" onclick="state.warehouseSearch='';render()">${icon('x',16)}</button>`:''}</div>
+        <button class="wh-scan" aria-label="Escanear código de barras" title="Escanear código de barras" onclick="openBarcodeScanner('warehouse')">${icon('camera',20)}</button>
+      </div>
+      ${state.warehouseLoadFailed ? `<div class="wh-warn">No pude actualizar las ubicaciones; te muestro las que tenía guardadas. <button onclick="warehouseRefresh()">Reintentar</button></div>` : ''}
+      <div class="wh-body" style="overflow-y:auto;">${body}</div>
+      <div class="wh-foot">
+        <button class="wh-refresh" onclick="warehouseRefresh()" ${state.warehouseLoading?'disabled':''}>${icon('refresh-cw',15)} ${state.warehouseLoading?'Actualizando…':'Actualizar ubicaciones'}</button>
+        <span>Si una ubicación no coincide, deja una nota con ${icon('message-circle',13)}</span>
+      </div>
     </div>
   </div>`;
 }
@@ -3468,6 +3638,22 @@ async function posLoadProducts(){
             const hs = await db.collection('products').where('hidden','==',true).get();
             hs.docs.forEach(d=>{ const x = posSlim({id:d.id, ...d.data()}); x._fresh = Date.now(); const i = prods.findIndex(y=>y.id===x.id); if(i>=0) prods[i] = x; else prods.push(x); });
           }catch(e){ console.warn('Productos ocultos', e); }
+          // Lo que cambió DESPUÉS de la última publicación (productos nuevos, precios, ubicaciones…):
+          // catalogo.json solo se regenera cada ~2 h o con el botón, así que sin esto un producto
+          // recién dado de alta no aparecía en el POS ni en Almacén. Solo se leen esos (pocas lecturas).
+          try{
+            const gen = Date.parse(j.generatedAt||'');
+            if(gen){
+              const since = firebase.firestore.Timestamp.fromMillis(gen - 10*60000);
+              const cs = await db.collection('products').where('_sync','>',since).get();
+              cs.docs.forEach(d=>{
+                const raw = d.data()||{}; const i = prods.findIndex(y=>y.id===d.id);
+                if(raw.deletedAt){ if(i>=0) prods.splice(i,1); return; }
+                const x = posSlim({id:d.id, ...raw}); delete x._sync; x._fresh = Date.now();
+                if(i>=0) prods[i] = x; else prods.push(x);
+              });
+            }
+          }catch(e){ console.warn('Productos cambiados desde la publicación', e); }
           try{ localStorage.setItem(POS_CAT_KEY, JSON.stringify({savedAt:Date.now(), generatedAt:j.generatedAt||null, products:prods})); }catch(e){}
           return {products:prods, source:'catalogo', generatedAt:j.generatedAt||null};
         }
@@ -3646,7 +3832,7 @@ function renderPosHeader(){
         <div class="top-more-overlay" onclick="state.posMoreMenuOpen=false;render()"></div>
         <div class="top-more-menu" onclick="event.stopPropagation()">
           <button onclick="state.posMoreMenuOpen=false;openExchangeModal()">${icon('refresh-cw')} Devolución o cambio</button>
-          <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén (ubicación de productos)</button>
+          <button onclick="state.posMoreMenuOpen=false;openWarehouseView()">${icon('map-pin')} Almacén: dónde está cada producto</button>
           <button onclick="state.posMoreMenuOpen=false;posReloadProducts()">${icon('refresh-cw')} Actualizar lista de productos</button>
           <button onclick="state.posMoreMenuOpen=false;state.drawerModalOpen=true;render()">${icon('wallet')} Abrir cajón de dinero</button>
           ${state.heldSales.length ? `<button onclick="state.posMoreMenuOpen=false;state.heldOpen=true;render()">${icon('pause')} Ventas en espera (${state.heldSales.length})</button>` : ''}
@@ -3957,14 +4143,27 @@ function restoreFocusState(root, info){
   }
   root.scrollTop = info.scrollTop;
 }
-const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"]';
+// .modal y [data-keep-scroll] tienen scroll por clase (no por style=): sin incluirlos, al tocar un botón
+// dentro de una ventana (p. ej. aplicar una corrección de ortografía) la ventana regresaba hasta arriba.
+const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"],.modal,[data-keep-scroll]';
+// Cada contenedor se identifica por su id (o su clase) y su orden entre los de esa misma clase: así,
+// al abrirse una ventana nueva no hereda por error el scroll de otra lista que estaba antes en pantalla.
+function scrollKeys(root){
+  const seen = {};
+  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>{
+    const base = el.id ? '#'+el.id : (el.getAttribute('data-keep-scroll') || (el.tagName+'.'+String(el.className||'').trim().split(/\s+/).sort().join('.')));
+    seen[base] = (seen[base]||0) + 1;
+    return {el, key: base+'|'+seen[base]};
+  });
+}
 function captureScrollPositions(root){
-  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>el.scrollTop);
+  const m = {};
+  scrollKeys(root).forEach(x=>{ if(x.el.scrollTop) m[x.key] = x.el.scrollTop; });
+  return m;
 }
 function restoreScrollPositions(root, positions){
-  if(!positions || !positions.length) return;
-  const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
-  els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
+  if(!positions) return;
+  scrollKeys(root).forEach(x=>{ const v = positions[x.key]; if(v) x.el.scrollTop = v; });
 }
 /* Menús desplegables siempre dentro de la pantalla: se abren alineados a la derecha de su botón,
    pero en celular el botón puede quedar del lado izquierdo (ej. "Herramientas" en Productos) y el

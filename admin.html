@@ -573,6 +573,26 @@ document.addEventListener('wheel', function(e){
   .import-drop input[type=file]{margin-top:10px;}
   .preview-count{font-size:12.5px;color:var(--primary-deep);font-weight:700;margin-bottom:10px;}
 
+  .pv-overlay{position:fixed;inset:0;z-index:90;background:rgba(20,10,16,.94);display:flex;flex-direction:column;color:#fff;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  .pv-top{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;}
+  .pv-count{font-size:13.5px;font-weight:700;opacity:.9;}
+  .pv-btn{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;}
+  .pv-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 8px;touch-action:pan-y;}
+  .pv-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;background:#fff;}
+  .pv-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border-radius:12px;background:rgba(0,0,0,.35);color:#fff;font-size:34px;line-height:1;display:flex;align-items:center;justify-content:center;}
+  .pv-nav.prev{left:8px;} .pv-nav.next{right:8px;}
+  .pv-strip{display:flex;gap:8px;justify-content:center;padding:10px 12px 0;overflow-x:auto;}
+  .pv-strip button{flex:0 0 auto;width:52px;height:52px;border-radius:8px;overflow:hidden;border:2px solid transparent;opacity:.6;padding:0;background:#fff;}
+  .pv-strip button.on{border-color:var(--amber);opacity:1;}
+  .pv-strip img{width:100%;height:100%;object-fit:cover;}
+  .pv-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px;}
+  .pv-actions button{min-height:48px;border-radius:12px;background:rgba(255,255,255,.12);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .pv-actions button[disabled]{opacity:.35;}
+  .pv-actions button.danger{background:rgba(188,53,92,.55);}
+  @media(max-width:420px){.pv-actions{grid-template-columns:repeat(2,1fr);}}
+  .pv-strip,.pv-actions{width:100%;max-width:680px;margin-left:auto;margin-right:auto;box-sizing:border-box;}
+  @media(min-width:900px){.pv-nav.prev{left:calc(50% - 380px);} .pv-nav.next{right:calc(50% - 380px);}}
+  .img-thumb img{cursor:zoom-in;}
   .img-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
   .img-thumb{position:relative;width:86px;height:86px;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow-sm);}
   .img-thumb img{width:100%;height:100%;object-fit:cover;}
@@ -5479,6 +5499,63 @@ function moveImage(idx,dir){
   render();
 }
 
+/* ---- Visor de fotos del producto: ver en grande, pasar de una a otra, ordenar, poner de portada o quitar ---- */
+function openPhotoViewer(idx){
+  const imgs = (state.productModal && state.productModal.images) || [];
+  if(!imgs.length) return;
+  state.photoViewer = {idx: Math.max(0, Math.min(idx, imgs.length-1))}; render();
+}
+function closePhotoViewer(){ state.photoViewer = null; render(); }
+function photoViewerGo(d){
+  const imgs = (state.productModal && state.productModal.images) || [];
+  if(!state.photoViewer || !imgs.length) return;
+  state.photoViewer.idx = (state.photoViewer.idx + d + imgs.length) % imgs.length; render();
+}
+function photoViewerMove(d){
+  const v = state.photoViewer; if(!v) return;
+  const imgs = state.productModal.images, j = v.idx + d;
+  if(j<0 || j>=imgs.length) return;
+  moveImage(v.idx, d); v.idx = j; render();
+}
+function photoViewerCover(){
+  const v = state.photoViewer; if(!v || v.idx===0) return;
+  while(v.idx>0){ moveImage(v.idx, -1); v.idx--; }
+  showToast('Ahora es la portada'); render();
+}
+function photoViewerRemove(){
+  const v = state.photoViewer; if(!v) return;
+  removeImage(v.idx);
+  const n = (state.productModal.images||[]).length;
+  if(!n){ state.photoViewer = null; }
+  else v.idx = Math.min(v.idx, n-1);
+  showToast('Foto quitada (se guarda al guardar el producto)'); render();
+}
+let pvTouchX = null;
+function renderPhotoViewer(){
+  const v = state.photoViewer, imgs = (state.productModal && state.productModal.images) || [];
+  if(!v || !imgs.length) return '';
+  const i = Math.min(v.idx, imgs.length-1), n = imgs.length;
+  return `
+  <div class="pv-overlay" role="dialog" aria-label="Foto ${i+1} de ${n}" onclick="if(event.target===this)closePhotoViewer()">
+    <div class="pv-top">
+      <span class="pv-count">${i+1} / ${n}${i===0?' · Portada':''}</span>
+      <button type="button" class="pv-btn" aria-label="Cerrar" onclick="closePhotoViewer()">${icon('x',20)}</button>
+    </div>
+    <div class="pv-stage" ontouchstart="pvTouchX=event.touches[0].clientX" ontouchend="if(pvTouchX!=null){const dx=event.changedTouches[0].clientX-pvTouchX;pvTouchX=null;if(Math.abs(dx)>50)photoViewerGo(dx<0?1:-1);}">
+      ${n>1?`<button type="button" class="pv-nav prev" aria-label="Foto anterior" onclick="photoViewerGo(-1)">‹</button>`:''}
+      <img src="${imgs[i]}" alt="Foto ${i+1} del producto">
+      ${n>1?`<button type="button" class="pv-nav next" aria-label="Foto siguiente" onclick="photoViewerGo(1)">›</button>`:''}
+    </div>
+    ${n>1?`<div class="pv-strip">${imgs.map((src,k)=>`<button type="button" class="${k===i?'on':''}" aria-label="Ver foto ${k+1}" onclick="state.photoViewer.idx=${k};render()"><img src="${src}" alt=""></button>`).join('')}</div>`:''}
+    <div class="pv-actions">
+      <button type="button" ${i===0?'disabled':''} onclick="photoViewerMove(-1)">◀ Mover</button>
+      <button type="button" ${i===0?'disabled':''} onclick="photoViewerCover()">${icon('star',15)} Portada</button>
+      <button type="button" ${i===n-1?'disabled':''} onclick="photoViewerMove(1)">Mover ▶</button>
+      <button type="button" class="danger" onclick="photoViewerRemove()">${icon('trash',15)} Quitar</button>
+    </div>
+  </div>`;
+}
+
 /* ============== LISTAS LARGAS: "ver más" ============== */
 // Helper genérico para no renderizar de golpe listas que pueden tener cientos de
 // filas (bajo stock, catálogo completo, pedidos, clientes...). Cada lista tiene su
@@ -5915,6 +5992,7 @@ function renderAdmin(){
   </div>
   ${renderMobileNav()}
   ${state.productModal!==null ? renderProductModal() : ''}
+  ${state.productModal!==null && state.photoViewer ? renderPhotoViewer() : ''}
   ${state.abandonedCartsOpen ? renderAbandonedCartsModal() : ''}
   ${state.failModal ? renderFailModal() : ''}
   ${state.globalSearchOpen ? renderGlobalSearchModal() : ''}
@@ -15620,8 +15698,9 @@ function renderProductModal(){
           ${(p.images||[]).map((src,idx)=>`
             <div class="img-thumb">
               ${idx===0?'<span class="pm-cover">Portada</span>':''}
-              <img src="${src}">
-              <div class="img-thumb-actions">
+              <img src="${src}" alt="Foto ${idx+1}">
+              <div class="img-thumb-actions" onclick="if(event.target===this)openPhotoViewer(${idx})">
+                <button type="button" title="Ver en grande" aria-label="Ver foto ${idx+1} en grande" onclick="openPhotoViewer(${idx})">${icon('search')}</button>
                 ${idx>0?`<button onclick="moveImage(${idx},-1)">◀</button>`:''}
                 ${idx<((p.images||[]).length-1)?`<button onclick="moveImage(${idx},1)">▶</button>`:''}
                 <button onclick="removeImage(${idx})">${icon('x')}</button>
@@ -15630,6 +15709,7 @@ function renderProductModal(){
           ${(p.images||[]).length<5 ? `<div class="img-thumb add-thumb" onclick="document.getElementById('img-file-input').click()" role="button" aria-label="Agregar foto">+</div>` : ''}
         </div>
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
+        ${(p.images||[]).length ? `<div class="row-sub" style="margin-top:6px;">Toca una foto para verla en grande, ordenarla o quitarla.</div>` : ''}
       </div>
       <div class="form-field"><label>Nombre del producto</label><input id="pf-name" spellcheck="true" lang="es" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
       <label class="pm-switch">
@@ -16329,14 +16409,27 @@ function restoreFocusState(root, info){
 // crecen con el tiempo), se recuerda el scroll de CADA contenedor con scroll propio, en el orden
 // en que aparecen en pantalla, y se restaura en ese mismo orden tras el redibujado — funciona
 // porque typear o marcar algo cambia el CONTENIDO de esas listas, no cuántas hay ni en qué orden.
-const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"]';
+// .modal y [data-keep-scroll] tienen scroll por clase (no por style=): sin incluirlos, al tocar un botón
+// dentro de una ventana (p. ej. aplicar una corrección de ortografía) la ventana regresaba hasta arriba.
+const SCROLLABLE_SELECTOR = '[style*="overflow-y:auto"],[style*="overflow-y: auto"],[style*="overflow:auto"],[style*="overflow: auto"],.modal,[data-keep-scroll]';
+// Cada contenedor se identifica por su id (o su clase) y su orden entre los de esa misma clase: así,
+// al abrirse una ventana nueva no hereda por error el scroll de otra lista que estaba antes en pantalla.
+function scrollKeys(root){
+  const seen = {};
+  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>{
+    const base = el.id ? '#'+el.id : (el.getAttribute('data-keep-scroll') || (el.tagName+'.'+String(el.className||'').trim().split(/\s+/).sort().join('.')));
+    seen[base] = (seen[base]||0) + 1;
+    return {el, key: base+'|'+seen[base]};
+  });
+}
 function captureScrollPositions(root){
-  return Array.from(root.querySelectorAll(SCROLLABLE_SELECTOR)).map(el=>el.scrollTop);
+  const m = {};
+  scrollKeys(root).forEach(x=>{ if(x.el.scrollTop) m[x.key] = x.el.scrollTop; });
+  return m;
 }
 function restoreScrollPositions(root, positions){
-  if(!positions || !positions.length) return;
-  const els = root.querySelectorAll(SCROLLABLE_SELECTOR);
-  els.forEach((el,i)=>{ if(positions[i]) el.scrollTop = positions[i]; });
+  if(!positions) return;
+  scrollKeys(root).forEach(x=>{ const v = positions[x.key]; if(v) x.el.scrollTop = v; });
 }
 /* Menús desplegables siempre dentro de la pantalla: se abren alineados a la derecha de su botón,
    pero en celular el botón puede quedar del lado izquierdo (ej. "Herramientas" en Productos) y el
@@ -17257,6 +17350,7 @@ function a11yNamePass(root){
 }
 function render(){
   const root = document.getElementById('root');
+  if(state.photoViewer && !state.productModal) state.photoViewer = null;   // el visor solo vive dentro de la ficha de producto
   const focusInfo = captureFocusState(root);
   const scrollPositions = captureScrollPositions(root);
   if(!state.authChecked){ root.innerHTML = `<div class="loading-screen">Verificando sesión…</div>`; restoreFocusState(root, focusInfo); return; }
@@ -17313,6 +17407,7 @@ window.addEventListener('popstate', (e)=>{
 });
 
 const NAV_ADMIN_MODALS = [
+  ['photoViewer', ()=>closePhotoViewer()],
   ['returnModal', ()=>closeReturnModal()], ['cancelModal', null], ['payEditModal', null], ['orderEditModal', null], ['custDupesOpen', false],
   ['postModalProductId', ()=>closePostModal()], ['notifyModalProductId', null], ['massPriceModalOpen', ()=>closeMassPriceModal()],
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
