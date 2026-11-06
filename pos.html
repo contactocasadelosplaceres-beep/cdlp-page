@@ -1700,7 +1700,7 @@ function openVoidSale(id){
 async function confirmVoidSale(){
   const m = state.voidModal; if(!m || m.busy) return;
   const v = state.salesListItems.find(x=>x.id===m.id); if(!v) return;
-  if(!navigator.onLine){ showToast('Necesitas conexión para anular una venta'); return; }
+  if(await posRefreshOnline()){ showToast('Necesitas conexión para anular una venta'); return; }
   m.busy = true; render();
   try{
     const restored = await posRestoreStock(v);
@@ -2941,6 +2941,36 @@ async function logStockMovement(productId, type, qtyChange, note, centerId){
    folio consecutivo y la escritura real en Firestore, que se asignan/mandan en cuanto regresa
    la señal. Mientras haya ventas pendientes de subir, no cierres esta pestaña ni la de otro
    dispositivo en este mismo centro sin haber recuperado internet primero. */
+/* ============== ¿DE VERDAD NO HAY INTERNET? ==============
+   Algunos navegadores (visto en Chrome de escritorio) reportan navigator.onLine = false aunque sí hay
+   conexión. El POS mostraba "Sin conexión", no descargaba el catálogo y mandaba las ventas a la cola
+   sin conexión, que solo se sube cuando el navegador dice "ya hay internet" (y nunca lo decía).
+   Ahora, si el navegador dice "sin conexión", se comprueba con una petición pequeña a este mismo
+   sitio; solo si falla se considera sin conexión. state.posOffline guarda el resultado. */
+async function posProbeOnline(){
+  try{
+    const ctl = typeof AbortController!=='undefined' ? new AbortController() : null;
+    const t = ctl ? setTimeout(()=>ctl.abort(), 4000) : null;
+    const r = await fetch('manifest-pos.json?ping='+Date.now(), {cache:'no-store', signal: ctl ? ctl.signal : undefined});
+    if(t) clearTimeout(t);
+    return r.ok;
+  }catch(e){ return false; }
+}
+function posIsOffline(){ return !!state.posOffline; }
+let posNetChecking = null;
+function posRefreshOnline(){
+  if(posNetChecking) return posNetChecking;
+  posNetChecking = (async ()=>{
+    const navOff = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+    const off = navOff ? !(await posProbeOnline()) : false;
+    const changed = state.posOffline !== off;
+    state.posOffline = off;
+    if(changed){ try{ render(); }catch(e){} }
+    if(!off){ setTimeout(()=>{ try{ trySyncOfflineQueue(); }catch(e){} }, 0); }
+    return off;
+  })().finally(()=>{ posNetChecking = null; });
+  return posNetChecking;
+}
 const POS_OFFLINE_QUEUE_KEY = 'cdlp_pos_offline_queue';
 function loadOfflineQueue(){
   try{ return JSON.parse(localStorage.getItem(POS_OFFLINE_QUEUE_KEY)||'[]'); }catch(e){ return []; }
@@ -2956,7 +2986,7 @@ function queueOfflineSale(saleData){
 }
 let posSyncingOffline = false;
 async function trySyncOfflineQueue(){
-  if(posSyncingOffline || typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine) return;
+  if(posSyncingOffline || posIsOffline()) return;
   let queue = loadOfflineQueue();
   if(!queue.length) return;
   posSyncingOffline = true;
@@ -2992,9 +3022,10 @@ async function trySyncOfflineQueue(){
   if(queue.length===0) showToast('Ventas pendientes sincronizadas ✓');
   render();
 }
-window.addEventListener('online', ()=>{ state.posOffline=false; render(); trySyncOfflineQueue(); });
-window.addEventListener('offline', ()=>{ state.posOffline=true; render(); });
-setInterval(()=>{ if(!(typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine)) trySyncOfflineQueue(); }, 20000);
+window.addEventListener('online', ()=>{ posRefreshOnline(); });
+window.addEventListener('offline', ()=>{ posRefreshOnline(); });
+setInterval(()=>{ posRefreshOnline(); }, 20000);
+setTimeout(()=>{ posRefreshOnline(); }, 0);
 /* ============== RESERVA TRANSACCIONAL DE STOCK AL COBRAR ==============
    Antes el stock se leía una sola vez al abrir el POS y se descontaba con una escritura simple
    al cobrar, basada en esa copia en memoria. Si dos ventas ocurrían al mismo tiempo en distintos
@@ -3140,7 +3171,7 @@ async function ensureQuickCustomer(){
   const phone = digits.slice(-10);
   const ix = findIndexByPhonePOS(phone);
   const payload = {name:(ix && ix.n) || ('Cliente '+phone.slice(-4)), phone, email:'', address:'', city:'', state:'', country:'', notes:'Creado desde el cobro en el Punto de Venta', createdAt:new Date().toISOString(), source:'pos-rapido'};
-  const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  const offline = posIsOffline();
   if(offline){ state.activeCustomer = {id:null, ...payload}; return; }
   try{
     const ref = await db.collection('customers').add(payload);
@@ -3173,7 +3204,7 @@ async function chargeSale(){
     if(state.manualDiscount.type==='coupon') manualDiscountPayload.code = state.manualDiscount.coupon.code;
     else manualDiscountPayload.value = state.manualDiscount.value;
   }
-  const isOffline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  const isOffline = await posRefreshOnline();
   const couponCode = state.manualDiscount && state.manualDiscount.type==='coupon' ? state.manualDiscount.coupon.code : null;
   const saleFields = {
     date: new Date().toISOString(),
@@ -3624,8 +3655,9 @@ const POS_CAT_KEY = 'cdlp_pos_catalog_v1';
 function posSlim(p){ const c = {...p}; delete c.desc; delete c.images; delete c.longDesc; return c; }
 function posMarkApprox(p){ p._cat = true; (p.variants||[]).forEach(v=>{ if(v && !v.stockByCenter) v._approx = true; }); return p; }
 async function posLoadProducts(){
-  const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
-  if(!offline){
+  // Antes, si el navegador decía "sin conexión" (algunos lo dicen aunque sí hay internet) no se
+  // descargaba el catálogo y el POS se quedaba con una lista vieja. Ahora siempre se intenta.
+  {
     try{
       const r = await fetch('catalogo.json', {cache:'no-cache'});
       if(r.ok){
@@ -3660,7 +3692,7 @@ async function posLoadProducts(){
       }
     }catch(e){ console.warn('catalogo.json no disponible, se usa Firebase', e); }
   }
-  if(offline){
+  {
     try{ const c = JSON.parse(localStorage.getItem(POS_CAT_KEY)||'null'); if(c && Array.isArray(c.products) && c.products.length) return {products:c.products, source:'local', generatedAt:c.generatedAt}; }catch(e){}
   }
   const snap = await db.collection('products').get();
@@ -3669,7 +3701,7 @@ async function posLoadProducts(){
 }
 // Lee de Firebase solo los productos indicados (y los componentes si es kit). 1 lectura por producto.
 async function posEnsureFresh(ids, maxAgeMs){
-  const offline = typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine;
+  const offline = posIsOffline();
   if(offline) return false;
   maxAgeMs = maxAgeMs==null ? 60000 : maxAgeMs;
   const want = new Set();
@@ -4804,7 +4836,7 @@ function renderLayawayScreen(){
 /* ---- Crear un apartado desde el carrito ---- */
 function lyOpenForm(){
   if(cartCount()===0){ showToast('Agrega los productos al carrito primero'); return; }
-  if(typeof navigator!=='undefined' && 'onLine' in navigator && !navigator.onLine){ showToast('Apartar necesita conexión a internet'); return; }
+  if(posIsOffline()){ showToast('Apartar necesita conexión a internet'); return; }
   const total = saleTotal(), c = state.activeCustomer || {};
   const min = Math.min(total, Math.ceil(total*lyMinPct()/100));
   state.lyForm = {name:c.name||'', phone:c.phone||state.quickPhone||'', phone2:'', refName:'', refPhone:'', address:c.address||'', idNote:'', dueDate:lyAddDays(lyDays()), initial:String(min), method:'Efectivo', notes:state.saleNotes||'', min, total};
