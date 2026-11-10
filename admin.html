@@ -15298,7 +15298,8 @@ function renderOperativoSubpanel(){
     <div class="form-field"><label>Envío local: ciudad y costo (se suma al total en la tienda cuando la clienta elige su ciudad)</label>
       <div style="display:flex;gap:8px;"><input id="set-ship-city" style="flex:2;" value="${escHtml(s.localShippingCity||'Cd. Guzmán')}" placeholder="Cd. Guzmán" oninput="state.settings.localShippingCity=this.value"><input id="set-ship-cost" style="flex:1;" type="number" inputmode="numeric" min="0" value="${s.localShippingCost!=null&&s.localShippingCost!==''?s.localShippingCost:35}" oninput="state.settings.localShippingCost=this.value"></div>
     </div>
-    <div class="form-field"><label>Aviso de costo de envío (se muestra en la ficha del producto y el carrito)</label><input id="set-shipping-note" value="${s.shippingNote||''}" placeholder="El envío se confirma por WhatsApp, normalmente $35 pesos en Cd. Guzmán." oninput="state.settings.shippingNote=this.value"></div>
+    <input id="set-shipping-note" type="hidden" value="${escHtml(s.shippingNote||'')}">
+    <div class="note-box" style="margin:-4px 0 12px;">En la ficha del producto y el carrito la tienda dice: <b>"$${s.localShippingCost!=null&&s.localShippingCost!==''?s.localShippingCost:35} MXN fijo en ${escHtml(s.localShippingCity||'Cd. Guzmán')}. A otras ciudades te lo cotizamos por WhatsApp."</b> Se arma solo con la ciudad y el costo de arriba.</div>
     <div class="form-field">
       <label>Avisos a Slack</label>
       <div class="note-box" style="margin-top:6px;">Cada pedido nuevo de la tienda y cada venta del Punto de Venta llegan a Slack con un retraso de unos 5 minutos (los manda una GitHub Action, ya no el navegador, para que el webhook no sea público). El webhook se guarda como secreto <strong>SLACK_WEBHOOK_URL</strong> en GitHub → Settings → Secrets and variables → Actions. En cuanto exista, el webhook que estaba aquí se borra solo de la configuración pública.</div>

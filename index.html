@@ -2705,7 +2705,7 @@ function renderProductDetailDrawer(){
         ${!isKioskMode() ? `
         <div class="detail-assure">
           <div class="assure-row"><span class="ic">${icon('package',20)}</span><span><b>Empaque discreto:</b> sin logotipos ni nada que indique el contenido.</span></div>
-          <div class="assure-row"><span class="ic">${icon('truck',20)}</span><span><b>Envío:</b> ${state.settings.shippingNote || DEFAULT_SETTINGS.shippingNote}</span></div>
+          <div class="assure-row"><span class="ic">${icon('truck',20)}</span><span><b>Envío:</b> ${shippingText()}</span></div>
           <div class="assure-row"><span class="ic">${icon('banknote',20)}</span><span><b>Pago contra entrega</b> al recibir tu pedido.</span></div>
         </div>` : ''}
         ${renderRelatedBlock(p)}
@@ -3098,8 +3098,42 @@ function renderSearchSuggest(){
 }
 
 /* ============== PRODUCTOS RELACIONADOS ("Va muy bien con…") ============== */
+/* Antes se armaba solo por etiquetas "Para quién" y popularidad, y a un masturbador le salían bóxers.
+   Ahora cada tipo de producto tiene "huecos" de complemento (lo que de verdad se usa junto): para un
+   juguete, un lubricante adecuado, el limpiador y condones; para un plug, lubricante anal; para
+   lencería, antifaz/esposas y velas o aceites… De cada hueco sale el mejor producto con existencia
+   (primero los que se venden más y cuestan menos que el producto: se agregan "de pasada"). Las
+   promociones de venta cruzada que tú armes siguen saliendo primero. */
+const REL_SLOTS = {
+  anal:          [{cats:['Lubricantes'], any:['anal','desensibiliz'], avoid:['garganta']}, {any:['limpiador']}, {any:['condon']}, {cats:['Plugs'], any:['plug','dilatador']}],
+  Masturbadores: [{cats:['Lubricantes'], any:['base agua','lubricante'], avoid:['anal','desensibiliz','retard','garganta','comestible']}, {any:['limpiador']}, {cats:['Lubricantes'], any:['retard'], avoid:['anal']}, {any:['anillo']}],
+  Dildos:        [{cats:['Lubricantes'], any:['base agua','lubricante'], avoid:['anal','desensibiliz','retard','garganta']}, {any:['limpiador']}, {any:['condon']}, {cats:['Juguetes'], any:['bala','vibrador'], avoid:['anal']}],
+  Juguetes:      [{cats:['Lubricantes'], any:['base agua','lubricante'], avoid:['anal','desensibiliz','retard','garganta']}, {any:['limpiador']}, {any:['condon']}, {cats:['Comestibles','Complementos'], any:['aceite','vela']}],
+  Plugs:         [{cats:['Lubricantes'], any:['anal','desensibiliz'], avoid:['garganta']}, {any:['limpiador']}, {any:['condon']}, {cats:['Plugs']}],
+  condon:        [{cats:['Lubricantes'], any:['base agua','lubricante'], avoid:['anal','desensibiliz','retard','garganta','condon']}, {any:['condon']}, {any:['anillo']}, {cats:['Juegos']}],
+  Lubricantes:   [{cats:['Juguetes'], any:['bala','vibrador','anillo']}, {any:['condon']}, {cats:['Juegos','Comestibles']}, {cats:['Juguetes','Dildos']}],
+  'Ropa femenina': [{cats:['Sadomasoquismo'], any:['antifaz','esposa','venda']}, {cats:['Complementos','Comestibles'], any:['vela','aceite','petalo']}, {cats:['Juegos']}, {cats:['Ropa femenina']}],
+  'Ropa masculina': [{cats:['Ropa masculina']}, {cats:['Ropa masculina']}, {any:['anillo']}, {cats:['Lubricantes'], avoid:['anal','desensibiliz','garganta']}],
+  Sadomasoquismo:  [{cats:['Sadomasoquismo']}, {cats:['Complementos','Comestibles'], any:['vela','aceite']}, {cats:['Ropa femenina']}, {cats:['Juegos']}],
+  Comestibles:     [{cats:['Juegos']}, {cats:['Comestibles']}, {cats:['Complementos','Comestibles'], any:['aceite','vela']}, {any:['condon']}],
+  Complementos:    [{cats:['Juegos','Comestibles']}, {cats:['Lubricantes'], avoid:['anal','desensibiliz','garganta']}, {cats:['Juguetes']}, {cats:['Complementos']}],
+  Juegos:          [{cats:['Comestibles']}, {cats:['Complementos'], any:['vela','aceite']}, {cats:['Juegos']}, {any:['condon']}],
+};
+function relSlotsFor(p){
+  const name = searchClean(p.name), cats = productCats(p);
+  if(/condon|preservativo/.test(name)) return REL_SLOTS.condon;
+  if(/\banal\b|\bplug\b|dilatador/.test(name) || cats.includes('Plugs')) return REL_SLOTS.anal;
+  for(const c of ['Masturbadores','Dildos','Plugs','Ropa femenina','Ropa masculina','Sadomasoquismo','Lubricantes','Comestibles','Juegos','Complementos','Juguetes']) if(cats.includes(c)) return REL_SLOTS[c];
+  return null;
+}
+function relMatches(x, slot){
+  const nm = searchClean(x.name);
+  if(slot.cats && !productCats(x).some(c=>slot.cats.includes(c))) return false;
+  if(slot.any && !slot.any.some(w=>nm.includes(w))) return false;
+  if(slot.avoid && slot.avoid.some(w=>nm.includes(w))) return false;
+  return true;
+}
 function relatedProducts(p, n){
-  const myNeeds = new Set(p.needs||[]), myCats = new Set(productCats(p));
   const partners = [];
   activePromotions().forEach(promo=>{
     if(promo.type==='cross_sell' && refParse(promo.triggerProductId).pid===p.id){
@@ -3107,18 +3141,21 @@ function relatedProducts(p, n){
       if(q && q.stock>0) partners.push(q);
     }
   });
-  const pop = new Set(popularProducts(12).map(x=>x.id));
-  const scored = dailyShuffledProducts()
-    .filter(x=>x.id!==p.id && x.stock>0 && !x.isMysteryBox)
-    .map((x,i)=>{
-      const shared = (x.needs||[]).filter(k=>myNeeds.has(k)).length;
-      const sameCat = productCats(x).some(c=>myCats.has(c));
-      let sc = shared*3 + (sameCat ? 1 : 2) + (shared>0 && !sameCat ? 3 : 0) + (pop.has(x.id) ? 2 : 0);
-      return {x, sc, i};
-    })
-    .sort((a,b)=> b.sc-a.sc || a.i-b.i);
+  const pop = popularProducts(40).map(x=>x.id);
+  const popRank = id=>{ const i = pop.indexOf(id); return i<0 ? 99 : i; };
+  const pool = dailyShuffledProducts().filter(x=>x.id!==p.id && x.stock>0 && !x.isMysteryBox && !productCats(x).includes('Tarjetas de regalo'));
+  const myPrice = searchPriceOf(p) || 0;
+  const rank = arr => arr.map((x,i)=>({x, i, sc: popRank(x.id) + (myPrice && searchPriceOf(x) > myPrice ? 30 : 0)})).sort((a,b)=>a.sc-b.sc||a.i-b.i).map(o=>o.x);
   const out = [...partners];
-  for(const s of scored){ if(out.length>=n) break; if(!out.some(o=>o.id===s.x.id)) out.push(s.x); }
+  const add = x=>{ if(x && out.length<n && !out.some(o=>o.id===x.id)) out.push(x); };
+  const slots = relSlotsFor(p);
+  if(slots) slots.forEach(slot=> add(rank(pool.filter(x=>relMatches(x, slot) && !out.some(o=>o.id===x.id)))[0]));
+  // Si faltan, lo de antes: comparte "Para quién", de preferencia de otra categoría y popular.
+  if(out.length<n){
+    const myNeeds = new Set(p.needs||[]), myCats = new Set(productCats(p));
+    pool.map((x,i)=>{ const shared=(x.needs||[]).filter(k=>myNeeds.has(k)).length; const same=productCats(x).some(c=>myCats.has(c)); return {x,i,sc:shared*3+(same?1:2)+(popRank(x.id)<12?2:0)}; })
+      .sort((a,b)=>b.sc-a.sc||a.i-b.i).forEach(o=>add(o.x));
+  }
   return out.slice(0, n);
 }
 function renderRelatedBlock(p){
@@ -4369,7 +4406,7 @@ function renderCartDrawer(){
       ` : ''}
     </div>
     <div class="drawer-foot">
-      ${state.settings.shippingNote ? `<div class="ship-badge">${icon('truck',15)} <span>${state.settings.shippingNote}</span></div>` : ''}
+      <div class="ship-badge">${icon('truck',15)} <span>${shippingText()}</span></div>
       ${cartSavings()>0 ? `<div class="save-row">${icon('check',14)} Ahorras ${money(cartSavings())} en este pedido</div>` : ''}
       <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
       <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="proceedToCheckout()">Continuar pedido ${icon('chevron-right',17)}</button>
@@ -4401,6 +4438,10 @@ function renderCheckoutSummary(){
 /* U-03: zona de entrega. El envío local se suma al total que ve la clienta y va en el mensaje de
    WhatsApp y en la dirección del pedido; el total guardado del pedido sigue siendo el de productos. */
 function localShippingCost(){ const v = state.settings.localShippingCost; if(v===undefined||v===null||v==='') return 35; const n = Number(v); return n>=0 ? n : 35; }
+// Un solo texto de envío en ficha, carrito y pedido, sacado del costo y la ciudad de Configuración,
+// para que nunca diga dos cosas distintas (antes la ficha decía "se confirma por WhatsApp,
+// normalmente $35" y el formulario cobraba $35 fijo).
+function shippingText(){ return `${money(localShippingCost())} fijo en ${escHtml(localShippingCity())}. A otras ciudades te lo cotizamos por WhatsApp.`; }
 function localShippingCity(){ return state.settings.localShippingCity || 'Cd. Guzmán'; }
 /* Dirección en partes (calle y número · colonia · ciudad). Se guarda en el pedido como UNA línea
    en orden natural — "Av. Juárez 120, Col. Centro, Cd. Guzmán" — sin corchetes ni costo de envío,
