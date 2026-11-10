@@ -67,6 +67,8 @@ await t('anónimo crea pedido con total negativo', setDoc(doc(anon,'orders/b3'),
 await t('anónimo crea pedido con campo extra stockDeducted', setDoc(doc(anon,'orders/b4'), {...order, stockDeducted:true}), false);
 await t('anónimo crea pedido sin productos', setDoc(doc(anon,'orders/b5'), {...order, items:[]}), false);
 await t('anónimo lee pedidos', getDoc(doc(anon,'orders/o1')), false);
+await t('cajero manda nota de almacén', addDoc(collection(cajero,'storeMessages'),{date:'2026-11-09T00:00:00Z',name:'Enrique',phone:'',type:'almacen',message:'Sobre "X": no está en su lugar',status:'nuevo'}), true);
+await t('anónimo manda nota de almacén', addDoc(collection(anon,'storeMessages'),{date:'x',name:'a',phone:'',type:'almacen',message:'x',status:'nuevo'}), false);
 await t('anónimo manda mensaje con campo extra', addDoc(collection(anon,'storeMessages'),{date:'x',name:'a',phone:'1',type:'queja',message:'x',status:'nuevo',extra:1}), false);
 await t('anónimo manda mensaje de 900 KB', addDoc(collection(anon,'storeMessages'),{date:'x',name:'a',phone:'1',type:'queja',message:'x'.repeat(900000),status:'nuevo'}), false);
 await t('anónimo registra visita con campos inventados', addDoc(collection(anon,'visits'),{date:'x',source:'y',basura:'z'}), false);

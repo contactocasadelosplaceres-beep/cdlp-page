@@ -123,7 +123,7 @@
   .hero-btn-outline{text-decoration:none;min-height:44px;padding:0 20px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1.5px solid var(--primary);color:var(--primary);background:transparent;font-size:14px;font-weight:600;}
   .hero-btn-primary:active{transform:scale(0.97);}
   .hero-btn-ghost{background:var(--surface-soft);color:var(--primary-deep);padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;}
-  .hero-btn-wa{color:var(--navy);min-height:44px;padding:0 6px;font-size:13.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;}
+  .hero-btn-wa{background:none;border:0;cursor:pointer;font-family:inherit;color:var(--navy);min-height:44px;padding:0 6px;font-size:13.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;}
   .load-more-btn{background:linear-gradient(135deg,var(--rose),#a92c50);color:#fff;padding:15px 30px;border-radius:999px;font-size:15px;font-weight:800;box-shadow:0 14px 28px -12px rgba(188,53,92,0.55);display:inline-flex;align-items:center;gap:9px;transition:transform .12s ease, box-shadow .12s ease;animation:loadMorePulse 2.6s ease-in-out infinite;}
   .load-more-btn:active{transform:scale(0.96);}
   .load-more-btn .lm-chev{display:inline-flex;animation:loadMoreChev 1.4s ease-in-out infinite;}
@@ -211,6 +211,9 @@
   .empty-state{padding:50px 20px;text-align:center;color:var(--ink-soft);}
 
   /* ===== FIRST-TIME BAND ===== */
+  .similar-note{margin:-4px 0 14px;font-size:13px;color:var(--ink-soft);line-height:1.45;}
+  .nr-wa{margin-top:18px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
+  .nr-wa a{color:var(--ink-soft);font-weight:700;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;}
   .first-band{margin:34px 20px 6px;border-radius:20px;background:var(--surface);border:1.5px solid var(--primary);padding:24px 22px;color:var(--ink);display:flex;flex-direction:column;align-items:flex-start;}
   .first-band h3{font-size:19px;font-weight:800;max-width:340px;color:var(--primary);}
   .first-band p{margin-top:8px;font-size:13.5px;line-height:1.55;max-width:380px;color:var(--ink-soft);}
@@ -676,7 +679,7 @@
   .card{background:#FFFFFF;border:1px solid #EAEAEA;border-radius:12px;padding:10px;justify-content:space-between;}
   .card-image-wrap{border-radius:8px;}
   .card-body{padding:10px 0 0;gap:3px;}
-  .badge-row{top:6px;left:6px;right:40px;gap:4px;}
+  .badge-row{top:auto;bottom:6px;left:6px;right:6px;gap:4px;}   /* abajo de la foto: ya no chocan con el corazón */
   .badge-off{background:#F6A030;color:#000000;font-weight:800;font-size:10px;border-radius:4px;padding:2px 6px;letter-spacing:0;}
   .wishlist-fab{top:6px;right:6px;width:26px;height:26px;background:rgba(255,255,255,0.9);box-shadow:0 2px 4px rgba(0,0,0,0.1);}
   .wishlist-fab svg{width:14px;height:14px;}
@@ -1525,14 +1528,29 @@ function isCouponEligible(p, coupon, v){
 function cartHasCouponEligibleItem(coupon){
   return Object.keys(state.cart).some(key=>{ const {p,v}=parseCartKey(key); return p && isCouponEligible(p, coupon, v); });
 }
+// Las fechas de inicio ("2026-11-09") empiezan a las 12:00 am hora local. new Date("2026-11-09")
+// las leía como medianoche UTC, o sea las 6:00 pm del día anterior en México.
+function dayStart(d){ return /^\d{4}-\d{2}-\d{2}$/.test(String(d||'')) ? new Date(d+'T00:00:00') : new Date(d); }
 async function applyCouponCode(){
   const code = (state.couponInput||'').trim().toUpperCase();
   state.couponError = '';
   if(!code){ return; }
-  const coupon = (state.settings.coupons||[]).find(c=>c.code===code);
+  let coupon = (state.settings.coupons||[]).find(c=>c.code===code);
+  // Si la tienda lleva rato abierta, puede tener la lista de cupones de antes de que se publicara
+  // uno nuevo: antes de decir "no válido" se vuelve a bajar catalogo.json (no gasta lecturas).
+  if((!coupon || !coupon.active) && Date.now() - (state.couponRefreshAt||0) > 60000){
+    state.couponRefreshAt = Date.now();
+    try{
+      const fresh = await loadCatalogFile();
+      const fs = fresh.settings||{};
+      if(Array.isArray(fs.coupons)) state.settings.coupons = fs.coupons;
+      if(Array.isArray(fs.promotions)) state.settings.promotions = fs.promotions;
+      coupon = (state.settings.coupons||[]).find(c=>c.code===code);
+    }catch(e){ /* sin conexión: se queda con lo que había */ }
+  }
   if(!coupon || !coupon.active){ state.couponError = 'Código no válido'; render(); return; }
   const now = new Date();
-  if(coupon.startDate && now < new Date(coupon.startDate)){ state.couponError = 'Este cupón todavía no está vigente'; render(); return; }
+  if(coupon.startDate && now < dayStart(coupon.startDate)){ state.couponError = 'Este cupón todavía no está vigente'; render(); return; }
   if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ state.couponError = 'Este cupón ya venció'; render(); return; }
   if(!cartHasCouponEligibleItem(coupon)){ state.couponError = 'Este cupón no aplica a los productos de tu carrito'; render(); return; }
   if(coupon.maxUses>0){
@@ -1585,9 +1603,18 @@ async function recordCouponUse(code, phone){
   try{ const ref = await couponClaimRef(code, phone); if(ref) await ref.set({date:new Date().toISOString()}); }catch(e){ /* ya existía: mismo teléfono */ }
 }
 function removeCoupon(){ state.appliedCoupon=null; state.couponError=''; render(); }
+// El cupón NO se suma a una promoción: se compara el precio con cupón (sobre el precio normal) con
+// el precio que ya trae promociones/oferta/precio promocional, y la clienta paga el más bajo.
+// Todo se redondea al peso más cercano para que no haya centavos al pagar en efectivo.
 function couponDiscountedPrice(p, price, v){
   if(!state.appliedCoupon || !isCouponEligible(p, state.appliedCoupon, v)) return price;
-  return Math.round(price*(1-state.appliedCoupon.discountPercent/100)*100)/100;
+  const withCoupon = Math.round(listPriceOf(p, v||soleVariant(p))*(1-state.appliedCoupon.discountPercent/100));
+  return Math.min(price, withCoupon);
+}
+// ¿El cupón le mejora el precio a algo del carrito? (si todo ya tiene una promoción mejor, se avisa)
+function couponImprovesCart(){
+  if(!state.appliedCoupon) return false;
+  return Object.keys(state.cart).some(key=>{ const {p,v}=parseCartKey(key); if(!p) return false; const pr = variantUnitPrice(p, v); return couponDiscountedPrice(p, pr, v) < pr; });
 }
 
 /* ============== PROMOCIONES AUTOMÁTICAS ============== */
@@ -1595,7 +1622,7 @@ function activePromotions(){
   const now = new Date();
   return (state.settings.promotions||[]).filter(promo=>{
     if(!promo.active) return false;
-    if(promo.startDate && now < new Date(promo.startDate)) return false;
+    if(promo.startDate && now < dayStart(promo.startDate)) return false;
     if(promo.endDate && now > new Date(promo.endDate+'T23:59:59')) return false;
     return true;
   });
@@ -1647,7 +1674,7 @@ function automaticDiscountedPrice(p, v){
       if(candidate < best) best = candidate;
     }
   });
-  return best;
+  return Math.round(best);
 }
 // "Lleva X y paga Y": junta las unidades elegibles de todo el carrito, y hace gratis
 // las más baratas de cada grupo completo de X unidades.
@@ -2837,7 +2864,7 @@ function queryVariants(full){
   });
   return out.slice(0, 8);
 }
-function searchProducts(q, pool){
+function searchProductsStrict(q, pool){
   const full = searchClean(q);
   const tokens = full.split(' ').filter(Boolean);
   const list = pool || state.products;
@@ -2855,6 +2882,82 @@ function searchProducts(q, pool){
   });
   out.sort((a,b)=> b.sc-a.sc || a.i-b.i);
   return out.map(x=>x.p);
+}
+
+/* ---- Búsqueda con intención ----
+   Las clientas escriben como hablan: "masturbador para hombres baratos", "dildo grande". Antes el
+   buscador exigía que TODAS las palabras salieran en el producto y "baratos" o "grande" dejaban la
+   búsqueda en cero. Ahora:
+   - las palabras de relleno ("para", "de", "quiero"…) no cuentan;
+   - "barato / económico" no filtra: ordena del más barato al más caro;
+   - "hombre / mujer / pareja" usan las etiquetas "Para quién" del producto (o su nombre);
+   - si aun así no hay coincidencia exacta, se muestran productos parecidos (los que coinciden con
+     más palabras) en vez de una pantalla vacía. Esa lista viene marcada con ._similar. */
+const SEARCH_STOP = new Set(['para','de','del','la','el','los','las','un','una','unos','unas','con','sin','y','o','que','mi','mis','en','por','algo','quiero','busco','buscando','me','a','al','su','sus','tu','tus','muy','mas','tipo','bueno','buena','buenos','buenas']);
+const SEARCH_CHEAP = new Set(['barato','barata','baratos','baratas','economico','economica','economicos','economicas','accesible','accesibles','oferta','ofertas']);
+const SEARCH_SOFT = {grande:['grande','largo','grueso','xl'], grandes:['grande','largo','grueso','xl'], chico:['chico','mini','pequeno','corto'], chica:['chico','mini','pequeno','corto'], chicos:['chico','mini','pequeno'], chicas:['chico','mini','pequeno'], pequeno:['pequeno','chico','mini'], pequena:['pequeno','chico','mini'], mediano:['mediano'], mediana:['mediano']};
+const SEARCH_AUDIENCE = [
+  {need:'para-el', words:['hombre','hombres','caballero','caballeros','masculino','masculinos','varon','chavo'], text:['hombre','masculin','pene','varon']},
+  {need:'para-ella', words:['mujer','mujeres','dama','damas','femenino','femeninos','femenina','chava'], text:['mujer','femenin','dama']},
+  {need:'compartir-pareja', alt:'para-pareja', words:['pareja','parejas'], text:['pareja']},
+];
+function searchIntent(q){
+  const toks = searchClean(q).split(' ').filter(Boolean);
+  const out = {core:[], soft:[], cheap:false, audience:null};
+  toks.forEach(t=>{
+    if(SEARCH_CHEAP.has(t)) { out.cheap = true; return; }
+    const aud = SEARCH_AUDIENCE.find(a=>a.words.includes(t));
+    if(aud){ out.audience = aud; return; }
+    if(SEARCH_SOFT[t]) { out.soft.push(...SEARCH_SOFT[t]); return; }
+    if(SEARCH_STOP.has(t)) return;
+    out.core.push(t);
+  });
+  return out;
+}
+function searchAudienceOk(p, aud){
+  if(!aud) return true;
+  const n = p.needs||[];
+  if(n.includes(aud.need) || (aud.alt && n.includes(aud.alt))) return true;
+  const e = productSearchEntry(p);
+  return aud.text.some(w=>e.name.includes(w) || e.cats.includes(w));
+}
+function searchPriceOf(p){ try{ return productDisplayPrice(p).price; }catch(e){ return p.price||0; } }
+function searchProducts(q, pool){
+  const list = pool || state.products;
+  const it = searchIntent(q);
+  // Sin intención especial: igual que siempre.
+  if(!it.cheap && !it.audience && !it.soft.length && it.core.join(' ')===searchClean(q)) return searchProductsStrict(q, list);
+  // Lo que quedó de la búsqueda (sin relleno). Si solo escribió "barato" o "para hombre", se busca en todo.
+  const coreQ = it.core.join(' ');
+  if(!coreQ && !it.cheap && !it.audience) return searchProductsStrict(q, list);
+  let res = coreQ ? searchProductsStrict(coreQ, list) : list.slice();
+  if(it.audience){ const f = res.filter(p=>searchAudienceOk(p, it.audience)); if(f.length) res = f; }
+  if(it.soft.length && res.length){
+    // "grande", "chico"…: suben los que lo dicen, pero no excluyen a los demás.
+    const hit = p=>{ const e = productSearchEntry(p); return it.soft.some(w=>e.name.includes(w)); };
+    res = res.filter(hit).concat(res.filter(p=>!hit(p)));
+  }
+  if(it.cheap) res = res.map((p,i)=>({p,i,pr:searchPriceOf(p)})).sort((a,b)=>a.pr-b.pr||a.i-b.i).map(x=>x.p);
+  return res;
+}
+// Productos parecidos cuando no hay coincidencia exacta: cuentan las palabras que sí coinciden
+// (cada una por separado, con la misma tolerancia a faltas de ortografía) y salen primero los que
+// coinciden con más. Solo palabras de 4 letras o más, para no traer medio catálogo por "de" o "en".
+function searchSimilar(q, pool){
+  const list = pool || state.products;
+  const it = searchIntent(q);
+  const toks = it.core.filter(t=>t.length>=4);
+  if(!toks.length) return [];
+  const out = [];
+  list.forEach((p,i)=>{
+    let n = 0, sc = 0;
+    toks.forEach(t=>{ const x = productSearchScore(p, [t], t); if(x>=0){ n++; sc += x; } });
+    if(n) out.push({p, n, sc: sc + (searchAudienceOk(p, it.audience) && it.audience ? 2 : 0), i});
+  });
+  out.sort((a,b)=> b.n-a.n || b.sc-a.sc || a.i-b.i);
+  let res = out.map(x=>x.p).slice(0, 24);
+  if(it.cheap) res = res.map((p,i)=>({p,i,pr:searchPriceOf(p)})).sort((a,b)=>a.pr-b.pr||a.i-b.i).map(x=>x.p);
+  return res;
 }
 
 /* ============== "AHORRAS $X" ==============
@@ -3323,18 +3426,16 @@ function renderQuizDrawer(){
   const r = quizResults(), {items, exact, note} = r;
   const shown = Math.min(items.length, state.quizShown||6);
   const summary = quizSummaryText();
-  const wa = `Hola, hice el quiz de la tienda${summary?` (${summary})`:''} y me gustaría que me ayuden a elegir.`;
   return `${head}
     <div class="drawer-body">
       <h3 class="quiz-q" style="margin-bottom:4px;">Te recomendamos</h3>
       ${summary ? `<div class="quiz-sum">${summary}</div>` : ''}
       ${note ? `<div class="note-box" style="margin:10px 0;">${note}</div>` : ''}
       ${exact>6 ? `<div class="quiz-sum">Mostrando ${shown} de ${exact} que coinciden con lo que elegiste, las mejores primero.</div>` : ''}
-      ${items.length ? `<div class="rel-grid">${items.slice(0,shown).map(p=>renderMiniCard(p,{close:'quizOpen', tags:quizTags(p,r)})).join('')}</div>` : `<div class="empty-state">Por ahora no encontramos productos con existencia para esa combinación. Escríbenos y te ayudamos.</div>`}
+      ${items.length ? `<div class="rel-grid">${items.slice(0,shown).map(p=>renderMiniCard(p,{close:'quizOpen', tags:quizTags(p,r)})).join('')}</div>` : `<div class="empty-state">Por ahora no encontramos productos con existencia para esa combinación. Prueba cambiando una respuesta o mira todo el catálogo.</div>`}
       ${items.length>shown ? `<button class="btn-outline" style="width:100%;margin-top:12px;" onclick="quizMore()">Mostrar otros ${Math.min(6,items.length-shown)}</button>` : ''}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
         <button class="btn-primary" onclick="applyQuizToCatalog()">Ver todos en el catálogo</button>
-        ${state.settings.whatsapp ? `<a class="hero-btn-outline" style="width:100%;text-decoration:none;gap:8px;" href="${waLink(wa)}" target="_blank" rel="noopener">${icon('whatsapp',17)} Pedir asesoría por WhatsApp</a>` : ''}
         <button class="btn-tertiary" onclick="openQuiz()">Hacer el quiz de nuevo</button>
       </div>
     </div>`;
@@ -3363,9 +3464,6 @@ function renderHeader(){
         <button class="icon-btn" onclick="openProfile()" aria-label="Mi perfil">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="${loadCustomerProfile()?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
-        <a class="icon-btn hdr-wa" href="${waLink('Hola, tengo una pregunta.')}" target="_blank" aria-label="WhatsApp">
-          <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
-        </a>
         <button class="icon-btn" onclick="state.wishlistOpen=true;render()" aria-label="Mis favoritos" style="position:relative;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="${loadWishlist().length?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
           ${loadWishlist().length>0?`<span class="cart-count">${loadWishlist().length}</span>`:''}
@@ -3399,7 +3497,7 @@ function renderHeroSection(){
         <div class="hero-actions">
           <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Explorar catálogo</button>
           <button class="hero-btn-outline" onclick="goToFeatured()">Ver más vendidos</button>
-          <a class="hero-btn-wa" href="${waLink('Hola, quiero conocer más de su catálogo.')}" target="_blank" rel="noopener">${icon('whatsapp',18)} Hablar por WhatsApp</a>
+          <button class="hero-btn-wa" onclick="openQuiz()">✦ Encuentra tu producto ideal</button>
         </div>
       </div>
     </div>
@@ -3456,8 +3554,8 @@ function renderFirstTimeSection(){
   return `
   <div class="first-band">
     <h3>¿Es tu primera compra?</h3>
-    <p>No necesitas saber por dónde empezar. Cuéntanos qué buscas y te ayudamos a encontrar opciones sencillas y fáciles de elegir.</p>
-    <a class="hero-btn-outline" href="${waLink('Es mi primera compra, ¿me pueden ayudar a elegir?')}" target="_blank" rel="noopener">${icon('whatsapp',17)} Pedir ayuda para empezar</a>
+    <p>No necesitas saber por dónde empezar. Responde unas preguntas rápidas y te mostramos opciones sencillas, pensadas para ti.</p>
+    <button class="hero-btn-outline" onclick="openQuiz()">✦ Hacer el quiz (1 minuto)</button>
   </div>`;
 }
 
@@ -3619,7 +3717,8 @@ function renderGridSection(){
   let filtered = dailyShuffledProducts();
   let heading = 'Catálogo completo';
   let showClearBtn = false;
-  let emptyMsg = `No encontramos productos que coincidan. Prueba con otra búsqueda o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
+  let similarMode = false;
+  let emptyMsg = `No encontramos productos que coincidan. Prueba con otra búsqueda o <a style="color:var(--primary);font-weight:700;cursor:pointer;" onclick="openQuiz()">haz el quiz y encuentra tu producto ideal</a>.`;
   if(state.activeBestSellers){
     const manualIds = featuredRefsValid();
     const idsList = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);
@@ -3628,18 +3727,24 @@ function renderGridSection(){
     showClearBtn = true;
     emptyMsg = `Todavía no tenemos suficientes ventas para armar esta lista. Mientras tanto, <a style="color:var(--primary);font-weight:700;" onclick="goToCatalog('Todos')">conoce el catálogo completo</a>.`;
   } else if(state.searchQuery.trim()){
-    filtered = searchProducts(state.searchQuery, filtered);
+    const pool = filtered;
+    filtered = searchProducts(state.searchQuery, pool);
     heading = `Resultados para "${escHtml(state.searchQuery.trim())}"`;
+    if(!filtered.length){
+      // Sin coincidencia exacta: en vez de una pantalla vacía, lo más parecido.
+      filtered = searchSimilar(state.searchQuery, pool);
+      if(filtered.length){ similarMode = true; heading = `Te puede interesar`; }
+    }
   } else if(state.activeNeed){
     const need = (state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===state.activeNeed);
     filtered = filtered.filter(p=>(p.needs||[]).includes(state.activeNeed));
     if(state.activeCat && state.activeCat!=='Todos') filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
     heading = (need ? need.label : 'Catálogo completo') + (state.activeCat && state.activeCat!=='Todos' ? ' · '+state.activeCat : '');
-    emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
+    emptyMsg = `Aún no hemos elegido productos para esta opción. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;cursor:pointer;" onclick="openQuiz()">haz el quiz y encuentra tu producto ideal</a>.`;
   } else if(state.activeCat!=="Todos"){
     filtered = filtered.filter(p=>productCats(p).includes(state.activeCat));
     heading = state.activeCat;
-    emptyMsg = `Todavía no tenemos productos en esta categoría. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;" href="${waLink('Hola, no encontré lo que buscaba en el catálogo, ¿me ayudan?')}" target="_blank">escríbenos por WhatsApp</a>.`;
+    emptyMsg = `Todavía no tenemos productos en esta categoría. Prueba otra categoría o <a style="color:var(--primary);font-weight:700;cursor:pointer;" onclick="openQuiz()">haz el quiz y encuentra tu producto ideal</a>.`;
     // Si Ale fijó un orden a mano para esta categoría (Productos → filtrar por categoría →
     // flechas), esos productos van primero en ese orden; el resto sigue mezclándose entre sí
     // como siempre (sort estable: los sin orden mantienen su posición relativa del shuffle).
@@ -3665,6 +3770,7 @@ function renderGridSection(){
       <h2 class="section-heading" style="margin-bottom:0;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</h2>
       ${showClearBtn ? `<button class="btn-tertiary" onclick="goToCatalog('Todos')">${icon('grid',14)} Ver catálogo completo</button>` : ''}
     </div>
+    ${similarMode ? `<div class="similar-note">No encontramos exactamente "${escHtml(state.searchQuery.trim())}", pero esto se parece a lo que buscas.</div>` : ''}
     ${renderPriceFilterRow()}
     ${filtered.length
       ? `<div class="grid">${shown.map(p=>renderProductCard(p, state.activeBestSellers)).join('')}</div>
@@ -3673,7 +3779,8 @@ function renderGridSection(){
              <button class="load-more-btn" onclick="loadMoreProducts()">Ver más productos <span class="lm-chev">${icon('chevron-down',16)}</span></button>
              <span class="load-more-count">${filtered.length - shown.length} producto${filtered.length-shown.length===1?'':'s'} más te esperan</span>
            </div>
-         ` : ''}`
+         ` : ''}
+         ${similarMode && !hasMore ? renderSearchAskWa(state.searchQuery.trim()) : ''}`
       : (state.searchQuery.trim() && !state.activeBestSellers ? renderNoResults(state.searchQuery.trim()) : `<div class="empty-state">${emptyMsg}</div>`)}
   </div>`;
 }
@@ -3681,17 +3788,22 @@ function renderGridSection(){
 // (con lo que buscó ya escrito en el mensaje) y se sugieren las categorías para seguir mirando.
 function renderNoResults(q){
   const cats = visibleCategories().slice(0,8);
-  const safe = q.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const msg = `Hola, estoy buscando "${q}" y no lo encontré en el catálogo, ¿me ayudan a conseguirlo?`;
+  const safe = escHtml(q);
   return `<div class="noresults">
     <span class="nr-ico">${icon('search',24)}</span>
     <h3>No encontramos "${safe}"</h3>
-    <p>Prueba con otra palabra o dinos qué buscas: lo conseguimos para ti, con total discreción.</p>
-    ${state.settings.whatsapp ? `<a class="hero-btn-primary" href="${waLink(msg)}" target="_blank" rel="noopener">${icon('whatsapp',18)} Pídelo por WhatsApp</a>` : ''}
-    <button class="quiz-cta" style="margin-top:12px;" onclick="state.searchQuery='';openQuiz()">✦ O encuentra tu producto ideal</button>
-    ${cats.length ? `<div class="nr-sub">O sigue explorando por categoría</div>
+    <p>Prueba con una sola palabra (por ejemplo "masturbador" o "lubricante"), mira por categoría o deja que te recomendemos.</p>
+    <button class="quiz-cta" style="margin-top:4px;" onclick="state.searchQuery='';openQuiz()">✦ Encuentra tu producto ideal en 1 minuto</button>
+    ${cats.length ? `<div class="nr-sub">Explora por categoría</div>
     <div class="nr-chips">${cats.map(c=>`<button class="cat-chip" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>` : ''}
+    ${renderSearchAskWa(q)}
   </div>`;
+}
+// Para lo que de verdad no está en el catálogo: un enlace chico al final, con lo que buscó ya escrito.
+function renderSearchAskWa(q){
+  if(!state.settings.whatsapp) return '';
+  const msg = `Hola, estoy buscando "${q}" y no lo encontré en el catálogo, ¿me ayudan a conseguirlo?`;
+  return `<div class="nr-wa">¿No está lo que buscas? <a href="${waLink(msg)}" target="_blank" rel="noopener">${icon('whatsapp',14)} Pídelo por WhatsApp</a></div>`;
 }
 const GRID_PAGE_SIZE = 20;
 function loadMoreProducts(){ state.gridRenderLimit += GRID_PAGE_SIZE; render(); }
@@ -4214,6 +4326,7 @@ function renderCartDrawer(){
               <span>${icon('check')} ${state.appliedCoupon.code} (${state.appliedCoupon.discountPercent}% OFF)</span>
               <a style="color:var(--rose);font-weight:700;cursor:pointer;" onclick="removeCoupon()">Quitar</a>
             </div>
+            ${couponImprovesCart() ? '' : `<div style="font-size:12px;color:var(--ink-soft);margin-top:-4px;margin-bottom:8px;">Tus productos ya tienen una promoción mejor que este cupón, así que se queda la promoción. Los descuentos no se suman.</div>`}
           ` : (state.couponOpen||state.couponError) ? `
             <div style="display:flex;gap:6px;">
               <input id="coupon-input" value="${state.couponInput}" oninput="state.couponInput=this.value" placeholder="Ej. VERANO20" style="flex:1;text-transform:uppercase;" onkeydown="if(event.key==='Enter')applyCouponCode()">

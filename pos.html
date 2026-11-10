@@ -2719,13 +2719,16 @@ function saveManualDiscount(){
   state.manualDiscount = {type: state.discountType, value, reason};
   state.discountModalOpen = false; render();
 }
+// Las fechas de inicio ("2026-11-09") empiezan a las 12:00 am hora local. new Date("2026-11-09")
+// las leía como medianoche UTC, o sea las 6:00 pm del día anterior en México.
+function dayStart(d){ return /^\d{4}-\d{2}-\d{2}$/.test(String(d||'')) ? new Date(d+'T00:00:00') : new Date(d); }
 async function applyCouponDiscount(){
   const code = state.discountCouponInput.trim().toUpperCase();
   if(!code){ state.discountError='Ingresa un código de cupón'; render(); return; }
   const coupon = (state.coupons||[]).find(c=>c.code===code);
   if(!coupon || !coupon.active){ state.discountError='Código no válido'; render(); return; }
   const now = new Date();
-  if(coupon.startDate && now < new Date(coupon.startDate)){ state.discountError='Este cupón todavía no está vigente'; render(); return; }
+  if(coupon.startDate && now < dayStart(coupon.startDate)){ state.discountError='Este cupón todavía no está vigente'; render(); return; }
   if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ state.discountError='Este cupón ya venció'; render(); return; }
   if(couponEligibleCartEntries(coupon).length===0){ state.discountError='Este cupón no aplica a los productos de la venta actual'; render(); return; }
   if(coupon.maxUses>0){

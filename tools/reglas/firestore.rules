@@ -294,7 +294,9 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasOnly(['date','name','phone','type','message','status'])
                     && request.resource.data.name is string && request.resource.data.name.size() <= 120
                     && request.resource.data.phone is string && request.resource.data.phone.size() <= 30
-                    && request.resource.data.type in ['pregunta','sugerencia','queja','otro']
+                    && (request.resource.data.type in ['pregunta','sugerencia','queja','otro']
+                        // Notas de Almacén del punto de venta: solo el equipo con sesión.
+                        || (request.resource.data.type == 'almacen' && isTeam()))
                     && request.resource.data.message is string && request.resource.data.message.size() <= 2000
                     && request.resource.data.date is string && request.resource.data.date.size() <= 40
                     && request.resource.data.status == 'nuevo';

@@ -133,6 +133,14 @@ async function main() {
   const pubRef = db.collection('settings').doc('publish');
   const pubSnap = await pubRef.get();                        // 1 lectura
   const pub = pubSnap.exists ? pubSnap.data() : {};
+  // Revisión automática (cron de GitHub): se anota la hora para que el panel pueda decir más o menos
+  // cuándo saldrán los cambios pendientes. GitHub no respeta el "cada 20 min": en la práctica corre
+  // cada 3 a 10 horas, así que el panel calcula el intervalo con las últimas revisiones reales.
+  if (env.GITHUB_EVENT_NAME === 'schedule' && !DRY_RUN) {
+    const now = new Date().toISOString();
+    const checks = (Array.isArray(pub.autoChecks) ? pub.autoChecks : []).concat(now).slice(-8);
+    await pubRef.set({ autoCheckedAt: now, autoChecks: checks }, { merge: true }).catch(e => console.warn('No se pudo anotar la revisión', e.message));
+  }
   const ageH = pub.publishedAt ? (Date.now() - new Date(pub.publishedAt).getTime()) / 36e5 : Infinity;
   const requestedRaw = pub.requestedAt && (!pub.publishedAt || pub.requestedAt > pub.publishedAt);
   const requested = requestedRaw && (pub.urgent === true || ageH * 60 >= MIN_GAP_MIN);

@@ -71,6 +71,14 @@ document.addEventListener('wheel', function(e){
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
   .app{max-width:1100px;margin:0 auto;min-height:100vh;background:var(--surface);}
+  .pub-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#FFF4E0;color:#6B4200;border-bottom:1px solid #F3D9A6;padding:9px 16px;font-size:13px;line-height:1.4;}
+  .pub-bar-ok{background:#EAF3D8;color:#2F6B12;border-color:#CFE3B0;justify-content:flex-start;}
+  .pub-bar-txt{display:flex;gap:7px;align-items:flex-start;flex:1 1 260px;}
+  .pub-bar-txt svg{flex:none;margin-top:2px;}
+  .pub-bar-act{display:flex;gap:8px;align-items:center;}
+  .pub-bar-btn{background:#993477;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+  .pub-bar-btn[disabled]{opacity:.6;}
+  .pub-bar-x{background:none;border:0;color:#6B4200;font-weight:600;font-size:12.5px;cursor:pointer;text-decoration:underline;font-family:inherit;}
   .admin-top{background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;box-shadow:0 4px 16px -10px rgba(0,0,0,0.45);position:relative;z-index:25;}
   .admin-top .brand-name{font-size:16px;font-weight:700;font-family:'League Spartan',sans-serif;letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;}
   .admin-top .brand-sub{font-size:11px;color:#a9d4dc;margin-top:2px;}
@@ -1638,7 +1646,9 @@ async function syncAllNow(){
       const o = {requestedAt:new Date().toISOString(), requestedBy:(auth.currentUser&&auth.currentUser.email)||''};
       if(urgent) o.urgent = true;
       await db.collection('settings').doc('publish').set(o, {merge:true});
-      state.publishRequestedAt = o.requestedAt; return true;
+      state.publishRequestedAt = o.requestedAt; state.publishBarHidden = false;
+      try{ render(); }catch(e){}
+      return true;
     }catch(e){ console.warn('No se pudo pedir la publicación de la tienda', e && e.code); return false; }
   }
   const schedule = ()=>{ clearTimeout(timer); timer = setTimeout(()=>send(false), 20000); };
@@ -1684,6 +1694,53 @@ async function publishStoreNow(){
   else if(instant) showToast('Publicando: en 2–3 minutos se verá en la tienda');
   else { console.warn('Publicación inmediata no disponible:', why); showToast('Quedó pedida, pero no se pudo publicar al momento: saldrá en la siguiente revisión automática'); }
   loadPublishStatus(true);
+}
+/* ---- Barra "Cambios sin publicar" ----
+   Al guardar un producto, cupón, promoción o ajuste de la tienda, el cambio queda esperando: sale
+   solo en la próxima revisión automática de GitHub (que NO tiene hora fija: en la práctica corre cada
+   3 a 10 horas), cuando el punto de venta agota un producto, o al momento con "Publicar ahora".
+   La barra dice desde cuándo hay cambios esperando y más o menos cuándo saldrían solos, para que Ale
+   decida si publica ya (cuenta 1 de las 500 del mes) o espera. Cuesta 1 lectura al abrir el panel. */
+function publishEstimate(s){
+  const checks = (Array.isArray(s.autoChecks) ? s.autoChecks : []).map(x=>new Date(x).getTime()).filter(Boolean).sort((a,b)=>a-b);
+  const gaps = []; for(let i=1;i<checks.length;i++){ const g = checks[i]-checks[i-1]; if(g>10*60000) gaps.push(g); }
+  gaps.sort((a,b)=>a-b);
+  const H = 36e5;
+  // Sin historial suficiente: lo observado en noviembre de 2026 (entre 3 y 10 horas).
+  const lo = gaps.length>=3 ? gaps[Math.floor(gaps.length*0.2)] : 3*H;
+  const hi = gaps.length>=3 ? gaps[Math.min(gaps.length-1, Math.ceil(gaps.length*0.8))] : 8*H;
+  const last = s.autoCheckedAt ? new Date(s.autoCheckedAt).getTime() : 0;
+  if(!last) return null;
+  const now = Date.now();
+  const from = Math.max(now, last+lo), to = last+hi;
+  if(to <= now + 10*60000) return {any:true};
+  return {from, to};
+}
+function renderPublishBar(){
+  if(state.myPermissions) return '';                       // solo la dueña decide cuándo publicar
+  if(!state.publishStatus && !state.publishStatusLoading) setTimeout(()=>loadPublishStatus(), 0);
+  const s = state.publishStatus || {};
+  const req = [s.requestedAt, state.publishRequestedAt].filter(Boolean).sort().pop();
+  const pending = req && (!s.publishedAt || req > s.publishedAt);
+  const t = iso => new Date(iso).toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'});
+  const dayT = ms => { const d = new Date(ms), today = new Date(); const tm = d.toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'}); return d.toDateString()===today.toDateString() ? tm : (d.toDateString()===new Date(today.getTime()+864e5).toDateString() ? 'mañana '+tm : d.toLocaleDateString('es-MX',{weekday:'short'})+' '+tm); };
+  const recent = state.publishInstantAt && (Date.now() - new Date(state.publishInstantAt).getTime() < 5*60000);
+  if(recent){
+    if(!state._pubPoll){ state._pubPoll = setTimeout(()=>{ state._pubPoll = null; loadPublishStatus(true); }, 150000); }
+    return `<div class="pub-bar pub-bar-ok">${icon('refresh-cw',14)} <span><b>Publicando…</b> en 2–3 minutos se verá en la tienda.</span></div>`;
+  }
+  if(!pending || state.publishBarHidden) return '';
+  const est = publishEstimate(s);
+  const when = !est ? 'en la próxima revisión automática (no tiene hora fija)'
+    : est.any ? 'en cualquier momento: la revisión automática ya está por correr'
+    : `aprox. entre las ${dayT(est.from)} y ${dayT(est.to)}`;
+  return `<div class="pub-bar">
+    <div class="pub-bar-txt">${icon('clock',14)} <span><b>Cambios sin publicar</b> (desde las ${t(req)}) · Si no haces nada, saldrán solos ${when}</span></div>
+    <div class="pub-bar-act">
+      <button class="pub-bar-btn" onclick="publishStoreNow()" ${state.publishBusy?'disabled':''}>${state.publishBusy?'Publicando…':'Publicar ahora'}</button>
+      <button class="pub-bar-x" onclick="state.publishBarHidden=true;render()" aria-label="Ocultar aviso">Esperar</button>
+    </div>
+  </div>`;
 }
 async function loadPublishStatus(force){
   if(state.publishStatusLoading || (state.publishStatus && !force)) return;
@@ -2672,6 +2729,9 @@ async function saveOrderDiscount(id, source){
     render(); showUndo('Ajuste guardado', ()=>restoreOrderPricing(id, source, prevSnap));
   }catch(e){ console.error(e); showToast('No se pudo guardar el ajuste'); }
 }
+// Las fechas de inicio ("2026-11-09") empiezan a las 12:00 am hora local. new Date("2026-11-09")
+// las leía como medianoche UTC, o sea las 6:00 pm del día anterior en México.
+function dayStart(d){ return /^\d{4}-\d{2}-\d{2}$/.test(String(d||'')) ? new Date(d+'T00:00:00') : new Date(d); }
 async function applyOrderCoupon(id, source){
   const o = state.orders.find(x=>x.id===id); if(!o) return;
   const code = state.orderDiscountCouponInput.trim().toUpperCase();
@@ -2679,7 +2739,7 @@ async function applyOrderCoupon(id, source){
   const coupon = (state.settings.coupons||[]).find(c=>c.code===code);
   if(!coupon || !coupon.active){ showToast('Código no válido'); return; }
   const now = new Date();
-  if(coupon.startDate && now < new Date(coupon.startDate)){ showToast('Este cupón todavía no está vigente'); return; }
+  if(coupon.startDate && now < dayStart(coupon.startDate)){ showToast('Este cupón todavía no está vigente'); return; }
   if(coupon.endDate && now > new Date(coupon.endDate+'T23:59:59')){ showToast('Este cupón ya venció'); return; }
   const eligible = orderCouponEligibleItems(o, coupon);
   if(eligible.length===0){ showToast('Este cupón no aplica a los productos de este pedido'); return; }
@@ -5962,6 +6022,7 @@ function renderAdmin(){
     <div class="admin-main">
   <div class="app">
     ${renderMobileTop()}
+    ${renderPublishBar()}
     <div class="admin-top">
       <div><div class="brand-name">${state.settings.storeName}</div><div class="brand-sub">Panel de administración</div></div>
       <div class="admin-top-actions">
@@ -6150,7 +6211,7 @@ async function saveFlashSale(){
   state.settings.flashSales = list;
   await saveSettings();
   logAdminAction('oferta_relampago','promoción',name,`${percent}% · ${fmtFlashDate(f.start)} a ${fmtFlashDate(f.end)}`);
-  state.flashModal = null; showToast('Oferta relámpago guardada'); render();
+  state.flashModal = null; showToast('Oferta relámpago guardada · se verá en la tienda cuando publiques'); render();
 }
 async function toggleFlashActive(id){
   const f = flashList().find(x=>x.id===id); if(!f) return;
@@ -11912,7 +11973,7 @@ async function saveCoupon(){
   if(idx>=0) state.settings.coupons[idx] = updated;
   else state.settings.coupons.push(updated);
   await saveSettings();
-  state.couponModal=null; showToast('Cupón guardado'); render();
+  state.couponModal=null; showToast('Cupón guardado · se verá en la tienda cuando publiques'); render();
 }
 async function deleteCoupon(id){
   const before = state.settings.coupons.slice();
@@ -11937,7 +11998,7 @@ function couponUsedCount(code){ return state.couponUsage.filter(u=>u.code===code
 function couponStatusLabel(c){
   if(!c.active) return {text:'Desactivado', color:'#8a6b78'};
   const now = new Date();
-  if(c.startDate && now < new Date(c.startDate)) return {text:'Programado', color:'var(--amber)'};
+  if(c.startDate && now < dayStart(c.startDate)) return {text:'Programado', color:'var(--amber)'};
   if(c.endDate && now > new Date(c.endDate+'T23:59:59')) return {text:'Vencido', color:'#8a6b78'};
   if(c.maxUses>0 && couponUsedCount(c.code)>=c.maxUses) return {text:'Agotado', color:'#8a6b78'};
   return {text:'Activado', color:'var(--green)'};
@@ -12106,7 +12167,7 @@ async function savePromotion(){
   if(idx>=0) state.settings.promotions[idx] = updated;
   else state.settings.promotions.push(updated);
   await saveSettings();
-  state.promoModal=null; showToast('Promoción guardada'); render();
+  state.promoModal=null; showToast('Promoción guardada · se verá en la tienda cuando publiques'); render();
 }
 async function deletePromotion(id){
   if(!confirm('¿Eliminar esta promoción?')) return;

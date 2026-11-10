@@ -4,7 +4,8 @@ Allow: /
 Disallow: /admin
 Disallow: /pos
 Disallow: /api/
-Disallow: /catalogo
+Disallow: /catalogo$
+Allow: /catalogo.json
 Disallow: /tools/
 Disallow: /manifest-
 
