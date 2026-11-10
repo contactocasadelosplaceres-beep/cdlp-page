@@ -265,6 +265,19 @@
   .discretion-3 .discretion-item{flex-direction:column;text-align:center;gap:6px;font-size:12.5px;min-height:0;}
   .foot-explore{display:grid !important;grid-template-columns:1fr 1fr;column-gap:12px;}
   .foot-explore h4{grid-column:1/-1;}
+  .cats-block{padding:22px 0 2px;}
+  .cats-head{display:flex;align-items:center;justify-content:space-between;padding:0 20px;margin-bottom:10px;}
+  .cats-hint{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .cat-tiles{display:flex;gap:10px;overflow-x:auto;padding:0 20px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+  .cat-tiles::-webkit-scrollbar{display:none;}
+  .cat-tile{flex:0 0 78px;display:flex;flex-direction:column;align-items:center;gap:5px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit;color:var(--ink);}
+  .cat-tile-img{width:72px;height:72px;border-radius:18px;background:#fff;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--primary);}
+  .cat-tile-img img{width:100%;height:100%;object-fit:contain;}
+  .cat-tile-name{font-size:12px;font-weight:700;line-height:1.2;text-align:center;}
+  .cat-tile-n{font-size:11px;color:var(--ink-soft);margin-top:-3px;}
+  .cat-tile.active .cat-tile-img{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary);}
+  .cat-tile.active .cat-tile-name{color:var(--primary);}
+  @media(min-width:900px){ .cats-hint{display:none;} .cat-tiles{flex-wrap:wrap;} }
   .similar-note{margin:-4px 0 14px;font-size:13px;color:var(--ink-soft);line-height:1.45;}
   .nr-wa{margin-top:18px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
   .nr-wa a{color:var(--ink-soft);font-weight:700;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;}
@@ -3804,9 +3817,28 @@ function renderFirstTimeSection(){
 }
 
 /* ============== CATEGORIES ============== */
+// Antes eran botones de texto ("Juguetes", "Dildos"…) que se confundían con etiquetas. Ahora son
+// mosaicos con foto, nombre y cuántos productos hay, bajo un título que dice qué hacer con ellos.
+// La foto es la del producto más vendido de esa categoría (o el primero con foto), siempre la misma.
+function categoryCoverImg(cat){
+  state._catCover = state._catCover || {};
+  if(state._catCover[cat]) return state._catCover[cat];
+  const best = (state.settings.bestSellerProductIds||[]).map(id=>refResolve(id)).filter(Boolean);
+  const pick = [...best, ...state.products].find(p=>p.stock>0 && (p.images||[]).length && productCats(p).includes(cat));
+  if(!pick) return '';   // sin guardar: puede aparecer cuando termine de cargar el catálogo
+  return (state._catCover[cat] = thumbSrc(pick.images[0]));
+}
 function renderCategoriesSection(){
-  const cats = ["Todos", ...visibleCategories()];
-  return `<div class="cats">${cats.map(c=>`<button class="cat-chip ${state.activeCat===c&&!state.searchQuery&&!state.activeNeed?'active':''}" aria-pressed="${state.activeCat===c&&!state.searchQuery&&!state.activeNeed}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>`;
+  const cats = visibleCategories();
+  const allActive = state.activeCat==='Todos' && !state.searchQuery && !state.activeNeed;
+  const count = c => state.products.filter(p=>productCats(p).includes(c)).length;
+  const tile = (c, label, img, n, active) => `<button class="cat-tile ${active?'active':''}" aria-pressed="${active}" onclick="goToCatalog('${c.replace(/'/g,"\\'")}')">
+      <span class="cat-tile-img">${img ? `<img src="${img}" alt="" loading="lazy">` : icon('grid',22)}</span>
+      <span class="cat-tile-name">${label}</span><span class="cat-tile-n">${n}</span></button>`;
+  return `<div class="cats-block">
+    <div class="cats-head"><span class="needs-lbl" style="margin:0;">Explora por categoría</span><span class="cats-hint">Desliza ›</span></div>
+    <div class="cat-tiles">${tile('Todos','Todo',null,state.products.length,allActive)}${cats.map(c=>tile(c,c,categoryCoverImg(c),count(c), state.activeCat===c && !state.searchQuery && !state.activeNeed)).join('')}</div>
+  </div>`;
 }
 
 /* ============== PROMO BANNER ============== */
@@ -4905,7 +4937,7 @@ window.addEventListener('resize', adjustTopbarSpacer);
    solo agrega movimiento a las mismas filas que ya existían. Como toda la página se
    vuelve a dibujar con cada render(), esto busca los elementos en el DOM en cada cuadro
    en vez de guardar una referencia fija, así sigue funcionando después de cualquier click. */
-const AUTOSCROLL_SELECTORS = ['.needs-row', '.cats'];
+const AUTOSCROLL_SELECTORS = ['.needs-row', '.cat-tiles'];
 const autoScrollDir = {};
 const autoScrollFrac = {}; // resto (menor a 1px) que un movimiento tan lento deja pendiente entre cuadros
 const autoScrollPausedUntil = {};
