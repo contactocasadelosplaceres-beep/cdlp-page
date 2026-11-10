@@ -240,6 +240,7 @@
   .filter-scope{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin:0 0 14px;padding:9px 12px;border-radius:10px;background:var(--blush,#FBEFF3);font-size:13px;color:var(--ink);}
   .filter-scope svg{color:var(--primary);flex:none;}
   .filter-scope button{margin-left:auto;background:var(--primary);color:#fff;border:0;border-radius:999px;padding:7px 13px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;}
+  .share-cat{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1.5px solid #EAEAEA;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;color:var(--primary);cursor:pointer;font-family:inherit;}
   .similar-note{margin:-4px 0 14px;font-size:13px;color:var(--ink-soft);line-height:1.45;}
   .nr-wa{margin-top:18px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
   .nr-wa a{color:var(--ink-soft);font-weight:700;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;}
@@ -1188,6 +1189,35 @@ async function loadData(attempt){
 // enlace compartido caía en la página principal y la persona tenía que buscarlo desde cero.
 // También soporta ?categoria=NombreDeCategoria, para compartir el catálogo ya filtrado a una
 // categoría completa (ej. "todo lo de Ropa femenina") en vez de un solo producto.
+/* ============== COMPARTIR ENLACES ==============
+   Desde la app instalada no hay barra de direcciones, y al copiar el enlace salía solo
+   casaplaceres.com/catalogo. Ahora la ficha y las categorías tienen botón "Compartir": abre el menú
+   de compartir del celular (WhatsApp, Instagram, copiar…) con el enlace exacto, y en computadora
+   lo copia. El enlace siempre usa la dirección normal de la tienda, nunca /catalogo. */
+function storeBaseUrl(){ return location.origin + '/'; }
+function productShareUrl(id){ return storeBaseUrl() + '?producto=' + encodeURIComponent(id); }
+function categoryShareUrl(){
+  const u = new URL(storeBaseUrl());
+  if(state.activeCat && state.activeCat!=='Todos') u.searchParams.set('categoria', state.activeCat);
+  if(state.activeNeed) u.searchParams.set('para', state.activeNeed);
+  return u.toString();
+}
+async function shareLink(url, title, text){
+  try{
+    if(navigator.share){ await navigator.share({title, text, url}); return; }
+  }catch(e){ if(e && e.name==='AbortError') return; }
+  try{ await navigator.clipboard.writeText(url); showToast('Enlace copiado'); }
+  catch(e){ prompt('Copia este enlace:', url); }
+}
+function shareProduct(id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  shareLink(productShareUrl(id), p.name, `${p.name} — ${money(automaticDiscountedPrice(p))} en ${state.settings.storeName||'La Casa de los Placeres'}`);
+}
+function shareCategory(){
+  const need = state.activeNeed ? ((state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===state.activeNeed)||{}).label : '';
+  const name = [need, state.activeCat!=='Todos'?state.activeCat:''].filter(Boolean).join(' · ');
+  shareLink(categoryShareUrl(), name, `Mira ${name} en ${state.settings.storeName||'La Casa de los Placeres'}`);
+}
 async function openProductFromURL(){
   // Lee ?producto= / ?categoria= ANTES de que syncProductUrl() pueda tocar la dirección: el primer
   // render() de loadData() corre antes que esta función y, sin esta marca, borraba ?producto= de la
@@ -1195,12 +1225,12 @@ async function openProductFromURL(){
   state.deepLinkChecked = true;
   const params = new URLSearchParams(location.search);
   const id = params.get('producto');
-  const catParam = params.get('categoria');
-  if(catParam){
-    const url = new URL(location.href); url.searchParams.delete('categoria');
-    history.replaceState(history.state, '', url.toString());
-    const match = visibleCategories().find(c=>c.toLowerCase()===catParam.toLowerCase());
-    if(match) goToCatalog(match);
+  const catParam = params.get('categoria'), paraParam = params.get('para');
+  if(catParam || paraParam){
+    const match = catParam ? visibleCategories().find(c=>c.toLowerCase()===catParam.toLowerCase()) : null;
+    const need = paraParam ? (state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===paraParam) : null;
+    if(need){ filterByNeed(need.key); if(match){ state.activeCat = match; render(); } }
+    else if(match) goToCatalog(match);
     else showToast('Esa categoría ya no está disponible');
   }
   if(!id) return;
@@ -2679,6 +2709,7 @@ function renderProductDetailDrawer(){
   const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible';
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><div style="display:flex;gap:6px;align-items:center;">
+      ${isKioskMode() ? '' : `<button class="close-x" aria-label="Compartir producto" onclick="shareProduct('${p.id}')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>`}
       ${isKioskMode() ? '' : `
       <button class="close-x" aria-label="${isWishlisted(p.id)?'Quitar de favoritos':'Agregar a favoritos'}" aria-pressed="${isWishlisted(p.id)}" onclick="toggleWishlist('${p.id}')" style="color:var(--rose);">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="${isWishlisted(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
@@ -3950,6 +3981,7 @@ function renderGridSection(){
   <div id="catalogo" class="section-block" style="padding-top:10px;">
     <div class="section-head-row" style="margin-bottom:14px;align-items:center;">
       <h2 class="section-heading" style="margin-bottom:0;">${heading}${filtered.length ? ` <span style="color:var(--ink-soft);font-weight:600;font-size:13px;">(${filtered.length})</span>` : ''}</h2>
+      ${!isKioskMode() && !state.searchQuery.trim() && !state.activeBestSellers && ((state.activeCat && state.activeCat!=='Todos') || state.activeNeed) ? `<button class="share-cat" onclick="shareCategory()" aria-label="Compartir esta categoría"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg> Compartir</button>` : ''}
 
     </div>
     ${similarMode ? `<div class="similar-note">No encontramos exactamente "${escHtml(state.searchQuery.trim())}", pero esto se parece a lo que buscas.</div>` : ''}
@@ -4942,8 +4974,13 @@ function syncProductUrl(){
     if(!state.loaded || !state.deepLinkChecked) return;
     const u = new URL(location.href); const cur = u.searchParams.get('producto');
     const want = state.detailProductId || null;
-    if((cur||null)===want) return;
+    // La categoría y "para quién" también quedan en la dirección (?categoria=, ?para=).
+    const wantCat = (!state.searchQuery.trim() && !state.activeBestSellers && state.activeCat && state.activeCat!=='Todos') ? state.activeCat : null;
+    const wantPara = (!state.searchQuery.trim() && !state.activeBestSellers && state.activeNeed) || null;
+    if((cur||null)===want && (u.searchParams.get('categoria')||null)===wantCat && (u.searchParams.get('para')||null)===wantPara) return;
     if(want) u.searchParams.set('producto', want); else u.searchParams.delete('producto');
+    if(wantCat) u.searchParams.set('categoria', wantCat); else u.searchParams.delete('categoria');
+    if(wantPara) u.searchParams.set('para', wantPara); else u.searchParams.delete('para');
     history.replaceState(history.state, '', u.toString());
   }catch(e){}
 }
