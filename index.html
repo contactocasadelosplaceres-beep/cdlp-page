@@ -241,6 +241,30 @@
   .filter-scope svg{color:var(--primary);flex:none;}
   .filter-scope button{margin-left:auto;background:var(--primary);color:#fff;border:0;border-radius:999px;padding:7px 13px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;}
   .share-cat{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1.5px solid #EAEAEA;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;color:var(--primary);cursor:pointer;font-family:inherit;}
+  .hero-sub-desk{display:none;}
+  @media(min-width:768px){ .hero-sub-desk{display:block;} .hero-points{justify-content:center;} }
+  .hero-points{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:10px;font-size:12.5px;font-weight:600;color:var(--ink-soft);}
+  .hero-points span{display:inline-flex;align-items:center;gap:5px;}
+  .hero-points svg{color:var(--primary);}
+  .hero-actions-2{flex-direction:row !important;gap:8px !important;margin-top:16px !important;}
+  .hero-actions-2>button{flex:1;min-height:48px;margin:0;padding:0 10px;font-size:14.5px;}
+  .needs-block{padding:18px 20px 0 !important;}
+  .needs-lbl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:8px;}
+  .best-row-block{padding:22px 0 4px;}
+  .best-row-head{display:flex;align-items:center;justify-content:space-between;padding:0 20px;margin-bottom:12px;}
+  .best-row-all{background:none;border:0;color:var(--primary);font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit;}
+  .best-row{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:20px;padding:0 20px 8px;scrollbar-width:none;}
+  .best-row::-webkit-scrollbar{display:none;}
+  .best-row>*{flex:0 0 42%;max-width:190px;scroll-snap-align:start;}
+  .first-band{text-align:center;align-items:center !important;padding:22px !important;}
+  .first-band p{margin:4px 0 0;}
+  .first-band .hero-btn-primary{margin-top:14px;width:100%;max-width:340px;border:0;cursor:pointer;font-family:inherit;}
+  .discretion-band{padding:20px 18px !important;}
+  .discretion-band h3{font-size:17px !important;}
+  .discretion-3{grid-template-columns:repeat(3,1fr) !important;gap:8px !important;margin-top:14px !important;}
+  .discretion-3 .discretion-item{flex-direction:column;text-align:center;gap:6px;font-size:12.5px;min-height:0;}
+  .foot-explore{display:grid !important;grid-template-columns:1fr 1fr;column-gap:12px;}
+  .foot-explore h4{grid-column:1/-1;}
   .similar-note{margin:-4px 0 14px;font-size:13px;color:var(--ink-soft);line-height:1.45;}
   .nr-wa{margin-top:18px;font-size:12.5px;color:var(--ink-soft);text-align:center;}
   .nr-wa a{color:var(--ink-soft);font-weight:700;text-decoration:underline;display:inline-flex;align-items:center;gap:4px;}
@@ -3700,11 +3724,11 @@ function renderHeroSection(){
     <div class="hero-inner">
       <div class="hero-copy">
         <h1>${state.settings.heroTitle}</h1>
-        <p>${state.settings.heroSubtitle}</p>
-        <div class="hero-actions">
-          <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Explorar catálogo</button>
-          <button class="hero-btn-outline" onclick="goToFeatured()">Ver más vendidos</button>
-          <button class="hero-btn-wa" onclick="openQuiz()">✦ Encuentra tu producto ideal</button>
+        <p class="hero-sub-desk">${state.settings.heroSubtitle}</p>
+        <div class="hero-points"><span>${icon('truck',14)} Envío ${money(localShippingCost())} en ${escHtml(localShippingCity())}</span></div>
+        <div class="hero-actions hero-actions-2">
+          <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Ver catálogo</button>
+          <button class="hero-btn-outline" onclick="openQuiz()">✦ Ayúdame a elegir</button>
         </div>
       </div>
     </div>
@@ -3725,10 +3749,8 @@ function renderTrustBar(){
 function renderNeedsSection(){
   return `
   <div class="needs-block">
-    <h2 class="section-heading">¿Qué estás buscando?</h2>
-    <div class="section-sub" style="margin-bottom:14px;">Elige una opción y te mostramos productos pensados para eso.</div>
+    <div class="needs-lbl">¿Para quién es?</div>
     <div class="needs-row">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="need-pill ${state.activeNeed===n.key?'active':''}" aria-pressed="${state.activeNeed===n.key}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
-    <button class="quiz-cta" onclick="openQuiz()">✦ ¿No sabes por dónde empezar? Encuentra tu producto ideal</button>
   </div>`;
 }
 
@@ -3756,13 +3778,28 @@ function renderFeaturedSection(){
   </div>`;
 }
 
+/* ============== MÁS VENDIDOS EN CARRUSEL (fixed) ==============
+   Prueba social justo antes del catálogo: lo que más compra la gente, en una fila que se desliza
+   (no ocupa media pantalla como la cuadrícula). Usa los marcados a mano o la lista automática de
+   ventas reales; si no hay ninguno, no se muestra. */
+function renderBestRow(){
+  if(state.activeNeed || (state.activeCat && state.activeCat!=='Todos')) return '';
+  const manualIds = featuredRefsValid();
+  const ids = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);
+  const items = ids.map(id=>refResolve(id)).filter(p=>p && p.stock>0).slice(0,10);
+  if(items.length<3) return '';
+  return `<div class="best-row-block" id="destacados">
+    <div class="best-row-head"><h2 class="section-heading" style="margin:0;">🔥 Lo más vendido</h2><button class="best-row-all" onclick="goToFeatured()">Ver todos</button></div>
+    <div class="best-row">${items.map(p=>renderMiniCard(p,{})).join('')}</div>
+  </div>`;
+}
 /* ============== PRIMERA COMPRA (fixed) ============== */
 function renderFirstTimeSection(){
   return `
   <div class="first-band">
-    <h3>¿Es tu primera compra?</h3>
-    <p>No necesitas saber por dónde empezar. Responde unas preguntas rápidas y te mostramos opciones sencillas, pensadas para ti.</p>
-    <button class="hero-btn-outline" onclick="openQuiz()">✦ Hacer el quiz (1 minuto)</button>
+    <h3>¿No te decides?</h3>
+    <p>Te ayudamos a elegir en 1 minuto.</p>
+    <button class="hero-btn-primary" onclick="openQuiz()">✦ Encontrar mi producto ideal</button>
   </div>`;
 }
 
@@ -4089,7 +4126,9 @@ function ensurePromoCountdownTimer(){
 // ayuda a decidir una compra primero: disponibilidad y urgencia de precio) y se muestran máximo 2.
 function renderProductBadges(p, ctx){
   const candidates = [];
-  if(p.stock<=3) candidates.push({priority:1, html:`<span class="badge badge-stock">${p.stock===0?'Agotado':'Últimas piezas'}</span>`});
+  // Escasez real: "Última pieza" solo cuando queda 1 (antes "Últimas piezas" salía en más de la
+  // mitad del catálogo, con 3 o menos, y dejaba de llamar la atención).
+  if(p.stock<=1) candidates.push({priority:1, html:`<span class="badge badge-stock">${p.stock===0?'Agotado':'¡Última pieza!'}</span>`});
   const countdown = renderPromoCountdownBadge(p);
   if(countdown) candidates.push({priority:2, html:countdown});
   if(ctx.hasPromo){ const d = productDisplayPrice(p); const pct = d.was ? Math.round((1 - d.price/d.was)*100) : 0; candidates.push({priority:0, html:`<span class="badge badge-off">${pct>=1?`-${pct}%`:'Oferta'}</span>`}); }
@@ -4121,12 +4160,11 @@ function renderProductCard(p, forceBest){
           </button>`}
         </div>
         <div class="card-body">
-          <div class="card-cat">${productCats(p).join(', ')}</div>
           <h3 class="card-name"><a class="card-link" href="?producto=${p.id}" onclick="event.preventDefault()">${p.name}</a></h3>
           ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
           <div class="card-price">${priceHtml(p,12)}</div>
           ${savingsLabel(p) ? `<div class="card-save">${savingsLabel(p)}</div>` : ''}
-          ${isKioskMode() ? '' : cardAction(p,'card')+'<div class="card-trust">📦 Empaque Neutro</div>'}
+          ${isKioskMode() ? '' : cardAction(p,'card')}
         </div>
       </div>`;
 }
@@ -4174,13 +4212,11 @@ function renderDiscretionSection(){
   return `
   <div class="discretion-band">
     <div class="discretion-inner">
-      <h3>Tu privacidad es nuestra prioridad.</h3>
-      <p>Preparamos tus pedidos con discreción para que puedas comprar con total tranquilidad, de principio a fin.</p>
-      <div class="discretion-grid">
-        <div class="discretion-item"><span class="ic">${icon('package',20)}</span>Empaque discreto, sin logos visibles</div>
-        <div class="discretion-item"><span class="ic">${icon('home',20)}</span>Entrega directa a domicilio</div>
-        <div class="discretion-item"><span class="ic">${icon('message-circle',20)}</span>Atención privada por WhatsApp</div>
-        <div class="discretion-item"><span class="ic">${icon('banknote',20)}</span>Pago contra entrega</div>
+      <h3>Compra con total tranquilidad</h3>
+      <div class="discretion-grid discretion-3">
+        <div class="discretion-item"><span class="ic">${icon('package',20)}</span>Empaque sin marcas</div>
+        <div class="discretion-item"><span class="ic">${icon('banknote',20)}</span>Pagas al recibir</div>
+        <div class="discretion-item"><span class="ic">${icon('home',20)}</span>Directo a tu puerta</div>
       </div>
     </div>
   </div>`;
@@ -4209,7 +4245,7 @@ function renderFooterSection(){
         <div class="foot-brand-name">${s.storeName}</div>
         <div class="foot-tagline">${s.headerSubtitle||'Discreto · Confidencial · A domicilio'}</div>
       </div>
-      <div class="foot-col">
+      <div class="foot-col foot-explore">
         <h4>Explora</h4>
         <a href="#" onclick="event.preventDefault();goToFeatured()">Más vendidos</a>
         <a href="#" onclick="event.preventDefault();goToCatalog('Todos')">Catálogo completo</a>
@@ -4692,8 +4728,11 @@ function renderStore(){
     knownKeys.add(defSection.key);
   });
   const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
-  const after = { hero: ['flash','trust','needs'], grid: ['firsttime'], testimonials: ['discretion'] };
-  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
+  // Orden pensado para vender: promesa + 2 botones → ofertas relámpago → para quién → lo más
+  // vendido (prueba social) → categorías y catálogo → "¿no te decides?" (quiz) → confianza → pie.
+  // La franja de 3 íconos (compra segura/empaque/pago) se quitó: ya lo dicen la barra de arriba y el hero.
+  const after = { hero: ['flash','needs','bestrow'], grid: ['firsttime'], testimonials: ['discretion'] };
+  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, bestrow: renderBestRow, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
 
   const searching = state.searchQuery.trim().length>0;
   let body = '';
