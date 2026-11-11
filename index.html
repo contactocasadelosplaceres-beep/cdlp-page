@@ -1023,6 +1023,65 @@
   .foot-bottom{font-size:12px;}
   .best-row-all{white-space:nowrap;}
   @media(max-width:359px){ .announce-bar{font-size:10.5px !important;} .best-sub{font-size:11.5px;} }
+
+  /* ===== Detalle, recomendaciones y carrito (nov-2026) ===== */
+  /* Encabezado del detalle: 4 botones iguales, separados y fáciles de tocar */
+  .drawer-detail .drawer-head h2{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .drawer-detail .drawer-head>div{gap:8px !important;flex:none;}
+  .drawer-detail .drawer-head .close-x{width:40px !important;height:40px !important;margin:0 !important;}
+  @media(max-width:359px){ .drawer-detail .drawer-head h2{display:none;} .drawer-detail .drawer-head{justify-content:flex-end;} }
+  /* Foto: fondo blanco, completa */
+  .detail-main-img-wrap{background:#fff !important;}
+  .detail-main-img-wrap img,.rel-img img,.suggestion-swatch,.card-image-wrap img{transition:transform .2s ease;}
+  .rel-img{background:#fff !important;}
+  .rel-img img{width:100%;height:100%;object-fit:contain;}
+  /* Nombre completo y descripción en bloques */
+  .detail-name{overflow-wrap:anywhere;hyphens:auto;margin:2px 0 6px !important;}
+  .detail-desc-blocks{white-space:normal !important;color:#3a3a3a;font-size:14px;line-height:1.55;}
+  .detail-desc-blocks p{margin:0 0 8px;}
+  .detail-desc-blocks h4{margin:12px 0 4px;font-size:13.5px;font-weight:800;color:var(--ink);}
+  .detail-desc-blocks ul{margin:0 0 8px;padding-left:18px;}
+  .detail-desc-blocks li{margin:2px 0;}
+  .detail-desc-blocks li::marker{color:#993477;}
+  /* Disponibilidad */
+  .detail-stock.low{background:#FDEBD3 !important;color:#8A4B00 !important;}
+  .variants-flash{animation:cdlpFlash 1.2s ease;border-radius:10px;}
+  @keyframes cdlpFlash{0%,100%{box-shadow:0 0 0 0 rgba(153,52,119,0)}30%{box-shadow:0 0 0 4px rgba(153,52,119,.35)}}
+  .detail-added{display:inline-flex;align-items:center;gap:5px;color:#3F6E0A;font-weight:800;}
+  .btn-choose{opacity:1 !important;background:#fff !important;color:#993477 !important;border:2px solid #993477 !important;}
+  /* Beneficios */
+  .detail-assure{padding:2px 12px !important;margin-top:12px !important;}
+  .assure-row{padding:8px 0 !important;font-size:13px !important;gap:10px !important;align-items:center !important;}
+  .assure-row .ic{color:#0A4A5B;flex:none;display:flex;}
+  /* Completa tu compra: tarjetas iguales */
+  .rel-row .rel-card{flex:0 0 138px !important;}
+  .rel-card{height:auto;}
+  .rel-name{min-height:2.6em !important;}
+  .rel-price{color:#993477;font-weight:800;}
+  .rel-add,.rel-card .qty-step{margin-top:8px !important;}
+  /* Carrito: miniatura más grande, todo en pocas líneas */
+  .drawer .cart-item{padding:10px !important;gap:12px !important;align-items:flex-start;}
+  .drawer .cart-item-swatch{width:76px !important;height:76px !important;object-fit:contain !important;background:#fff !important;border:1px solid #EFE9ED;}
+  .cart-item-name{font-size:13.5px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .cart-item-price{font-size:12px;color:var(--ink-soft);margin:2px 0 6px;}
+  .cart-item-subtotal{font-weight:800;color:#993477;}
+  /* También te puede interesar */
+  .suggestion-imgbox{width:118px;height:118px;border-radius:12px;overflow:hidden;background:#fff;border:1px solid #EFE9ED;}
+  .suggestion-imgbox .suggestion-swatch{width:100% !important;height:100% !important;object-fit:contain !important;background:#fff !important;border-radius:0;}
+  .suggestion-price{color:#993477;font-weight:800;font-size:13px;}
+  .suggestion-add{min-height:34px;}
+  /* Resumen de importes */
+  .tot-box{margin:0 0 10px;}
+  .tot-zone{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}
+  .tot-zone button{min-height:34px;border-radius:999px;border:1.5px solid #E5DCE2;background:#fff;color:var(--ink);font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;}
+  .tot-zone button.on{background:#0A4A5B;border-color:#0A4A5B;color:#fff;}
+  .tot-line{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;color:#3a3a3a;padding:2px 0;}
+  .tot-line small{color:var(--ink-soft);font-weight:500;}
+  .tot-grand{font-size:17px;font-weight:800;color:var(--ink);border-top:1px solid #EFE9ED;margin-top:4px;padding-top:6px;}
+  .tot-grand span:last-child{color:#993477;}
+  .tot-note{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:#0A4A5B;background:#E6F2F4;border-radius:8px;padding:6px 8px;margin-top:6px;line-height:1.35;}
+  .drawer-foot .btn-primary{min-height:48px;}
+  .drawer-foot .dw-foot-note{margin-top:6px;}
 </style>
 </head>
 <body>
@@ -1917,7 +1976,11 @@ function genericCartSuggestions(){
   const sameCat = pool.filter(p=>productCats(p).some(c=>cartCats.has(c)));
   const featured = pool.filter(p=>featuredIds.includes(p.id) && !sameCat.includes(p));
   const rest = pool.filter(p=>!sameCat.includes(p) && !featured.includes(p));
-  return [...sameCat, ...featured, ...rest].slice(0,4);
+  // Primero los complementos reales de lo que ya lleva (lubricante para el juguete, limpiador…,
+  // las mismas reglas de "Completa tu compra"), sin tallas que elegir para poder agregarlos de un toque.
+  const comp = [];
+  Object.keys(state.cart).forEach(key=>{ const {p}=parseCartKey(key); if(p) relatedProducts(p, 6).forEach(x=>{ if(!inCartIds.has(x.id) && !promoSuggestedIds.has(x.id) && x.stock>0 && !(x.variantGroups||[]).length && !comp.includes(x)) comp.push(x); }); });
+  const seen = new Set(); return [...comp, ...sameCat, ...featured, ...rest].filter(x=>!seen.has(x.id) && seen.add(x.id)).slice(0,4);
 }
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
 function vImage(p, v){ return (v && typeof v.imageIdx==='number' && p && p.images && p.images[v.imageIdx]) || null; }
@@ -1979,6 +2042,10 @@ function proceedToCheckout(){
   if(state.settings.storePaused){ showToast(state.settings.storePausedMessage || 'La tienda está en pausa temporalmente.'); return; }
   // U-02: ya no hay pantalla intermedia "¿Se te olvidó algo?"; las sugerencias van en una fila
   // compacta dentro del formulario de entrega (renderCheckoutAddOns).
+  // Antes de avanzar, el carrito se ajusta a las existencias de hoy (lo agotado se quita y lo que
+  // pasa del stock se recorta, con aviso) y no se avanza con el carrito vacío.
+  if(typeof clampCartToStock==='function') clampCartToStock();
+  if(!cartCount()){ showToast('Tu carrito está vacío'); render(); return; }
   state.cartOpen=false; state.checkoutOpen=true; state.checkoutOpenedAt=Date.now(); trackEvent('checkout_start',{cartTotal: cartTotal()}); render();
 }
 function addReminderProductToCart(id, vid){
@@ -2819,7 +2886,9 @@ function renderProductDetailDrawer(){
   const listShown = matchedVariant ? listPriceOf(p, matchedVariant) : p.price;
   const needsSelection = hasVariants && !matchedVariant;
   const stockStateClass = stockLeft<=0 ? 'out' : stockLeft<=3 ? 'low' : 'ok';
-  const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft<=3 ? `Últimas piezas (${stockLeft})` : 'Disponible';
+  // Existencias reales: "Última pieza" solo con 1; con 2 a 5 se dice cuántas quedan.
+  const stockStateClass2 = stockLeft<=0 ? 'out' : stockLeft===1 ? 'low' : 'ok';
+  const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft===1 ? '¡Última pieza!' : stockLeft<=5 ? `Disponible · quedan ${stockLeft}` : 'Disponible';
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><div style="display:flex;gap:6px;align-items:center;">
       ${isKioskMode() ? '' : `<button class="close-x" aria-label="Compartir producto" onclick="shareProduct('${p.id}')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>`}
@@ -2836,7 +2905,7 @@ function renderProductDetailDrawer(){
     <div class="drawer-body" style="padding:0;">
       <div class="detail-main-img-wrap" ontouchstart="detailTouchStart(event)" ontouchend="detailTouchEnd(event)">
         ${images
-          ? `<img src="${images[idx]}" alt="${p.name}" onclick="openZoom()"><span class="zoom-badge" aria-hidden="true">${icon('search',16)}</span>`
+          ? `<img src="${images[idx]}" alt="${p.name}" onclick="openZoom()" onload="fitImg(this)"><span class="zoom-badge" aria-hidden="true">${icon('search',16)}</span>`
           : `<div class="card-image-fallback" style="background:${catColor(p.cat)};height:100%;">${catIcon(p.cat)}</div>`}
         ${images && images.length>1 ? `
           <button class="detail-nav-btn prev" onclick="detailPrevImage()" aria-label="Imagen anterior">‹</button>
@@ -2854,9 +2923,9 @@ function renderProductDetailDrawer(){
         <div class="detail-price">${needsSelection && productDisplayPrice(p).from ? `<span style="font-size:13px;font-weight:600;color:var(--ink-soft);margin-right:4px;">Desde</span>${money(productDisplayPrice(p).price)}` : (price<listShown ? `<s style="color:var(--ink-soft);font-weight:600;font-size:14px;margin-right:6px;">${money(listShown)}</s>${money(price)}` : money(price))}</div>
         ${matchedVariant && (matchedVariant.priceOverride>0 || matchedVariant.promoPriceOverride>0) ? (price<listShown ? `<div class="detail-save">Ahorras ${moneyShort(listShown-price)} (−${Math.round((listShown-price)/listShown*100)}%)</div>` : '') : (savingsLabel(p) ? `<div class="detail-save">${savingsLabel(p)}</div>` : '')}
         ${renderPromoCountdownBadge(p) ? `<div style="margin-bottom:8px;">${renderPromoCountdownBadge(p)}</div>` : ''}
-        ${!needsSelection ? `<div class="detail-stock ${stockStateClass}">${stockLabel}</div>` : ''}
+        ${!needsSelection ? `<div class="detail-stock ${stockStateClass2}">${stockLabel}</div>` : ''}
         ${hasVariants ? `
-          <div style="margin:10px 0;">
+          <div style="margin:10px 0;" id="detail-variants" class="${state.flashVariants?'variants-flash':''}">
             ${p.variantGroups.map((g,gi)=>`
               <div style="margin-bottom:10px;">
                 <div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;">${escHtml(g.name)}</div>
@@ -2868,7 +2937,7 @@ function renderProductDetailDrawer(){
           </div>
         ` : ''}
         ${p.isMysteryBox ? `<div class="note-box" style="margin-bottom:10px;">🎁 Es una caja sorpresa: incluye ${p.mysteryItemCount||3} producto(s) elegidos al azar${p.mysteryCategory&&p.mysteryCategory!=='Cualquiera'?` de ${p.mysteryCategory}`:''}. No se elige el contenido, ¡es parte de la sorpresa!</div>` : ''}
-        ${p.desc ? `<div class="detail-desc">${formatDesc(p.desc)}</div>` : ''}
+        ${p.desc ? `<div class="detail-desc detail-desc-blocks">${descHtml(p.desc)}</div>` : ''}
         ${!isKioskMode() ? `
         <div class="detail-assure">
           <div class="assure-row"><span class="ic">${icon('package',20)}</span><span><b>Empaque discreto:</b> sin logotipos ni nada que indique el contenido.</span></div>
@@ -2882,24 +2951,55 @@ function renderProductDetailDrawer(){
       ${isKioskMode() ? `
         <div class="note-box" style="margin:0;">Pregunta por este producto en el mostrador.</div>
       ` : needsSelection ? `
-        <button class="btn-primary btn-choose" disabled>Elige ${p.variantGroups.map(g=>g.name).join(' y ')}</button>
+        <button class="btn-primary btn-choose" onclick="goToVariants()">Elige ${p.variantGroups.map(g=>escHtml(g.name).toLowerCase()).join(' y ')} para agregar</button>
       ` : qty>0 ? `
         <div class="detail-qty-row">
           <button class="qty-btn" onclick="changeQty('${key}',-1)">−</button>
-          <div class="qty-val">${qty} en tu carrito</div>
+          <div class="qty-val" role="status">${state.detailAddedAt && Date.now()-state.detailAddedAt<2500 ? `<span class="detail-added">${icon('check',14)} Agregado</span>` : `${qty} en tu carrito`}</div>
           <button class="qty-btn" ${stockLeft<=qty?'disabled style="opacity:.4"':''} onclick="changeQty('${key}',1)">+</button>
         </div>
-        <button class="btn-primary" onclick="closeProductDetail();state.cartOpen=true;render()">Ver carrito y pagar · ${money(cartTotal())} ${icon('chevron-right',17)}</button>
+        <button class="btn-primary" onclick="closeProductDetail();state.cartOpen=true;render()">Ir al carrito (${cartCount()}) ${icon('chevron-right',17)}</button>
       ` : `
-        <button class="btn-primary" ${stockLeft<=0?'disabled style="opacity:.5"':''} onclick="addToCart('${p.id}'${matchedVariant?`,'${matchedVariant.id}'`:''})">${stockLeft<=0?'Agotado':'Agregar al carrito · '+money(price)}</button>
+        <button class="btn-primary" ${stockLeft<=0?'disabled style="opacity:.5"':''} onclick="detailAdd('${p.id}'${matchedVariant?`,'${matchedVariant.id}'`:''})">${stockLeft<=0?'Agotado':'Agregar al carrito · '+money(price)}</button>
         ${stockLeft<=0 ? renderNotifyMeBlock(p, matchedVariant) : ''}
       `}
     </div>`;
 }
 
+/* Fotos con mucho margen blanco: al cargar, se mide (en una miniatura de 48 px) dónde está el
+   producto dentro de la foto y, si ocupa poco del cuadro, se acerca entre 5 % y 30 % alrededor del
+   propio producto, sin recortarlo nunca (el acercamiento se limita para que quepa completo). No se
+   modifica el archivo original; con fotos de otro dominio o si algo falla, se deja como está. */
+const __fitCache = new Map();
+function fitImg(img){
+  try{
+    img.style.transform = ''; img.style.transformOrigin = '';
+    const src = img.currentSrc || img.src; if(!src || !img.naturalWidth) return;
+    let f = __fitCache.get(src);
+    if(f===undefined){
+      const N = 48, c = document.createElement('canvas'); c.width = c.height = N;
+      const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(img, 0, 0, N, N);
+      const d = x.getImageData(0, 0, N, N).data; let x0=N, y0=N, x1=-1, y1=-1;
+      for(let yy=0; yy<N; yy++) for(let xx=0; xx<N; xx++){ const i=(yy*N+xx)*4; if(d[i+3]>20 && Math.min(d[i],d[i+1],d[i+2])<232){ if(xx<x0)x0=xx; if(yy<y0)y0=yy; if(xx>x1)x1=xx; if(yy>y1)y1=yy; } }
+      f = x1<0 ? null : {x0:x0/N, y0:y0/N, x1:(x1+1)/N, y1:(y1+1)/N};
+      __fitCache.set(src, f);
+    }
+    if(!f) return;
+    const W = img.clientWidth, H = img.clientHeight; if(!W || !H) return;
+    const k = Math.min(W/img.naturalWidth, H/img.naturalHeight), rw = img.naturalWidth*k, rh = img.naturalHeight*k;
+    const ox = (W-rw)/2, oy = (H-rh)/2;
+    const cx0 = ox+f.x0*rw, cx1 = ox+f.x1*rw, cy0 = oy+f.y0*rh, cy1 = oy+f.y1*rh, cw = cx1-cx0, ch = cy1-cy0;
+    const fill = Math.max(cw/W, ch/H); if(fill >= 0.82) return;
+    const mx = (cx0+cx1)/2, my = (cy0+cy1)/2, pad = 0.96;
+    const sc = Math.min(1.3, 0.92/fill, pad*2*mx/cw, pad*2*(W-mx)/cw, pad*2*my/ch, pad*2*(H-my)/ch);
+    if(sc < 1.05) return;
+    img.style.transformOrigin = `${mx.toFixed(1)}px ${my.toFixed(1)}px`;
+    img.style.transform = `scale(${sc.toFixed(3)})`;
+  }catch(e){ /* foto de otro dominio: se queda igual */ }
+}
 function productImageHtml(p){
   if(p.images && p.images.length){
-    return `<img src="${thumbSrc(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" width="400" height="400">`;
+    return `<img src="${thumbSrc(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" width="400" height="400" onload="fitImg(this)">`;
   }
   return `<div class="card-image-fallback" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>`;
 }
@@ -3219,7 +3319,7 @@ function renderMiniCard(p, opts){
   opts = opts || {};
   const hasVariants = p.variantGroups && p.variantGroups.length;
   const img = p.images && p.images.length
-    ? `<img src="${thumbSrc(p.images[0])}" alt="" loading="lazy">`
+    ? `<img src="${thumbSrc(p.images[0])}" alt="" loading="lazy" onload="fitImg(this)">`
     : `<div class="rel-fallback" style="background:${catColor(p.cat)}">${catIcon(p.cat)}</div>`;
   const pre = opts.close ? `state.${opts.close}=false;` : '';
   const open = opts.fromDetail ? `openRelated('${p.id}')` : `openProductDetail('${p.id}'${p._fv?`,'${p._fv}'`:''})`;
@@ -3328,7 +3428,7 @@ function relatedProducts(p, n){
 function renderRelatedBlock(p){
   const rel = relatedProducts(p, 4);
   if(!rel.length) return '';
-  return `<div class="rel-block"><h3 class="rel-title">Va muy bien con…</h3><div class="rel-row">${rel.map(x=>renderMiniCard(x,{fromDetail:true})).join('')}</div></div>`;
+  return `<div class="rel-block"><h3 class="rel-title">Completa tu compra</h3><div class="rel-row">${rel.map(x=>renderMiniCard(x,{fromDetail:true})).join('')}</div></div>`;
 }
 function openRelated(id){
   openProductDetail(id);
@@ -3658,6 +3758,36 @@ function applyQuizToCatalog(){
 }
 // Descripciones que llegaron de Tiendanube en un solo renglón ("Medidas: - Largo 18 cm - Vagina…"):
 // cada " - " pasa a su propio renglón con viñeta para que se lean fácil.
+/* Descripción en bloques: renglones que terminan en ":" (Características:, Medidas:, Modo de uso:,
+   Contenido:, Incluye:…) se vuelven subtítulos y los que empiezan con "-", "•" o "*" van en lista.
+   Solo se reacomoda el texto que ya existe; no se agrega ninguna característica. */
+function descHtml(d){
+  const t = formatDesc(d).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+  const out = []; let list = null;
+  t.split(/\n/).forEach(raw=>{
+    let l = raw.trim(); if(!l){ list = null; return; }
+    // "Medidas: • Largo 18 cm" → subtítulo + primer elemento
+    const m = l.match(/^([^•:]{2,40}):\s*•\s*(.+)$/);
+    if(m){ out.push(`<h4>${escHtml(m[1])}</h4>`); list = [escHtml(m[2])]; out.push(list); return; }
+    if(/^•\s*/.test(l)){ if(!list){ list = []; out.push(list); } list.push(escHtml(l.replace(/^•\s*/,''))); return; }
+    list = null;
+    if(l.length<=40 && /:$/.test(l)) out.push(`<h4>${escHtml(l.replace(/:$/,''))}</h4>`);
+    else { const lab = l.match(/^([A-ZÁÉÍÓÚÑ¿][^:.!?]{2,28}):\s+(.+)$/); out.push(lab ? `<p><b>${escHtml(lab[1])}:</b> ${escHtml(lab[2])}</p>` : `<p>${escHtml(l)}</p>`); }
+  });
+  return out.map(x=>Array.isArray(x) ? `<ul>${x.map(i=>`<li>${i}</li>`).join('')}</ul>` : x).join('');
+}
+function goToVariants(){
+  const el = document.getElementById('detail-variants'); if(!el) return;
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  state.flashVariants = true; render();
+  setTimeout(()=>{ state.flashVariants = false; render(); }, 1300);
+  showToast('Elige una opción para agregarlo');
+}
+function detailAdd(id, vid){
+  const before = cartCount();
+  try{ addToCart(id, vid); }catch(e){ showToast('No se pudo agregar. Intenta de nuevo.'); return; }
+  if(cartCount() > before){ state.detailAddedAt = Date.now(); render(); setTimeout(()=>{ if(state.detailProductId) render(); }, 2600); }
+}
 function formatDesc(d){
   let t = String(d||'');
   if(!t.includes('\n') && (t.match(/\s-\s/g)||[]).length>=2) t = t.replace(/\s+-\s+/g, '\n• ');
@@ -4740,10 +4870,10 @@ function renderCartDrawer(){
           <div class="cart-suggestions-row">
             ${genericCartSuggestions().map(p=>`
               <div class="suggestion-card" onclick="openProductDetail('${p.id}')">
-                ${p.images&&p.images.length ? `<img class="suggestion-swatch" src="${thumbSrc(p.images[0])}" alt="">` : `<div class="suggestion-swatch" style="background:${catColor(p.cat)}"></div>`}
+                <div class="suggestion-imgbox">${p.images&&p.images.length ? `<img class="suggestion-swatch" src="${thumbSrc(p.images[0])}" alt="" onload="fitImg(this)">` : `<div class="suggestion-swatch" style="background:${catColor(p.cat)}"></div>`}</div>
                 <div class="suggestion-name">${p.name}</div>
                 <div class="suggestion-price">${money(automaticDiscountedPrice(p))}</div>
-                <button class="suggestion-add" onclick="event.stopPropagation();addToCart('${p.id}')">+ Agregar</button>
+                ${(p.variantGroups||[]).length ? `<button class="suggestion-add" onclick="event.stopPropagation();openProductDetail('${p.id}')">Elegir</button>` : `<button class="suggestion-add" onclick="event.stopPropagation();addToCart('${p.id}')">+ Agregar</button>`}
               </div>
             `).join('')}
           </div>
@@ -4769,9 +4899,8 @@ function renderCartDrawer(){
       ` : ''}
     </div>
     <div class="drawer-foot">
-      <div class="ship-badge">${icon('truck',15)} <span>${shippingText()}</span></div>
       ${cartSavings()>0 ? `<div class="save-row">${icon('check',14)} Ahorras ${money(cartSavings())} en este pedido</div>` : ''}
-      <div class="total-row"><span>Total</span><span>${money(cartTotal())}</span></div>
+      ${entries.length ? renderTotals(true) : ''}
       <button class="btn-primary" ${entries.length===0?'disabled style="opacity:.5"':''} onclick="proceedToCheckout()">Continuar pedido ${icon('chevron-right',17)}</button>
       ${entries.length ? `<div class="dw-foot-note">${icon('lock',12)} Pagas al recibir · Empaque sin marcas</div>` : ''}
     </div>`;
@@ -4825,6 +4954,26 @@ function composeAddress(d, zone){
 function ckZone(){ const d = ckDraft(); return d.zone==='foraneo' ? 'foraneo' : 'local'; }
 function setCkZone(z){ const d = ckDraft(); ['name','phone','street','colonia','city','notes'].forEach(k=>{ const el = document.getElementById('ck-'+k); if(el) d[k] = el.value; }); d.zone = z; state.ckDraft = d; if(state.ckErrors) delete state.ckErrors.city; render(); }
 function checkoutGrandTotal(){ return cartTotal() + (ckZone()==='local' ? localShippingCost() : 0); }
+/* Resumen de importes. Antes el carrito decía "envío $35" junto a "Total $160" (el total no
+   incluía el envío) y confundía. Ahora:
+   - Cd. Guzmán:   Subtotal $160 · Envío $35 · Total $195
+   - Otra ciudad:  Subtotal $160 · Envío Por cotizar · Total de productos $160 + aviso
+   Usa la tarifa y la ciudad de Configuración. El pedido se sigue guardando con el total de
+   PRODUCTOS (el envío se le paga al repartidor, como hasta ahora) y el mensaje de WhatsApp ya
+   incluye la línea de envío, así que lo que se le informa a la clienta es lo que paga. */
+function renderTotals(withZone){
+  const local = ckZone()==='local', sub = cartTotal();
+  return `<div class="tot-box">
+    ${withZone ? `<div class="tot-zone" role="radiogroup" aria-label="¿Dónde lo entregamos?">
+      <button role="radio" aria-checked="${local}" class="${local?'on':''}" onclick="setCkZone('local')">${escHtml(localShippingCity())}</button>
+      <button role="radio" aria-checked="${!local}" class="${!local?'on':''}" onclick="setCkZone('foraneo')">Otra ciudad</button>
+    </div>` : ''}
+    <div class="tot-line"><span>Subtotal</span><span>${money(sub)}</span></div>
+    <div class="tot-line"><span>Envío${local?` <small>(${escHtml(localShippingCity())})</small>`:''}</span><span>${local ? money(localShippingCost()) : 'Por cotizar'}</span></div>
+    <div class="tot-line tot-grand"><span>${local ? 'Total' : 'Total de productos'}</span><span>${money(local ? sub + localShippingCost() : sub)}</span></div>
+    ${local ? '' : `<div class="tot-note">${icon('message-circle',13)} Te confirmamos el costo de envío por WhatsApp antes de completar tu pedido.</div>`}
+  </div>`;
+}
 function renderCheckoutDrawer(){
   const p = ckDraft();
   return `
@@ -4863,9 +5012,8 @@ function renderCheckoutDrawer(){
       </label>${ckErrHtml('terms')}` : ''}
     </div>
     <div class="drawer-foot">
-      ${ckZone()==='local' ? `<div class="total-row" style="font-weight:600;font-size:14px;"><span>Productos ${money(cartTotal())} + envío ${money(localShippingCost())}</span></div>` : ''}
-      <div class="total-row"><span>Total a pagar${ckZone()==='local'?'':' <small style="font-weight:600;">(+ envío por cotizar)</small>'}</span><span>${money(checkoutGrandTotal())}</span></div>
-      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':icon('lock',16)+' Finalizar pedido ('+money(checkoutGrandTotal())+')'}</button>
+      ${renderTotals(false)}
+      <button class="btn-primary" ${state.submittingOrder?'disabled style="opacity:.6"':''} onclick="handleCheckoutSubmit()">${state.submittingOrder?'Enviando pedido…':icon('lock',16)+(ckZone()==='local' ? ' Finalizar pedido · '+money(checkoutGrandTotal()) : ' Finalizar pedido')}</button>
       <div class="dw-foot-note">No pagas nada ahora · te confirmamos por WhatsApp</div>
       <button class="btn-link" onclick="state.checkoutOpen=false;state.cartOpen=true;render()">Volver al carrito</button>
     </div>`;
