@@ -102,7 +102,7 @@ service cloud.firestore {
 
     match /analyticsEvents/{docId} {
       allow create: if request.resource.data.keys().hasOnly(['type','date','productId','cartTotal','orderTotal'])
-                    && request.resource.data.type in ['product_view','add_to_cart','wishlist_add','checkout_start','purchase']
+                    && request.resource.data.type in ['product_view','add_to_cart','wishlist_add','checkout_start','purchase','kit_add']
                     && request.resource.data.date is string && request.resource.data.date.size() <= 40
                     && (!('productId' in request.resource.data) || (request.resource.data.productId is string && request.resource.data.productId.size() <= 60))
                     && (!('cartTotal' in request.resource.data) || request.resource.data.cartTotal is number)

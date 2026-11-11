@@ -38,7 +38,7 @@ await t('tienda crea pedido con promoción (renglón negativo permitido)', setDo
 await t('tienda lee y sube el folio +1', runTransaction(anon, async tx=>{ const r=doc(anon,'counters/orders'); const s=await tx.get(r); tx.set(r,{next:s.data().next+1},{merge:true}); }), true);
 await t('tienda registra visita', addDoc(collection(anon,'visits'),{date:'2026-10-12T00:00:00Z',source:'directo'}), true);
 await t('tienda registra visita con campaña', addDoc(collection(anon,'visits'),{date:'2026-10-12T00:00:00Z',source:'facebook',campaign:'promo-octubre'}), true);
-for(const [ty,ex] of [['product_view',{productId:'p1'}],['add_to_cart',{productId:'p1'}],['wishlist_add',{productId:'p1'}],['checkout_start',{cartTotal:300}],['purchase',{orderTotal:300}]])
+for(const [ty,ex] of [['product_view',{productId:'p1'}],['add_to_cart',{productId:'p1'}],['wishlist_add',{productId:'p1'}],['checkout_start',{cartTotal:300}],['purchase',{orderTotal:300}],['kit_add',{cartTotal:299}]])
   await t('tienda registra evento '+ty, addDoc(collection(anon,'analyticsEvents'),{type:ty,date:'2026-10-12T00:00:00Z',...ex}), true);
 await t('tienda envía mensaje al buzón', addDoc(collection(anon,'storeMessages'),{date:'2026-10-12T00:00:00Z',name:'Ana',phone:'3312345678',type:'sugerencia',message:'Hola',status:'nuevo'}), true);
 await t('tienda guarda su borrador de carrito', setDoc(doc(anon,'abandonedCarts/ac_abcdefghij1234567890'),{name:'Ana',phone:'3312345678',address:'x',notes:'',items:[],total:5,updatedAt:'x',completed:false}), true);

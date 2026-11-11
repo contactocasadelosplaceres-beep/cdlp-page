@@ -3820,6 +3820,7 @@ function quizKit(top){
 function quizAddKit(){
   const r = quizResults(), kit = quizKit(r.items[0]);
   kit.forEach(p=>{ const k = cartKey(p.id); if((state.cart[k]||0) < itemStock(p,null)) state.cart[k] = (state.cart[k]||0)+1; trackEvent('add_to_cart', {productId:p.id}); });
+  trackEvent('kit_add', {cartTotal: kit.reduce((t,x)=>t+productDisplayPrice(x).price,0)});   // para Estadísticas → Resumen
   saveCart(); state.quizOpen = false; state.cartOpen = true; showToast(`Agregamos ${kit.length} productos a tu carrito`); render();
 }
 function renderQuizTopPick(p, r){

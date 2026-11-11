@@ -854,6 +854,35 @@ document.addEventListener('wheel', function(e){
     .var-head{display:grid;background:var(--surface-soft);font-weight:700;font-size:12.5px;border-top:0;}
     .var-total{grid-template-columns:minmax(110px,1.5fr) 1fr;}
   }
+
+  /* ===== Estadísticas · Resumen ===== */
+  .rs-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 0 14px;}
+  .rs-period{display:inline-flex;background:#F2ECEF;border-radius:999px;padding:3px;}
+  .rs-period button{border:0;background:none;padding:7px 14px;border-radius:999px;font-weight:700;font-size:13px;cursor:pointer;color:var(--ink-soft);font-family:inherit;}
+  .rs-period button.on{background:#993477;color:#fff;}
+  .rs-sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#0A4A5B;margin:20px 0 8px;}
+  .rs-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:10px;}
+  @media(min-width:760px){.rs-grid{grid-template-columns:repeat(3,1fr);}}
+  .rs-card{background:#fff;border:1px solid #EEE6EA;border-radius:14px;padding:12px;}
+  .rs-l{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .rs-v{font-size:21px;font-weight:800;color:var(--ink);margin:2px 0;}
+  .rs-s{font-size:12px;color:var(--ink-soft);}
+  .rs-d{font-weight:800;font-size:12px;}
+  .rs-d.up{color:#3F7A12;} .rs-d.down{color:#BC355C;}
+  .rs-funnel{padding:14px;}
+  .rs-step{display:grid;grid-template-columns:minmax(110px,38%) 1fr auto;gap:8px;align-items:center;margin-bottom:8px;font-size:13px;}
+  .rs-bar{height:10px;background:#F2ECEF;border-radius:999px;overflow:hidden;}
+  .rs-bar span{display:block;height:100%;background:linear-gradient(90deg,#993477,#ED7578);border-radius:999px;}
+  .rs-sv{font-weight:800;white-space:nowrap;}
+  .rs-conv{font-size:13.5px;margin-top:8px;}
+  .rs-lists{display:grid;grid-template-columns:1fr;gap:10px;}
+  @media(min-width:760px){.rs-lists{grid-template-columns:1fr 1fr;}}
+  .rs-list{background:#fff;border:1px solid #EEE6EA;border-radius:14px;padding:12px 14px;}
+  .rs-lt{font-weight:800;font-size:14px;}
+  .rs-lw{font-size:12px;color:var(--ink-soft);margin:2px 0 6px;}
+  .rs-list ol{margin:0;padding-left:18px;font-size:13px;line-height:1.6;}
+  .rs-list li b{color:#993477;margin-left:4px;}
+  .rs-empty{font-size:12.5px;color:var(--ink-soft);margin:6px 0;}
 </style>
 </head>
 <body>
@@ -7481,12 +7510,13 @@ function ensureRealtimeTimer(active){
 // pregunta de negocio que responden; mismo state.statsSubview, mismas funciones de render, cero
 // cambio de lógica o de datos.
 const STATS_SUBTAB_GROUPS = [
-  {label:'Ventas', items:[
-    {key:'general', label:'General'},
-    {key:'calendario', label:'Calendario'},
-    {key:'carritoabandonado', label:'Carrito abandonado'},
+  // "Resumen" junta en una sola pantalla lo que sirve para decidir; lo demás son reportes de detalle.
+  {label:'Para decidir', items:[
+    {key:'resumen', label:'Resumen'},
   ]},
-  {label:'Finanzas', items:[
+  {label:'Ventas y dinero', items:[
+    {key:'general', label:'Ventas (detalle)'},
+    {key:'calendario', label:'Calendario'},
     {key:'gastos', label:'Gastos y utilidad'},
     {key:'pagos', label:'Pagos y conciliación'},
     {key:'comisiones', label:'Comisiones'},
@@ -7494,17 +7524,18 @@ const STATS_SUBTAB_GROUPS = [
   ]},
   {label:'Productos', items:[
     {key:'productos', label:'Productos'},
+    {key:'embudoproducto', label:'Embudo por producto'},
     {key:'margen', label:'Margen por categoría'},
     {key:'margenproveedor', label:'Rentabilidad por proveedor'},
-    {key:'embudoproducto', label:'Embudo por producto'},
     {key:'busquedas', label:'Búsquedas sin resultado'},
     {key:'cambiosproducto', label:'Cambios de producto'},
   ]},
-  {label:'Clientes y tráfico', items:[
+  {label:'Tienda en línea y redes', items:[
+    {key:'visitas', label:'Visitas'},
     {key:'trafico', label:'Fuentes de tráfico'},
     {key:'campanas', label:'Campañas'},
-    {key:'visitas', label:'Visitas'},
     {key:'mejorhoraredes', label:'Mejor hora para redes'},
+    {key:'carritoabandonado', label:'Carrito abandonado'},
   ]},
   {label:'Operación', items:[
     {key:'tiemporeal', label:'Tiempo real'},
@@ -7513,7 +7544,7 @@ const STATS_SUBTAB_GROUPS = [
   ]},
 ];
 function renderEstadisticas(){
-  const sub = state.statsSubview || 'general';
+  const sub = state.statsSubview || 'resumen';
   const goSub = (s) => `state.statsSubview='${s}';state.statsPickerOpen=false;render();window.scrollTo(0,0)`;
   const cur = STATS_SUBTAB_GROUPS.flatMap(g=>g.items.map(it=>({...it, group:g.label}))).find(it=>it.key===sub);
   return `
@@ -7531,6 +7562,7 @@ function renderEstadisticas(){
         </div>
       `).join('')}
     </div>
+    ${sub==='resumen' ? renderStatsResumen() : ''}
     ${sub==='general' ? renderStatsGeneral() : ''}
     ${sub==='pagos' ? renderStatsPagos() : ''}
     ${sub==='productos' ? renderStatsProductos() : ''}
@@ -7754,6 +7786,121 @@ function renderStatsMargen(){
           </div>
         </div>
       `).join('')}
+  `;
+}
+/* ============== RESUMEN PARA DECIDIR ==============
+   Una sola pantalla con lo que sirve para decidir qué publicar y qué cambiar, comparando el
+   periodo elegido (7 o 30 días) contra el periodo anterior del mismo largo. No hace lecturas nuevas:
+   usa pedidos, visitas, eventos de la tienda, quiz, búsquedas y avisos que el panel ya tiene. */
+function rsRange(days, back){ const end = Date.now() - back*days*864e5; return [end - days*864e5, end]; }
+function rsIn(list, field, r){ return (list||[]).filter(x=>{ const t = new Date(x[field]).getTime(); return t>=r[0] && t<r[1]; }); }
+function rsDelta(cur, prev){
+  if(!prev && !cur) return '';
+  if(!prev) return `<span class="rs-d up">nuevo</span>`;
+  const d = Math.round((cur-prev)/prev*100);
+  return `<span class="rs-d ${d>=0?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d)}%</span>`;
+}
+function rsPeriod(days, back){
+  const r = rsRange(days, back);
+  const orders = rsIn(state.orders, 'date', r).filter(o=>o.status!=='Cancelado');
+  const web = orders.filter(o=>o.source==='tienda'), pos = orders.filter(o=>o.source!=='tienda');
+  const ev = rsIn(state.analyticsEvents, 'date', r);
+  const cnt = t => ev.filter(e=>e.type===t).length;
+  const sum = l => l.reduce((s,o)=>s+(o.total||0),0);
+  return {
+    r, orders, web, pos, revenue: sum(orders), webRevenue: sum(web), posRevenue: sum(pos),
+    ticket: orders.length ? sum(orders)/orders.length : 0, webTicket: web.length ? sum(web)/web.length : 0,
+    visits: rsIn(state.visits, 'date', r).length, views: cnt('product_view'), adds: cnt('add_to_cart'),
+    checkouts: cnt('checkout_start'), kits: cnt('kit_add'), ev,
+    quiz: rsIn(state.quizResponses, 'date', r), misses: rsIn(state.searchMisses, 'date', r),
+    abandoned: rsIn(state.abandonedCarts, 'updatedAt', r).filter(c=>!c.completed),
+  };
+}
+function renderStatsResumen(){
+  const days = state.rsDays || 7;
+  const c = rsPeriod(days, 0), p = rsPeriod(days, 1);
+  const pct = (a,b)=> b>0 ? Math.round(a/b*100) : 0;
+  const nameOf = id => (state.products.find(x=>x.id===id)||{}).name;
+  // ---- Qué publicar / revisar ----
+  const units = {}; c.orders.forEach(o=>(o.items||[]).forEach(it=>{ if(it.id && it.id!=='promo_buyxpayy') units[it.id]=(units[it.id]||0)+(it.qty||0); }));
+  const top = Object.entries(units).sort((a,b)=>b[1]-a[1]).slice(0,5).filter(([id])=>nameOf(id));
+  const views = {}, adds = {};
+  c.ev.forEach(e=>{ if(!e.productId) return; if(e.type==='product_view') views[e.productId]=(views[e.productId]||0)+1; if(e.type==='add_to_cart') adds[e.productId]=(adds[e.productId]||0)+1; });
+  const cold = Object.entries(views).filter(([id,v])=>v>=5 && !(units[id]) && (adds[id]||0)<=1 && nameOf(id)).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const lowTop = Object.entries(units).sort((a,b)=>b[1]-a[1]).map(([id])=>state.products.find(x=>x.id===id)).filter(x=>x && (x.stock||0)<=2).slice(0,5);
+  const missCount = {}; c.misses.forEach(m=>{ const k=(m.normalized||m.query||'').trim().toLowerCase(); if(k) missCount[k]=(missCount[k]||0)+1; });
+  const topMiss = Object.entries(missCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const restock = {}; (state.restockRequests||[]).filter(x=>!x.notified).forEach(x=>{ const k=x.productName||nameOf(x.productId); if(k) restock[k]=(restock[k]||0)+1; });
+  const topRestock = Object.entries(restock).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const quizCat = {}; c.quiz.forEach(q=>{ if(q.cat) quizCat[q.cat]=(quizCat[q.cat]||0)+1; });
+  const topQuiz = Object.entries(quizCat).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const heat = typeof computeVisitHeatmap==='function' ? computeVisitHeatmap(Math.max(30, days)) : null;
+  // ---- Dónde se pierde la venta en línea ----
+  const steps = [
+    {k:'Visitas', v:c.visits, pv:p.visits},
+    {k:'Vieron un producto', v:c.views, pv:p.views},
+    {k:'Agregaron al carrito', v:c.adds, pv:p.adds},
+    {k:'Empezaron el pedido', v:c.checkouts, pv:p.checkouts},
+    {k:'Pidieron', v:c.web.length, pv:p.web.length},
+  ];
+  const conv = pct(c.web.length, c.visits), convPrev = pct(p.web.length, p.visits);
+  const stepRates = [ ['ver productos', pct(c.views, c.visits)], ['agregar al carrito', pct(c.adds, c.views)], ['empezar el pedido', pct(c.checkouts, c.adds)], ['terminar el pedido', pct(c.web.length, c.checkouts)] ];
+  const tips = {
+    'ver productos': 'Mucha gente entra y se va sin abrir un producto: revisa que la portada y "Lo más vendido" muestren fotos atractivas y que el anuncio lleve a lo que promete.',
+    'agregar al carrito': 'Ven productos pero no los agregan: revisa fotos, precio y descripción de los más vistos (lista "Muchas vistas, sin ventas").',
+    'empezar el pedido': 'Agregan al carrito pero no avanzan: revisa el costo de envío y considera envío gratis desde cierto monto.',
+    'terminar el pedido': 'Empiezan el pedido y no lo terminan: contacta los carritos abandonados por WhatsApp.',
+  };
+  const weakest = c.views>=20 ? stepRates.reduce((a,b)=> (b[1] < a[1] ? b : a)) : null;
+  const card = (label, val, d, sub) => `<div class="rs-card"><div class="rs-l">${label}</div><div class="rs-v">${val}</div><div class="rs-s">${d||''}${sub?` <span>${sub}</span>`:''}</div></div>`;
+  const list = (title, why, rows, empty) => `<div class="rs-list"><div class="rs-lt">${title}</div><div class="rs-lw">${why}</div>${rows.length ? `<ol>${rows.join('')}</ol>` : `<div class="rs-empty">${empty}</div>`}</div>`;
+  const covStart = (state.analyticsEvents||[]).reduce((m,e)=>Math.min(m,new Date(e.date).getTime()), Infinity);
+  const partial = isFinite(covStart) && covStart > p.r[0];
+  return `
+    <div class="rs-head">
+      <div><div class="panel-title" style="margin:0;">Resumen</div><div class="panel-sub" style="margin:2px 0 0;">Comparado con los ${days} días anteriores</div></div>
+      <div class="rs-period">${[7,30].map(d=>`<button class="${days===d?'on':''}" onclick="state.rsDays=${d};render()">${d} días</button>`).join('')}</div>
+    </div>
+
+    <div class="rs-sec">1 · ¿Cómo vamos?</div>
+    <div class="rs-grid">
+      ${card('Ventas', money(c.revenue), rsDelta(c.revenue, p.revenue), '')}
+      ${card('Pedidos', c.orders.length, rsDelta(c.orders.length, p.orders.length), '')}
+      ${card('Ticket promedio', money(c.ticket), rsDelta(c.ticket, p.ticket), '')}
+      ${card('Tienda en línea', money(c.webRevenue), rsDelta(c.webRevenue, p.webRevenue), `${c.web.length} pedido${c.web.length===1?'':'s'}`)}
+      ${card('Mostrador', money(c.posRevenue), rsDelta(c.posRevenue, p.posRevenue), `${c.pos.length} venta${c.pos.length===1?'':'s'}`)}
+      ${card('Ticket en línea', money(c.webTicket), rsDelta(c.webTicket, p.webTicket), '')}
+    </div>
+
+    <div class="rs-sec">2 · Tienda en línea: de visita a pedido</div>
+    <div class="panel rs-funnel">
+      ${steps.map((s,i)=>{ const w = steps[0].v ? Math.max(3, s.v/steps[0].v*100) : 0; return `<div class="rs-step"><div class="rs-sk">${s.k}</div><div class="rs-bar"><span style="width:${w}%"></span></div><div class="rs-sv">${s.v} ${rsDelta(s.v, s.pv)}</div></div>`; }).join('')}
+      <div class="rs-conv">De cada 100 visitas, <b>${conv}</b> terminan en pedido ${convPrev||conv ? `(antes ${convPrev})` : ''}.</div>
+      ${weakest && weakest[1]<100 ? `<div class="note-box" style="margin:10px 0 0;"><b>Donde más se pierde: ${weakest[0]} (${weakest[1]}% pasa).</b> ${tips[weakest[0]]}</div>` : (c.views<20 ? `<div class="rs-empty">Aún hay pocos datos en este periodo para saber dónde se pierde la venta.</div>` : '')}
+      ${partial ? `<div class="rs-empty">Los eventos de la tienda guardados no cubren todo el periodo anterior; la comparación puede verse inflada.</div>` : ''}
+    </div>
+
+    <div class="rs-sec">3 · Qué publicar y qué revisar</div>
+    <div class="rs-lists">
+      ${list('🔥 Lo que más se vende', 'Publícalo en redes y mantenlo con existencias.', top.map(([id,u])=>`<li>${escHtml(nameOf(id))} <b>${u} pz</b></li>`), 'Sin ventas en este periodo.')}
+      ${list('👀 Muchas vistas, sin ventas', 'Revisa foto, precio o descripción; o ponlo en promoción.', cold.map(([id,v])=>`<li>${escHtml(nameOf(id))} <b>${v} vistas</b></li>`), 'Nada que revisar por ahora.')}
+      ${list('📦 Se vende y ya casi no hay', 'Resúrtelo antes de que se agote.', lowTop.map(x=>`<li>${escHtml(x.name)} <b>${x.stock||0} pz</b></li>`), 'Tus más vendidos tienen existencias.')}
+      ${list('🔎 Lo buscan y no lo encuentran', 'Considera traerlo o renombrar productos para que salgan.', topMiss.map(([q,n])=>`<li>"${escHtml(q)}" <b>${n}×</b></li>`), 'Nadie se quedó sin encontrar algo.')}
+      ${topRestock.length ? list('🔔 Piden aviso cuando haya', 'Hay gente esperando: resurte y avísales.', topRestock.map(([n,k])=>`<li>${escHtml(n)} <b>${k} persona${k===1?'':'s'}</b></li>`), '') : ''}
+    </div>
+
+    <div class="rs-sec">4 · Quiz y ventas extra</div>
+    <div class="rs-grid">
+      ${card('Quiz terminados', c.quiz.length, rsDelta(c.quiz.length, p.quiz.length), '')}
+      ${card('Kits agregados', c.kits, rsDelta(c.kits, p.kits), 'desde el quiz')}
+      ${card('Carritos sin terminar', c.abandoned.length, rsDelta(c.abandoned.length, p.abandoned.length), 'con teléfono')}
+    </div>
+    ${topQuiz.length ? `<div class="rs-empty" style="margin-top:-6px;">Lo que más piden en el quiz: ${topQuiz.map(([k,n])=>`<b>${escHtml(k)}</b> (${n})`).join(' · ')}. Úsalo como tema de tus próximas publicaciones.</div>` : ''}
+
+    <div class="rs-sec">5 · Cuándo publicar</div>
+    <div class="panel">
+      ${heat && heat.top && heat.top.length ? `Cuando más gente entra a tu tienda (últimos ${Math.max(30,days)} días): ${heat.top.map(x=>`<b>${HEAT_DAY_LABELS[x.day]} ${x.hour}:00</b>`).join(' · ')}. Publica una hora antes. <a onclick="state.statsSubview='mejorhoraredes';render()" style="color:var(--primary);font-weight:700;cursor:pointer;">Ver mapa completo</a>` : 'Aún no hay suficientes visitas registradas.'}
+    </div>
   `;
 }
 function renderStatsGeneral(){
