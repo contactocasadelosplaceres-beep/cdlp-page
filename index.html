@@ -951,6 +951,78 @@
   .sk-spin{width:18px;height:18px;border-radius:50%;border:2.5px solid #EBD9D3;border-top-color:var(--primary);animation:skspin .8s linear infinite;flex-shrink:0;}
   @keyframes skspin{to{transform:rotate(360deg);}}
   @media(prefers-reduced-motion:reduce){.sk-spin{animation:skspin 1.6s linear infinite!important;}}
+
+  /* ===== Plan UI/UX nov-2026 (al final para que mande sobre reglas anteriores) ===== */
+  /* F1 encabezado móvil más bajo */
+  @media(max-width:767px){
+    .topbar-main{padding:5px 10px !important;gap:8px;}
+    .topbar .icon-btn{width:38px !important;height:38px !important;}
+    .topbar .cart-btn{width:40px;height:40px;}
+    .brand-mark-img{width:34px !important;height:34px !important;}
+    .announce-bar{min-height:26px !important;padding:4px 36px 4px 12px !important;font-size:11.5px !important;}
+    .trust-top{padding:4px 10px !important;font-size:11.5px !important;}
+  }
+  /* F2 hero: menos aire, botones gemelos */
+  @media(max-width:767px){
+    .hero{padding:16px 14px 12px !important;}
+    .hero-inner{padding:18px 16px !important;}
+    .hero-inner h1{font-size:23px;line-height:1.2;margin:0;}
+  }
+  .hero-actions-2{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+  .hero-actions-2>button{flex:none !important;min-width:0;}
+  .hero-actions-2>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:48px;min-height:48px;border-radius:12px;font-weight:700;box-sizing:border-box;white-space:nowrap;font-size:14px !important;padding:0 8px !important;width:100%;}
+  @media(max-width:340px){ .hero-actions-2>button{font-size:13px !important;} .hero-actions-2>button svg{display:none;} }
+  .hero-actions-2 .hero-btn-outline{border-width:2px;}
+  /* F4/F5 categorías: cuadros iguales, fondo blanco, sin recorte; desvanecido = hay más */
+  .cats-block{position:relative;}
+  .cat-tiles{scroll-snap-type:x proximity;scroll-padding-inline:20px;-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent);padding-right:36px !important;}
+  .cat-tile{scroll-snap-align:start;}
+  .cat-tile-img{border-radius:14px !important;border:1.5px solid #EAEAEA !important;background:#fff !important;padding:6px;box-sizing:border-box;}
+  .needs-row{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 30px),transparent);}
+  @media(min-width:900px){ .cat-tiles,.needs-row{-webkit-mask-image:none;mask-image:none;} }
+  /* F6 filtros: línea 1 Filtrar + Ordenar, línea 2 interruptor */
+  .filter-row{display:grid !important;grid-template-columns:auto 1fr;gap:8px;flex-wrap:nowrap;}
+  .filter-row .sort-select{width:100%;min-width:0;}
+  .filter-row2{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:0;margin:-4px 0 12px;}
+  .avail-switch{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;min-height:36px;user-select:none;}
+  .avail-switch input{position:absolute;opacity:0;width:1px;height:1px;}
+  .avail-track{width:38px;height:22px;border-radius:999px;background:#D8D2D6;position:relative;transition:background .15s;flex:none;}
+  .avail-knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s;}
+  .avail-switch input:checked + .avail-track{background:#993477;}
+  .avail-switch input:checked + .avail-track .avail-knob{transform:translateX(16px);}
+  .avail-switch input:focus-visible + .avail-track{outline:2px solid #993477;outline-offset:2px;}
+  /* F7 tarjetas uniformes: foto cuadrada completa, nombre 2 líneas, precio y botón alineados */
+  .card-image-wrap{aspect-ratio:1/1 !important;background:#fff !important;}
+  .card-image-wrap img{width:100%;height:100%;object-fit:contain !important;}
+  .card-name{min-height:calc(2 * 1.3em);}
+  .card-body{display:flex;flex-direction:column;flex:1;}
+  .card-price{margin-top:auto !important;}
+  .card .card-add,.card .qty-step{width:100%;min-height:42px;}
+  /* F12 confianza: 4 beneficios, 2×2 en celular y 4 en fila en computadora */
+  .discretion-4{grid-template-columns:repeat(2,1fr) !important;gap:12px 10px !important;margin-top:14px !important;}
+  .discretion-4 .discretion-item{flex-direction:column;text-align:center;gap:6px;font-size:12.5px;line-height:1.3;min-height:0;}
+  @media(min-width:768px){ .discretion-4{grid-template-columns:repeat(4,1fr) !important;} }
+  /* F10 ¿No te decides? */
+  .first-band .hero-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100% !important;max-width:none !important;min-height:48px;}
+  /* F13 FAQ */
+  .faq-block{padding-top:26px;}
+  .faq-block .faq-list{padding:0;}
+  .faq-answer{font-size:13.5px;line-height:1.55;}
+  /* F16 más vendidos con protagonismo */
+  .best-hot{background:linear-gradient(180deg,#FBEFF3 0%,#FBEFF3 78%,transparent 78%);margin-top:18px;padding-top:18px !important;}
+  .best-sub{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .best-rank-wrap{position:relative;flex:0 0 42%;max-width:190px;scroll-snap-align:start;}
+  .best-rank-wrap>*:not(.best-rank){height:100%;}
+  .best-rank{position:absolute;z-index:2;top:6px;left:6px;width:24px;height:24px;border-radius:50%;background:#993477;color:#fff;font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  .best-row>.best-rank-wrap{flex:0 0 42%;}
+  /* F14 pie en 4 bloques */
+  .foot-4{display:grid !important;grid-template-columns:1fr 1fr;gap:22px 16px;}
+  .foot-4 .foot-brand-row{grid-column:1/-1;}
+  .foot-4 .foot-col a,.foot-4 .foot-col div{min-height:34px;}
+  @media(min-width:900px){ .foot-4{grid-template-columns:1.2fr 1fr 1fr 1fr 1fr;} .foot-4 .foot-brand-row{grid-column:auto;} }
+  .foot-bottom{font-size:12px;}
+  .best-row-all{white-space:nowrap;}
+  @media(max-width:359px){ .announce-bar{font-size:10.5px !important;} .best-sub{font-size:11.5px;} }
 </style>
 </head>
 <body>
@@ -2141,6 +2213,7 @@ function goToFeatured(){
   requestAnimationFrame(()=>scrollToId('catalogo'));
 }
 function openProductDetail(id, vid){
+  rememberViewed(id);
   state.detailProductId=id; state.detailImageIndex=0; state.detailSelectedVariant={};
   if(vid){
     const dp = state.products.find(x=>x.id===id); const v = dp ? (dp.variants||[]).find(x=>x.id===vid) : null;
@@ -2502,6 +2575,9 @@ function policyHtml(text){
 function renderPrivacyPolicyDrawer(){
   const text = state.settings.privacyPolicyText || DEFAULT_SETTINGS.privacyPolicyText;
   const returnsText = state.settings.returnPolicyText || DEFAULT_SETTINGS.returnPolicyText;
+  if(state.privacyPolicyOpen==='returns') return `
+    ${drawerHead('Cambios y devoluciones','package','Qué hacer si algo sale mal',`state.privacyPolicyOpen=false;render()`)}
+    <div class="drawer-body"><div class="dw-card dw-policy">${policyHtml(returnsText)}</div></div>`;
   return `
     ${drawerHead('Aviso de privacidad','shield','Cómo cuidamos tus datos',`state.privacyPolicyOpen=false;render()`)}
     <div class="drawer-body">
@@ -3675,7 +3751,7 @@ function renderQuizDrawer(){
       ${exact>6 ? `<div class="quiz-sum">Mostrando ${shown} de ${exact} que coinciden con lo que elegiste, las mejores primero.</div>` : ''}
       ${items.length ? renderQuizTopPick(items[0], r) : ''}
       ${items.length>1 ? `<h4 class="quiz-more-t">Otras opciones para ti</h4>` : ''}
-      ${items.length ? `<div class="rel-grid">${items.slice(1,shown+1).map(p=>renderMiniCard(p,{close:'quizOpen', tags:quizTags(p,r)})).join('')}</div>` : `<div class="empty-state">Por ahora no encontramos productos con existencia para esa combinación. Prueba cambiando una respuesta o mira todo el catálogo.</div>`}
+      ${items.length ? `<div class="rel-grid">${items.slice(1,shown+1).map(p=>renderMiniCard(p,{close:'quizOpen', tags:quizTags(p,r)})).join('')}</div>` : `<div class="empty-state">Por ahora no encontramos productos con existencia para esa combinación. Prueba cambiando una respuesta, mira todo el catálogo${state.settings.whatsapp?` o <a href="${waLink('Hola, hice el quiz de la tienda y no encontré lo que busco, ¿me ayudan a elegir?')}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700;">pregúntanos por WhatsApp</a>`:''}.</div>`}
       ${items.length>shown+1 ? `<button class="btn-outline" style="width:100%;margin-top:12px;" onclick="quizMore()">Mostrar otros ${Math.min(6,items.length-shown-1)}</button>` : ''}
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
         ${items.length ? `<button class="btn-primary" onclick="applyQuizToCatalog()">Ver más opciones como estas</button>` : ''}
@@ -3738,10 +3814,10 @@ function renderHeroSection(){
       <div class="hero-copy">
         <h1>${state.settings.heroTitle}</h1>
         <p class="hero-sub-desk">${state.settings.heroSubtitle}</p>
-        <div class="hero-points"><span>${icon('truck',14)} Envío ${money(localShippingCost())} en ${escHtml(localShippingCity())}</span></div>
+        <div class="hero-points"><span>${icon('truck',14)} Entrega a domicilio desde $${Number(localShippingCost())||35} · ${escHtml(localShippingCity())}</span></div>
         <div class="hero-actions hero-actions-2">
           <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Ver catálogo</button>
-          <button class="hero-btn-outline" onclick="openQuiz()">✦ Ayúdame a elegir</button>
+          <button class="hero-btn-outline" onclick="openQuiz()">${sparkIcon(16)} Encuentra tu ideal</button>
         </div>
       </div>
     </div>
@@ -3795,14 +3871,44 @@ function renderFeaturedSection(){
    Prueba social justo antes del catálogo: lo que más compra la gente, en una fila que se desliza
    (no ocupa media pantalla como la cuadrícula). Usa los marcados a mano o la lista automática de
    ventas reales; si no hay ninguno, no se muestra. */
+function sparkIcon(sz){ return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/><path d="M19 3v4M17 5h4"/></svg>`; }
 function renderBestRow(){
   if(state.activeNeed || (state.activeCat && state.activeCat!=='Todos')) return '';
   const manualIds = featuredRefsValid();
   const ids = manualIds.length ? manualIds : (state.settings.bestSellerProductIds||[]);
   const items = ids.map(id=>refResolve(id)).filter(p=>p && p.stock>0).slice(0,10);
   if(items.length<3) return '';
-  return `<div class="best-row-block" id="destacados">
-    <div class="best-row-head"><h2 class="section-heading" style="margin:0;">🔥 Lo más vendido</h2><button class="best-row-all" onclick="goToFeatured()">Ver todos</button></div>
+  return `<div class="best-row-block best-hot" id="destacados">
+    <div class="best-row-head"><div><h2 class="section-heading" style="margin:0;">Lo más vendido</h2><div class="best-sub">Lo que más compran nuestros clientes</div></div><button class="best-row-all" onclick="goToFeatured()">Ver todos</button></div>
+    <div class="best-row">${items.map((p,i)=>`<div class="best-rank-wrap"><span class="best-rank">${i+1}</span>${renderMiniCard(p,{})}</div>`).join('')}</div>
+  </div>`;
+}
+/* Novedades: solo productos con fecha real de alta (createdAt) de los últimos 30 días y con
+   existencia. Si hay menos de 4, la sección no aparece (no se inventan "nuevos"). */
+function newArrivals(){
+  const lim = Date.now() - 30*864e5;
+  return state.products.filter(p=>p.createdAt && p.stock>0 && new Date(p.createdAt).getTime()>=lim)
+    .sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+function renderNewRow(){
+  if(state.activeNeed || (state.activeCat && state.activeCat!=='Todos') || state.searchQuery.trim() || state.activeBestSellers) return '';
+  const items = newArrivals().slice(0,10);
+  if(items.length<4) return '';
+  return `<div class="best-row-block" id="novedades">
+    <div class="best-row-head"><h2 class="section-heading" style="margin:0;">Novedades</h2><button class="best-row-all" onclick="state.sortBy='nuevos';goToCatalog('Todos')">Ver todas</button></div>
+    <div class="best-row">${items.map(p=>renderMiniCard(p,{})).join('')}</div>
+  </div>`;
+}
+// Vistos recientemente: guardados solo en este celular (localStorage), sin cuenta ni lecturas.
+const RECENT_KEY = 'cdlp_recent';
+function loadRecent(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY)||'[]'); }catch(e){ return []; } }
+function rememberViewed(id){ try{ const l = [id, ...loadRecent().filter(x=>x!==id)].slice(0,12); localStorage.setItem(RECENT_KEY, JSON.stringify(l)); }catch(e){} }
+function renderRecentRow(){
+  if(state.activeNeed || (state.activeCat && state.activeCat!=='Todos') || state.searchQuery.trim() || state.activeBestSellers) return '';
+  const items = loadRecent().map(id=>state.products.find(p=>p.id===id)).filter(p=>p && p.stock>0).slice(0,10);
+  if(items.length<2) return '';
+  return `<div class="best-row-block">
+    <div class="best-row-head"><h2 class="section-heading" style="margin:0;">Vistos recientemente</h2></div>
     <div class="best-row">${items.map(p=>renderMiniCard(p,{})).join('')}</div>
   </div>`;
 }
@@ -3812,7 +3918,7 @@ function renderFirstTimeSection(){
   <div class="first-band">
     <h3>¿No te decides?</h3>
     <p>Te ayudamos a elegir en 1 minuto.</p>
-    <button class="hero-btn-primary" onclick="openQuiz()">✦ Encontrar mi producto ideal</button>
+    <button class="hero-btn-primary" onclick="openQuiz()">${sparkIcon(17)} Ayúdame a elegir</button>
   </div>`;
 }
 
@@ -3967,14 +4073,21 @@ function renderPriceFilterRow(){
     <select class="sort-select ${state.sortBy?'on':''}" aria-label="Ordenar por" onchange="setSortBy(this.value)">
       ${[['','Ordenar: sugeridos'],['precio-asc','Precio: menor a mayor'],['precio-desc','Precio: mayor a menor'],['nuevos','Novedades'],['nombre','Nombre (A-Z)']].map(o=>`<option value="${o[0]}" ${state.sortBy===o[0]?'selected':''}>${o[1]}</option>`).join('')}
     </select>
-    <button class="filter-btn ${state.onlyAvailable?'on':''}" aria-pressed="${state.onlyAvailable?'true':'false'}" onclick="toggleOnlyAvailable()">${state.onlyAvailable?icon('check',16):''} Solo disponibles</button>
+  </div>
+  <div class="filter-row2">
+    <label class="avail-switch"><input type="checkbox" role="switch" ${state.onlyAvailable?'checked':''} onchange="toggleOnlyAvailable()"><span class="avail-track"><span class="avail-knob"></span></span> Solo disponibles</label>
     ${label ? `<button class="filter-chip" onclick="clearPriceFilter()">${label} ${icon('x',13)}</button>` : ''}
   </div>`;
 }
 function renderPriceFilterDrawer(){
   return `
-  ${drawerHead('Filtrar por precio','sliders','Se combina con tu categoría o búsqueda',`state.priceFilterOpen=false;render()`)}
+  ${drawerHead('Filtrar','sliders','Por categoría y precio',`state.priceFilterOpen=false;render()`)}
   <div class="drawer-body">
+    <div class="dw-card-t" style="margin-bottom:10px;">Categoría</div>
+    <div class="price-presets" style="margin-bottom:18px;">
+      ${['Todos', ...visibleCategories()].map(c=>`<button class="dw-chip ${state.activeCat===c?'on':''}" onclick="state.activeCat='${c.replace(/'/g,"\\'")}';state.activeBestSellers=false;state.gridRenderLimit=20;render()">${c==='Todos'?'Todas':c}</button>`).join('')}
+    </div>
+    <div class="dw-card-t" style="margin-bottom:10px;">Precio</div>
     <div class="dw-card-t" style="margin-bottom:10px;">Rangos rápidos</div>
     <div class="price-presets">
       ${[['','150','Hasta $150'],['150','300','$150 – $300'],['300','600','$300 – $600'],['600','','Más de $600']].map(p=>`<button class="dw-chip ${String(state.priceMin||'')===p[0]&&String(state.priceMax||'')===p[1]&&priceFilterActive()?'on':''}" onclick="setPricePreset('${p[0]}','${p[1]}')">${p[2]}</button>`).join('')}
@@ -4206,16 +4319,33 @@ function renderProductCard(p, forceBest){
 // arriba del catálogo (ver renderRatingLineBlock más abajo) para que sea lo primero que se
 // vea antes de los precios. Aquí solo quedan las tarjetas con el detalle de cada opinión.
 /* ============== PREGUNTAS FRECUENTES SOBRE DISCRECIÓN ============== */
+/* Preguntas frecuentes: las 5 básicas de compra (respuestas armadas SOLO con datos reales de
+   Configuración: costo/ciudad de envío, formas de pago del pie, política de devoluciones) + las de
+   discreción que Ale escribe en Diseño → Preguntas frecuentes. Una sola sección, al final. */
+function faqItemsAll(){
+  const s = state.settings, own = (s.faqItems||[]).filter(x=>x && x.question && x.answer);
+  const ship = `${money(localShippingCost())} en ${escHtml(localShippingCity())}`;
+  const base = [
+    {k:'pedido', question:'¿Cómo realizo mi pedido?', answer:'Agrega tus productos al carrito, toca <b>Continuar pedido</b> y escribe tus datos de entrega. Te contactamos por WhatsApp para confirmar tu pedido y coordinar la entrega.'},
+    {k:'pago', question:'¿Cómo funciona el pago contra entrega?', answer:'No pagas nada por adelantado: pagas cuando recibes tu pedido. Puedes pagar en efectivo, con tarjeta o por transferencia.'},
+    {k:'envio', question:'¿Cómo entregan los productos?', answer:`Te lo llevamos a tu domicilio. El envío cuesta ${ship}; a otras ciudades te cotizamos por WhatsApp.`},
+    {k:'paquete', question:'¿El paquete tiene alguna identificación del contenido?', answer:(own.find(x=>/paquete|muestra lo que/i.test(x.question))||{}).answer || 'No. Tu pedido va en empaque sin marcas, sin imágenes ni nombres de productos.'},
+    {k:'problema', question:'¿Qué sucede si tengo un problema con mi pedido?', answer:'Escríbenos por WhatsApp lo antes posible. Si el producto llega con defecto de fábrica (no enciende, llega dañado o incompleto) y está en su empaque original, te lo cambiamos por el mismo o uno equivalente; si no es posible, acordamos contigo la devolución del pago. Por higiene, no hay cambios de productos abiertos o usados en buen estado. <a onclick="state.privacyPolicyOpen=\'returns\';render()" style="color:var(--primary);font-weight:700;cursor:pointer;">Ver política completa</a>'},
+  ];
+  const extra = own.filter(x=>!/paquete|muestra lo que/i.test(x.question));
+  return [...base, ...extra];
+}
+function goSection(id){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; state.activeBestSellers=false; render(); requestAnimationFrame(()=>scrollToId(id)); }
+function openFaq(k){ const i = faqItemsAll().findIndex(x=>x.k===k); state.openFaqIndex = i<0?null:i; goSection('faq'); }
 function renderFaqSection(){
-  const items = state.settings.faqItems||[];
-  if(!items.length) return '';
+  const items = faqItemsAll();
   return `
-  <div class="section-block">
-    <h2 class="section-heading" style="margin-bottom:14px;">Preguntas frecuentes</h2>
+  <div class="section-block faq-block" id="faq">
+    <h2 class="section-heading" style="margin-bottom:12px;">Preguntas frecuentes</h2>
     <div class="faq-list">
       ${items.map((item,i)=>`
         <div class="faq-item">
-          <button class="faq-question" onclick="state.openFaqIndex=state.openFaqIndex===${i}?null:${i};render()">
+          <button class="faq-question" aria-expanded="${state.openFaqIndex===i}" onclick="state.openFaqIndex=state.openFaqIndex===${i}?null:${i};render()">
             <span>${item.question}</span>
             <span class="faq-chevron ${state.openFaqIndex===i?'open':''}">${icon('chevron-down',18)}</span>
           </button>
@@ -4245,10 +4375,11 @@ function renderDiscretionSection(){
   <div class="discretion-band">
     <div class="discretion-inner">
       <h3>Compra con total tranquilidad</h3>
-      <div class="discretion-grid discretion-3">
+      <div class="discretion-grid discretion-4">
         <div class="discretion-item"><span class="ic">${icon('package',20)}</span>Empaque sin marcas</div>
         <div class="discretion-item"><span class="ic">${icon('banknote',20)}</span>Pagas al recibir</div>
         <div class="discretion-item"><span class="ic">${icon('home',20)}</span>Directo a tu puerta</div>
+        <div class="discretion-item"><span class="ic">${icon('message-circle',20)}</span>Atención discreta por WhatsApp</div>
       </div>
     </div>
   </div>`;
@@ -4268,30 +4399,47 @@ function renderNewsletterSection(){
 /* ============== FOOTER ============== */
 // QA-32: 523317494004 → 33 1749 4004
 function fmtPhone(n){ const d = String(n||'').replace(/\D/g,''); const t = d.length===12 && d.startsWith('52') ? d.slice(2) : d; return t.length===10 ? `${t.slice(0,2)} ${t.slice(2,6)} ${t.slice(6)}` : String(n||''); }
+/* Pie en 4 bloques. Solo enlaces que llevan a algo real: "Novedades" y "Tarjetas de regalo"
+   aparecen solo si existen; no hay página de términos aparte (los términos se aceptan al pedir y
+   están dentro del aviso de privacidad y la política de devoluciones). */
 function renderFooterSection(){
   const s = state.settings;
+  const L = (txt, js) => `<a href="#" onclick="event.preventDefault();${js}">${txt}</a>`;
+  const giftCat = visibleCategories().find(c=>/tarjeta.*regalo/i.test(c));
   return `
   <footer class="site-foot">
-    <div class="site-foot-inner">
-      <div>
+    <div class="site-foot-inner foot-4">
+      <div class="foot-brand-row">
         <div class="foot-brand-name">${s.storeName}</div>
-        <div class="foot-tagline">${s.headerSubtitle||'Discreto · Confidencial · A domicilio'}</div>
+        <div class="foot-tagline">Bienestar, confianza y discreción en cada experiencia.</div>
       </div>
-      <div class="foot-col foot-explore">
-        <h4>Explora</h4>
-        <a href="#" onclick="event.preventDefault();goToFeatured()">Más vendidos</a>
-        <a href="#" onclick="event.preventDefault();goToCatalog('Todos')">Catálogo completo</a>
-        ${visibleCategories().slice(0,4).map(c=>`<a href="#" onclick="event.preventDefault();goToCatalog('${c.replace(/'/g,"\\'")}')">${c}</a>`).join('')}
+      <div class="foot-col">
+        <h4>La Casa de los Placeres</h4>
+        ${L('Explorar catálogo',"goToCatalog('Todos')")}
+        ${L('Más vendidos','goToFeatured()')}
+        ${newArrivals().length>=4 ? L('Novedades',"goSection('novedades')") : ''}
+        ${giftCat ? L('Tarjetas de regalo',`goToCatalog('${giftCat.replace(/'/g,"\\'")}')`) : ''}
+      </div>
+      <div class="foot-col">
+        <h4>Atención al cliente</h4>
+        <a href="${waLink('Hola, tengo una pregunta.')}" target="_blank" rel="noopener">Contactar por WhatsApp</a>
+        ${L('Preguntas frecuentes',"state.openFaqIndex=null;goSection('faq')")}
+        ${L('Envíos y entregas',"openFaq('envio')")}
+        ${L('Cambios y devoluciones',"state.privacyPolicyOpen='returns';render()")}
+        ${L(`Buzón de sugerencias`,'state.messageDrawerOpen=true;render()')}
+      </div>
+      <div class="foot-col">
+        <h4>Información legal</h4>
+        ${L('Aviso de privacidad','state.privacyPolicyOpen=true;render()')}
       </div>
       <div class="foot-col">
         <h4>Contacto</h4>
-        <a href="${waLink('Hola, tengo una pregunta.')}" target="_blank" rel="noopener">WhatsApp: ${fmtPhone(s.whatsapp)}</a>
+        <a href="${waLink('Hola, tengo una pregunta.')}" target="_blank" rel="noopener">${icon('whatsapp',15)} ${fmtPhone(s.whatsapp)}</a>
+        <div>${escHtml(localShippingCity()==='Cd. Guzmán'?'Ciudad Guzmán, Jalisco':localShippingCity())}</div>
         <div>${s.schedule}</div>
         ${s.socialInstagram?`<div>Instagram: ${s.socialInstagram}</div>`:''}
         ${s.socialFacebook?`<div>Facebook: ${s.socialFacebook}</div>`:''}
         ${s.contactEmail?`<div>${s.contactEmail}</div>`:''}
-        <a href="#" onclick="event.preventDefault();state.messageDrawerOpen=true;render()">${icon('message-circle')} Buzón de sugerencias</a>
-        <a href="#" onclick="event.preventDefault();state.privacyPolicyOpen=true;render()">Aviso de privacidad</a>
       </div>
     </div>
     <div class="foot-pay">
@@ -4301,7 +4449,7 @@ function renderFooterSection(){
       <span class="pay-badge">${icon('shield',16)} Transferencia</span>
       <span class="pay-badge seal">${icon('lock',16)} Empaque 100% discreto</span>
     </div>
-    <div class="foot-bottom">Pedidos por catálogo con entrega a domicilio y pago contra entrega.</div>
+    <div class="foot-bottom">© ${new Date().getFullYear()} ${s.storeName} · Pedidos con entrega a domicilio y pago contra entrega.</div>
   </footer>`;
 }
 
@@ -4372,7 +4520,7 @@ const SECTION_RENDERERS = {
   promoBanner: renderPromoBannerSection,
   grid: renderGridSection,
   testimonials: renderTestimonialsSection,
-  faq: renderFaqSection,
+  faq: ()=>'',   // la sección de preguntas ahora es fija, al final (renderFaqSection en 'faqfix')
   newsletter: renderNewsletterSection,
   footer: renderFooterSection,
 };
@@ -4763,8 +4911,8 @@ function renderStore(){
   // Orden pensado para vender: promesa + 2 botones → ofertas relámpago → para quién → lo más
   // vendido (prueba social) → categorías y catálogo → "¿no te decides?" (quiz) → confianza → pie.
   // La franja de 3 íconos (compra segura/empaque/pago) se quitó: ya lo dicen la barra de arriba y el hero.
-  const after = { hero: ['flash','needs','bestrow'], grid: ['firsttime'], testimonials: ['discretion'] };
-  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, bestrow: renderBestRow, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection };
+  const after = { hero: ['flash','needs','bestrow'], grid: ['newrow','recent','firsttime'], testimonials: ['discretion','faqfix'] };
+  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, bestrow: renderBestRow, newrow: renderNewRow, recent: renderRecentRow, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection, faqfix: renderFaqSection };
 
   const searching = state.searchQuery.trim().length>0;
   let body = '';
@@ -4937,7 +5085,9 @@ window.addEventListener('resize', adjustTopbarSpacer);
    solo agrega movimiento a las mismas filas que ya existían. Como toda la página se
    vuelve a dibujar con cada render(), esto busca los elementos en el DOM en cada cuadro
    en vez de guardar una referencia fija, así sigue funcionando después de cualquier click. */
-const AUTOSCROLL_SELECTORS = ['.needs-row', '.cat-tiles'];
+// Las filas ya no se mueven solas: el movimiento dejaba la primera opción cortada a la izquierda.
+// Que hay más se indica con el desvanecido del borde derecho y "Desliza ›".
+const AUTOSCROLL_SELECTORS = [];
 const autoScrollDir = {};
 const autoScrollFrac = {}; // resto (menor a 1px) que un movimiento tan lento deja pendiente entre cuadros
 const autoScrollPausedUntil = {};
