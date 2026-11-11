@@ -2887,8 +2887,9 @@ function renderProductDetailDrawer(){
   const needsSelection = hasVariants && !matchedVariant;
   const stockStateClass = stockLeft<=0 ? 'out' : stockLeft<=3 ? 'low' : 'ok';
   // Existencias reales: "Última pieza" solo con 1; con 2 a 5 se dice cuántas quedan.
-  const stockStateClass2 = stockLeft<=0 ? 'out' : stockLeft===1 ? 'low' : 'ok';
-  const stockLabel = stockLeft<=0 ? 'Agotado' : stockLeft===1 ? '¡Última pieza!' : stockLeft<=5 ? `Disponible · quedan ${stockLeft}` : 'Disponible';
+  const stockStateClass2 = stockLeft<=0 ? 'out' : 'ok';
+  // Sin decir cuántas piezas quedan: solo "Disponible" o "Agotado".
+  const stockLabel = stockLeft<=0 ? 'Agotado' : 'Disponible';
   return `
     <div class="drawer-head"><h2>Detalle del producto</h2><div style="display:flex;gap:6px;align-items:center;">
       ${isKioskMode() ? '' : `<button class="close-x" aria-label="Compartir producto" onclick="shareProduct('${p.id}')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>`}
@@ -3944,7 +3945,6 @@ function renderHeroSection(){
       <div class="hero-copy">
         <h1>${state.settings.heroTitle}</h1>
         <p class="hero-sub-desk">${state.settings.heroSubtitle}</p>
-        <div class="hero-points"><span>${icon('truck',14)} Entrega a domicilio desde $${Number(localShippingCost())||35} · ${escHtml(localShippingCity())}</span></div>
         <div class="hero-actions hero-actions-2">
           <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Ver catálogo</button>
           <button class="hero-btn-outline" onclick="openQuiz()">${sparkIcon(16)} Encuentra tu ideal</button>
