@@ -3543,12 +3543,12 @@ const QUIZ_BUDGETS = [
    del nombre del producto. "extraCat" es la categoría que decide la pregunta extra (vibración, tipo de
    lubricante, talla…) y "catalogCat" a cuál categoría lleva "Ver más opciones como estas". */
 const QUIZ_GOALS = [
-  {k:'ext',   ico:'✨', label:'Estimulación externa', sub:'Vibradores, balas, succionadores', toy:true, extraCat:'Juguetes', catalogCat:'Juguetes',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Juguetes')||c.includes('Dildos')) && /succion|bala|huevo|vibrador|estimulador|clitori|labial|masajeador|conejo|lengua|mariposa/.test(n) && !/anal|plug|\bpene\b|masturbador|anillo|dilatador|cock|dildo|consolador/.test(n); }},
+  {k:'ext',   ico:'✨', label:'Estimulación externa', sub:'Para ella: vibradores, balas, succionadores', toy:true, extraCat:'Juguetes', catalogCat:'Juguetes',
+    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Juguetes')||c.includes('Dildos')) && /succion|bala|huevo|vibrador|estimulador|clitori|labial|masajeador|conejo|lengua|mariposa/.test(n) && !/anal|plug|\bpene\b|masturb|mastub|masculin|anillo|dilatador|cock|dildo|consolador|bomba|pump|prostat|testic/.test(n); }},
   {k:'pen',   ico:'💗', label:'Penetración', sub:'Dildos y vibradores con forma', toy:true, extraCat:'Dildos', catalogCat:'Dildos',
     fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Dildos') || /dildo|consolador|conejo|realista/.test(n)) && !/anal|plug|dilatador|masturbador|anillo/.test(n); }},
   {k:'el',    ico:'🔥', label:'Algo para él', sub:'Masturbadores, anillos, fundas', toy:true, extraCat:'Masturbadores', catalogCat:'Masturbadores',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Masturbadores') || /anillo|cock ring|funda|\bpene\b|masturbador/.test(n) && !c.includes('Lubricantes') && !c.includes('Comestibles'); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Masturbadores') || /anillo|cock ring|funda|\bpene\b|masturb|mastub|prostat|bomba de succion|pump/.test(n) && !c.includes('Lubricantes') && !c.includes('Comestibles'); }},
   {k:'anal',  ico:'🍑', label:'Explorar lo anal', sub:'Plugs, bolas, dilatadores', toy:true, extraCat:'Plugs', catalogCat:'Plugs',
     fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Plugs') || /\banal\b|plug|dilatador|bolas? chinas|perlas/.test(n) && !c.includes('Lubricantes'); }},
   {k:'pareja',ico:'💞', label:'Jugar en pareja', sub:'Juegos, esposas, aceites, control remoto', extraCat:null, catalogCat:'Juegos',
@@ -3556,12 +3556,28 @@ const QUIZ_GOALS = [
   {k:'lenc',  ico:'👙', label:'Sorprender con lencería', sub:'Ropa sexy para ella o para él', extraCat:'Ropa femenina', catalogCat:'Ropa femenina',
     fn:p=>{ const c=productCats(p); return c.includes('Ropa femenina') || c.includes('Ropa masculina'); }},
   {k:'durar', ico:'⏱️', label:'Durar más o sentir más', sub:'Retardantes, potenciadores, geles', extraCat:null, catalogCat:'Lubricantes',
-    fn:p=>{ const n=quizName(p); return /retard|vigoriz|potenci|multiorgasm|excitante|estimulante|feromona|erecci|capsula|intens|calor|efecto|sensibiliz/.test(n) && !/desensibiliz/.test(n); }},
+    fn:p=>{ const n=quizName(p); return /retard|vigoriz|potenci|multiorgasm|excitante|estimulante|erecci|prolong|capsula|intens|calor|efecto|sensibiliz/.test(n) && !/desensibiliz|feromona|splash|perfume|body spray|aroma/.test(n); }},
   {k:'lub',   ico:'💧', label:'Lubricar y cuidar', sub:'Lubricantes, limpiadores, condones', extraCat:'Lubricantes', catalogCat:'Lubricantes',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Lubricantes') && !/retard|vigoriz|potenci|multiorgasm|sensibiliz|excitante|estimulante/.test(n)) || /limpiador|condon/.test(n); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Lubricantes') && !/retard|vigoriz|potenci|multiorgasm|sensibiliz|excitante|estimulante|garganta|feromona|perfume|splash|body spray|estrechador|erecci|prolong/.test(n)) || /limpiador|condon/.test(n); }},
 ];
 function quizGoal(a){ a = a || state.quizAnswers; return QUIZ_GOALS.find(g=>g.k===a.cat) || null; }
-function quizGoalOk(p, a){ const g = quizGoal(a); return !g || g.fn(p); }
+/* Coherencia de género. Si eligió "Para ella" nunca salen productos de uso masculino (ni la opción
+   "Algo para él"), y con "Para él" no salen productos de uso femenino ni "Estimulación externa".
+   Las metas "Algo para él" y "Estimulación externa" también fijan el género de sus resultados, y en
+   lencería cuenta la categoría (Ropa femenina / Ropa masculina). Esto no se relaja nunca: aunque
+   haya pocos productos marcados para esa ocasión, lo que se amplía es la ocasión, no el género. */
+const QUIZ_NEED_GENDER = {'para-ella':'f', 'para-el':'m'};
+const QUIZ_GOAL_GENDER = {el:'m', ext:'f'};
+const QUIZ_MALE_RX = /\bpene\b|masculin|prostat|testic|escroto|cock|jockstrap|boxer|\bslip\b|suspensorio|zuppo|para hombre|retard|masturb|mastub|funda|bomba de succion|pump|castidad|erecci|vigoriz/;
+const QUIZ_FEMALE_RX = /clitori|femenin|mujer|braga|brasier|babydoll|baby doll|pantalet|estrechador|labios vagin|pezon|liguero(?!.*zuppo)/;
+function quizGenderOf(a){ a = a || state.quizAnswers; return QUIZ_NEED_GENDER[a.need] || QUIZ_GOAL_GENDER[a.cat] || (a.cat==='lenc' && a.extra==='lenc-f' ? 'f' : a.cat==='lenc' && a.extra==='lenc-m' ? 'm' : null); }
+function quizGenderOk(p, gen){
+  if(!gen) return true;
+  const n = quizName(p), c = productCats(p);
+  if(gen==='f') return !c.includes('Ropa masculina') && !(QUIZ_MALE_RX.test(n) && !/vagin|clitori|para ella|femenin/.test(n));
+  return !c.includes('Ropa femenina') && !(QUIZ_FEMALE_RX.test(n) && !/masturb|mastub|para el|hombre|masculin/.test(n));
+}
+function quizGoalOk(p, a){ a = a || state.quizAnswers; const g = quizGoal(a); return (!g || g.fn(p)) && quizGenderOk(p, quizGenderOf(a)); }
 // "¿Es tu primera vez?": a quien empieza le suben lo pequeño, sencillo y económico; a quien ya tiene
 // experiencia, lo más completo. Solo se pregunta en metas de juguetes.
 const QUIZ_BEGIN_RX = /principiante|iniciacion|iniciar|\bmini\b|basico|pequen|small|starter|chico|suave|delgad|bolsillo/;
@@ -3571,7 +3587,7 @@ function closeQuiz(){ state.quizOpen = false; render(); }
 function quizSteps(a){
   a = a || state.quizAnswers;
   const g = quizGoal(a);
-  return ['need','cat', ...(g && g.toy ? ['level'] : []), ...(a.cat && quizExtraDef(a) ? ['extra'] : []), 'budget'];
+  return ['need','cat', ...(g && g.toy && a.need!=='empezando' ? ['level'] : []), ...(a.cat && quizExtraDef(a) ? ['extra'] : []), 'budget'];
 }
 function quizAnswer(field, val){
   const a = state.quizAnswers;
@@ -3639,8 +3655,16 @@ function quizColorOpts(pool){
 function quizExtraDef(a){
   if(!a.cat) return null;
   const g = quizGoal(a);
+  if(g && g.k==='lenc' && !QUIZ_NEED_GENDER[a.need]){
+    const pool = quizPool();
+    const opts = [
+      {k:'lenc-f', label:'Para ella', fn:p=>productCats(p).includes('Ropa femenina')},
+      {k:'lenc-m', label:'Para él', fn:p=>productCats(p).includes('Ropa masculina')},
+    ].map(o=>({...o, count:pool.filter(o.fn).length})).filter(o=>o.count>0);
+    return opts.length>=2 ? {title:'¿La lencería es para…?', opts} : null;
+  }
   if(!g || !g.extraCat) return null;
-  const pool = quizPool().filter(p=>(!a.need || (p.needs||[]).includes(a.need)) && g.fn(p));
+  const pool = quizPool().filter(p=>(!a.need || (p.needs||[]).includes(a.need)) && g.fn(p) && quizGenderOk(p, quizGenderOf(a)));
   if(!pool.length) return null;
   const catN = searchClean(g.extraCat);
   let title = null, opts = [];
@@ -3661,8 +3685,14 @@ function quizExtraFn(a){
 }
 // Opciones que SÍ tienen productos con lo ya elegido: así nunca se llega a una combinación vacía.
 function quizCatOptions(need){
-  const pool = quizPool().filter(p=>!need || (p.needs||[]).includes(need));
-  return QUIZ_GOALS.map(g=>[g, pool.filter(g.fn).length]).filter(x=>x[1]>0);
+  const gen = QUIZ_NEED_GENDER[need] || null;
+  const all = quizPool();
+  return QUIZ_GOALS.filter(g=>!(gen && QUIZ_GOAL_GENDER[g.k] && QUIZ_GOAL_GENDER[g.k]!==gen)).map(g=>{
+    const a = {need, cat:g.k};
+    const exact = all.filter(p=>(!need || (p.needs||[]).includes(need)) && quizGoalOk(p, a)).length;
+    const any = all.filter(p=>quizGoalOk(p, a)).length;
+    return [g, exact, any];
+  }).filter(x=>x[1]>0 || x[2]>=3);   // se muestra si hay para esa ocasión, o al menos 3 del género correcto
 }
 function quizBudgetOptions(a){
   const ex = quizExtraFn(a);
@@ -3681,11 +3711,12 @@ function quizResults(){
   const base = pool.filter(p=>okCat(p) && okEx(p));   // categoría y característica elegidas: nunca se relajan
   const pop = new Set(popularProducts(30).map(p=>p.id));
   const mid = b ? (b.max==null ? b.min*1.3 : (b.min+b.max)/2) : null;
+  const level = a.level || (a.need==='empezando' ? 'nuevo' : null);
   const score = p=>{
     const pr = productDisplayPrice(p).price, n = quizName(p);
     let lv = 0;
-    if(a.level==='nuevo') lv = (QUIZ_BEGIN_RX.test(n)?2.5:0) - (QUIZ_PRO_RX.test(n)?2:0) - (mid?0:Math.min(pr,1500)/1000);
-    else if(a.level==='exp') lv = (QUIZ_PRO_RX.test(n)?1.5:0) - (QUIZ_BEGIN_RX.test(n)?1:0);
+    if(level==='nuevo') lv = (QUIZ_BEGIN_RX.test(n)?2.5:0) - (QUIZ_PRO_RX.test(n)?2:0) - (mid?0:Math.min(pr,1500)/1000);
+    else if(level==='exp') lv = (QUIZ_PRO_RX.test(n)?1.5:0) - (QUIZ_BEGIN_RX.test(n)?1:0);
     return (pop.has(p.id)?2:0) + ((p.images&&p.images.length)?1:0) + (p.desc?0.3:0) - (mid?Math.abs(pr-mid)/mid:0) + lv;
   };
   const rank = (x,y)=>score(y)-score(x);
@@ -3798,7 +3829,7 @@ function formatDesc(d){
 // Por qué se recomienda: solo razones ciertas (lo que eligió y datos reales del producto).
 function quizReasons(p, r){
   const a = state.quizAnswers, out = [], n = quizName(p), b = quizBudgetOf(a.budget);
-  if(a.level==='nuevo' && QUIZ_BEGIN_RX.test(n)) out.push('Ideal para empezar');
+  if((a.level==='nuevo' || a.need==='empezando') && QUIZ_BEGIN_RX.test(n)) out.push('Ideal para empezar');
   if(a.level==='exp' && QUIZ_PRO_RX.test(n)) out.push('De los más completos');
   const d = a.extra ? quizExtraDef(a) : null, o = d && d.opts.find(x=>x.k===a.extra);
   if(o && o.fn(p)) out.push(o.label);
@@ -3850,19 +3881,21 @@ function renderQuizTopPick(p, r){
 }
 function renderQuizDrawer(){
   const step = state.quizStep, a = state.quizAnswers, steps = quizSteps(a);
-  const head = drawerHead('Encuentra tu producto ideal','sparkle', step<steps.length ? `Te faltan ${steps.length-step} pregunta${steps.length-step===1?'':'s'}` : 'Elegimos esto para ti','closeQuiz()');
+  const head = drawerHead('Encuentra tu producto ideal','sparkle', step<steps.length ? 'Toma menos de 1 minuto' : 'Elegimos esto para ti','closeQuiz()');
   const sel = (v)=>String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   if(step<steps.length){
     const field = steps[step], needs = state.settings.needs || DEFAULT_NEEDS;
     let Q;
-    if(field==='need') Q = {title:'¿Para quién o para qué ocasión es?', opts:needs.map(n=>[n.key,n.label]), skip:'Muéstrame lo más vendido'};
-    else if(field==='cat') Q = {title:'¿Qué te gustaría?', opts:quizCatOptions(a.need).map(x=>[x[0].k,`<span class="qo-ico">${x[0].ico}</span><span class="qo-txt"><b>${x[0].label}</b><small>${x[0].sub}</small></span>`]), skip:'Sorpréndeme con lo más popular'};
+    // Íconos y una línea de ayuda: "Para mi pareja" (regalo) y "Para compartir en pareja" (usar juntos) se confundían.
+    const NEED_UI = {'para-mi':['🙋','Algo para disfrutar tú'], 'para-pareja':['🎁','Un regalo para tu pareja'], 'para-ella':['👩','Productos para mujer'], 'para-el':['👨','Productos para hombre'], 'compartir-pareja':['💞','Para usar juntos'], 'empezando':['🌱','Opciones sencillas para tu primera vez']};
+    if(field==='need') Q = {title:'¿Para quién es?', opts:needs.map(n=>{ const u = NEED_UI[n.key]; return [n.key, u ? `<span class="qo-ico">${u[0]}</span><span class="qo-txt"><b>${escHtml(n.label)}</b><small>${u[1]}</small></span>` : escHtml(n.label)]; }), skip:'Muéstrame lo más vendido'};
+    else if(field==='cat') Q = {title:'¿Qué te gustaría?', opts:quizCatOptions(a.need).map(x=>[x[0].k,`<span class="qo-ico">${x[0].ico}</span><span class="qo-txt"><b>${x[0].label}</b><small>${x[0].k==='lenc' && QUIZ_NEED_GENDER[a.need] ? (QUIZ_NEED_GENDER[a.need]==='f'?'Ropa sexy para ella':'Ropa sexy para él') : x[0].sub}</small></span>`]), skip:'Sorpréndeme con lo más popular'};
     else if(field==='level') Q = {title:'¿Es tu primera vez con algo así?', opts:[['nuevo','<span class="qo-ico">🌱</span><span class="qo-txt"><b>Sí, es mi primera vez</b><small>Te mostramos opciones sencillas y fáciles de usar</small></span>'],['exp','<span class="qo-ico">⭐</span><span class="qo-txt"><b>Ya tengo experiencia</b><small>Te mostramos lo más completo</small></span>']], skip:'Prefiero no decir'};
     else if(field==='extra'){ const d = quizExtraDef(a); Q = {title:d.title, opts:d.opts.map(o=>[o.k,`${o.label} (${o.count})`]), skip:'Me da igual'}; }
     else Q = {title:'¿Cuánto quieres invertir?', opts:quizBudgetOptions(a).map(x=>[x[0].k,`${x[0].label} (${x[1]})`]), skip:'Sin presupuesto definido'};
     return `${head}
     <div class="drawer-body">
-      <div class="quiz-progress"><span>Pregunta ${step+1} de ${steps.length}</span><div class="quiz-dots">${steps.map((_,i)=>`<i class="${i<=step?'on':''}"></i>`).join('')}</div></div>
+      <div class="quiz-progress"><span>Pregunta ${step+1}</span><div class="quiz-dots">${steps.map((_,i)=>`<i class="${i<=step?'on':''}"></i>`).join('')}</div></div>
       <h3 class="quiz-q">${Q.title}</h3>
       <div class="quiz-opts">
         ${Q.opts.map(o=>`<button class="quiz-opt ${a[field]===o[0]?'active':''}" onclick="quizAnswer('${field}','${sel(o[0])}')"><span>${o[1]}</span>${icon('chevron-right',18)}</button>`).join('')}
