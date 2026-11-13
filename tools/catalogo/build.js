@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const admin = require('firebase-admin');
+const { writeSeoPages } = require('./seo');
 const env = process.env;
 const ROOT = path.join(__dirname, '..', '..');
 const OUT = path.join(ROOT, 'catalogo.json');
@@ -222,10 +223,12 @@ async function main() {
 
   if (!same) {
     fs.writeFileSync(OUT, JSON.stringify({ generatedAt: startedAt, ...body }));
-    writeSitemap(products, startedAt);
+    // Páginas para Google (/p/ y /c/) y sitemap.xml con esas direcciones.
+    try { const r = writeSeoPages(ROOT, SITE, products, settings, startedAt); console.log(`Páginas para Google: ${r.products} productos, ${r.categories} categorías · ${r.written} reescritas · ${r.removed} borradas`); }
+    catch (e) { console.log('No se pudieron generar las páginas para Google:', e.message); writeSitemap(products, startedAt); }
     git('git config user.name "cdlp-catalogo[bot]"');
     git('git config user.email "actions@users.noreply.github.com"');
-    git('git add catalogo.json sitemap.xml');
+    git('git add catalogo.json sitemap.xml'); git('git add -A p c');
     git(`git commit -m "Catálogo estático: ${products.length} productos (${why})"`);
     let pushed = false;
     for (let i = 0; i < 4 && !pushed; i++) {

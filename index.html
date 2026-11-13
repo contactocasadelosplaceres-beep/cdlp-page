@@ -4,9 +4,11 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://*.googleapis.com https://api.languagetool.org https://www.gstatic.com https://www.google.com https://cloudflareinsights.com; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<meta name="description" content="Catálogo de La Casa de los Placeres: juguetes, lubricantes y más, con empaque sin marcas y pago al recibir en Ciudad Guzmán.">
+<meta name="description" content="Sex shop en Ciudad Guzmán, Jalisco: juguetes, dildos, lubricantes, lencería y más. Empaque discreto sin marcas, pago al recibir y envío $35 en Cd. Guzmán.">
+<link rel="canonical" href="https://casaplaceres.com/">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>La Casa de los Placeres — Catálogo</title>
+<title>La Casa de los Placeres | Sex shop en Ciudad Guzmán</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Store","name":"La Casa de los Placeres","url":"https://casaplaceres.com/","logo":"https://casaplaceres.com/logo.png","image":"https://casaplaceres.com/logo.png","description":"Sex shop en Ciudad Guzmán: juguetes, lubricantes, lencería y más, con empaque discreto y pago al recibir.","telephone":"+52 33 1749 4004","priceRange":"$$","currenciesAccepted":"MXN","paymentAccepted":"Efectivo al recibir","address":{"@type":"PostalAddress","addressLocality":"Ciudad Guzmán","addressRegion":"Jalisco","addressCountry":"MX"},"areaServed":"Ciudad Guzmán, Jalisco","openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday","Friday"],"opens":"10:00","closes":"21:00"},{"@type":"OpeningHoursSpecification","dayOfWeek":"Saturday","opens":"10:00","closes":"14:00"}]}</script>
 <link rel="icon" type="image/png" href="favicon.png">
 <!-- App instalable (PWA): cada plataforma tiene SU manifest, con id y alcance propios
      (/catalogo, /pos, /admin) para que en Android se instalen como 3 apps separadas. -->
@@ -1020,6 +1022,9 @@
   .foot-4 .foot-brand-row{grid-column:1/-1;}
   .foot-4 .foot-col a,.foot-4 .foot-col div{min-height:34px;}
   @media(min-width:900px){ .foot-4{grid-template-columns:1.2fr 1fr 1fr 1fr 1fr;} .foot-4 .foot-brand-row{grid-column:auto;} }
+  .foot-4 .foot-cats{grid-column:1/-1;}
+  .foot-4 .foot-cats a{display:inline-flex;margin-right:16px;}
+  @media(min-width:900px){ .foot-4 .foot-cats{grid-column:auto;} .foot-4 .foot-cats a{display:flex;margin-right:0;} .foot-4{grid-template-columns:1.2fr repeat(5,1fr);} }
   .foot-bottom{font-size:12px;}
   .best-row-all{white-space:nowrap;}
   @media(max-width:359px){ .announce-bar{font-size:10.5px !important;} .best-sub{font-size:11.5px;} }
@@ -4566,6 +4571,8 @@ function fmtPhone(n){ const d = String(n||'').replace(/\D/g,''); const t = d.len
 /* Pie en 4 bloques. Solo enlaces que llevan a algo real: "Novedades" y "Tarjetas de regalo"
    aparecen solo si existen; no hay página de términos aparte (los términos se aceptan al pedir y
    están dentro del aviso de privacidad y la política de devoluciones). */
+// Igual que slugify() de tools/catalogo/seo.js: dirección de la página de la categoría para Google (/c/…/).
+function catPageSlug(c){ return String(c||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/ñ/g,'n').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,70).replace(/-+$/,''); }
 function renderFooterSection(){
   const s = state.settings;
   const L = (txt, js) => `<a href="#" onclick="event.preventDefault();${js}">${txt}</a>`;
@@ -4592,6 +4599,10 @@ function renderFooterSection(){
         ${L('Cambios y devoluciones',"state.privacyPolicyOpen='returns';render()")}
         ${L(`Buzón de sugerencias`,'state.messageDrawerOpen=true;render()')}
       </div>
+      ${(()=>{ const cs = visibleCategories().filter(c=>state.products.some(p=>productCats(p).includes(c))); return cs.length ? `<div class="foot-col foot-cats">
+        <h4>Categorías</h4>
+        ${cs.map(c=>`<a href="/c/${catPageSlug(c)}/" onclick="event.preventDefault();goToCatalog('${c.replace(/'/g,"\\'")}')">${escHtml(c)}</a>`).join('')}
+      </div>` : ''; })()}
       <div class="foot-col">
         <h4>Información legal</h4>
         ${L('Aviso de privacidad','state.privacyPolicyOpen=true;render()')}
