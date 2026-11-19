@@ -4227,6 +4227,7 @@ function renderPromoPickModal(){
       ${list.length ? list.map(p=>row(p,true)).join('') : `<div class="empty-state">Aún no hay productos. Busca arriba para agregar.</div>`}
       <div class="modal-actions">
         ${list.length ? `<button class="btn-cancel" onclick="copyPromoPickList()">${icon('copy',14)} Copiar lista</button>` : ''}
+        ${list.length>1 ? `<button class="btn-cancel" onclick='state.promoPickOpen=false;openPostModalMulti(${JSON.stringify(list.slice(0,POST_MAX_MULTI).map(p=>p.id))})'>${icon('share',14)} Publicar en un estado</button>` : ''}
         <button class="btn-primary" onclick="closePromoPick()">Listo</button>
       </div>
     </div>
@@ -8837,6 +8838,7 @@ function renderProductos(){
             <span>${selected.length} seleccionado${selected.length===1?'':'s'}</span>
             <button class="btn-tertiary" onclick="openBulkTagModal()">${icon('tag',14)} Categoría / etiqueta</button>
             <button class="btn-tertiary" onclick="openMassPriceModal()">${icon('dollar-sign',14)} Cambiar precios</button>
+            <button class="btn-tertiary" onclick='openPostModalMulti(${JSON.stringify(selected)})'>${icon('share',14)} Publicación (hasta ${POST_MAX_MULTI})</button>
             <button class="btn-tertiary" onclick='printProductLabelsBulk(${JSON.stringify(selected)})'>${icon('printer',14)} Imprimir etiquetas</button>
             <button class="btn-tertiary" onclick="bulkSetPromoCandidate(true)">${icon('star',14)} A mi lista de promoción</button>
             <button class="btn-tertiary" onclick="bulkSetPromoCandidate(false)">Quitar de la lista</button>
@@ -11353,17 +11355,144 @@ function renderSeasonsSubpanel(){
 /* ================================================================
    GENERADOR DE PUBLICACIONES PARA ESTADOS DE WHATSAPP
    ================================================================ */
-function defaultPostText(p){
-  const promo = p.promoPrice>0 && p.promoPrice<p.price;
-  const priceLine = promo ? `~${money(p.price)}~ *${money(p.promoPrice)}*` : `*${money(p.price)}*`;
-  return `✨ ${p.name}\n${priceLine}\n\nEnvío discreto y pago contra entrega 💕\n👉 ${productShareLink(p.id)}`;
+function postEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+// Saca características cortas de la descripción. Muchas descripciones vienen pegadas
+// ("...(flor artificial)Medidas petalo 5 x 5 cms") o en un solo renglón largo, así que se parte
+// por renglones, viñetas, puntos y también donde arranca una palabra con mayúscula a media frase.
+function extractPostFeatures(desc){
+  let t = String(desc||'').replace(/\r/g,'');
+  t = t.replace(/([a-záéíóúñ0-9)])([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/g, '$1\n$2');
+  t = t.replace(/(?<!(?:^|\s)[A-ZÁÉÍÓÚÑ][^\s]*)([a-záéíóúñ0-9])\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s(?![A-ZÁÉÍÓÚÑ]))/g, '$1\n$2');
+  // Textos de relleno que venían de la tienda anterior y no le dicen nada al cliente.
+  const junk = /^(compra en l[ií]nea|haz tu pedido|sujeto a disponibilidad|producto vendido bajo pedido|medidas en im[aá]genes?)|\$\s?\d/i;
+  const parts = t.split(/\n|•|·|;|\.\s+|\s-\s|^-\s/m).map(s=>s.replace(/^[\s\-–*✓✔•]+/,'').replace(/[\s.]+$/,'').trim())
+    .filter(s=>s.length>=3 && !/:$/.test(s) && !junk.test(s));
+  const out = [];
+  parts.forEach(s=>{ if(out.length<4 && !out.some(o=>o.toLowerCase()===s.toLowerCase())) out.push(s.charAt(0).toUpperCase()+s.slice(1)); });
+  return out.map(s=> s.length>70 ? s.slice(0,67).replace(/\s+\S*$/,'')+'…' : s);
 }
-function openPostModal(id){
-  const p = state.products.find(x=>x.id===id); if(!p) return;
-  state.postModalProductId = id; state.postImageIdx = 0; state.postText = defaultPostText(p);
+const POST_THEMES = {
+  morado:{label:'Morado', bg:['#4A1642','#993477'], ink:'#fff', soft:'rgba(255,255,255,0.9)', pill:'#fff', pillInk:'#993477', badge:'#F7C948', badgeInk:'#4A1642', deco:'#fff'},
+  noche:{label:'Noche', bg:['#120A1C','#3B1236'], ink:'#fff', soft:'rgba(255,255,255,0.85)', pill:'#E0559B', pillInk:'#fff', badge:'#E0559B', badgeInk:'#fff', deco:'#E0559B'},
+  rosa:{label:'Rosa', bg:['#FBEDEF','#F3C9D6'], ink:'#4A1642', soft:'rgba(74,22,66,0.85)', pill:'#993477', pillInk:'#fff', badge:'#4A1642', badgeInk:'#fff', deco:'#993477'},
+};
+const POST_BADGES = ['', 'Nuevo', 'Más vendido', 'Últimas piezas', 'Promoción', 'Recomendado'];
+const POST_MAX_MULTI = 4;
+function postPrefs(){
+  if(!state.postPrefs){
+    let saved = {}; try{ saved = JSON.parse(localStorage.getItem('cdlp_post_prefs')||'{}')||{}; }catch(e){ saved = {}; }
+    state.postPrefs = {showPrice: saved.showPrice!==false, theme: POST_THEMES[saved.theme]?saved.theme:'morado', showFeatures: saved.showFeatures!==false, showQr: !!saved.showQr};
+  }
+  return state.postPrefs;
+}
+function savePostPrefs(){ try{ const p = postPrefs(); localStorage.setItem('cdlp_post_prefs', JSON.stringify({showPrice:p.showPrice, theme:p.theme, showFeatures:p.showFeatures, showQr:p.showQr})); }catch(e){} }
+function postProducts(){ return (state.postModalIds||[]).map(id=>state.products.find(x=>x.id===id)).filter(Boolean); }
+function postIsMulti(){ return postProducts().length>1; }
+function postFeatureList(){ return (postPrefs().showFeatures && !postIsMulti()) ? String(state.postFeatures||'').split('\n').map(s=>s.trim()).filter(Boolean).slice(0,4) : []; }
+function postPromo(p){ return p.promoPrice>0 && p.promoPrice<p.price; }
+function postStoreLink(){ return location.href.replace(/admin(\.html)?([?#].*)?$/, ''); }
+function postQrLink(){ const ps = postProducts(); return ps.length===1 ? productShareLink(ps[0].id) : postStoreLink(); }
+
+// ---- Fecha límite ("Solo hasta el domingo 23 nov") ----
+function postLocalISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function postDeadlinePreset(kind){
+  const d = new Date(); d.setHours(12,0,0,0);
+  if(kind==='manana') d.setDate(d.getDate()+1);
+  if(kind==='domingo') d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+  if(kind==='semana') d.setDate(d.getDate()+7);
+  return postLocalISO(d);
+}
+function postDeadlineText(){
+  const v = state.postDeadline; if(!v) return '';
+  const d = new Date(v+'T12:00:00'); if(isNaN(d)) return '';
+  const today = new Date(); today.setHours(12,0,0,0);
+  const days = Math.round((d - today)/86400000);
+  if(days<0) return '';
+  if(days===0) return 'Solo por hoy';
+  if(days===1) return 'Solo hasta mañana';
+  const wd = d.toLocaleDateString('es-MX',{weekday:'long'});
+  const dm = d.toLocaleDateString('es-MX',{day:'numeric', month:'short'}).replace('.','');
+  return `Solo hasta el ${wd} ${dm}`;
+}
+
+// ---- Código QR: la librería se baja solo la primera vez que se activa ----
+let postQrLibPromise = null;
+function loadPostQrLib(){
+  if(typeof qrcode==='function') return Promise.resolve(true);
+  if(postQrLibPromise) return postQrLibPromise;
+  postQrLibPromise = new Promise(resolve=>{
+    const s = document.createElement('script');
+    s.src = 'assets/vendor/qrcode-generator-1.4.4.js'; // copia local (MIT, Kazuhiko Arase): no depende de un CDN
+    s.onload = ()=>resolve(typeof qrcode==='function');
+    s.onerror = ()=>{ postQrLibPromise = null; resolve(false); };
+    document.head.appendChild(s);
+  });
+  return postQrLibPromise;
+}
+function drawPostQr(ctx, text, x, y, size, T, FONT){
+  if(typeof qrcode!=='function') return false;
+  let qr; try{ qr = qrcode(0,'M'); qr.addData(text); qr.make(); }catch(e){ return false; }
+  const n = qr.getModuleCount(), pad = 18, inner = size - pad*2, cell = inner / n;
+  postRoundRect(ctx, x, y, size, size, 28); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.fillStyle = '#2A0F27';
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(qr.isDark(r,c)) ctx.fillRect(Math.floor(x+pad+c*cell), Math.floor(y+pad+r*cell), Math.ceil(cell), Math.ceil(cell));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = T.soft; ctx.font = `600 30px ${FONT}`;
+  ctx.fillText('Escanéame', x+size/2, y+size+40); ctx.textAlign = 'left';
+  return true;
+}
+
+function postPriceLine(p){
+  if(!postPrefs().showPrice) return '💬 Pregunta por su precio';
+  return postPromo(p) ? `~${money(p.price)}~ *${money(p.promoPrice)}*` : `*${money(p.price)}*`;
+}
+function defaultPostText(){
+  const ps = postProducts(); if(!ps.length) return '';
+  const badge = state.postBadge ? `🔥 ${state.postBadge.toUpperCase()}\n` : '';
+  const dl = postDeadlineText(); const dlLine = dl ? `⏰ ${dl}\n` : '';
+  const foot = `\nEnvío discreto y pago contra entrega 💕`;
+  if(ps.length===1){
+    const p = ps[0]; const feats = postFeatureList();
+    return `${badge}✨ ${p.name}\n${feats.length ? feats.map(f=>'• '+f).join('\n')+'\n' : ''}${postPriceLine(p)}\n${dlLine}${foot}\n👉 ${productShareLink(p.id)}`;
+  }
+  const title = (state.postTitle||'').trim();
+  return `${badge}${title ? '✨ '+title+'\n' : ''}${dlLine}\n${ps.map(p=>`▪️ ${p.name} — ${postPriceLine(p)}\n👉 ${productShareLink(p.id)}`).join('\n\n')}\n${foot}`;
+}
+// Si la persona no ha escrito el texto a mano, se vuelve a armar solo al cambiar una opción.
+function refreshPostText(){
+  if(!postProducts().length) return;
+  if(!state.postTextEdited){ state.postText = defaultPostText(); const ta = document.getElementById('post-text'); if(ta) ta.value = state.postText; }
+}
+function setPostOption(key, val){
+  if(key==='badge') state.postBadge = val;
+  else if(key==='deadline') state.postDeadline = val;
+  else { postPrefs()[key] = val; savePostPrefs(); }
+  refreshPostText(); render();
+  if(key==='showQr' && val) loadPostQrLib().then(ok=>{ if(!ok) showToast('No se pudo cargar el código QR; revisa tu conexión'); drawPostCanvas(); });
+}
+function onPostFeaturesInput(v){ state.postFeatures = v; refreshPostText(); drawPostCanvas(); }
+function onPostTitleInput(v){ state.postTitle = v; refreshPostText(); drawPostCanvas(); }
+function resetPostText(){ state.postTextEdited = false; refreshPostText(); render(); }
+function startPost(ids){
+  postPrefs();
+  state.postModalIds = ids; state.postModalProductId = ids[0];
+  state.postImageIdx = 0; state.postTextEdited = false; state.postDeadline = '';
+  const ps = postProducts();
+  state.postFeatures = ps.length===1 ? extractPostFeatures(ps[0].desc).join('\n') : '';
+  state.postTitle = ps.length>1 ? (ps.every(postPromo) ? 'Promociones de la semana' : 'Te recomendamos') : '';
+  state.postBadge = ps.length===1 && postPromo(ps[0]) ? 'Promoción' : '';
+  state.postText = defaultPostText();
   render();
+  if(postPrefs().showQr) loadPostQrLib().then(()=>drawPostCanvas());
 }
-function closePostModal(){ state.postModalProductId = null; render(); }
+function openPostModal(id){ if(state.products.some(x=>x.id===id)) startPost([id]); }
+// Varios productos en un solo estado (desde la selección de la lista o desde tu lista de promoción).
+function openPostModalMulti(ids){
+  const valid = (ids||[]).filter(id=>state.products.some(x=>x.id===id));
+  if(!valid.length){ showToast('Selecciona al menos un producto'); return; }
+  if(valid.length>POST_MAX_MULTI) showToast(`Caben hasta ${POST_MAX_MULTI} productos por estado: usé los primeros ${POST_MAX_MULTI}`);
+  startPost(valid.slice(0, POST_MAX_MULTI));
+}
+function closePostModal(){ state.postModalProductId = null; state.postModalIds = null; render(); }
 const postImgCache = {};
 function loadPostImage(src){
   return new Promise(resolve=>{
@@ -11391,58 +11520,162 @@ function postWrapText(ctx, text, maxW, maxLines){
 }
 // Dibuja la tarjeta vertical (1080×1920, el formato de los estados) en el <canvas>. Como cada
 // render() reconstruye el DOM, esta función se vuelve a llamar después de cada render.
+function postDrawPricePill(ctx, p, x, y, h, fontPx, T, FONT, minW){
+  const pr = postPrefs(); const promo = postPromo(p);
+  const priceText = pr.showPrice ? money(promo ? p.promoPrice : p.price) : 'Pregunta por su precio';
+  ctx.font = `800 ${pr.showPrice ? fontPx : Math.round(fontPx*0.65)}px ${FONT}`;
+  const pw = Math.max(minW, ctx.measureText(priceText).width + h*0.7);
+  postRoundRect(ctx, x, y, pw, h, h/2); ctx.fillStyle = T.pill; ctx.fill();
+  ctx.fillStyle = T.pillInk; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(priceText, x + h*0.35, y+h/2+2);
+  return {pw, promo: pr.showPrice && promo, priceText};
+}
+function postDrawImage(ctx, img, p, ix, iy, is, r, FONT){
+  postRoundRect(ctx, ix-10, iy-10, is+20, is+20, r+10); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.save(); postRoundRect(ctx, ix, iy, is, is, r); ctx.clip();
+  if(img){ const s = Math.min(img.width, img.height); ctx.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,ix,iy,is,is); }
+  else { ctx.fillStyle = '#F6E9E6'; ctx.fillRect(ix,iy,is,is); ctx.fillStyle = '#993477'; ctx.font = `700 ${Math.round(is*0.4)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText((p.name||'?').charAt(0).toUpperCase(), ix+is/2, iy+is/2); ctx.textAlign = 'left'; }
+  ctx.restore();
+}
+function postDrawBadge(ctx, text, x, y, T, FONT, px){
+  ctx.font = `800 ${px}px ${FONT}`; const bt = text.toUpperCase(); const bh = Math.round(px*1.95); const bw = ctx.measureText(bt).width + px*1.5;
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 6;
+  postRoundRect(ctx, x, y, bw, bh, bh/2); ctx.fillStyle = T.badge; ctx.fill(); ctx.restore();
+  ctx.fillStyle = T.badgeInk; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(bt, x+px*0.75, y+bh/2+2);
+}
+// Dibuja la tarjeta vertical (1080×1920, el formato de los estados) en el <canvas>. Como cada
+// render() reconstruye el DOM, esta función se vuelve a llamar después de cada render.
 async function drawPostCanvas(){
   const canvas = document.getElementById('post-canvas'); if(!canvas) return;
-  const p = state.products.find(x=>x.id===state.postModalProductId); if(!p) return;
+  const ps = postProducts(); if(!ps.length) return;
+  const multi = ps.length>1;
+  const pr = postPrefs(); const T = POST_THEMES[pr.theme] || POST_THEMES.morado;
   const W = 1080, H = 1920;
-  canvas.width = W; canvas.height = H;
   let ctx = null; try{ ctx = canvas.getContext('2d'); }catch(e){ ctx = null; }
   if(!ctx) return;
-  const [img, logo] = await Promise.all([loadPostImage((p.images||[])[state.postImageIdx||0]), loadPostImage(state.settings.logoUrl)]);
+  const imgSrcs = multi ? ps.map(p=>(p.images||[])[0]) : [(ps[0].images||[])[state.postImageIdx||0]];
+  const loaded = await Promise.all([...imgSrcs.map(loadPostImage), loadPostImage(state.settings.logoUrl)]);
+  const logo = loaded.pop(); const imgs = loaded;
   if(document.getElementById('post-canvas') !== canvas) return; // la pantalla se reconstruyó mientras cargaba la foto: la nueva versión se dibuja sola
+  canvas.width = W; canvas.height = H;
   const FONT = 'Poppins, Inter, Arial, sans-serif';
-  const g = ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,'#4A1642'); g.addColorStop(1,'#993477');
+  const g = ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,T.bg[0]); g.addColorStop(1,T.bg[1]);
   ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-  ctx.globalAlpha = 0.08; ctx.fillStyle = '#fff';
+  ctx.globalAlpha = 0.08; ctx.fillStyle = T.deco;
   ctx.beginPath(); ctx.arc(W-80,220,300,0,Math.PI*2); ctx.fill();
   ctx.beginPath(); ctx.arc(60,H-320,260,0,Math.PI*2); ctx.fill();
   ctx.globalAlpha = 1;
   let hx = 90;
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   if(logo){ ctx.save(); ctx.beginPath(); ctx.arc(hx+55,150,55,0,Math.PI*2); ctx.clip(); ctx.drawImage(logo,hx,95,110,110); ctx.restore(); hx += 135; }
-  ctx.fillStyle = '#fff'; ctx.font = `700 48px ${FONT}`;
+  ctx.fillStyle = T.ink; ctx.font = `700 48px ${FONT}`;
   ctx.fillText(state.settings.storeName || '', hx, 150);
-  const ix = 90, iy = 290, is = 900;
-  postRoundRect(ctx, ix-12, iy-12, is+24, is+24, 60); ctx.fillStyle = '#fff'; ctx.fill();
-  ctx.save(); postRoundRect(ctx, ix, iy, is, is, 48); ctx.clip();
-  if(img){ const s = Math.min(img.width, img.height); ctx.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,ix,iy,is,is); }
-  else { ctx.fillStyle = '#F6E9E6'; ctx.fillRect(ix,iy,is,is); ctx.fillStyle = '#993477'; ctx.font = `700 360px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText((p.name||'?').charAt(0).toUpperCase(), ix+is/2, iy+is/2); ctx.textAlign = 'left'; }
-  ctx.restore();
-  ctx.fillStyle = '#fff'; ctx.font = `700 70px ${FONT}`; ctx.textBaseline = 'alphabetic';
-  const lines = postWrapText(ctx, p.name||'', 900, 3);
-  let y = 1310; lines.forEach(l=>{ ctx.fillText(l, 90, y); y += 84; });
-  const promo = p.promoPrice>0 && p.promoPrice<p.price;
-  const priceText = money(promo ? p.promoPrice : p.price);
-  ctx.font = `800 92px ${FONT}`;
-  const pw = Math.max(320, ctx.measureText(priceText).width + 90);
-  y += 10;
-  postRoundRect(ctx, 90, y, pw, 130, 65); ctx.fillStyle = '#fff'; ctx.fill();
-  ctx.fillStyle = '#993477'; ctx.textBaseline = 'middle'; ctx.fillText(priceText, 135, y+68);
-  if(promo){
-    ctx.font = `600 50px ${FONT}`; ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    const old = money(p.price), ox = 90+pw+30;
-    ctx.fillText(old, ox, y+68);
-    const w = ctx.measureText(old).width;
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(ox,y+68); ctx.lineTo(ox+w,y+68); ctx.stroke();
+
+  const qrOn = pr.showQr && typeof qrcode==='function';
+  const dl = postDeadlineText();
+  const contentBottom = H - (qrOn ? 400 : 290);
+
+  if(!multi){
+    const p = ps[0];
+    const feats = postFeatureList();
+    ctx.font = `500 44px ${FONT}`;
+    const featLines = feats.map(f=>postWrapText(ctx, f, 830, 2));
+    const featH = featLines.reduce((s,l)=>s + l.length*56 + 18, 0);
+    ctx.font = `700 64px ${FONT}`;
+    const nameLinesN = feats.length ? postWrapText(ctx, p.name||'', 900, 2).length : 0;
+    const belowH = 120 + nameLinesN*76 + 16 + featH + 130 + (dl ? 80 : 0);
+    const is = (feats.length || dl || qrOn) ? Math.round(Math.max(560, Math.min(900, contentBottom - 270 - (feats.length ? belowH : 330 + (dl?80:0))))) : 900;
+    const ix = (W - is)/2, iy = 270;
+    postDrawImage(ctx, imgs[0], p, ix, iy, is, 48, FONT);
+    if(state.postBadge) postDrawBadge(ctx, state.postBadge, ix-20, iy+40, T, FONT, 46);
+    ctx.fillStyle = T.ink; ctx.textBaseline = 'alphabetic';
+    ctx.font = `700 ${feats.length?64:70}px ${FONT}`;
+    const lines = postWrapText(ctx, p.name||'', 900, feats.length?2:3);
+    let y = iy + is + 120; lines.forEach(l=>{ ctx.fillText(l, 90, y); y += feats.length?76:84; });
+    if(feats.length){
+      y += 6; ctx.font = `500 44px ${FONT}`;
+      featLines.forEach(ls=>{
+        ctx.fillStyle = T.pill; ctx.beginPath(); ctx.arc(108, y-15, 12, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = T.soft; ls.forEach((l,i)=>{ ctx.fillText(l, 140, y + i*56); });
+        y += ls.length*56 + 18;
+      });
+    }
+    y += 10;
+    if(y + 130 + (dl?80:0) > contentBottom + 40) y = contentBottom + 40 - 130 - (dl?80:0);
+    const {pw, promo} = postDrawPricePill(ctx, p, 90, y, 130, 92, T, FONT, 320);
+    if(promo){
+      ctx.font = `600 50px ${FONT}`; ctx.fillStyle = T.soft;
+      const old = money(p.price), ox = 90+pw+30;
+      ctx.fillText(old, ox, y+68);
+      const w = ctx.measureText(old).width;
+      ctx.strokeStyle = T.soft; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(ox,y+68); ctx.lineTo(ox+w,y+68); ctx.stroke();
+    }
+    if(dl){ ctx.textBaseline = 'alphabetic'; ctx.fillStyle = T.ink; ctx.font = `700 46px ${FONT}`; ctx.fillText('⏰ '+dl, 95, y+130+66); }
+  } else {
+    // Varios productos: título arriba y una cuadrícula (2 lado a lado, o 2×2 para 3–4).
+    const title = (state.postTitle||'').trim();
+    let top = 250;
+    if(state.postBadge){ postDrawBadge(ctx, state.postBadge, 90, top, T, FONT, 40); top += 100; }
+    if(title){
+      ctx.fillStyle = T.ink; ctx.textBaseline = 'alphabetic'; ctx.font = `800 76px ${FONT}`;
+      postWrapText(ctx, title, 900, 2).forEach(l=>{ top += 86; ctx.fillText(l, 90, top); });
+      top += 20;
+    }
+    if(dl){ ctx.fillStyle = T.soft; ctx.font = `700 44px ${FONT}`; ctx.textBaseline = 'alphabetic'; top += 56; ctx.fillText('⏰ '+dl, 92, top); top += 10; }
+    top += 40;
+    const gap = 40, availH = contentBottom - top;
+    const oldPrice = (p, x, y)=>{ if(!(pr.showPrice && postPromo(p))) return; ctx.font = `600 34px ${FONT}`; ctx.fillStyle = T.soft; ctx.textBaseline = 'middle'; const t = 'antes '+money(p.price); ctx.fillText(t, x, y); const w = ctx.measureText(t).width, w0 = ctx.measureText('antes ').width; ctx.strokeStyle = T.soft; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x+w0, y); ctx.lineTo(x+w, y); ctx.stroke(); };
+    if(ps.length===2){
+      // Dos productos: un renglón por producto, foto a la izquierda y datos a la derecha.
+      const is = Math.round(Math.max(300, Math.min(460, (availH - gap)/2)));
+      ps.forEach((p,i)=>{
+        const cy = top + i*(is+gap), tx = 90 + is + 44, tw = 900 - is - 44;
+        postDrawImage(ctx, imgs[i], p, 90, cy, is, 40, FONT);
+        ctx.fillStyle = T.ink; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.font = `700 50px ${FONT}`;
+        const nl = postWrapText(ctx, p.name||'', tw, 3);
+        let ty = cy + 70; nl.forEach(l=>{ ctx.fillText(l, tx, ty); ty += 60; });
+        const py = Math.min(ty + 10, cy + is - 150);
+        postDrawPricePill(ctx, p, tx, py, 96, 60, T, FONT, 200);
+        oldPrice(p, tx+6, py + 96 + 40);
+      });
+    } else {
+      // 3 o 4 productos: cuadrícula 2×2 (con 3, el tercero va centrado abajo).
+      const cellW = (900 - gap)/2, infoH = 250;
+      const is = Math.round(Math.max(240, Math.min(cellW, (availH - gap)/2 - infoH)));
+      ps.forEach((p,i)=>{
+        const c = i % 2, r = Math.floor(i / 2);
+        const cx = (ps.length===3 && i===2) ? 90 + (900 - cellW)/2 : 90 + c*(cellW+gap);
+        const cy = top + r*(is + infoH + gap);
+        const ix = cx + (cellW - is)/2;
+        postDrawImage(ctx, imgs[i], p, ix, cy, is, 36, FONT);
+        ctx.fillStyle = T.ink; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.font = `700 42px ${FONT}`;
+        let ty = cy + is + 62;
+        postWrapText(ctx, p.name||'', cellW, 2).forEach(l=>{ ctx.fillText(l, cx, ty); ty += 50; });
+        const {pw} = postDrawPricePill(ctx, p, cx, cy + is + 140, 80, 52, T, FONT, 180);
+        if(pr.showPrice && postPromo(p)){ ctx.font = `600 34px ${FONT}`; if(pw + 20 + ctx.measureText('antes '+money(p.price)).width <= cellW) oldPrice(p, cx + pw + 20, cy + is + 182); }
+      });
+    }
   }
-  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = `500 40px ${FONT}`;
-  ctx.fillText('Envío discreto · Pago contra entrega', W/2, H-150);
+
+  ctx.textBaseline = 'alphabetic';
+  if(qrOn){
+    const qs = 230, qx = W-90-qs, qy = H-110-qs-30;
+    drawPostQr(ctx, postQrLink(), qx, qy, qs, T, FONT);
+    ctx.textAlign = 'left'; ctx.fillStyle = T.ink; ctx.font = `700 46px ${FONT}`;
+    ctx.fillText('Pídelo por mensaje 💬', 90, qy+80);
+    ctx.fillStyle = T.soft; ctx.font = `500 38px ${FONT}`;
+    ctx.fillText('Envío discreto', 90, qy+145); ctx.fillText('Pago contra entrega', 90, qy+195);
+  } else {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = T.ink; ctx.font = `700 46px ${FONT}`;
+    ctx.fillText('Pídelo por mensaje 💬', W/2, H-200);
+    ctx.fillStyle = T.soft; ctx.font = `500 38px ${FONT}`;
+    ctx.fillText('Envío discreto · Pago contra entrega', W/2, H-135);
+  }
   ctx.textAlign = 'left';
 }
 function postFileName(){
-  const p = state.products.find(x=>x.id===state.postModalProductId);
-  const slug = ((p&&p.name)||'producto').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+  const ps = postProducts(); const p = ps[0];
+  const slug = (ps.length>1 ? 'varios-productos' : ((p&&p.name)||'producto')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
   return `publicacion_${slug||'producto'}.png`;
 }
 function postCanvasBlob(){
@@ -11472,12 +11705,16 @@ function copyPostText(){
   try{ navigator.clipboard.writeText(state.postText); showToast('Texto copiado'); }catch(e){ showToast('No se pudo copiar'); }
 }
 function renderPostModal(){
-  const p = state.products.find(x=>x.id===state.postModalProductId); if(!p) return '';
-  const nImgs = (p.images||[]).length;
+  const ps = postProducts(); if(!ps.length) return '';
+  const multi = ps.length>1; const p = ps[0];
+  const nImgs = multi ? 0 : (p.images||[]).length; const pr = postPrefs();
+  const chips = (items, cur, fn)=>`<div class="status-filter ord-chips" style="flex-wrap:wrap;gap:6px;margin:4px 0 2px;">${items.map(([v,l])=>`<button type="button" class="${cur===v?'active':''}" onclick="${fn(v)}">${l}</button>`).join('')}</div>`;
+  const presets = [['','Ninguna'],[postDeadlinePreset('hoy'),'Hoy'],[postDeadlinePreset('manana'),'Mañana'],[postDeadlinePreset('domingo'),'Este domingo'],[postDeadlinePreset('semana'),'En una semana']]
+    .filter((x,i,a)=>a.findIndex(y=>y[0]===x[0])===i);
   return `
   <div class="modal-overlay"><div class="modal" style="max-width:420px;max-height:92vh;overflow-y:auto;">
     <h3>Publicación para estados</h3>
-    <p class="panel-sub">Descarga la imagen (o compártela directo desde tu celular), copia el texto con el enlace y súbelo a tu estado de WhatsApp.</p>
+    <p class="panel-sub">${multi ? `${ps.length} productos en un solo estado. ` : ''}Ajusta cómo se ve, descarga la imagen (o compártela directo desde tu celular) y súbela a tu estado de WhatsApp.</p>
     <div style="text-align:center;">
       <canvas id="post-canvas" width="1080" height="1920" style="width:100%;max-width:250px;aspect-ratio:9/16;border-radius:14px;box-shadow:0 10px 30px -12px rgba(0,0,0,.45);"></canvas>
     </div>
@@ -11485,13 +11722,33 @@ function renderPostModal(){
       <button class="btn-tertiary" onclick="state.postImageIdx=(state.postImageIdx-1+${nImgs})%${nImgs};render()">‹ Foto anterior</button>
       <span class="panel-sub" style="align-self:center;">${(state.postImageIdx||0)+1} de ${nImgs}</span>
       <button class="btn-tertiary" onclick="state.postImageIdx=((state.postImageIdx||0)+1)%${nImgs};render()">Foto siguiente ›</button></div>` : ''}
-    <div class="form-field" style="margin-top:12px;"><label>Texto para acompañar</label>
-      <textarea id="post-text" rows="5" oninput="state.postText=this.value">${(state.postText||'').replace(/</g,'&lt;')}</textarea></div>
+    ${multi ? `<div class="form-field" style="margin-top:12px;"><label>Título</label>
+      <input id="post-title" maxlength="60" value="${postEsc(state.postTitle)}" placeholder="Ej.: Lo más pedido de la semana" oninput="onPostTitleInput(this.value)"></div>` : ''}
+    <div class="form-field" style="margin-top:12px;"><label>Precio</label>
+      ${chips([[true,'Mostrar precio'],[false,'Ocultar precio']], pr.showPrice, v=>`setPostOption('showPrice',${v})`)}
+      ${!pr.showPrice ? `<div class="panel-sub" style="margin-top:4px;">En su lugar dice "Pregunta por su precio", para que te escriban.</div>` : ''}</div>
+    <div class="form-field"><label>Fecha límite</label>
+      ${chips(presets, state.postDeadline||'', v=>`setPostOption('deadline','${v}')`)}
+      <input type="date" style="margin-top:6px;" value="${state.postDeadline||''}" min="${postDeadlinePreset('hoy')}" onchange="setPostOption('deadline',this.value)">
+      ${postDeadlineText() ? `<div class="panel-sub" style="margin-top:4px;">Se verá: "⏰ ${postEsc(postDeadlineText())}"</div>` : ''}</div>
+    <div class="form-field"><label>Etiqueta</label>
+      ${chips(POST_BADGES.map(b=>[b, b||'Ninguna']), state.postBadge||'', v=>`setPostOption('badge','${v}')`)}</div>
+    ${!multi ? `<div class="form-field"><label>Características</label>
+      ${chips([[true,'Mostrar'],[false,'No mostrar']], pr.showFeatures, v=>`setPostOption('showFeatures',${v})`)}
+      ${pr.showFeatures ? `<textarea id="post-features" rows="4" placeholder="Una por renglón (máximo 4). Ej.: Ajustables&#10;Con cascabeles" oninput="onPostFeaturesInput(this.value)">${postEsc(state.postFeatures)}</textarea>
+      <div class="panel-sub" style="margin-top:4px;">${p.desc ? 'Las saqué de la descripción; edítalas o bórralas a tu gusto.' : 'Este producto no tiene descripción: escribe 2 o 3 puntos atractivos.'} Una por renglón, máximo 4.</div>` : ''}</div>` : ''}
+    <div class="form-field"><label>Código QR</label>
+      ${chips([[true,'Incluir'],[false,'Sin QR']], pr.showQr, v=>`setPostOption('showQr',${v})`)}
+      ${pr.showQr ? `<div class="panel-sub" style="margin-top:4px;">${multi ? 'Lleva a tu tienda en línea.' : 'Lleva directo a este producto en tu tienda.'} Útil cuando ven tu estado en otro teléfono o en una pantalla.</div>` : ''}</div>
+    <div class="form-field"><label>Estilo</label>
+      ${chips(Object.entries(POST_THEMES).map(([k,t])=>[k,t.label]), pr.theme, v=>`setPostOption('theme','${v}')`)}</div>
+    <div class="form-field" style="margin-top:12px;"><label style="display:flex;justify-content:space-between;align-items:center;">Texto para acompañar ${state.postTextEdited ? `<button type="button" class="btn-tertiary" style="padding:2px 8px;" onclick="resetPostText()">Rehacer texto</button>` : ''}</label>
+      <textarea id="post-text" rows="6" oninput="state.postText=this.value;state.postTextEdited=true">${postEsc(state.postText)}</textarea></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
       <button class="btn-primary" onclick="downloadPostImage()">Descargar imagen</button>
       <button class="btn-outline" onclick="sharePostImage()">Compartir…</button>
       <button class="btn-outline" onclick="copyPostText()">Copiar texto</button>
-      <button class="btn-outline" onclick="copyProductLink('${p.id}')">Copiar enlace</button>
+      ${multi ? `<button class="btn-outline" onclick="try{navigator.clipboard.writeText(postStoreLink());showToast('Enlace de la tienda copiado')}catch(e){}">Copiar enlace</button>` : `<button class="btn-outline" onclick="copyProductLink('${p.id}')">Copiar enlace</button>`}
     </div>
     <div class="modal-actions"><button class="btn-cancel" style="flex:1;" onclick="closePostModal()">Cerrar</button></div>
   </div></div>`;
