@@ -237,6 +237,8 @@ async function main() {
     }
     if (!pushed) throw new Error('No se pudo subir catalogo.json');
     await requestPagesBuild();
+    // Avisa al workflow que el catálogo cambió (el paso siguiente regenera el catálogo en PDF).
+    if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, 'cambio=1\n');
   }
   await pubRef.set(Object.assign({ publishedAt: startedAt, urgent: false, productCount: products.length, sizeKb: kb, syncMax, buildsPausedWhy: null },
     incremental ? {} : { fullAt: startedAt },
