@@ -1783,6 +1783,22 @@ function renderPublishBar(){
     </div>
   </div>`;
 }
+/* Catálogo en PDF: lo genera la GitHub Action "Catálogo estático" cada vez que se publica la tienda
+   y la página lo entrega en /catalogo-pdf (no gasta lecturas de Firestore ni publicaciones). */
+const CATALOGO_PDF_URL = 'https://casaplaceres.com/catalogo-pdf';
+function openFlyersPanel(){
+  state.adminTab='configuración'; state.configSubpanel='herramientas'; render();
+  setTimeout(()=>{ const el=document.getElementById('flyers-panel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }, 80);
+}
+function openCatalogPdf(){ window.open(CATALOGO_PDF_URL + '?v=' + Date.now(), '_blank', 'noopener'); }
+function copyCatalogPdfLink(){
+  navigator.clipboard.writeText(CATALOGO_PDF_URL).then(()=>showToast('Enlace copiado, pégalo en WhatsApp')).catch(()=>showToast('No se pudo copiar'));
+}
+async function shareCatalogPdf(){
+  const text = 'Aquí está nuestro catálogo actualizado. Toca cualquier producto para verlo y pedirlo:';
+  if(navigator.share){ try{ await navigator.share({ title:'Catálogo La Casa de los Placeres', text, url:CATALOGO_PDF_URL }); return; }catch(e){ if(e && e.name==='AbortError') return; } }
+  window.open('https://wa.me/?text=' + encodeURIComponent(text + ' ' + CATALOGO_PDF_URL), '_blank', 'noopener');
+}
 async function loadPublishStatus(force){
   if(state.publishStatusLoading || (state.publishStatus && !force)) return;
   state.publishStatusLoading = true;
@@ -1829,6 +1845,23 @@ function renderPublishPanel(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
         <button class="btn-primary" style="width:auto;" ${state.publishBusy?'disabled':''} onclick="publishStoreNow()">${state.publishBusy?'Enviando…':'Publicar tienda ahora'}</button>
         <button class="btn-tertiary" onclick="loadPublishStatus(true)">Actualizar estado</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Catálogo en PDF</div>
+      <div class="note-box">Se rehace solo cada vez que publicas la tienda (unos minutos después). Trae solo los productos con existencias y cada producto abre su página para pedirlo. El enlace es siempre el mismo: <strong>casaplaceres.com/catalogo-pdf</strong>.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn-primary" style="width:auto;" onclick="openCatalogPdf()">${icon('download',15)} Ver / descargar</button>
+        <button class="btn-tertiary" onclick="shareCatalogPdf()">${icon('share',15)} Compartir</button>
+        <button class="btn-tertiary" onclick="copyCatalogPdfLink()">${icon('link',15)} Copiar enlace</button>
+      </div>
+    </div>
+    <div class="panel" id="flyers-panel">
+      <div class="panel-title">Flyers para repartir</div>
+      <div class="note-box">Tamaño media carta (5.5 × 8.5 in), listos para imprenta: cada PDF trae el frente y el reverso. El QR lleva a casaplaceres.com.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <a class="btn-primary" style="width:auto;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-a.pdf" target="_blank" rel="noopener" download>${icon('download',15)} Flyer A (morado)</a>
+        <a class="btn-tertiary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-b.pdf" target="_blank" rel="noopener" download>${icon('download',15)} Flyer B (claro)</a>
       </div>
     </div>
     <div class="panel">
@@ -7096,6 +7129,8 @@ function renderResumen(){
       ${canAccessTab('productos') ? `<button onclick="state.adminTab='productos';state.productModal=newProductModal();render()">${icon('package',20)} Nuevo producto</button>` : ''}
       ${!state.myPermissions ? `<a class="m-hide" href="pos.html" target="_blank">${icon('bag',20)} Punto de venta</a>` : ''}
       <button onclick="openGlobalSearch()">${icon('search',20)} Buscar</button>
+      <button onclick="openCatalogPdf()">${icon('download',20)} Catálogo PDF</button>
+      ${!state.myPermissions ? `<button onclick="openFlyersPanel()">${icon('share',20)} Flyers</button>` : ''}
     </div>
     ${renderTodayPanel()}
     ${maint.length ? dashSec('mant', 'Mantenimiento de la semana', `${maint.length} pendiente${maint.length===1?'':'s'}`, renderMaintenancePanel(maint), false) : ''}
