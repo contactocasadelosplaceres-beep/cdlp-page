@@ -1786,10 +1786,6 @@ function renderPublishBar(){
 /* Catálogo en PDF: lo genera la GitHub Action "Catálogo estático" cada vez que se publica la tienda
    y la página lo entrega en /catalogo-pdf (no gasta lecturas de Firestore ni publicaciones). */
 const CATALOGO_PDF_URL = 'https://casaplaceres.com/catalogo-pdf';
-function openFlyersPanel(){
-  state.adminTab='configuración'; state.configSubpanel='herramientas'; render();
-  setTimeout(()=>{ const el=document.getElementById('flyers-panel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }, 80);
-}
 function openCatalogPdf(){ window.open(CATALOGO_PDF_URL + '?v=' + Date.now(), '_blank', 'noopener'); }
 function copyCatalogPdfLink(){
   navigator.clipboard.writeText(CATALOGO_PDF_URL).then(()=>showToast('Enlace copiado, pégalo en WhatsApp')).catch(()=>showToast('No se pudo copiar'));
@@ -1858,10 +1854,15 @@ function renderPublishPanel(){
     </div>
     <div class="panel" id="flyers-panel">
       <div class="panel-title">Flyers para repartir</div>
-      <div class="note-box">Tamaño media carta (5.5 × 8.5 in), listos para imprenta: cada PDF trae el frente y el reverso. El QR lleva a casaplaceres.com.</div>
+      <div class="note-box">Tres diseños a media carta (5.5 × 8.5 in), cada uno con frente y reverso. En el editor cambias los textos, el QR y la promoción, ves el cambio al momento y lo imprimes o guardas en PDF.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-        <a class="btn-primary" style="width:auto;text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-a.pdf" target="_blank" rel="noopener" download>${icon('download',15)} Flyer A (morado)</a>
-        <a class="btn-tertiary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-b.pdf" target="_blank" rel="noopener" download>${icon('download',15)} Flyer B (claro)</a>
+        <button class="btn-primary" style="width:auto;" onclick="openFlyerEditor()">${icon('share',15)} Editar e imprimir flyers</button>
+      </div>
+      <div class="panel-sub" style="margin:10px 0 4px;">PDF con los textos originales:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn-tertiary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-a.pdf" target="_blank" rel="noopener" download>${icon('download',15)} A · Morado</a>
+        <a class="btn-tertiary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-b.pdf" target="_blank" rel="noopener" download>${icon('download',15)} B · Claro</a>
+        <a class="btn-tertiary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" href="flyers/flyer-frente-c.pdf" target="_blank" rel="noopener" download>${icon('download',15)} C · Elegante</a>
       </div>
     </div>
     <div class="panel">
@@ -6179,7 +6180,141 @@ function renderAdmin(){
   ${state.massPriceModalOpen ? renderMassPriceModal() : ''}
   ${state.notifyModalProductId ? renderNotifyModal() : ''}
   ${state.postModalProductId ? renderPostModal() : ''}
+  ${state.flyerEditor ? renderFlyerEditor() : ''}
   `;
+}
+
+/* ============== FLYERS: editor con vista previa ==============
+   Diseños y textos en assets/flyers.js (se baja solo al abrir el editor). Los textos editados se
+   guardan en settings/flyers (1 lectura al abrir el editor la primera vez; no es público ni sale en
+   catalogo.json). Imprimir abre una ventana con frente y reverso a media carta para imprimir o
+   "Guardar como PDF". */
+let _flyersLibPromise = null;
+function loadFlyersLib(){
+  if(window.CDLPFlyers) return Promise.resolve(true);
+  if(_flyersLibPromise) return _flyersLibPromise;
+  _flyersLibPromise = new Promise(resolve=>{
+    const s = document.createElement('script'); s.src = 'assets/flyers.js?v=1';
+    s.onload = ()=>resolve(!!window.CDLPFlyers); s.onerror = ()=>{ _flyersLibPromise = null; resolve(false); };
+    document.head.appendChild(s);
+  });
+  return _flyersLibPromise;
+}
+async function openFlyerEditor(design){
+  state.flyerEditor = { loading:true, side:'front' }; render();
+  const [ok] = await Promise.all([loadFlyersLib(), loadPostQrLib()]);
+  if(!ok){ state.flyerEditor = null; render(); showToast('No se pudo abrir el editor (revisa tu internet)'); return; }
+  if(state.flyerSaved === undefined){
+    try{ const d = await db.collection('settings').doc('flyers').get(); state.flyerSaved = d.exists ? d.data() : null; }
+    catch(e){ console.warn('flyers', e); state.flyerSaved = null; }
+  }
+  const F = window.CDLPFlyers;
+  const base = Object.assign({}, F.defaults((state.flyerSaved && state.flyerSaved.design) || 'A'), state.flyerSaved || {});
+  if(design && design !== base.design) flyerApplyDesign(base, design);
+  state.flyerEditor = { loading:false, side:'front', draft: base, dirty:false };
+  render(); updateFlyerPreview();
+}
+function closeFlyerEditor(){
+  if(state.flyerEditor && state.flyerEditor.dirty && !confirm('Tienes cambios sin guardar en el flyer. ¿Cerrar de todos modos?')) return;
+  state.flyerEditor = null; render();
+}
+function flyerApplyDesign(d, design){
+  const F = window.CDLPFlyers, old = F.DESIGNS.find(x=>x.key===d.design), nu = F.DESIGNS.find(x=>x.key===design);
+  if(!nu) return;
+  if(!d.headline || (old && d.headline === old.headline)) d.headline = nu.headline; // si no la habías cambiado, toma la del diseño
+  d.design = design;
+}
+function flyerSetDesign(design){ const e = state.flyerEditor; if(!e||!e.draft) return; flyerApplyDesign(e.draft, design); e.dirty = true; render(); updateFlyerPreview(); }
+function flyerSetSide(side){ const e = state.flyerEditor; if(!e) return; e.side = side; render(); updateFlyerPreview(); }
+function flyerSet(key, value){ const e = state.flyerEditor; if(!e||!e.draft) return; e.draft[key] = value; e.dirty = true; updateFlyerPreview(); const b = document.getElementById('flyer-save-btn'); if(b) b.disabled = false; }
+let _flyerQr = { url:'', svg:'' };
+function flyerQrSvg(url, color){
+  if(!url || typeof qrcode !== 'function') return '';
+  if(_flyerQr.url === url) return _flyerQr.svg;
+  try{
+    const q = qrcode(0, 'M'); q.addData(url); q.make();
+    const svg = q.createSvgTag({cellSize:4, margin:0, scalable:true}).replace('<svg', '<svg style="width:100%;height:100%;display:block"').replace(/fill="black"/g, `fill="${color||'#521C3E'}"`);
+    _flyerQr = { url, svg }; return svg;
+  }catch(e){ return ''; }
+}
+function flyerOpts(d){ return { logo: new URL('logo.png', location.href).href, qr: flyerQrSvg(d.qrUrl) }; }
+function updateFlyerPreview(){
+  const e = state.flyerEditor, box = document.getElementById('flyer-prev');
+  if(!e || !e.draft || !box || !window.CDLPFlyers) return;
+  box.innerHTML = window.CDLPFlyers.html(e.draft.design, e.side, e.draft, flyerOpts(e.draft));
+}
+async function saveFlyer(){
+  const e = state.flyerEditor; if(!e||!e.draft) return;
+  e.saving = true; render(); updateFlyerPreview();
+  try{
+    const data = Object.assign({}, e.draft, { updatedAt: new Date().toISOString(), updatedBy: (state.user && state.user.email) || '' });
+    await db.collection('settings').doc('flyers').set(data);
+    state.flyerSaved = data; e.dirty = false; showToast('Flyer guardado');
+  }catch(err){ console.error(err); showToast('No se pudo guardar el flyer'); }
+  e.saving = false; render(); updateFlyerPreview();
+}
+function resetFlyerTexts(){
+  const e = state.flyerEditor; if(!e||!e.draft) return;
+  if(!confirm('¿Regresar todos los textos a los originales de este diseño? (Se aplica al guardar)')) return;
+  e.draft = window.CDLPFlyers.defaults(e.draft.design); e.dirty = true; render(); updateFlyerPreview();
+}
+function printFlyer(){
+  const e = state.flyerEditor; if(!e||!e.draft) return;
+  const F = window.CDLPFlyers, d = e.draft, o = flyerOpts(d);
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Permite las ventanas emergentes para imprimir'); return; }
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Flyer La Casa de los Placeres</title>
+<link rel="stylesheet" href="${F.FONTS_CSS}">
+<style>@page{size:5.5in 8.5in;margin:0}html,body{margin:0;background:#888}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pg{width:528px;height:816px;overflow:hidden;margin:0 auto 16px;break-after:page;page-break-after:always}.pg:last-child{break-after:auto;page-break-after:auto}
+.tip{font:14px system-ui,sans-serif;color:#fff;text-align:center;padding:12px}
+@media print{html,body{background:none}.pg{margin:0}.tip{display:none}}</style></head><body>
+<div class="tip">Se abrirá la ventana para imprimir. Para guardarlo en PDF elige "Guardar como PDF" (en iPhone: Compartir → Imprimir → Compartir → Guardar en Archivos). Tamaño: media carta (5.5 × 8.5 in).</div>
+<div class="pg">${F.html(d.design,'front',d,o)}</div><div class="pg">${F.html(d.design,'back',d,o)}</div>
+<script>window.onload=function(){(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(function(){setTimeout(function(){window.print()},300)})}<\/script>
+</body></html>`);
+  w.document.close();
+}
+function renderFlyerEditor(){
+  const e = state.flyerEditor; if(!e) return '';
+  if(e.loading || !e.draft) return `<div class="modal-overlay"><div class="modal" style="max-width:420px;text-align:center;"><p>Abriendo el editor de flyers…</p></div></div>`;
+  const F = window.CDLPFlyers, d = e.draft;
+  const ex = s => escDescHtml(String(s==null?'':s));
+  const field = (k, label, opt) => { opt = opt||{};
+    return `<div class="form-field" style="margin-top:8px;"><label>${label}</label>${opt.area
+      ? `<textarea rows="${opt.rows||2}" maxlength="${opt.max||220}" oninput="flyerSet('${k}',this.value)">${ex(d[k])}</textarea>`
+      : `<input maxlength="${opt.max||80}" value="${ex(d[k])}" oninput="flyerSet('${k}',this.value)">`}${opt.hint?`<div class="panel-sub" style="margin:3px 0 0;font-size:12px;">${opt.hint}</div>`:''}</div>`; };
+  const chips = (items, cur, fn) => `<div class="status-filter ord-chips" style="flex-wrap:wrap;gap:6px;margin:4px 0 2px;">${items.map(([v,l])=>`<button type="button" class="${cur===v?'active':''}" onclick="${fn(v)}">${l}</button>`).join('')}</div>`;
+  const sec = (t, inner) => `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);"><div style="font-weight:700;font-size:14px;color:var(--primary-deep);">${t}</div>${inner}</div>`;
+  return `
+  <div class="modal-overlay"><div class="modal" style="max-width:860px;width:96vw;max-height:94vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <h3 style="margin:0;">Editor de flyers</h3>
+      <button class="icon-btn" onclick="closeFlyerEditor()" aria-label="Cerrar">${icon('x',18)}</button>
+    </div>
+    <p class="panel-sub" style="margin-top:4px;">Elige un diseño, cambia los textos y mira el cambio al momento. Tamaño media carta (salen 2 por hoja carta).</p>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
+      <div style="flex:0 0 auto;margin:0 auto;">
+        ${chips([['front','Frente'],['back','Reverso']], e.side, v=>`flyerSetSide('${v}')`)}
+        <div style="width:290px;height:448px;overflow:hidden;border-radius:10px;box-shadow:0 10px 30px -12px rgba(0,0,0,.45);margin-top:6px;background:#fff;">
+          <div id="flyer-prev" style="width:528px;height:816px;transform:scale(${(290/528).toFixed(4)});transform-origin:0 0;pointer-events:none;"></div>
+        </div>
+      </div>
+      <div style="flex:1 1 300px;min-width:0;">
+        <div class="form-field"><label>Diseño</label>${chips(F.DESIGNS.map(x=>[x.key,x.label]), d.design, v=>`flyerSetDesign('${v}')`)}</div>
+        ${sec('Frente', field('headline','Frase principal',{max:60,hint:'Corta (máx. 6 palabras) para que se lea de lejos.'}) + field('sub','Texto de apoyo',{area:true,max:160}) + field('b1','Beneficio 1',{max:40}) + field('b2','Beneficio 2',{max:40}) + field('b3','Beneficio 3',{max:40}))}
+        ${sec('Contacto y QR', field('web','Página que se ve',{max:40}) + field('qrUrl','A dónde lleva el QR',{max:200,hint:'Escanéalo con tu celular antes de imprimir.'}) + field('qrLabel','Texto sobre el QR',{max:40}) + field('whatsapp','WhatsApp',{max:30}) + field('instagram','Instagram',{max:40}) + field('horario','Horario',{max:60}) + field('ciudad','Ciudad',{max:50}) + field('nota18','Aviso de edad',{max:50}))}
+        ${sec('Reverso', field('stepsTitle','Título',{max:40}) + field('s1t','Paso 1',{max:24}) + field('s1d','Detalle paso 1',{area:true,max:110}) + field('s2t','Paso 2',{max:24}) + field('s2d','Detalle paso 2',{area:true,max:110}) + field('s3t','Paso 3',{max:24}) + field('s3d','Detalle paso 3',{area:true,max:110}) + field('catsTitle','Título de categorías',{max:30}) + field('cats','Categorías',{area:true,max:220,hint:'Sepáralas con comas.'})
+          + `<div class="form-field" style="margin-top:8px;"><label>Promoción</label>${chips([[true,'Mostrar'],[false,'Ocultar']], !!d.giftOn, v=>`flyerSet('giftOn',${v});render();updateFlyerPreview()`)}</div>`
+          + (d.giftOn ? field('giftTitle','Título de la promoción',{max:40}) + field('giftText','Detalle de la promoción',{max:90}) : ''))}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;position:sticky;bottom:-1px;background:var(--surface,#fff);padding:10px 0 2px;">
+      <button class="btn-primary" style="width:auto;" onclick="printFlyer()">${icon('download',15)} Imprimir / guardar PDF</button>
+      <button class="btn-tertiary" id="flyer-save-btn" ${e.saving||!e.dirty?'disabled':''} onclick="saveFlyer()">${e.saving?'Guardando…':(e.dirty?'Guardar cambios':'Guardado')}</button>
+      <button class="btn-tertiary" onclick="resetFlyerTexts()">Textos originales</button>
+    </div>
+  </div></div>`;
 }
 
 /* ============== OFERTAS RELÁMPAGO ==============
@@ -7130,7 +7265,7 @@ function renderResumen(){
       ${!state.myPermissions ? `<a class="m-hide" href="pos.html" target="_blank">${icon('bag',20)} Punto de venta</a>` : ''}
       <button onclick="openGlobalSearch()">${icon('search',20)} Buscar</button>
       <button onclick="openCatalogPdf()">${icon('download',20)} Catálogo PDF</button>
-      ${!state.myPermissions ? `<button onclick="openFlyersPanel()">${icon('share',20)} Flyers</button>` : ''}
+      ${!state.myPermissions ? `<button onclick="openFlyerEditor()">${icon('share',20)} Flyers</button>` : ''}
     </div>
     ${renderTodayPanel()}
     ${maint.length ? dashSec('mant', 'Mantenimiento de la semana', `${maint.length} pendiente${maint.length===1?'':'s'}`, renderMaintenancePanel(maint), false) : ''}
