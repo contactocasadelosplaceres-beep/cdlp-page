@@ -678,6 +678,18 @@ document.addEventListener('wheel', function(e){
   .modal .row-main{min-width:0;}
   .modal .row-sub,.modal .row-title{overflow-wrap:anywhere;}
   .pm-modal{max-width:620px;}
+  .pm-modal .modal-actions{flex-wrap:wrap;}
+  .pm-checklist{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;}
+  .pm-checklist .pm-ck-lbl{font-weight:700;color:var(--ink-soft);}
+  .pm-checklist .pm-ck-ok{font-weight:700;color:var(--green);}
+  .modal-actions .pm-checklist button.pm-ck{flex:0 0 auto;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;border:0;cursor:pointer;}
+  .pm-ck.req,.pm-st-in.req{background:#FDE2E2;color:#B3261E;}
+  .pm-ck.warn,.pm-st-in.warn{background:#FFF1DC;color:#9A5B00;}
+  .pm-st-in.ok{background:#EAF3D8;color:var(--green);}
+  .fsec-badge.pm-st{padding:0;background:none;white-space:normal;max-width:45%;text-align:right;}
+  .pm-st-in{display:inline-block;padding:3px 8px;border-radius:999px;}
+  .pm-warn{font-size:12px;color:#9A5B00;margin-top:5px;}
+  .pm-copied{font-size:12.5px;background:var(--surface-soft);border-radius:var(--radius-sm);padding:8px 10px;margin:0 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
   .fsec{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);margin:0 0 14px;box-shadow:var(--shadow-sm);}
   .fsec-head{display:flex;align-items:center;gap:10px;padding:13px 14px;list-style:none;cursor:default;}
   summary.fsec-head{cursor:pointer;-webkit-tap-highlight-color:transparent;}
@@ -7080,7 +7092,7 @@ function renderResumen(){
       </div>
     </div>
     <div class="quick-actions">
-      ${canAccessTab('productos') ? `<button onclick="state.adminTab='productos';state.productModal={images:[], sku:generateSKU({})};render()">${icon('package',20)} Nuevo producto</button>` : ''}
+      ${canAccessTab('productos') ? `<button onclick="state.adminTab='productos';state.productModal=newProductModal();render()">${icon('package',20)} Nuevo producto</button>` : ''}
       ${!state.myPermissions ? `<a class="m-hide" href="pos.html" target="_blank">${icon('bag',20)} Punto de venta</a>` : ''}
       <button onclick="openGlobalSearch()">${icon('search',20)} Buscar</button>
     </div>
@@ -8781,7 +8793,7 @@ function renderProductos(){
             ${undoPrice ? `<button onclick="state.productToolsOpen=false;undoLastMassPriceChange()">${icon('history',15)} Deshacer último cambio de precios</button>` : ''}
           </div>` : ''}
         </div>
-        <button class="btn-add-new" onclick="state.productModal={images:[], sku:generateSKU({})};render()">+ Nuevo producto</button>
+        <button class="btn-add-new" onclick="state.productModal=newProductModal();render()">+ Nuevo producto</button>
       </div>
     </div>
     ${(daysSinceExport===null || daysSinceExport>30) ? `<div class="note-box" style="margin-bottom:12px;">${daysSinceExport===null ? 'Nunca has exportado un respaldo de tu catálogo.' : `No exportas un respaldo de tu catálogo hace ${daysSinceExport} días.`} <button class="btn-tertiary" style="margin-left:6px;" onclick="exportProductsJSON()">Exportar ahora</button></div>` : ''}
@@ -15773,10 +15785,11 @@ function pmSection(key, title, o){
   const head = `
     <span class="fsec-ico">${icon(o.icon||'tag',16)}</span>
     <span class="fsec-titles"><div class="fsec-title">${title}</div>${o.hint?`<div class="fsec-hint">${o.hint}</div>`:''}</span>
-    ${o.badge?`<span class="fsec-badge">${o.badge}</span>`:''}`;
-  if(!o.collapsible) return `<section class="fsec"><div class="fsec-head">${head}</div><div class="fsec-body">${o.body}</div></section>`;
+    ${o.badge?`<span class="fsec-badge">${o.badge}</span>`:''}
+    ${o.status?`<span class="fsec-badge pm-st" id="pmst-${key}">${pmStatusHtml(key)}</span>`:''}`;
+  if(!o.collapsible) return `<section class="fsec" id="pmsec-${key}"><div class="fsec-head">${head}</div><div class="fsec-body">${o.body}</div></section>`;
   const open = pmOpen(key, !!o.open);
-  return `<details class="fsec" ${open?'open':''} ontoggle="pmToggle('${key}',this.open)"><summary class="fsec-head">${head}<span class="fsec-chev">▾</span></summary><div class="fsec-body">${o.body}</div></details>`;
+  return `<details class="fsec" id="pmsec-${key}" ${open?'open':''} ontoggle="pmToggle('${key}',this.open)"><summary class="fsec-head">${head}<span class="fsec-chev">▾</span></summary><div class="fsec-body">${o.body}</div></details>`;
 }
 /* ---- Revisar ortografía del producto (nombre y descripción) ----
    Usa el corrector gratuito de LanguageTool (api.languagetool.org, español): solo se le manda el
@@ -15906,6 +15919,93 @@ function renderSpellPanel(){
     ${btn}
   </div>`;
 }
+/* ---- Lista de pendientes de la ficha de producto ----
+   Lo obligatorio (nombre, precio, categoría) no deja guardar; lo recomendado (foto, costo,
+   descripción, ¿para quién es?) solo avisa. Se muestra junto al botón Guardar y en el encabezado
+   de cada sección, y se actualiza mientras escribes (pmLive) sin redibujar la ventana. */
+function pmCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+function pmChecks(p){
+  p = p || state.productModal || {};
+  const gift = pmCats(p).some(c=>normName(c)==='tarjetas de regalo');
+  return [
+    {key:'name',  label:'Nombre',          sec:'foto',       field:'pf-name',  req:true,  ok: !!String(p.name||'').trim()},
+    {key:'price', label:'Precio',          sec:'precio',     field:'pf-price', req:true,  ok: Number(p.price)>0 || (p.variants||[]).some(v=>Number(v.priceOverride)>0)},
+    {key:'cat',   label:'Categoría',       sec:'categorias', field:'',         req:true,  ok: pmCats(p).length>0},
+    {key:'foto',  label:'Foto',            sec:'foto',       field:'',         req:false, ok: (p.images||[]).length>0},
+    {key:'cost',  label:'Costo',           sec:'precio',     field:'pf-cost',  req:false, ok: gift || Number(p.cost)>0},
+    {key:'desc',  label:'Descripción',     sec:'desc',       field:'pf-desc',  req:false, ok: !!String(p.desc||'').trim()},
+    {key:'needs', label:'¿Para quién es?', sec:'categorias', field:'',         req:false, ok: gift || (p.needs||[]).length>0},
+  ];
+}
+function pmStatusHtml(sec){
+  const miss = pmChecks().filter(c=>c.sec===sec && !c.ok);
+  if(!miss.length) return `<span class="pm-st-in ok">✓ Listo</span>`;
+  const req = miss.some(c=>c.req);
+  return `<span class="pm-st-in ${req?'req':'warn'}">Falta: ${miss.map(c=>c.label.toLowerCase()).join(', ')}</span>`;
+}
+function pmChecklistHtml(){
+  const miss = pmChecks().filter(c=>!c.ok);
+  if(!miss.length) return `<span class="pm-ck-ok">✓ Todo listo para guardar</span>`;
+  return `<span class="pm-ck-lbl">Falta:</span>` + miss.map(c=>`<button type="button" class="pm-ck ${c.req?'req':'warn'}" onclick="pmGoTo('${c.sec}','${c.field}')" title="${c.req?'Obligatorio':'Recomendado'}">${c.label}${c.req?' *':''}</button>`).join('');
+}
+function pmLive(){
+  const ck = document.getElementById('pm-checklist'); if(ck) ck.innerHTML = pmChecklistHtml();
+  ['foto','precio','categorias','desc'].forEach(k=>{ const el = document.getElementById('pmst-'+k); if(el) el.innerHTML = pmStatusHtml(k); });
+  const cw = document.getElementById('pf-cost-warn');
+  if(cw){ const c = pmChecks().find(x=>x.key==='cost'); cw.style.display = (c && !c.ok) ? '' : 'none'; }
+}
+function pmGoTo(sec, fieldId){
+  const el = document.getElementById('pmsec-'+sec); if(!el) return;
+  if(el.tagName==='DETAILS' && !el.open){ el.open = true; pmToggle(sec, true); }
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+  if(fieldId) setTimeout(()=>{ const f = document.getElementById(fieldId); if(f) f.focus({preventScroll:true}); }, 350);
+}
+/* Producto nuevo: se copian categoría, proveedor y ubicación del último producto dado de alta
+   (útil cuando das de alta varios del mismo surtido). Se guarda solo en este equipo. */
+const PM_LAST_KEY = 'cdlp.pmLastDefaults';
+function pmLastGet(){ try{ return JSON.parse(localStorage.getItem(PM_LAST_KEY)||'null'); }catch(e){ return null; } }
+function pmLastSet(v){ try{ localStorage.setItem(PM_LAST_KEY, JSON.stringify(v)); }catch(e){} }
+function newProductModal(){
+  const m = {images:[]};
+  const last = pmLastGet();
+  if(last){
+    const cats = (last.categories||[]).filter(c=>(state.settings.categories||[]).includes(c));
+    if(cats.length) m.categories = cats;
+    if(last.supplierId && (state.suppliers||[]).some(s=>s.id===last.supplierId)) m.supplierId = last.supplierId;
+    if(last.location) m.location = last.location;
+    if(m.categories || m.supplierId || m.location) m._copied = true;
+  }
+  m.sku = generateSKU(m);
+  return m;
+}
+function pmClearCopied(){
+  const m = state.productModal; if(!m) return;
+  delete m.categories; delete m.supplierId; delete m.location; m._copied = false;
+  m.sku = generateSKU(m);
+  render();
+}
+function pmConfirmSave(hide){
+  const pr = state.pmMissingPrompt; state.pmMissingPrompt = null;
+  if(!pr) return;
+  if(hide) state.productModal.hidden = true;
+  render();
+  handleSaveProduct(pr.id, true);
+}
+function renderPmMissingPrompt(){
+  const pr = state.pmMissingPrompt; if(!pr) return '';
+  return `
+  <div class="modal-overlay" style="z-index:1200;">
+    <div class="modal" style="max-width:380px;">
+      <h3>Le ${pr.missing.length===1?'falta 1 cosa':'faltan '+pr.missing.length+' cosas'}</h3>
+      <div class="panel-sub" style="margin:0 0 12px;">${pr.missing.map(l=>'<strong>'+l+'</strong>').join(', ')}. Puedes guardarlo oculto mientras lo completas, así tus clientas no lo ven a medias.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="btn-primary" style="padding:12px;" onclick="pmConfirmSave(true)">Guardar oculto (borrador)</button>
+        <button class="btn-outline" style="padding:12px;" onclick="pmConfirmSave(false)">${state.productModal&&state.productModal.hidden?'Guardar así':'Guardar así y mostrarlo'}</button>
+        <button class="btn-cancel" style="padding:12px;" onclick="state.pmMissingPrompt=null;render()">Seguir llenando</button>
+      </div>
+    </div>
+  </div>`;
+}
 function renderProductModal(){
   const p = state.productModal; const isNew = !p.id;
   const price = Number(p.price)||0;
@@ -15919,7 +16019,7 @@ function renderProductModal(){
   const activeCenters = state.centers.filter(c=>c.active);
   const stockTotal = Object.values(p.stockByCenter||{}).reduce((s,n)=>s+(n||0),0);
 
-  const secPhoto = pmSection('foto','Foto y nombre',{icon:'image', body:`
+  const secPhoto = pmSection('foto','Foto y nombre',{icon:'image', status:true, body:`
       <div class="form-field"><label>Fotos (máx. 5) — la primera es la portada</label>
         <div class="pm-photos">
           ${(p.images||[]).map((src,idx)=>`
@@ -15938,7 +16038,7 @@ function renderProductModal(){
         <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="handleImageFileSelected(this)">
         ${(p.images||[]).length ? `<div class="row-sub" style="margin-top:6px;">Toca una foto para verla en grande, ordenarla o quitarla.</div>` : ''}
       </div>
-      <div class="form-field"><label>Nombre del producto</label><input id="pf-name" spellcheck="true" lang="es" value="${p.name||''}" oninput="state.productModal.name=this.value"></div>
+      <div class="form-field"><label>Nombre del producto</label><input id="pf-name" spellcheck="true" lang="es" value="${p.name||''}" oninput="state.productModal.name=this.value;pmLive()"></div>
       <label class="pm-switch">
         <span class="pm-switch-txt">Ocultar de la tienda<small>Sigue existiendo, solo no se muestra a tus clientes</small></span>
         <input type="checkbox" id="pf-hidden" ${p.hidden?'checked':''} onchange="state.productModal.hidden=this.checked">
@@ -15961,12 +16061,13 @@ function renderProductModal(){
       </details>`;
   })() : `<div class="panel-sub" style="margin:10px 0 0;">El historial de costos y de cambios aparece aquí después de guardar el producto.</div>`;
 
-  const secPrice = pmSection('precio','Precio y ganancia',{icon:'dollar-sign', body:`
+  const secPrice = pmSection('precio','Precio y ganancia',{icon:'dollar-sign', status:true, body:`
       <div class="two-col-keep">
-        <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" inputmode="decimal" value="${p.price||''}" placeholder="0.00" oninput="state.productModal.price=this.value;updatePriceCalc()"></div>
+        <div class="form-field"><label>Precio de venta</label><input id="pf-price" type="number" inputmode="decimal" value="${p.price||''}" placeholder="0.00" oninput="state.productModal.price=this.value;updatePriceCalc();pmLive()"></div>
         <div class="form-field"><label>Precio promocional</label><input id="pf-promo" type="number" inputmode="decimal" value="${p.promoPrice||''}" placeholder="0.00" oninput="state.productModal.promoPrice=this.value;updatePriceCalc()"></div>
       </div>
-      <div class="form-field" style="margin-bottom:0;"><label>Costo (solo para ti)</label><input id="pf-cost" type="number" inputmode="decimal" value="${p.cost||''}" placeholder="0.00" oninput="state.productModal.cost=this.value;updatePriceCalc()"></div>
+      <div class="form-field" style="margin-bottom:0;"><label>Costo (solo para ti)</label><input id="pf-cost" type="number" inputmode="decimal" value="${p.cost||''}" placeholder="0.00" oninput="state.productModal.cost=this.value;updatePriceCalc();pmLive()">
+        <div id="pf-cost-warn" class="pm-warn" ${pmChecks(p).find(x=>x.key==='cost').ok?'style="display:none;"':''}>Sin costo no se puede calcular tu ganancia real.</div></div>
       <div class="pm-result">
         <div><div class="row-sub">Margen de ganancia</div><strong id="pf-margin" style="color:var(--primary-deep);">${margin}%</strong></div>
         <div><div class="row-sub">Ganancia por unidad</div><strong id="pf-profit" style="color:var(--green);">${money(profit)}</strong></div>
@@ -15988,18 +16089,19 @@ function renderProductModal(){
         <div class="pm-stock-total"><span>Total</span><strong><span id="pf-stock-total">${stockTotal}</span> unidades</strong></div>
         <div class="panel-sub" style="margin:8px 0 0;">El total se suma solo a partir de cada centro.</div>`});
 
-  const secDesc = pmSection('desc','Descripción',{icon:'edit', hint:'Lo que tus clientes leen en la tienda', body:`
-      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" spellcheck="true" lang="es" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value">${p.desc||''}</textarea>${renderSpellPanel()}</div>`});
+  const secDesc = pmSection('desc','Descripción',{icon:'edit', status:true, hint:'Lo que tus clientes leen en la tienda', body:`
+      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" spellcheck="true" lang="es" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value;pmLive()">${p.desc||''}</textarea>${renderSpellPanel()}</div>`});
 
-  const secCats = pmSection('categorias','Categorías y público',{icon:'tag', hint:'Para que tus clientes lo encuentren', body:`
-      <div class="form-field"><label>Categorías</label>
+  const secCats = pmSection('categorias','Categorías y público',{icon:'tag', status:true, hint:'Para que tus clientes lo encuentren', body:`
+      ${isNew && p._copied ? `<div class="pm-copied">${icon('copy',13)} Copié la categoría, el proveedor y la ubicación del último producto que diste de alta. <button type="button" class="btn-tertiary" onclick="pmClearCopied()">Empezar en blanco</button></div>` : ''}
+      <div class="form-field"><label>Categorías *</label>
         <div class="pm-chips">
           ${state.settings.categories.map(c=>`
-            <label><input type="checkbox" value="${escDescHtml(c)}" ${(p.categories||[p.cat]).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}',this.checked)"> ${c}</label>`).join('')}
+            <label><input type="checkbox" value="${escDescHtml(c)}" ${pmCats(p).includes(c)?'checked':''} onchange="toggleProductCategory('${c.replace(/'/g,"\\'")}',this.checked)"> ${c}</label>`).join('')}
         </div>
       </div>
       <div class="form-field" style="margin-bottom:0;"><label>¿Para quién es?</label>
-        <div class="panel-sub" style="margin:0 0 8px;">Aparece en la sección "¿Qué estás buscando?" de la tienda.</div>
+        <div class="panel-sub" style="margin:0 0 8px;">Aparece en la sección "¿Qué estás buscando?" de la tienda. Al elegir la categoría te lo sugiero solo; revísalo.</div>
         <button type="button" class="btn-tertiary" style="margin-bottom:10px;" onclick="applySuggestedNeeds()">${icon('star',13)} Sugerir según nombre y categoría</button>
         <div class="pm-chips">
           ${(state.settings.needs||DEFAULT_NEEDS).map(n=>`
@@ -16009,7 +16111,7 @@ function renderProductModal(){
 
   const variantCount = (p.variants||[]).length;
   const secVariants = pmSection('variantes','Variantes',{icon:'grid', collapsible:true, open: variantCount>0 || (p.variantGroups||[]).length>0,
-    badge: variantCount ? `${variantCount}` : 'Opcional', hint:'Color, talla u otras opciones', body: renderVariantsEditor(p)});
+    badge: variantCount ? `${variantCount}` : 'Opcional', hint:'¿Tiene tallas, colores u otras opciones? Agrégalas aquí', body: renderVariantsEditor(p)});
 
   const secInternal = pmSection('interno','Datos internos',{icon:'sliders', collapsible:true, open:false, badge:'Solo tú', hint:'SKU, ubicación, proveedor, caducidad y código de barras', body:`
       <div class="two-col">
@@ -16081,19 +16183,20 @@ function renderProductModal(){
       <h3>${isNew?'Nuevo producto':'Editar producto'}</h3>
       ${secPhoto}
       ${secPrice}
-      ${secStock}
-      ${p.isKit ? '' : renderBatchesSection(p)}
-      ${secDesc}
       ${secCats}
+      ${secDesc}
+      ${secStock}
       ${secVariants}
+      ${p.isKit ? '' : renderBatchesSection(p)}
       ${secType}
       ${secInternal}
       <div class="modal-actions">
+        <div class="pm-checklist" id="pm-checklist" aria-live="polite">${pmChecklistHtml()}</div>
         <button class="btn-cancel" onclick="state.productModal=null;render()" ${state.savingProduct?'disabled':''}>Cancelar</button>
         <button class="btn-primary" onclick="handleSaveProduct('${p.id||''}')" ${state.savingProduct?'disabled':''}>${state.savingProduct?'Guardando…':'Guardar'}</button>
       </div>
     </div>
-  </div>`;
+  </div>${renderPmMissingPrompt()}`;
 }
 // Sugerencia automática de "¿Para quién es?" a partir del nombre y la categoría —
 // mismo criterio que se usó para etiquetar los 547 productos del catálogo original,
@@ -16171,12 +16274,19 @@ function toggleProductNeed(key, checked){
   if(!state.productModal.needs) state.productModal.needs = [];
   if(checked){ if(!state.productModal.needs.includes(key)) state.productModal.needs.push(key); }
   else{ state.productModal.needs = state.productModal.needs.filter(k=>k!==key); }
+  pmLive();
 }
 function toggleProductCategory(cat, checked){
   const p = state.productModal;
   if(!p.categories) p.categories = p.cat ? [p.cat] : [];
   if(checked){ if(!p.categories.includes(cat)) p.categories.push(cat); }
   else{ p.categories = p.categories.filter(c=>c!==cat); }
+  // Si aún no hay "¿Para quién es?", se sugiere solo al elegir la categoría (se puede ajustar).
+  if(checked && !(p.needs||[]).length){
+    const sug = suggestNeedsForProduct(p);
+    if(sug.length){ p.needs = sug; showToast('Te sugerí "¿Para quién es?" — revísalo'); render(); return; }
+  }
+  pmLive();
 }
 function setProductCenterStock(centerId, value){
   if(!state.productModal.stockByCenter) state.productModal.stockByCenter = {};
@@ -16533,7 +16643,7 @@ function setVariantImage(id, idx){
   if(idx==null) delete v.imageIdx; else v.imageIdx = idx;
   state.varPhotoPick = null; render();
 }
-function handleSaveProduct(existingId){
+function handleSaveProduct(existingId, skipWarn){
   // Evita el doble-guardado: un doble click o un dedo lento en pantallas táctiles podía disparar
   // esta función dos veces antes de que la primera terminara, creando el producto duplicado (o
   // registrando el cambio dos veces en la bitácora) cuando se trata de uno nuevo.
@@ -16551,8 +16661,15 @@ function handleSaveProduct(existingId){
   const cost = Number(document.getElementById('pf-cost').value)||0;
   const desc = document.getElementById('pf-desc').value.trim();
   const hidden = document.getElementById('pf-hidden').checked;
-  if(!name){ state.savingProduct = false; showToast('Ponle un nombre al producto'); render(); return; }
-  const categories = (state.productModal.categories && state.productModal.categories.length) ? state.productModal.categories : [state.settings.categories[0]];
+  if(!name){ state.savingProduct = false; showToast('Ponle un nombre al producto'); render(); pmGoTo('foto','pf-name'); return; }
+  if(!(price>0) && !(state.productModal.variants||[]).some(v=>Number(v.priceOverride)>0)){ state.savingProduct = false; showToast('Ponle precio de venta al producto'); render(); pmGoTo('precio','pf-price'); return; }
+  const categories = pmCats(state.productModal);
+  if(!categories.length){ state.savingProduct = false; showToast('Elige al menos una categoría'); render(); pmGoTo('categorias',''); return; }
+  if(!existingId && !skipWarn){
+    const missing = pmChecks().filter(c=>!c.req && !c.ok).map(c=>c.label);
+    if(missing.length){ state.savingProduct = false; state.pmMissingPrompt = {id: existingId||'', missing}; render(); return; }
+  }
+  if(!existingId) pmLastSet({categories, supplierId, location});
   const cat = categories[0];
   let stockByCenter = state.productModal.stockByCenter || {};
   let stock = Object.values(stockByCenter).reduce((s,n)=>s+(n||0),0);
