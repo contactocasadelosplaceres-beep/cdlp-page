@@ -20,6 +20,10 @@ on:
         description: '1 = el punto de venta agotó un producto (publica aunque el panel no lo haya pedido)'
         default: '0'
         required: false
+      pdf:
+        description: '1 = rehacer el catálogo en PDF aunque el catálogo no haya cambiado'
+        default: '0'
+        required: false
   schedule:
     - cron: '*/20 * * * *'
 permissions:
@@ -42,6 +46,7 @@ jobs:
           cache-dependency-path: tools/catalogo/package-lock.json
       - run: npm ci --prefix tools/catalogo --no-audit --no-fund
       - name: Generar catalogo.json
+        id: json
         run: node tools/catalogo/build.js
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -50,3 +55,20 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '0' }}
           EXISTENCIAS: ${{ github.event_name == 'workflow_dispatch' && inputs.existencias || '0' }}
           MAX_AGE_HORAS: '6'
+      # Catálogo en PDF (casaplaceres.com/catalogo-pdf). Se rehace solo cuando catalogo.json cambió.
+      # NO se guarda en el repositorio (pesaría ~6 MB por publicación y no gasta compilaciones de
+      # Cloudflare): se sube como archivo de la versión "catalogo" de GitHub y la página lo entrega.
+      - uses: actions/setup-python@v5
+        if: ${{ steps.json.outputs.cambio == '1' || (github.event_name == 'workflow_dispatch' && inputs.pdf == '1') }}
+        with: { python-version: '3.12' }
+      - name: Catálogo en PDF
+        if: ${{ steps.json.outputs.cambio == '1' || (github.event_name == 'workflow_dispatch' && inputs.pdf == '1') }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install --quiet reportlab pillow
+          python3 tools/catalogo-pdf/generar.py --out "$RUNNER_TEMP/catalogo.pdf"
+          gh release view catalogo >/dev/null 2>&1 || gh release create catalogo --title "Catálogo en PDF" \
+            --notes "Se actualiza solo cada vez que se publica la tienda. Enlace para clientas: https://casaplaceres.com/catalogo-pdf" --latest=false
+          gh release upload catalogo "$RUNNER_TEMP/catalogo.pdf" --clobber
