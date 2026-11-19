@@ -60,6 +60,7 @@ h2{font-size:19px;margin:28px 0 10px}.grid{display:grid;grid-template-columns:re
 .card.no{opacity:.6}.chips{display:flex;flex-wrap:wrap;gap:8px}.chips a{background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px;text-decoration:none;font-size:14px}
 footer{max-width:960px;margin:24px auto;padding:16px;color:var(--soft);font-size:13px;border-top:1px solid var(--line)}
 #ag{position:fixed;inset:0;background:rgba(40,10,32,.92);display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}
+#ag[hidden]{display:none}
 #ag div{background:#fff;border-radius:18px;padding:24px;max-width:360px;text-align:center}#ag button{border:0;cursor:pointer;width:100%}`;
 
 // Mismo aviso de mayoría de edad que la tienda (misma llave, si ya lo aceptó no vuelve a salir).
