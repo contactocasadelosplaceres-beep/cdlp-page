@@ -11515,16 +11515,24 @@ function postWrapText(ctx, text, maxW, maxLines){
   const words = String(text).split(/\s+/); const lines = []; let line = '';
   words.forEach(w=>{ const test = line ? line+' '+w : w; if(ctx.measureText(test).width>maxW && line){ lines.push(line); line = w; } else line = test; });
   if(line) lines.push(line);
-  if(lines.length>maxLines){ const cut = lines.slice(0,maxLines); cut[maxLines-1] = cut[maxLines-1].replace(/\s*\S*$/,'')+'…'; return cut; }
+  if(lines.length>maxLines){
+    const cut = lines.slice(0,maxLines); let last = cut[maxLines-1] + ' ' + lines[maxLines];
+    while(last.length>1 && ctx.measureText(last+'…').width>maxW) last = last.slice(0,-1);
+    cut[maxLines-1] = last.replace(/[\s,;.\-]+$/,'')+'…'; return cut;
+  }
+  for(let i=0;i<lines.length;i++){ while(lines[i].length>1 && ctx.measureText(lines[i]).width>maxW) lines[i] = lines[i].slice(0,-2)+'…'; }
   return lines;
 }
 // Dibuja la tarjeta vertical (1080×1920, el formato de los estados) en el <canvas>. Como cada
 // render() reconstruye el DOM, esta función se vuelve a llamar después de cada render.
-function postDrawPricePill(ctx, p, x, y, h, fontPx, T, FONT, minW){
+function postDrawPricePill(ctx, p, x, y, h, fontPx, T, FONT, minW, maxW){
   const pr = postPrefs(); const promo = postPromo(p);
+  maxW = maxW || (1080 - 90 - x);
   const priceText = pr.showPrice ? money(promo ? p.promoPrice : p.price) : 'Pregunta por su precio';
-  ctx.font = `800 ${pr.showPrice ? fontPx : Math.round(fontPx*0.65)}px ${FONT}`;
-  const pw = Math.max(minW, ctx.measureText(priceText).width + h*0.7);
+  let fp = pr.showPrice ? fontPx : Math.round(fontPx*0.65);
+  ctx.font = `800 ${fp}px ${FONT}`;
+  while(fp>18 && ctx.measureText(priceText).width + h*0.7 > maxW){ fp -= 2; ctx.font = `800 ${fp}px ${FONT}`; }
+  const pw = Math.min(maxW, Math.max(minW, ctx.measureText(priceText).width + h*0.7));
   postRoundRect(ctx, x, y, pw, h, h/2); ctx.fillStyle = T.pill; ctx.fill();
   ctx.fillStyle = T.pillInk; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(priceText, x + h*0.35, y+h/2+2);
   return {pw, promo: pr.showPrice && promo, priceText};
@@ -11578,12 +11586,17 @@ async function drawPostCanvas(){
     const p = ps[0];
     const feats = postFeatureList();
     ctx.font = `500 44px ${FONT}`;
-    const featLines = feats.map(f=>postWrapText(ctx, f, 830, 2));
-    const featH = featLines.reduce((s,l)=>s + l.length*56 + 18, 0);
+    let featLines = feats.map(f=>postWrapText(ctx, f, 830, 2));
+    const featHOf = fl=>fl.reduce((s,l)=>s + l.length*56 + 18, 0);
+    // Si con la foto al mínimo no cabe todo, primero se dejan las características en un renglón y luego se quitan las últimas.
+    const roomFor = fl=> contentBottom - 270 - 400 - (120 + 2*76 + 16 + featHOf(fl) + 130 + (dl ? 80 : 0)) >= 0;
+    if(!roomFor(featLines)) featLines = feats.map(f=>postWrapText(ctx, f, 830, 1));
+    while(featLines.length>1 && !roomFor(featLines)) featLines.pop();
+    const featH = featHOf(featLines);
     ctx.font = `700 64px ${FONT}`;
     const nameLinesN = feats.length ? postWrapText(ctx, p.name||'', 900, 2).length : 0;
     const belowH = 120 + nameLinesN*76 + 16 + featH + 130 + (dl ? 80 : 0);
-    const is = (feats.length || dl || qrOn) ? Math.round(Math.max(560, Math.min(900, contentBottom - 270 - (feats.length ? belowH : 330 + (dl?80:0))))) : 900;
+    const is = (feats.length || dl || qrOn) ? Math.round(Math.max(400, Math.min(900, contentBottom - 270 - (feats.length ? belowH : 330 + (dl?80:0))))) : 900;
     const ix = (W - is)/2, iy = 270;
     postDrawImage(ctx, imgs[0], p, ix, iy, is, 48, FONT);
     if(state.postBadge) postDrawBadge(ctx, state.postBadge, ix-20, iy+40, T, FONT, 46);
@@ -11600,7 +11613,6 @@ async function drawPostCanvas(){
       });
     }
     y += 10;
-    if(y + 130 + (dl?80:0) > contentBottom + 40) y = contentBottom + 40 - 130 - (dl?80:0);
     const {pw, promo} = postDrawPricePill(ctx, p, 90, y, 130, 92, T, FONT, 320);
     if(promo){
       ctx.font = `600 50px ${FONT}`; ctx.fillStyle = T.soft;
@@ -11634,7 +11646,7 @@ async function drawPostCanvas(){
         const nl = postWrapText(ctx, p.name||'', tw, 3);
         let ty = cy + 70; nl.forEach(l=>{ ctx.fillText(l, tx, ty); ty += 60; });
         const py = Math.min(ty + 10, cy + is - 150);
-        postDrawPricePill(ctx, p, tx, py, 96, 60, T, FONT, 200);
+        postDrawPricePill(ctx, p, tx, py, 96, 60, T, FONT, 200, tw);
         oldPrice(p, tx+6, py + 96 + 40);
       });
     } else {
@@ -11650,7 +11662,7 @@ async function drawPostCanvas(){
         ctx.fillStyle = T.ink; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.font = `700 42px ${FONT}`;
         let ty = cy + is + 62;
         postWrapText(ctx, p.name||'', cellW, 2).forEach(l=>{ ctx.fillText(l, cx, ty); ty += 50; });
-        const {pw} = postDrawPricePill(ctx, p, cx, cy + is + 140, 80, 52, T, FONT, 180);
+        const {pw} = postDrawPricePill(ctx, p, cx, cy + is + 140, 80, 52, T, FONT, 180, cellW);
         if(pr.showPrice && postPromo(p)){ ctx.font = `600 34px ${FONT}`; if(pw + 20 + ctx.measureText('antes '+money(p.price)).width <= cellW) oldPrice(p, cx + pw + 20, cy + is + 182); }
       });
     }
