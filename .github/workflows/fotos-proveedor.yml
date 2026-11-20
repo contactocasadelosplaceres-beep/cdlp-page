@@ -1,0 +1,30 @@
+name: Fotos oficiales del proveedor
+# Cambia las fotos de los productos de tools/fotos-proveedor/fotos.json por las oficiales de la
+# página del proveedor. Solo se lanza a mano (primero con DRY_RUN=1 para ver el reporte).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: fotos
+  cancel-in-progress: false
+jobs:
+  fotos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/fotos-proveedor --no-audit --no-fund
+      - name: Fotos del proveedor
+        run: node tools/fotos-proveedor/fotos.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}

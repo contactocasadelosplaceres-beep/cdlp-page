@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-fotos-proveedor",
+  "private": true,
+  "description": "Fotos oficiales del proveedor a archivos webp para productos de la tienda",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0", "sharp": "^0.33.4" }
+}
