@@ -1,0 +1,39 @@
+name: Ajustes de productos (nombres, precios, categorías)
+# Aplica los cambios de tools/ajustes/cambios.json. Solo se lanza a mano:
+# Actions → "Ajustes de productos" → Run workflow (primero con DRY_RUN=1 para ver el reporte).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: ajustes
+  cancel-in-progress: false
+jobs:
+  ajustes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/ajustes }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/ajustes --no-audit --no-fund
+      - name: Aplicar ajustes
+        run: node tools/ajustes/aplicar.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          BACKUP_DIR: ${{ runner.temp }}/respaldo-ajustes
+      - name: Guardar respaldo de cómo estaban
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: respaldo-ajustes-${{ github.run_id }}
+          path: ${{ runner.temp }}/respaldo-ajustes
+          if-no-files-found: ignore
+          retention-days: 90

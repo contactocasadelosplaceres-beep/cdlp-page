@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-ajustes",
+  "private": true,
+  "description": "Ajustes masivos de nombre, precio y categoría de productos",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}
