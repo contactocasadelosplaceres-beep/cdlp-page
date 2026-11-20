@@ -1,5 +1,5 @@
 {
- "_nota": "Cambia las fotos de estos productos por las oficiales de la página de Orgie México. Solo toca un producto si sus fotos siguen siendo exactamente 'fotosActuales' (si alguien ya las cambió en el panel, no se pisan).",
+ "_nota": "Cambia las fotos de estos productos por las oficiales de la página de Orgie México. Solo toca un producto si sus fotos siguen siendo exactamente 'fotosActuales' (si alguien ya las cambió en el panel, no se pisan). 'excluir': pedazos de nombre de archivo de fotos que no se deben usar (p. ej. la página pone una foto de otro producto).",
  "maxFotos": 4,
  "productos": [
   {
@@ -8,6 +8,9 @@
    "pagina": "https://orgie.com.mx/products/sexy-vibe-high-voltage",
    "fotosActuales": [
     "img/p/in7Gc3ZoSUSuC1gLO4SB-0-059b04e69c.webp"
+   ],
+   "excluir": [
+    "Xtra-Time"
    ]
   },
   {

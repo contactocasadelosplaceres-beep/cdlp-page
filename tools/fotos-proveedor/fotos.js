@@ -27,7 +27,7 @@ async function main(){
   for(const p of productos){
     try{
       const info = await (await bajar(p.pagina.replace(/\/?$/, '') + '.json')).json();
-      const imgs = ((info.product || {}).images || []).map(i => i.src).filter(u => !/icon/i.test(u)).slice(0, maxFotos);
+      const imgs = ((info.product || {}).images || []).map(i => i.src).filter(u => !/icon/i.test(u) && !(p.excluir || []).some(x => u.includes(x))).slice(0, maxFotos);
       if(!imgs.length){ console.log(`  ✗ ${p.nombre}: la página no tiene fotos`); continue; }
       const files = [], rutas = [];
       for(let i = 0; i < imgs.length; i++){
