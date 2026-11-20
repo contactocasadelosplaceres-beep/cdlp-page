@@ -4524,7 +4524,6 @@ function lyRenderCustModal(){
     <h3>Datos del cliente</h3><div class="ly-wrap">
       ${inp('name','Nombre completo')}
       <div class="ly-grid2">${inp('phone','WhatsApp','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono','type="tel" inputmode="tel"')}</div>
-      <div class="ly-grid2">${inp('refName','Contacto de referencia (opcional)')}${inp('refPhone','Teléfono de la referencia (opcional)','type="tel" inputmode="tel"')}</div>
       ${inp('address','Domicilio')}${inp('idNote','Identificación (opcional)')}${inp('notes','Notas del apartado','maxlength="200"')}
     </div>
     <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyCust=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lySaveCust()">${state.lyBusy?'Guardando…':'Guardar'}</button></div>
@@ -4858,7 +4857,6 @@ function lyRenderFormModal(){
       <div class="ly-sec">Datos del cliente</div>
       ${inp('name','Nombre completo','Nombre y apellidos')}
       <div class="ly-grid2">${inp('phone','WhatsApp','10 dígitos','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono (opcional)','','type="tel" inputmode="tel"')}</div>
-      <div class="ly-grid2">${inp('refName','Contacto de referencia (opcional)','Nombre (familiar o amigo)')}${inp('refPhone','Teléfono de la referencia (opcional)','10 dígitos','type="tel" inputmode="tel"')}</div>
       ${inp('address','Domicilio','Calle, número, colonia, ciudad')}
       ${inp('idNote','Identificación (opcional)','Ej. INE, últimos 4 dígitos del folio')}
       <div class="ly-sec">Condiciones</div>

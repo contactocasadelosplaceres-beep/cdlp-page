@@ -17372,7 +17372,6 @@ function lyRenderCustModal(){
     <h3>Datos del cliente</h3><div class="ly-wrap">
       ${inp('name','Nombre completo')}
       <div class="ly-grid2">${inp('phone','WhatsApp','type="tel" inputmode="tel"')}${inp('phone2','Otro teléfono','type="tel" inputmode="tel"')}</div>
-      <div class="ly-grid2">${inp('refName','Contacto de referencia (opcional)')}${inp('refPhone','Teléfono de la referencia (opcional)','type="tel" inputmode="tel"')}</div>
       ${inp('address','Domicilio')}${inp('idNote','Identificación (opcional)')}${inp('notes','Notas del apartado','maxlength="200"')}
     </div>
     <div class="modal-actions" style="margin-top:12px;"><button class="btn-cancel btn-secondary" onclick="state.lyCust=null;render()">Cancelar</button><button class="btn-primary" style="flex:1;" ${state.lyBusy?'disabled':''} onclick="lySaveCust()">${state.lyBusy?'Guardando…':'Guardar'}</button></div>
@@ -17772,7 +17771,7 @@ function lyRenderNewModal(){
     ${lyPickerHtml('lyNew')}
     <div class="ly-sec">Cliente</div>
     ${f('name','Nombre completo')}${f('phone','WhatsApp (10 dígitos)','', 'tel','inputmode="numeric"')}${f('phone2','Otro teléfono (opcional)','', 'tel')}
-    ${f('refName','Contacto de referencia (opcional)')}${f('refPhone','Teléfono de la referencia (opcional)','', 'tel')}${f('address','Domicilio')}${f('idNote','Identificación (nota, opcional)')}
+    ${f('address','Domicilio')}${f('idNote','Identificación (nota, opcional)')}
     <div class="ly-sec">Condiciones</div>
     ${f('dueDate','Fecha límite','', 'date')}
     <label class="ly-lab">Método del abono inicial<select class="ly-inp" onchange="lyNewSet('method',this.value)">${LY_METHODS.map(x=>`<option ${m.method===x?'selected':''}>${x}</option>`).join('')}</select></label>
