@@ -38,6 +38,8 @@ await t('tienda crea pedido con promoción (renglón negativo permitido)', setDo
 await t('tienda lee y sube el folio +1', runTransaction(anon, async tx=>{ const r=doc(anon,'counters/orders'); const s=await tx.get(r); tx.set(r,{next:s.data().next+1},{merge:true}); }), true);
 await t('tienda registra visita', addDoc(collection(anon,'visits'),{date:'2026-10-12T00:00:00Z',source:'directo'}), true);
 await t('tienda registra visita con campaña', addDoc(collection(anon,'visits'),{date:'2026-10-12T00:00:00Z',source:'facebook',campaign:'promo-octubre'}), true);
+await t('tienda registra visita con sesión', addDoc(collection(anon,'visits'),{date:'2026-10-12T00:00:00Z',source:'directo',sid:'k3j9x2m1q8wz'}), true);
+await t('tienda registra evento con sesión', addDoc(collection(anon,'analyticsEvents'),{type:'product_view',date:'2026-10-12T00:00:00Z',productId:'p1',sid:'k3j9x2m1q8wz'}), true);
 for(const [ty,ex] of [['product_view',{productId:'p1'}],['add_to_cart',{productId:'p1'}],['wishlist_add',{productId:'p1'}],['checkout_start',{cartTotal:300}],['purchase',{orderTotal:300}],['kit_add',{cartTotal:299}]])
   await t('tienda registra evento '+ty, addDoc(collection(anon,'analyticsEvents'),{type:ty,date:'2026-10-12T00:00:00Z',...ex}), true);
 await t('tienda envía mensaje al buzón', addDoc(collection(anon,'storeMessages'),{date:'2026-10-12T00:00:00Z',name:'Ana',phone:'3312345678',type:'sugerencia',message:'Hola',status:'nuevo'}), true);
@@ -72,6 +74,7 @@ await t('anónimo manda nota de almacén', addDoc(collection(anon,'storeMessages
 await t('anónimo manda mensaje con campo extra', addDoc(collection(anon,'storeMessages'),{date:'x',name:'a',phone:'1',type:'queja',message:'x',status:'nuevo',extra:1}), false);
 await t('anónimo manda mensaje de 900 KB', addDoc(collection(anon,'storeMessages'),{date:'x',name:'a',phone:'1',type:'queja',message:'x'.repeat(900000),status:'nuevo'}), false);
 await t('anónimo registra visita con campos inventados', addDoc(collection(anon,'visits'),{date:'x',source:'y',basura:'z'}), false);
+await t('anónimo registra evento con sesión gigante', addDoc(collection(anon,'analyticsEvents'),{type:'product_view',date:'x',sid:'a'.repeat(200)}), false);
 await t('anónimo registra evento desconocido', addDoc(collection(anon,'analyticsEvents'),{type:'hack',date:'x'}), false);
 await t('anónimo sobrescribe carrito de otra persona (id = teléfono)', setDoc(doc(anon,'abandonedCarts/3312345678'),{name:'Otra',phone:'3312345678',items:[],total:1}), false);
 await t('anónimo borra carrito de otra persona (id = teléfono)', deleteDoc(doc(anon,'abandonedCarts/3312345678')), false);

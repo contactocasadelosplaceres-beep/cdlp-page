@@ -93,20 +93,22 @@ service cloud.firestore {
     }
 
     match /visits/{docId} {
-      allow create: if request.resource.data.keys().hasOnly(['date','source','campaign'])
+      allow create: if request.resource.data.keys().hasOnly(['date','source','campaign','sid'])
                     && request.resource.data.date is string && request.resource.data.date.size() <= 40
                     && request.resource.data.source is string && request.resource.data.source.size() <= 40
-                    && (!('campaign' in request.resource.data) || (request.resource.data.campaign is string && request.resource.data.campaign.size() <= 80));
+                    && (!('campaign' in request.resource.data) || (request.resource.data.campaign is string && request.resource.data.campaign.size() <= 80))
+                    && (!('sid' in request.resource.data) || (request.resource.data.sid is string && request.resource.data.sid.size() <= 24));
       allow read: if hasPerm('estadisticas');
     }
 
     match /analyticsEvents/{docId} {
-      allow create: if request.resource.data.keys().hasOnly(['type','date','productId','cartTotal','orderTotal'])
+      allow create: if request.resource.data.keys().hasOnly(['type','date','productId','cartTotal','orderTotal','sid'])
                     && request.resource.data.type in ['product_view','add_to_cart','wishlist_add','checkout_start','purchase','kit_add']
                     && request.resource.data.date is string && request.resource.data.date.size() <= 40
                     && (!('productId' in request.resource.data) || (request.resource.data.productId is string && request.resource.data.productId.size() <= 60))
                     && (!('cartTotal' in request.resource.data) || request.resource.data.cartTotal is number)
-                    && (!('orderTotal' in request.resource.data) || request.resource.data.orderTotal is number);
+                    && (!('orderTotal' in request.resource.data) || request.resource.data.orderTotal is number)
+                    && (!('sid' in request.resource.data) || (request.resource.data.sid is string && request.resource.data.sid.size() <= 24));
       allow read: if hasPerm('estadisticas');
     }
 
