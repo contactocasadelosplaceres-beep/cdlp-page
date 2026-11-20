@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-altas",
+  "private": true,
+  "description": "Altas de productos nuevos (ocultos) desde altas.json",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}

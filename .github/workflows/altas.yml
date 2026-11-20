@@ -1,0 +1,30 @@
+name: Altas de productos (ocultos)
+# Crea los productos de tools/altas/altas.json OCULTOS y sin existencias. Solo se lanza a mano:
+# Actions → "Altas de productos (ocultos)" → Run workflow (primero con DRY_RUN=1 para ver el reporte).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: altas
+  cancel-in-progress: false
+jobs:
+  altas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/altas }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/altas --no-audit --no-fund
+      - name: Dar de alta
+        run: node tools/altas/altas.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
