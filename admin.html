@@ -7818,12 +7818,16 @@ function rsPeriod(days, back){
   const orders = rsIn(state.orders, 'date', r).filter(o=>o.status!=='Cancelado');
   const web = orders.filter(o=>o.source==='tienda'), pos = orders.filter(o=>o.source!=='tienda');
   const ev = rsIn(state.analyticsEvents, 'date', r);
-  const cnt = t => ev.filter(e=>e.type===t).length;
+  // Personas por paso: los registros con "sid" (sesión anónima, desde 2026-11-20) cuentan una vez por
+  // sesión; los viejos sin sid cuentan cada uno (era el comportamiento anterior: clics, no personas).
+  const people = list => { const s = new Set(); let n = 0; list.forEach(x=>{ if(x.sid) s.add(x.sid); else n++; }); return s.size + n; };
+  const cnt = t => people(ev.filter(e=>e.type===t));
+  const visitList = rsIn(state.visits, 'date', r);
   const sum = l => l.reduce((s,o)=>s+(o.total||0),0);
   return {
     r, orders, web, pos, revenue: sum(orders), webRevenue: sum(web), posRevenue: sum(pos),
     ticket: orders.length ? sum(orders)/orders.length : 0, webTicket: web.length ? sum(web)/web.length : 0,
-    visits: rsIn(state.visits, 'date', r).length, views: cnt('product_view'), adds: cnt('add_to_cart'),
+    visits: people(visitList), legacy: visitList.some(v=>!v.sid) || ev.some(e=>!e.sid), views: cnt('product_view'), adds: cnt('add_to_cart'),
     checkouts: cnt('checkout_start'), kits: cnt('kit_add'), ev,
     quiz: rsIn(state.quizResponses, 'date', r), misses: rsIn(state.searchMisses, 'date', r),
     abandoned: rsIn(state.abandonedCarts, 'updatedAt', r).filter(c=>!c.completed),
@@ -7856,8 +7860,12 @@ function renderStatsResumen(){
     {k:'Empezaron el pedido', v:c.checkouts, pv:p.checkouts},
     {k:'Pidieron', v:c.web.length, pv:p.web.length},
   ];
-  const conv = pct(c.web.length, c.visits), convPrev = pct(p.web.length, p.visits);
-  const stepRates = [ ['ver productos', pct(c.views, c.visits)], ['agregar al carrito', pct(c.adds, c.views)], ['empezar el pedido', pct(c.checkouts, c.adds)], ['terminar el pedido', pct(c.web.length, c.checkouts)] ];
+  // Porcentaje con un decimal cuando es menor a 10 (1 de 273 = 0.4%, no "0").
+  const pct1 = (a,b)=>{ if(!(b>0)) return '0'; const v = a/b*100; return v>0 && v<10 ? v.toFixed(1).replace(/\.0$/,'') : String(Math.round(v)); };
+  const convTxt = c.visits ? `De <b>${c.visits}</b> visita${c.visits===1?'':'s'}, <b>${c.web.length}</b> ${c.web.length===1?'terminó':'terminaron'} en pedido (<b>${pct1(c.web.length, c.visits)}%</b>)${p.visits ? `; antes ${pct1(p.web.length, p.visits)}%` : ''}.` : 'Sin visitas registradas en este periodo.';
+  const passRate = (a,b)=> Math.min(100, pct(a,b));   // con datos viejos (clics) un paso podía pasar de 100%
+  const stepRates = [ ['ver productos', passRate(c.views, c.visits)], ['agregar al carrito', passRate(c.adds, c.views)], ['empezar el pedido', passRate(c.checkouts, c.adds)], ['terminar el pedido', passRate(c.web.length, c.checkouts)] ];
+  const overflow = steps.some((s,i)=> i>0 && s.v > steps[i-1].v);
   const tips = {
     'ver productos': 'Mucha gente entra y se va sin abrir un producto: revisa que la portada y "Lo más vendido" muestren fotos atractivas y que el anuncio lleve a lo que promete.',
     'agregar al carrito': 'Ven productos pero no los agregan: revisa fotos, precio y descripción de los más vistos (lista "Muchas vistas, sin ventas").',
@@ -7887,8 +7895,9 @@ function renderStatsResumen(){
 
     <div class="rs-sec">2 · Tienda en línea: de visita a pedido</div>
     <div class="panel rs-funnel">
-      ${steps.map((s,i)=>{ const w = steps[0].v ? Math.max(3, s.v/steps[0].v*100) : 0; return `<div class="rs-step"><div class="rs-sk">${s.k}</div><div class="rs-bar"><span style="width:${w}%"></span></div><div class="rs-sv">${s.v} ${rsDelta(s.v, s.pv)}</div></div>`; }).join('')}
-      <div class="rs-conv">De cada 100 visitas, <b>${conv}</b> terminan en pedido ${convPrev||conv ? `(antes ${convPrev})` : ''}.</div>
+      ${steps.map((s,i)=>{ const w = steps[0].v ? Math.min(100, Math.max(3, s.v/steps[0].v*100)) : 0; return `<div class="rs-step"><div class="rs-sk">${s.k}</div><div class="rs-bar"><span style="width:${w}%"></span></div><div class="rs-sv">${s.v} ${rsDelta(s.v, s.pv)}</div></div>`; }).join('')}
+      <div class="rs-conv">${convTxt}</div>
+      ${overflow && c.legacy ? `<div class="rs-empty">Hasta el 20 de noviembre la tienda contaba clics, no personas (quien abría 5 productos sumaba 5). Desde ese día cada paso cuenta personas, así que el embudo se irá acomodando.</div>` : ''}
       ${weakest && weakest[1]<100 ? `<div class="note-box" style="margin:10px 0 0;"><b>Donde más se pierde: ${weakest[0]} (${weakest[1]}% pasa).</b> ${tips[weakest[0]]}</div>` : (c.views<20 ? `<div class="rs-empty">Aún hay pocos datos en este periodo para saber dónde se pierde la venta.</div>` : '')}
       ${partial ? `<div class="rs-empty">Los eventos de la tienda guardados no cubren todo el periodo anterior; la comparación puede verse inflada.</div>` : ''}
     </div>

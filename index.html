@@ -1461,8 +1461,23 @@ function activeCampaign(){
   }catch(e){}
   return '';
 }
+/* Id anónimo de la sesión (solo en esta pestaña, se borra al cerrarla). Sirve para que el embudo de
+   Estadísticas cuente PERSONAS por paso y no clics: sin él, alguien que abre 5 productos contaba 5
+   y "Vieron un producto" salía mayor que "Visitas". No identifica a nadie. */
+function analyticsSid(){
+  try{
+    let s = sessionStorage.getItem('cdlp_sid');
+    if(!s){ s = Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); sessionStorage.setItem('cdlp_sid', s); }
+    return s.slice(0,24);
+  }catch(e){ return ''; }
+}
 function trackVisit(){
-  try{ const camp = sessionCampaign(); db.collection('visits').add(Object.assign({date: new Date().toISOString(), source: trafficSourceBucket()}, camp?{campaign:camp}:{})); }catch(e){ /* silencioso */ }
+  try{
+    // Una visita por sesión: recargar la página o volver desde un producto ya no suma otra.
+    try{ if(sessionStorage.getItem('cdlp_visit_logged')) return; sessionStorage.setItem('cdlp_visit_logged','1'); }catch(e){}
+    const camp = sessionCampaign(), sid = analyticsSid();
+    db.collection('visits').add(Object.assign({date: new Date().toISOString(), source: trafficSourceBucket()}, camp?{campaign:camp}:{}, sid?{sid}:{}));
+  }catch(e){ /* silencioso */ }
 }
 /* ============== ANALÍTICA: eventos de embudo (vistas de producto, agregar al carrito, inicio de checkout) ==============
    Se guardan en una colección aparte ('analyticsEvents') en vez de 'visits' para no
@@ -1482,7 +1497,7 @@ function trafficSourceBucket(){
   }catch(e){ return 'directo'; }
 }
 function trackEvent(type, extra){
-  try{ db.collection('analyticsEvents').add(Object.assign({type, date:new Date().toISOString()}, extra||{})); }catch(e){ /* silencioso */ }
+  try{ const sid = analyticsSid(); db.collection('analyticsEvents').add(Object.assign({type, date:new Date().toISOString()}, extra||{}, sid?{sid}:{})); }catch(e){ /* silencioso */ }
 }
 
 /* ============== BORRADOR DE CARRITO (para recuperación por WhatsApp desde el admin) ==============
