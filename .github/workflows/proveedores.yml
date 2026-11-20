@@ -1,0 +1,44 @@
+name: Asignar proveedor a sus productos
+# Crea el proveedor (si no existe) y se lo asigna a los productos que traen su marca en el nombre.
+# Solo se lanza a mano: Actions → "Asignar proveedor a sus productos" → Run workflow (primero con DRY_RUN=1).
+on:
+  workflow_dispatch:
+    inputs:
+      proveedor:
+        description: 'Nombre del proveedor (p. ej. Orgie)'
+        required: true
+      marca:
+        description: 'Palabra que traen sus productos en el nombre (vacío = el nombre del proveedor)'
+        default: ''
+        required: false
+      pistas:
+        description: 'Otras palabras de la marca, separadas por coma (solo para el reporte)'
+        default: ''
+        required: false
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: proveedores
+  cancel-in-progress: false
+jobs:
+  asignar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/proveedores }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/proveedores --no-audit --no-fund
+      - name: Asignar
+        run: node tools/proveedores/asignar.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROVEEDOR: ${{ inputs.proveedor }}
+          MARCA: ${{ inputs.marca }}
+          PISTAS: ${{ inputs.pistas }}
+          DRY_RUN: ${{ inputs.dry_run }}

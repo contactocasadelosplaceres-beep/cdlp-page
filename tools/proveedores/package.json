@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-proveedores",
+  "private": true,
+  "description": "Crear un proveedor y asignárselo a sus productos",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}
