@@ -1354,7 +1354,7 @@ const auth = firebase.auth();
    Registro de errores del sistema. */
 let systemErrorsLoggedThisSession = 0;
 const SYSTEM_ERROR_LOG_LIMIT = 5;
-const SYSTEM_ERROR_NOISE = /^(Uncaught )?Script error\.?$|without an in-progress transaction|Cannot stop, scanner is not running|ResizeObserver loop|Non-Error promise rejection/i;   // ruido del navegador (Safari/IndexedDB, scripts de otros dominios, lector de códigos): no es un fallo del sistema
+const SYSTEM_ERROR_NOISE = /^(Uncaught )?Script error\.?$|without an in-progress transaction|Cannot stop, scanner is not running|ResizeObserver loop|Non-Error promise rejection|Java object is gone|reCAPTCHA has already been rendered/i;   // ruido del navegador (Safari/IndexedDB, scripts de otros dominios, lector de códigos): no es un fallo del sistema
 function logSystemError(message, stack){
   if(SYSTEM_ERROR_NOISE.test(String(message||''))) return;
   if(systemErrorsLoggedThisSession >= SYSTEM_ERROR_LOG_LIMIT) return;
@@ -5019,9 +5019,11 @@ async function restoreFromTrash(ids){
 }
 async function deleteForever(ids, silent){
   try{
-    for(let i=0;i<ids.length;i+=400){
+    // También se borra su costo privado (productCosts): antes se quedaba suelto para siempre.
+    // 200 por lote porque cada producto son 2 borrados y Firestore acepta máximo 500 por lote.
+    for(let i=0;i<ids.length;i+=200){
       const batch = db.batch();
-      ids.slice(i,i+400).forEach(id=>batch.delete(db.collection('products').doc(id)));
+      ids.slice(i,i+200).forEach(id=>{ batch.delete(db.collection('products').doc(id)); batch.delete(db.collection('productCosts').doc(id)); });
       await batch.commit();
     }
     const gone = state.trashProducts.filter(p=>ids.includes(p.id));
