@@ -2279,6 +2279,13 @@ async function refreshNow(quiet){
       const all = ps.docs.map(d=>({id:d.id, ...d.data()}));
       if(all.length){ state.products = all.filter(p=>!p.deletedAt); state.trashProducts = all.filter(p=>p.deletedAt); }
     }catch(e){ console.warn('No se pudieron actualizar productos', e); }
+    // Proveedores: al cargar el panel se toman de la copia local hasta 30 min; aquí se piden solo
+    // los cambios (casi siempre 0 lecturas), para que un proveedor creado desde otro equipo o por
+    // una Acción de GitHub aparezca al tocar "Actualizar datos".
+    try{
+      const ss = await syncedList('suppliers', {fullHours:168});
+      if(ss.docs.length || !(state.suppliers||[]).length) state.suppliers = ss.docs.map(d=>({id:d.id, ...d.data()}));
+    }catch(e){ console.warn('No se pudieron actualizar proveedores', e); }
     if(state.adminTab==='estadísticas' && state.statsSubview==='tiemporeal') await refreshRealtime();
     if(!quiet && !found) showToast('Todo al día: no hay nada nuevo');
   }finally{ state.refreshing = false; state.lastRefreshAt = Date.now(); render(); }
