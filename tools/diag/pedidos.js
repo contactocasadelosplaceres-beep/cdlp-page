@@ -9,6 +9,8 @@ const DESDE = process.env.DESDE || new Date(Date.now() - 6 * 3600e3).toISOString
     db.collection('orders').where('date', '>=', DESDE).orderBy('date').get(),
     db.collection('sales').where('date', '>=', DESDE).orderBy('date').get(),
   ]);
+  const [lo, ls] = await Promise.all([db.collection('orders').orderBy('date','desc').limit(1).get(), db.collection('sales').orderBy('date','desc').limit(1).get()]);
+  console.log(`Último pedido de la tienda: ${lo.docs[0] ? lo.docs[0].data().date : '(ninguno)'} · última venta del POS: ${ls.docs[0] ? ls.docs[0].data().date : '(ninguna)'}`);
   console.log(`Desde ${DESDE}: ${o.size} pedido(s) de la tienda · ${s.size} venta(s) del POS`);
   const ids = new Set();
   const show = (tipo, d) => {
