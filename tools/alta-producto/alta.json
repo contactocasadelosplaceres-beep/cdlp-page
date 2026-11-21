@@ -1,0 +1,26 @@
+{
+  "_nota": "Altas de productos VISIBLES con existencias iniciales. Cada uno se crea una sola vez (si ya existe su id, su SKU o un producto con el mismo nombre, se brinca).",
+  "productos": [
+    {
+      "id": "HmSMvrAvkFJHVnqiB00t",
+      "sku": "LUB-PROD-S5RM",
+      "name": "Lubricante híbrido After Dark Essentials 120 ml",
+      "price": 399,
+      "cost": 198,
+      "proveedor": "ST",
+      "existencias": 5,
+      "cat": "Lubricantes",
+      "categories": [
+        "Lubricantes"
+      ],
+      "needs": [
+        "compartir-pareja",
+        "para-mi"
+      ],
+      "desc": "Lo mejor de dos mundos en una sola botella. After Dark Essentials Hybrid, de CalExotics, mezcla agua y silicona: se desliza tan suave y dura tanto como un lubricante de silicona, pero se quita fácil con agua, como uno a base de agua. Así puedes disfrutar sin interrupciones y sin sentirte pegajosa.\n\n- Fórmula híbrida: dura más que uno a base de agua\n- Textura sedosa que no se siente pegajosa\n- Se quita fácil con agua tibia y jabón\n- Botella de 120 ml que rinde mucho\n- Hecho en EE. UU.",
+      "images": [
+        "img/p/HmSMvrAvkFJHVnqiB00t-0-712770e49d.webp"
+      ]
+    }
+  ]
+}

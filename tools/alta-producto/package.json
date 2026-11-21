@@ -1,0 +1,7 @@
+{
+  "name": "cdlp-alta-producto",
+  "private": true,
+  "description": "Alta de productos visibles con existencias",
+  "type": "commonjs",
+  "dependencies": { "firebase-admin": "^12.1.0" }
+}

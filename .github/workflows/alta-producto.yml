@@ -1,0 +1,30 @@
+name: Alta de productos visibles con existencias
+# Crea los productos de tools/alta-producto/alta.json visibles y con existencias. Solo se lanza a mano:
+# Actions → "Alta de productos visibles" → Run workflow (primero con DRY_RUN=1 para ver el reporte).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = solo reporte (no cambia nada) · 0 = aplicar'
+        default: '1'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: alta-producto
+  cancel-in-progress: false
+jobs:
+  alta-producto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/alta-producto }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/alta-producto --no-audit --no-fund
+      - name: Dar de alta
+        run: node tools/alta-producto/alta.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
