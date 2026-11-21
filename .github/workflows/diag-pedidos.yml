@@ -1,0 +1,24 @@
+name: Diagnóstico de pedidos recientes (solo lectura)
+on:
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: 'Desde (fecha ISO, UTC). Vacío = últimas 6 h'
+        default: ''
+        required: false
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/diag }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/diag --no-audit --no-fund
+      - run: node tools/diag/pedidos.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DESDE: ${{ inputs.desde }}
