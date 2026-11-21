@@ -3566,22 +3566,24 @@ const QUIZ_BUDGETS = [
    del nombre del producto. "extraCat" es la categoría que decide la pregunta extra (vibración, tipo de
    lubricante, talla…) y "catalogCat" a cuál categoría lleva "Ver más opciones como estas". */
 const QUIZ_GOALS = [
+  // Desde nov 2026 cada meta sale de las categorías nuevas (Vibradores, Succionadores, Anal…), que ya
+  // clasifican bien cada producto; el nombre solo afina casos puntuales.
   {k:'ext',   ico:'✨', label:'Estimulación externa', sub:'Para ella: vibradores, balas, succionadores', toy:true, extraCat:'Juguetes', catalogCat:'Vibradores',
-    fn:p=>{ const n=quizName(p), c=legacyCats(p); return (c.includes('Juguetes')||c.includes('Dildos')) && /succion|bala|huevo|vibrador|estimulador|clitori|labial|masajeador|conejo|lengua|mariposa/.test(n) && !/anal|plug|\bpene\b|masturb|mastub|masculin|anillo|dilatador|cock|dildo|consolador|bomba|pump|prostat|testic/.test(n); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Vibradores')||c.includes('Succionadores')) && !c.includes('Dildos y arneses') && !c.includes('Anal') && !/kegel|bolas chinas|\bpene\b|masculin|testic/.test(n); }},
   {k:'pen',   ico:'💗', label:'Penetración', sub:'Dildos y vibradores con forma', toy:true, extraCat:'Dildos', catalogCat:'Dildos y arneses',
-    fn:p=>{ const n=quizName(p), c=legacyCats(p); return (c.includes('Dildos') || /dildo|consolador|conejo|realista/.test(n)) && !/anal|plug|dilatador|masturbador|anillo/.test(n); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return c[0]!=='Anal' && !/arnes para dildo/.test(n) && (c.includes('Dildos y arneses') || (c.includes('Vibradores') && /punto g|conejo|realista|dildo|consolador|curvo|doble|retractil/.test(n))); }},
   {k:'el',    ico:'🔥', label:'Algo para él', sub:'Masturbadores, anillos, fundas', toy:true, extraCat:'Masturbadores', catalogCat:'Masturbadores',
-    fn:p=>{ const n=quizName(p), c=legacyCats(p); return c.includes('Masturbadores') || /anillo|cock ring|funda|\bpene\b|masturb|mastub|prostat|bomba de succion|pump/.test(n) && !c.includes('Lubricantes') && !c.includes('Comestibles'); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Masturbadores') || c.includes('Anillos y fundas') || (c.includes('Anal') && /prostat/.test(n)); }},
   {k:'anal',  ico:'🍑', label:'Explorar lo anal', sub:'Plugs, bolas, dilatadores', toy:true, extraCat:'Plugs', catalogCat:'Anal',
-    fn:p=>{ const n=quizName(p), c=legacyCats(p); return c.includes('Plugs') || /\banal\b|plug|dilatador|bolas? chinas|perlas/.test(n) && !c.includes('Lubricantes'); }},
+    fn:p=>productCats(p).includes('Anal')},
   {k:'pareja',ico:'💞', label:'Jugar en pareja', sub:'Juegos, esposas, aceites, control remoto', extraCat:null, catalogCat:'Juegos y despedidas',
-    fn:p=>{ const n=quizName(p), c=legacyCats(p); return c.includes('Juegos') || c.includes('Sadomasoquismo') || /pareja|control remoto|aplicacion|masaje|vela|dados|cartas|esposa|antifaz/.test(n); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Juegos y despedidas') || c.includes('Bondage') || (c[0]==='Masaje y seducción') || ((c.includes('Vibradores')||c.includes('Succionadores')||c.includes('Anillos y fundas')) && /control remoto|aplicacion|\bapp\b|pareja/.test(n)); }},
   {k:'lenc',  ico:'👙', label:'Sorprender con lencería', sub:'Ropa sexy para ella o para él', extraCat:'Ropa femenina', catalogCat:'Lencería',
-    fn:p=>{ const c=legacyCats(p); return c.includes('Ropa femenina') || c.includes('Ropa masculina'); }},
+    fn:p=>{ const c=productCats(p); return c.includes('Lencería') || c.includes('Ropa para él'); }},
   {k:'durar', ico:'⏱️', label:'Durar más o sentir más', sub:'Retardantes, potenciadores, geles', extraCat:null, catalogCat:'Estimulantes y retardantes',
-    fn:p=>{ const n=quizName(p); return /retard|vigoriz|potenci|multiorgasm|excitante|estimulante|erecci|prolong|capsula|intens|calor|efecto|sensibiliz/.test(n) && !/desensibiliz|feromona|splash|perfume|body spray|aroma/.test(n); }},
+    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Estimulantes y retardantes') && !/anal|garganta/.test(n)) || (c.includes('Anillos y fundas') && /retard/.test(n)); }},
   {k:'lub',   ico:'💧', label:'Lubricar y cuidar', sub:'Lubricantes, limpiadores, condones', extraCat:'Lubricantes', catalogCat:'Lubricantes',
-    fn:p=>{ const n=quizName(p), c=legacyCats(p); return (c.includes('Lubricantes') && !/retard|vigoriz|potenci|multiorgasm|sensibiliz|excitante|estimulante|garganta|feromona|perfume|splash|body spray|estrechador|erecci|prolong/.test(n)) || /limpiador|condon/.test(n); }},
+    fn:p=>{ const c=productCats(p); return c.includes('Lubricantes') || c.includes('Condones y cuidado'); }},
 ];
 function quizGoal(a){ a = a || state.quizAnswers; return QUIZ_GOALS.find(g=>g.k===a.cat) || null; }
 /* Coherencia de género. Si eligió "Para ella" nunca salen productos de uso masculino (ni la opción
@@ -3594,9 +3596,12 @@ const QUIZ_GOAL_GENDER = {el:'m', ext:'f'};
 const QUIZ_MALE_RX = /\bpene\b|masculin|prostat|testic|escroto|cock|jockstrap|boxer|\bslip\b|suspensorio|zuppo|para hombre|retard|masturb|mastub|funda|bomba de succion|pump|castidad|erecci|vigoriz/;
 const QUIZ_FEMALE_RX = /clitori|femenin|mujer|braga|brasier|babydoll|baby doll|pantalet|estrechador|labios vagin|pezon|liguero(?!.*zuppo)/;
 function quizGenderOf(a){ a = a || state.quizAnswers; return QUIZ_NEED_GENDER[a.need] || QUIZ_GOAL_GENDER[a.cat] || (a.cat==='lenc' && a.extra==='lenc-f' ? 'f' : a.cat==='lenc' && a.extra==='lenc-m' ? 'm' : null); }
+const QUIZ_MALE_CATS = ['Ropa para él','Masturbadores','Anillos y fundas'], QUIZ_FEMALE_CATS = ['Lencería','Succionadores'];
 function quizGenderOk(p, gen){
   if(!gen) return true;
   const n = quizName(p), c = legacyCats(p);
+  if(gen==='f' && c.some(x=>QUIZ_MALE_CATS.includes(x))) return false;
+  if(gen==='m' && c.some(x=>QUIZ_FEMALE_CATS.includes(x))) return false;
   if(gen==='f') return !c.includes('Ropa masculina') && !(QUIZ_MALE_RX.test(n) && !/vagin|clitori|para ella|femenin/.test(n));
   return !c.includes('Ropa femenina') && !(QUIZ_FEMALE_RX.test(n) && !/masturb|mastub|para el|hombre|masculin/.test(n));
 }
