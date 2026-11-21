@@ -58,7 +58,18 @@ async function run({ db, FieldValue }){
   console.log(`  gana el costo de products (más nuevo): ${count('gana products')} · iguales: ${count('igual')} · se respeta productCosts: ${count('se respeta productCosts')} · sin costo en ninguno: ${count('sin costo en ninguno')}`);
   console.log(`::notice::${DRY_RUN ? 'Prueba' : 'Aplicando'}: ${rows.length} producto(s) · cambia el costo en ${count('gana products')} · ya iguales ${count('igual')} · se conserva productCosts ${count('se respeta productCosts')} · sin costo ${count('sin costo en ninguno')}`);
   rows.forEach(r => console.log(`  ${r.id}  ${r.name.slice(0, 50).padEnd(50)}  products ${String(r.pc || '—').padStart(7)}  productCosts ${String(r.cc || '—').padStart(7)}  → queda ${String(r.final.cost || '—').padStart(7)}  (${r.change})`));
+  // Costos privados de productos que ya se borraron para siempre (antes la papelera no los borraba).
+  const pcs = await db.collection('productCosts').get();
+  const prodIds = new Set(snap.docs.map(d => d.id));
+  const orphans = pcs.docs.filter(d => !prodIds.has(d.id));
+  console.log(`Costos sueltos de productos que ya no existen: ${orphans.length}${orphans.length ? ' → ' + orphans.map(d => d.id).join(', ') : ''}`);
   if(DRY_RUN){ console.log('DRY_RUN: no se tocó Firestore.'); return { fixed: 0 }; }
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  for(const d of orphans){
+    fs.writeFileSync(path.join(BACKUP_DIR, `huerfano-${d.id}.json`), JSON.stringify({ id: d.id, productCosts: d.data() }, null, 1));
+    await d.ref.delete();
+  }
+  if(orphans.length) console.log(`::notice::Costos sueltos borrados: ${orphans.length} (respaldo en el artefacto)`);
 
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   let fixed = 0;

@@ -1,0 +1,35 @@
+name: Diagnóstico de salud de datos (solo lectura)
+# Revisa errores registrados, existencias que no cuadran, espejo de la tienda, costos y pedidos.
+# Actions → "Diagnóstico de salud de datos" → Run workflow. No cambia nada.
+on:
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'Días hacia atrás para errores y pedidos'
+        default: '30'
+        required: false
+      ids:
+        description: 'Opcional: ids de productos separados por coma para ver su historial completo'
+        default: ''
+        required: false
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1, sparse-checkout: tools/diag }
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: npm install --prefix tools/diag --no-audit --no-fund
+      - run: node tools/diag/salud.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DIAS: ${{ inputs.dias }}
+      - if: ${{ inputs.ids != '' }}
+        run: node tools/diag/rastro.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          IDS: ${{ inputs.ids }}
