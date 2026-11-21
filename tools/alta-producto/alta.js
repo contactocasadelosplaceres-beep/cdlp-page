@@ -1,5 +1,5 @@
 /* Alta de productos VISIBLES con existencias iniciales, leídos de alta.json.
-   Cada producto se crea con su foto ya en img/p/, su costo, su proveedor (por nombre; si no existe
+   Cada producto se crea con su foto ya en img/p/, su costo y proveedor (en productCosts, la capa privada), su proveedor (por nombre; si no existe
    en Proveedores se crea) y sus existencias en el centro Principal (el marcado como predeterminado).
    No crea nada si ya existe: mismo id, mismo SKU o un producto vivo con el mismo nombre.
    Deja anotado el alta en la bitácora y la entrada de inventario en los movimientos.
@@ -12,6 +12,9 @@ const { productos } = JSON.parse(fs.readFileSync(path.join(__dirname, 'alta.json
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 const money = n => '$' + Number(n || 0).toLocaleString('es-MX');
 const BY = 'Alta de producto (Acción de GitHub)';
+// Igual que tools/costos/migrar.js: costo, historial y proveedor viven en productCosts (privado);
+// en products solo queda el nivel de margen (mgTier) para los filtros.
+function marginTier(price, cost){ price = Number(price); cost = Number(cost); if(!(price > 0) || !(cost > 0)) return null; const m = (price - cost) / price; return m >= 0.6 ? 3 : m >= 0.45 ? 2 : m >= 0.3 ? 1 : 0; }
 
 async function run({ db, FieldValue }){
   const [snap, supSnap, cenSnap] = await Promise.all([
@@ -51,13 +54,18 @@ async function run({ db, FieldValue }){
     const supName = sup ? (sup.data().name || '') : (p.proveedor || '');
     const qty = Number(p.existencias) || 0;
     batch.create(db.collection('products').doc(p.id), {
-      name: p.name, sku: p.sku, location: p.location || '', supplierId: supId, expirationDate: '', lowStockThreshold: 0,
-      cat: p.cat, categories: p.categories, price: p.price, promoPrice: 0, cost: p.cost, stock: qty,
+      name: p.name, sku: p.sku, location: p.location || '', expirationDate: '', lowStockThreshold: 0,
+      cat: p.cat, categories: p.categories, price: p.price, promoPrice: 0, stock: qty,
       desc: p.desc, images: p.images, needs: p.needs || [], stockByCenter: qty ? { [principal.id]: qty } : {}, hidden: !!p.oculto,
       variantGroups: [], variants: [], batches: [], isKit: false, kitItems: [],
       isMysteryBox: false, mysteryCategory: '', mysteryItemCount: 0, categorySortOrder: {}, createdAt: now,
+      promoSince: null, ...(marginTier(p.price, p.cost) !== null ? { mgTier: marginTier(p.price, p.cost) } : {}),
+      _sync: FieldValue.serverTimestamp(),
+    });
+    batch.set(db.collection('productCosts').doc(p.id), {
+      cost: p.cost, supplierId: supId,
       costHistory: [{ cost: p.cost, date: now, supplierId: supId, supplierName: supName, source: 'alta', by: BY }],
-      promoSince: null, _sync: FieldValue.serverTimestamp(),
+      _sync: FieldValue.serverTimestamp(),
     });
     if(qty) batch.set(db.collection('stockMovements').doc(), {
       productId: p.id, type: 'ajuste_manual', qtyChange: qty, note: 'Existencias iniciales al dar de alta', centerId: principal.id,
