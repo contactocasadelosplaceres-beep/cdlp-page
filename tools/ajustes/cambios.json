@@ -1,9 +1,4950 @@
 {
-  "_nota": "Productos Orgie que ya estaban en la tienda: nombres y precio acordados el 2026-11-19 (sin guiones en el nombre). Se busca cada producto por SKU y solo se toca si su nombre actual coincide con 'antes'.",
-  "cambios": [
-    { "sku": "LUB-GELL-QA2B", "antes": "Gel Lubricante Vibrador con Hemp Intense Orgasm Orgie 15ML", "nombre": "Vibrador líquido con aceite de cáñamo Hemp! Intense Orgasm Orgie 15 ml" },
-    { "sku": "LUB-GELL-P5I1", "antes": "Gel Lubricante Vibrador con Hemp Intense Orgasm Orgie 2ML", "nombre": "Vibrador líquido Hemp! Intense Orgasm Orgie sobre 2 ml" },
-    { "sku": "LUB-VIBR-HJYI", "antes": "Vibrador liquido extra fuerte Sexy Vibe High Voltage Orgie 2ML", "nombre": "Vibrador líquido extra fuerte Sexy Vibe! High Voltage Orgie sobre 2 ml" },
-    { "sku": "LUB-VIBR-FM3M", "antes": "Vibrador liquido para sexo oral Electric Fellatio Orgie 10ML", "nombre": "Gloss vibrador para labios y sexo oral Electric Fellatio Orgie 10 ml", "precio": 670 }
+ "_nota": "Nov 2026: nuevas categorías (16) y etiquetas 'para quién'. Ver claude/orden-catalogo-propuesta-2026-11.md",
+ "ajustesTienda": {
+  "categories": [
+   "Vibradores",
+   "Succionadores",
+   "Dildos y arneses",
+   "Anal",
+   "Masturbadores",
+   "Anillos y fundas",
+   "Lubricantes",
+   "Estimulantes y retardantes",
+   "Masaje y seducción",
+   "Comestibles",
+   "Condones y cuidado",
+   "Bondage",
+   "Juegos y despedidas",
+   "Lencería",
+   "Ropa para él",
+   "Tarjetas de regalo"
+  ],
+  "needs": [
+   {
+    "key": "para-ella",
+    "label": "Para ella"
+   },
+   {
+    "key": "para-el",
+    "label": "Para él"
+   },
+   {
+    "key": "compartir-pareja",
+    "label": "En pareja"
+   },
+   {
+    "key": "para-pareja",
+    "label": "Para regalar"
+   },
+   {
+    "key": "empezando",
+    "label": "Estoy empezando"
+   }
   ]
+ },
+ "cambios": [
+  {
+   "id": "FsRwGc9tIUyGxvYUGzit",
+   "antes": "1 pieza vela eléctrica",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "CGtdB7ZpuyHA4JFeLzVF",
+   "antes": "100 petalos de rosa (flor artificial)",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "ySI49j2joOx82ObVdrQu",
+   "antes": "17 pcs funda de pene",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "NLBkyfrXKLupSWrwVEJ6",
+   "antes": "2 en 1 masturbador y funda",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "JNXe3u8CVl8qhNYxh2ZT",
+   "antes": "2 piezas de mascarilla de encaje color negro C80570",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "VY5rAO22KP3qeqoefro0",
+   "antes": "2 piezas esposas con encaje",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "nXZKxrq7TrGyTNEHGsaP",
+   "antes": "2 piezas perlas magnéticas",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": []
+  },
+  {
+   "id": "4T7TTgZW5FpfXCDvmRed",
+   "antes": "2 pzs dildo doble cabeza y dildo",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "LWwuRWTWs0DNpL5AYscj",
+   "antes": "2 pzs dildos pack",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "fHGtElpeQ1z31S7UcivG",
+   "antes": "3 anillos con texturas",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "oAtXnNMLmHS8RrZjlRY1",
+   "antes": "3 condones trojan lubricado",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "QeT3fYrWXTinpxsG3ay8",
+   "antes": "4 bolas morado élan",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "ydLA54NXCy5UHOXJehLu",
+   "antes": "40 tarjetas raspables ideas para una cita",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "62pdbX4Q4bOp0ZhUNkoR",
+   "antes": "5 fundas de pene",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "3WgHj3vosD8war6B3RPY",
+   "antes": "Aceite comestible para masajes sabor capuchino SXO 30ML",
+   "categoriasExactas": [
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "sR8T2Y4nHD4FTkYxUGif",
+   "antes": "Aceite comestible para masajes sabor chocolate SXO 30ML",
+   "categoriasExactas": [
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "F9vBomORkAK8yWxtMmyC",
+   "antes": "Aceite comestible para masajes sabor Fresa SXO 30ML",
+   "categoriasExactas": [
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "qiJAqr6XQ40TYUILwiMO",
+   "antes": "Aceite de Almendras con Feromonas SexAppeal",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": []
+  },
+  {
+   "id": "fWQkLPimhvH1jZo85Qri",
+   "antes": "Aceite esencial aromatico para masaje Tout Temps 60ML",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": []
+  },
+  {
+   "id": "n0zQsc58sG3wvpdJkdFx",
+   "antes": "Aceite Lubricante Estimulador con HEMP Tout Temps 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "CCaLkxI62q7iFfWoia1H",
+   "antes": "Aceite para masaje efecto frio SXO sabor Hierbabuena 18 ml",
+   "categoriasExactas": [
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "NuoYbaMu36WOCb4Mdv8z",
+   "antes": "Aceite para masaje efecto frio SXO sabor Sandia 18 ml",
+   "categoriasExactas": [
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "npYHcFrhZhjBXIuB0cco",
+   "antes": "Aceite para masaje térmico y comestible fresa chocolate 18 ml (iquidación)",
+   "categoriasExactas": [
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "8nyDmM0PkhYu4VBuj0Lm",
+   "antes": "Amarres Cama",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "5V1qoNRIklyfkyzwYvug",
+   "antes": "Anillo con vibración para el pene Satisfyer Strong One",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "Jd1Ez9r04vQ1ng76UXcz",
+   "antes": "Anillo para pene con masaje",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "u9NC3T2HFrtgyMxmSK4d",
+   "antes": "Anillo para pene con vibración y estimulador",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "x1eelwtKyFesDHnbZkQM",
+   "antes": "Anillo retardador",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "xl8wqHDQnb3DWYlvEt6Y",
+   "antes": "Anillo vibrador básico",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando",
+    "para-el"
+   ]
+  },
+  {
+   "id": "fRLku8nzhJG08eZZIu1S",
+   "antes": "Anillo vibrador con estimulador",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "GOAuTX8avchrfGN7EU1o",
+   "antes": "Anillo Vibrador conejo",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "RqHUHaz0Dhq3EeMUBQoy",
+   "antes": "Anillo vibrador control por app rojo",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "4MX4vXpNMfXFFSqUnWJj",
+   "antes": "Anillo vibrador melocotón",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "QmbWRjQqOaoHsYahblRB",
+   "antes": "Anillo vibrador para pene 9 cm largo",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "PyKJvBSbHCqrACo0ohLi",
+   "antes": "Anillo vibrador para pene y escroto recargable",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "8D2veaeDTND1yJOqtDww",
+   "antes": "Antifaz",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "qKWD1zT1PO1t4chBg7kM",
+   "antes": "Arnes ajustable con dildo de 21 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "W52BVG2XAcm2xZDnVheP",
+   "antes": "Arnes con bala vibradora penetrix",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "JCm7TmkK9gyg6WljHtit",
+   "antes": "Arnes con dildo doble Fiercely",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "FOzJGXYqunsGXIfeBghM",
+   "antes": "Arnés elástico con dos dildos morados",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "HtJbXiNQIyjgtW1OnKvd",
+   "antes": "Arnes para Dildo",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "nCwWTyAEU24G3NJFYJjC",
+   "antes": "Arnés para doble penetración",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "8eDsGN7WPbpLokytdr7i",
+   "antes": "Asiento inflable erótico",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "N2aw1olxJatQkgAqozT6",
+   "antes": "Baby doll de encaje rosa talla L",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "gZZIVPhY04cu4mngBx6t",
+   "antes": "Babydoll con tanga Rojo 42112",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "xFseHGwgsITxfKoxr5Jd",
+   "antes": "Babydoll con tanga Verde 42112",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "t4cvWTTojmLEY9Ck2QHy",
+   "antes": "Babydoll estilizador Rojo 71017",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "WczDyUkBnhzXnkOdMbnH",
+   "antes": "Babydoll transparente con tanga Verde 42190",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "XAuTj583mJHHYBVQETTq",
+   "antes": "Bala rosa 11 cm de baterias",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "gSnPd9XwuO6tZVN4VUQY",
+   "antes": "Bala rosa alámbrica pequeña (liquidación)",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "vrIp1SY2X1LS1fEX9Ye6",
+   "antes": "Bala Vibradora Alámbrica multi-velocidades",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "FPg8XFzkK6k0dGMudDgP",
+   "antes": "Bala vibradora de bolsillo",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "ZLHsuH70RzGU86G89TwQ",
+   "antes": "Bala vibradora recargable de bolsillo",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella",
+    "para-el",
+    "empezando"
+   ]
+  },
+  {
+   "id": "jRKTb5qeqfOcUSykreXY",
+   "antes": "BDSM Sujeción Esposas y Cuello",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "ZEXRwTb2AGU8gLp1A2aK",
+   "antes": "BDSM Sujeción Piernas Abiertas",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "m8ldBztCFhtSXeZaXFEX",
+   "antes": "Bikini para hombre – Talla M",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "mH8kFMTZYMkceMXqOBi0",
+   "antes": "Bikini para hombre negro Jessborn – Talla L",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "KFqKhW9GqEUjkvZrkadr",
+   "antes": "Body con liguero Negro 71000",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "H2vkGfZryeMyPDGubNTA",
+   "antes": "Body con liguero Rojo 71000",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "M8yDzdE4vFn40EBpinit",
+   "antes": "Body splash feromonas bad boy 60 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "5UHudSAdUWUW3xZILdu7",
+   "antes": "Body spray femenino con feromonas 60 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "ocGVBGswQwZBH8vwv9wG",
+   "antes": "Body spray masculino con feromonas 60 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "q58VBL4HmyyEYm7wC37A",
+   "antes": "Bola anal + cock ring vibratorio",
+   "categoriasExactas": [
+    "Anal",
+    "Vibradores"
+   ],
+   "needs": []
+  },
+  {
+   "id": "fWB4WDRuteUGAKHMNfPS",
+   "antes": "Bola gag BDSM",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "NubcpzUTQf1fjjoDNVMV",
+   "antes": "Bola kegel élan balle de luxe",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "gw11CwVc7bO0MtHBhrqu",
+   "antes": "Bolas de kegel",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "8JajvD5cpPI6bFqtHMKB",
+   "antes": "Boletos de rasca y gana de sexo oral",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "LQExhl5SEyQ4ub0Cgsyj",
+   "antes": "Bomba de succión",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "2xdjr4G83dxVgOaErSE6",
+   "antes": "Bomba de succión automática y recargable (liquidación)",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "5zWJzLckYbLE7OqPfOI4",
+   "antes": "Bomba de succión Penis Pump",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "uhns656SYo4AXUGcYZZM",
+   "antes": "Bomba de vacio vaginal",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "JP42jrvzjPcHCdWa6UTr",
+   "antes": "Boxer Arjen Kroos blancos",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "0j8WDtFeHgJOm6neWAM0",
+   "antes": "Bóxer blanco para hombre – Talla XXL",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "jSxoK8vTOLyjCOGuMD5Q",
+   "antes": "Boxer corto Valentino negro con grecas doradas zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Bm9LZtBlogdDqDyTahZQ",
+   "antes": "Boxer Zuppo leather fetish",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "xMiyHdhwMEhOnMiFC7QB",
+   "antes": "Braga negra de encaje talla L DY281P1115",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "BEcoKYftAA6wbgSglos4",
+   "antes": "Bragas blancas de encaje con cordones en tallas XL a 2XLP5133-2P1117",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Z1b14wagqOI5DArujTNt",
+   "antes": "Bralette 72003",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "xGtivLX2ryML8rlsLYYd",
+   "antes": "Briefs AussieBum Catch",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "zHFdHEeKJ6KPIxABJfqY",
+   "antes": "Briefs negros básicos",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "ZgYWg4FcG2wG6kcCtfa2",
+   "antes": "Calvin Klein brief",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "s5ds2697swAguvvNUB5B",
+   "antes": "Calvin klein suspensorio",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "SR7mk3A5pw9fi9vGUFU7",
+   "antes": "Calzoncillos con esponja levanta glúteos y pene M negro",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "y2c2qr4wF6ZN0Tssr1Eq",
+   "antes": "Capsulas vigorizante natural para hombre Lions Power",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "1uHyHuauF3mJ2H9mFCGi",
+   "antes": "Cartas de posiciones sexuales en inglés",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "XqvyvysNGmBrZxQ53bWi",
+   "antes": "Chocolate Liquido para sexo oral SXO 30ML",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "KfhrpjSrTtwztztDF0fq",
+   "antes": "Classic brief Aussiebum Azul",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "VlysMPIML6Q4MC4o40RS",
+   "antes": "Classic brief Aussiebum Negro",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "KCx0KB7ZiAzUbwRntXjK",
+   "antes": "Classic brief Aussiebum Rojo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Fe89hdbq1W9uXO8QEPRC",
+   "antes": "Cock ring",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "04PE6u0Ni4VMzGHH73Ww",
+   "antes": "Collar con pinzas",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "xmcrDVInZpoOE4u6inpm",
+   "antes": "Columpio",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "SXqZmX6eN28hhscBhsJV",
+   "antes": "Condón Playboy Sabores",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "eMAjZUpRywEG1zDgjk0e",
+   "antes": "Condón possess",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "InhxWHOhh8QJoYYd3hPV",
+   "antes": "Condón Prudence clásico",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "HryJlYRaUqI2yWfmKdyw",
+   "antes": "Condones que brillan en la oscuridad",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "KSutRT0mbVBqBZGN8tA7",
+   "antes": "Condones sin latex",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "vcJUkxd3jiCjdC9e5DpA",
+   "antes": "Conjunto 4 piezas con lazo de encaje negro talla grande",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "CsQRiZflbML1iAh1qYJm",
+   "antes": "Conjunto de sujetador de encaje rojo sexy con aros para tallas grandes (3XL-4XL)R80774-2P1119",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "GcifSXAwqLm3C55jGJAP",
+   "antes": "Consolador vibrador ballena rosa",
+   "categoriasExactas": [
+    "Vibradores",
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "vRf0ESMCGqfqYgnAYlQC",
+   "antes": "Correa auxiliar de cintura",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "l8fz0QwAiNhTQ2jGXcCS",
+   "antes": "Correa para cuello BDSM",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "IC7lLT4XM4aZ019DgNA5",
+   "antes": "Crema desensibilizadora anal con menta NUMB 10g",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "foJJLZd9qDZm7IgLBJbj",
+   "antes": "Crema engrosadora para pene HotSex 10ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "g3ACtLSPVUILF5jdLawr",
+   "antes": "Crema estimulante para labios vaginales Euphoric XXX 10ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "56EBjLeT9bMudg6KXbfA",
+   "antes": "Crema estrechadora de vagina REVERSE 10g",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "oPrcgGDQQKtWA1Mjw0rT",
+   "antes": "Crema feromonas hombre 60 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "qVDdm2jPZL4dvh4ndIdI",
+   "antes": "Crema feromonas mujer 60 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "iriOXUfzvFC6LbtPqsO3",
+   "antes": "Crema para erección firme STA-ERECT con feromonas 10g",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "7qMzOUZRnelik24PCfbq",
+   "antes": "Crema para erección firme STA-ERECT con feromonas 56g",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "4wuWdB5OXUHrAo1VPU1y",
+   "antes": "Crema para prolongar erección PROLONGING con gingseng 10g",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "j4IWwtW3POvOHooeay38",
+   "antes": "Crema para prolongar erección PROLONGING con gingseng 56g",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "pTJFK5kMoO6hPr5C9DzI",
+   "antes": "Crema sensibilizante para clítoris Libido 10ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "fEL2Ua9qg2xuKYFclPe4",
+   "antes": "Cuerda para bondage roja 5 m",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": []
+  },
+  {
+   "id": "CApqlYo5QyUqwhXArPpo",
+   "antes": "Dado de posiciones de 12 caras (negro)",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "aoDmceWsNE4V456cRqlm",
+   "antes": "Dados eróticos para juego previo (par)",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "QF5QHs6gJY20CyKDdZv5",
+   "antes": "Dados que brillan en la oscuridad",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "f6Ftj31x1ZmqAV1xqHcn",
+   "antes": "Dedo vibrador",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "VqdmpYUVvAaoBcsRhACK",
+   "antes": "Dedo vibrador negro",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "5effwh1oB8Fo4hG8l3Pq",
+   "antes": "Desensibilizador de garganta Tout temps fresa",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "W5GkRciLpIX02XHBt9wC",
+   "antes": "Desensibilizante anal en spray 4.5 ml Lions power",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "vtzr0caHTE5DIhYZ0YlL",
+   "antes": "Dicai",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "thOER0a5LGiTP4FUib4N",
+   "antes": "Dilatador anal inflable falo",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "LSZFsv1xXDiy6VVVoa6x",
+   "antes": "Dilatador anal inflable forma de plug",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "dnOdBeLUkDmKAnRQB16v",
+   "antes": "Dildo 23 cm grueso",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "KiaNYePGf22y5evCa6qi",
+   "antes": "Dildo 35 cm largo",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "FaqSNRgD5zKIkv5wE2VO",
+   "antes": "Dildo abominable dragón",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "g8mfM5SUbq3f1ckvA62a",
+   "antes": "Dildo abominable gorgona",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "CfYbxLq6676zdumWDQej",
+   "antes": "Dildo abominable kraken",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "NUKqPlAY2WUnddaKqA56",
+   "antes": "Dildo Africano 36 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "djZt0mKRWZLwbDEusU8L",
+   "antes": "Dildo Alan",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Jnzh9u49O89mHJ57eyIS",
+   "antes": "Dildo anal extra largo 34 cm",
+   "categoriasExactas": [
+    "Anal",
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-pareja",
+    "para-ella",
+    "para-el"
+   ]
+  },
+  {
+   "id": "bx3kjHuQIyFqnTjFiOFm",
+   "antes": "Dildo Bala negra (liquidación)",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "2lQYL1EcRoQcyucKtR6b",
+   "antes": "Dildo boludo",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "7JHaX3wO6AHzX1h3zAbT",
+   "antes": "Dildo caballo semental",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "YlgA0APsfFtwXNGbjB46",
+   "antes": "Dildo con eyaculación",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "sMkGDlESZRY9rWmatd8m",
+   "antes": "Dildo conejo de baterias",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "58Ymye1yB2o2445TDScj",
+   "antes": "Dildo conejo vibrador y retráctil recargable",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "0vy7CRUZ1z7zurNWTqRK",
+   "antes": "Dildo Cubanito (color negro)",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "LNbQt0trjpCnVwZz4QIT",
+   "antes": "Dildo Daddy",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "BYVl4gzJY76JbhmcZNon",
+   "antes": "Dildo Derek el bartender",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "t9lnHdeG7G2sIuMVPUjD",
+   "antes": "Dildo Ding Dong",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "B2KnXRrmxSdOH3tGWv2U",
+   "antes": "Dildo doble cabeza morado",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Icva1JYBoy3oFRHO3KA2",
+   "antes": "Dildo Double Pleasure",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "CKBYyNKad2er8zuvv1pt",
+   "antes": "Dildo El Gordo",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "g6uELJAWPbqjqruYgQon",
+   "antes": "Dildo el Maestro",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "B2AaG2051gCPWI1LdoAl",
+   "antes": "Dildo el Poli Black",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "6eQbrHeyQ4WLTfTcMCpo",
+   "antes": "Dildo erectosaurio",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "VYfqtSAGBjOWhZEzurLh",
+   "antes": "Dildo extra largo 46 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "zLTe8Ef06FPmjMMPV9V1",
+   "antes": "Dildo Gag con candado",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "FUicbOKKBRUaE7PX4YhR",
+   "antes": "Dildo Kevin",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "78RpNjuzgFF8eie6mtdB",
+   "antes": "Dildo Kike",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "QpVwgZ7REZ7lVlKawfjF",
+   "antes": "Dildo lucky daddy 30 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "cHHnVbYJVuZ72HKIjQvA",
+   "antes": "Dildo Luismi",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "XMmrus2Yz5CQP5U15TaT",
+   "antes": "Dildo mano color piel",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Anal"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "qkmD94Wuk0SgHvcebaph",
+   "antes": "Dildo Minimi",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "m02pvpXcFYyyD0vhStlh",
+   "antes": "Dildo monstruo con eyaculación",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "gKFaDx7UAJgrL9EUhKxQ",
+   "antes": "Dildo Mr Hernandez Black",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "BSVBCVD4ar7yBIZiNzYa",
+   "antes": "Dildo Mr Lopéz",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "0ZfzwPoErgsk9H1Wuvjh",
+   "antes": "Dildo mr. Egg",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "pnmEuENO6u5wM2gDs6QY",
+   "antes": "Dildo Mr. López Flexible",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "OA4LYHtGvFZ6rgn1ldtu",
+   "antes": "Dildo Mr. Pérez",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "DSUL1VWdd4wxl33r2KOn",
+   "antes": "Dildo Mr. Pérez Flexible",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "fKE43ibu0KNwzh8vwnCd",
+   "antes": "Dildo Mr. Ricky",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "wC83cn3EOEF1Fhm7dnyF",
+   "antes": "Dildo negro con texturas",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Anal"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "PInYu5dH1e4apThCsqlD",
+   "antes": "Dildo para doble penetración",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "gTUy6vDNLDbQFa12pCvJ",
+   "antes": "Dildo para doble penetración 13 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "wALxtm0UIDfWqc3PCAxl",
+   "antes": "Dildo realista con estimulador rosa",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "HrWtowTRJBg87LRMuybY",
+   "antes": "Dildo realista con vibración 21.5cm",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "VBwD3Yr7aYJqOC0uI1qR",
+   "antes": "Dildo realista retráctil, vibración y calefacción",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "fJumxoDDdY28iBUl8JXc",
+   "antes": "Dildo realista retráctil, vibración y calefacción negro",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella",
+    "para-el",
+    "para-pareja",
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "Pmmy6qKjWxMvqK6dqa3P",
+   "antes": "Dildo Santiago",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "d3v6YgO2pIlDop3MUshf",
+   "antes": "Dildo suave color chocolate Tonny",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "ALOPZERZinqhLzcaMBwH",
+   "antes": "Dildo telescopico realista con vibración 21.5 cm",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "WyU9skvh6xakPmQFpCLZ",
+   "antes": "Dildo tentaculo",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "316kdoGfg7i9Dv25BQcf",
+   "antes": "Dildo tentaculo control por aplicación y control remoto",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "hiupEvQboF7eFLyFWxgt",
+   "antes": "Dildo transparente 14 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "iHi5IN8aW0sg6QX3mPaB",
+   "antes": "Dildo unicornio",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "BwiZCyzTPYaLdmIGiFND",
+   "antes": "Dildo Venom",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "eb12cUvbD9LqBPpVPrlu",
+   "antes": "Dildo vibrador 16 cm con regulador de vibración",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Q4M5731j3SDL45wA1jR3",
+   "antes": "Dildo vibrador 22 cm con estimulador",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "VQVfAeOkn2f05uaBojmT",
+   "antes": "Dildo vibrador con estimulador Puffy",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "UIdgIWOlTVbfEOu6uIkO",
+   "antes": "Dildo vibrador curvy",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Gqm8cNaY7QnsZ6WeSmEL",
+   "antes": "Dildo vibrador Dr. Skin",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "mhqKQIucnIcyGbXdhGQs",
+   "antes": "Dildo vibrador injoy 20 cm Tarsy",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "abJWrCV4YWOPP2cAFzkC",
+   "antes": "Dildo vibrador Nato (liquidación)",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "tnF0GyEBvuRqljw0RiDU",
+   "antes": "Dildo vibrador realista 18 cm – Injoy Nusy",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "sKqv1xWrgukGC1kVh69n",
+   "antes": "Dildo vibrador Wiggly",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "2zVUEUQQWKozzOD5dl5g",
+   "antes": "Dildo Zapata",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "SflwaGXYkrCxenZPqwow",
+   "antes": "Dispositivo de castidad masculina",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "iHLh9ZPhRg3a6LACjNU0",
+   "antes": "Doble penetración y vibración",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "dUjP0RQV4d7ClVZh2QXz",
+   "antes": "Dulce garganta profunda SXO fresa",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "4Q4kP15fJzx56iQzOlWg",
+   "antes": "Dulce Garganta Profunda SXO uva",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "E4wS4GWaT3LQFSpNYZzX",
+   "antes": "Dulces estimulantes fresa",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "v9qem8tTWDDaOQJOiXKY",
+   "antes": "Dulces estimulantes menta",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "aOwboyO9TAptKNEoX9J4",
+   "antes": "Duo multiorgásmico y retardador 7.5 ml SXO",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "nwnS7NHJeyhTxC9Iu4bu",
+   "antes": "El Poli 31 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "JMKrJrrLZhcRShHxYNf6",
+   "antes": "Enema ducha grande",
+   "categoriasExactas": [
+    "Condones y cuidado",
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "D4tK3KMFguKPami78r3G",
+   "antes": "Enema ducha perilla",
+   "categoriasExactas": [
+    "Condones y cuidado",
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "2NFIEYkkuiOMpDaDXqMi",
+   "antes": "Esposas colgantes en puerta",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "NbSqveySzPaEFrzvaREK",
+   "antes": "Esposas de peluche velcro",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "CULkopEU3VT3mQ4TnXei",
+   "antes": "Esposas dominación",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "ZsDjITTTfZiBfNKksaF4",
+   "antes": "Esposas en muslo",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "9HmILwoQd0BLIl65pwN5",
+   "antes": "Esposas Hosh",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "y2nRimsrjytgNtZxlUID",
+   "antes": "Esposas metalicas con Peluche",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "DgtKKXusIFhIYRkWFaTr",
+   "antes": "Esposas para manos y piernas con unión",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "bduKZBZab1vqusqIY9T7",
+   "antes": "Esposas temptasia",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "noGOQkixbYtuL1dJXDxF",
+   "antes": "Estimulador de clitoris pingüino rosa",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "BVOajrx59nUMilA5xiDb",
+   "antes": "Estimulador de Clitoris Satisfyer Sweet Treat",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Y91y8JtcLU2tdAKXlSOQ",
+   "antes": "Extensión funda para pene con vibración",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "zg4rVc7XV5x12vVgabor",
+   "antes": "Fat boy",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "YvGDXjIyW2GVNRA5tco4",
+   "antes": "Feromona con aroma para hombre 60 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "XjRaB3msSr98hhdh8bEi",
+   "antes": "Feromonas 5 ml",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": []
+  },
+  {
+   "id": "2ZIl63seJlsxQ5O7ftlc",
+   "antes": "Funda con anillo para testiculos",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "M6N1OSNhEGjYrWX7SYOq",
+   "antes": "Funda para dedo con vibración",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": []
+  },
+  {
+   "id": "2Vo28vk6ihxuzQS6HgU9",
+   "antes": "Funda para pene con texturas",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Y675IxnWtPqz5v779S3b",
+   "antes": "Funda para pene Xtensions",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "pXSFlKS8MUYj1V4mVu6q",
+   "antes": "Funda realista para pene",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "8hqgiJ64VBjwFCNDlRMn",
+   "antes": "Garganta Profunda en spray 4.5 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "EkrOAdzNOY5FBi6lTyKG",
+   "antes": "Gel Desensibilizador Anal Engourdi Tout Temps 30 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "6EkVqUrRT2xCQna5XOZq",
+   "antes": "Gel estimulador vaginal SPOT-ON 56gr",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "TfPb8weda0XM3CbuDGyh",
+   "antes": "Gel estrechador vaginal Tight Cherry 10ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "PiNfdTmbQz0vBWD8unux",
+   "antes": "Gel lubricante desensibilizador anal Taboo 10ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "pfiAnUEhZuAFwrJ2hpI7",
+   "antes": "Gel lubricante natural con ácido hialurónico y vitamina E Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "npKx3x7ua8Ge0b4l6oEo",
+   "antes": "Gel lubricante sensibilizante femenino Orgasme Tout Temps 10ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "ckZedQIqZV0JiNb1kJsa",
+   "antes": "Gel Lubricante sensibilizante femenino Orgasme Tout Temps 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "eNAAERMSZvlz3kmKdBIf",
+   "antes": "Gel Multiorgasmico Femenino Comestible SXO 18ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "WhrPTW1BM6COU5JQooOK",
+   "antes": "Gel Multiorgasmico Femenino Comestible SXO 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Eh2B8TAngWGMlzlHC9zk",
+   "antes": "Gel multiorgasmico y estimulante vaginal Orgasmix 2ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "c12vAQmICYMRLI2itCbt",
+   "antes": "Gel retardador base agua comestible 30 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "U4so7kAXdlMcxyLAmvY5",
+   "antes": "Gel Retardador Lions Power 20ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "VGx9bhNXMVW0JTHEjScG",
+   "antes": "Gel Sensibilizador de Clítoris HotSex 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "jtwx4NT59DOHbJPvNYal",
+   "antes": "Gel sensibilizante femenino Climax Tout Temps 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "if1ozWp3eVFUBA3Ue9vs",
+   "antes": "Gel vibrador comestible para sexo oral Dickalicious 2ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "RMMg3K0b2vjIKUEOSlaP",
+   "antes": "Gloss vibrador para labios y sexo oral Electric Fellatio Orgie 10 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "xrI9KXCAeMieh9TCsjwl",
+   "antes": "Guante con texturas para sexo o masturbación (mano derecha)",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "v7kRzO5svYSRZZy29vSN",
+   "antes": "Hombre realista miembro de 18 cm",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "bTbwJO8caStsi64uBubG",
+   "antes": "Huevo mastubador masculino chico",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "empezando",
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "pD5cCp0aRmWHWL0HCdLb",
+   "antes": "Huevo Mastubador Masculino Grande",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "yEKhkK3VgnO0S5foYGFK",
+   "antes": "Huevo vibrador alambrico",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "09j0pgoj42JcF1IsOd2c",
+   "antes": "Huevo vibrador inalámbrico con control remoto rosa",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Z58oYzUSaN2UkJSV7Tqz",
+   "antes": "Intimate Lubricant 18 ml RubaXX",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "CTt8CnkgujIu0SncgVpN",
+   "antes": "Jaula de castidad de metal",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "FCNlsxqrgb6f1O2Prz7f",
+   "antes": "Jenga en español",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "0IKMJhSZxcoE3zwG2OKN",
+   "antes": "Jenga en inglés",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "PMrOqB3kVEl3pwB6K4Ke",
+   "antes": "JO gelato double chocolate base agua 30 ml",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "MIE2ON8NNuL5qGbPp1xs",
+   "antes": "Jock Aussiebum Pride",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "wtQ0SjLTVlUWNsMT04lC",
+   "antes": "Jock Aussiebum Riot",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "AuZTv3nDfYhV2NLwPH6Q",
+   "antes": "Jock básico zuppo negro",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "RxeEldsYpPGrG2x7NWwV",
+   "antes": "Jockstrap azul zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "TspLzmPRkf74TsXOnIDB",
+   "antes": "Jockstrap zuppo Anton",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Md2FwJQtIJQEmswS3CCF",
+   "antes": "Jockstrap zuppo con cremallera",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "uNNzqXKqZAiZ3pG9d2IS",
+   "antes": "Juego de mordazas para pezón",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "WDb4ObeipMWdzh5CPJGO",
+   "antes": "Juego de Pezoneras Comestibles SXO sabor Chocolate y Fresa",
+   "categoriasExactas": [
+    "Lencería",
+    "Comestibles"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "tlBcl1ToMcZXqNHOQnuA",
+   "antes": "Juego de plugs negros",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "6Ym8t5Z9dzT5lx0gVpTE",
+   "antes": "Juego despedida de soltera",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "YdhGAivmnhgwvVBM3MFw",
+   "antes": "Juego el calentometro",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "cQQb9DGAUbdZY3T5CCqG",
+   "antes": "Juego girar despedida de soltera",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "MOZR3AHvaOBHKiO6Y0Gi",
+   "antes": "Juguete con 10 modos retráctiles",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella",
+    "para-el",
+    "empezando"
+   ]
+  },
+  {
+   "id": "zDUtvaHyQnY0plsIGIg5",
+   "antes": "Juguete retráctil automático con dildo vibrador",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "ZIKqYaTy0qW6OkX5aqQS",
+   "antes": "Juguete vibrador para pene y testiculos",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-ella",
+    "para-el"
+   ]
+  },
+  {
+   "id": "jZA2bUZAxYvOEmPEVBY4",
+   "antes": "Kit 10 popotes",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "YRj2Fe9pWGmnsPhGvqvB",
+   "antes": "Kit chocolate liquido SXO",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "gSWYbm85XYTL4pwV9OMZ",
+   "antes": "Kit masturbador con calefaccion y anillo vibrador",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "BPkHUbpWTdS4hnEONM98",
+   "antes": "Kit orejas y cola de zorro",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "lAov9BtPhYYuaZOLw37G",
+   "antes": "Látigo BDSM",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "05pNS4CMck36Wm5imZq6",
+   "antes": "Lenceria colegiala talla grande",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "qhkdlJSqoBSDGO1Cc0LY",
+   "antes": "Lenceria femenina Comestible SXO sabor Fresa",
+   "categoriasExactas": [
+    "Lencería",
+    "Comestibles"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "dSMBDgtnVpGOIzs2fUTY",
+   "antes": "Lengua vibradora",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "avpuBQqqb9ad3lD7A5JJ",
+   "antes": "Liguero blanco zuppo \"Glow\"",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "5RWo7xfHGXUrl4TE5Od0",
+   "antes": "Liguero negro zuppo \"Glow\"",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "n4ra8QiefUVioXCsdGDs",
+   "antes": "Liguero y medias de encaje Beige 1235",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "gY7KJzaDYX9u9gWEdvTh",
+   "antes": "Liguero y medias de encaje Negras 1235",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "gu2F8SyKmoFcNFmz6grb",
+   "antes": "Liguero zuppo grecas doradas",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "xmqq0QdHFyEJH603u75X",
+   "antes": "Liguero zuppo grecas plateadas",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "YWAt4kZF4OfP4Z6XZ9Z8",
+   "antes": "Limpiador de juguetes ID 30 ml",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": []
+  },
+  {
+   "id": "VQa69bMavGLUareIeQUF",
+   "antes": "Limpiador para juguetes Tout Temps 30 ml",
+   "categoriasExactas": [
+    "Condones y cuidado"
+   ],
+   "needs": []
+  },
+  {
+   "id": "raen6DjjpO2iaN9rZxjK",
+   "antes": "Lubricante a base de agua Intimate Occasion Aqua hipoalergénico 130 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "Vo9W5xRCYwzNtpnHNcvS",
+   "antes": "Lubricante anal espeso a base de agua JO 60 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "u1P53uQUe7lJfVwqJsKf",
+   "antes": "Lubricante Anal larga duración Tout Temps 30ml Lub Anale",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "6sHFAIjMuHsa0fP5RSaG",
+   "antes": "Lubricante anal térmico tout temps 30 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "GY3Hgg09uoa90lhdJRcO",
+   "antes": "Lubricante aromático Maracuyá Tout Temps",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "y9GL4wUX7CocQAdsvBum",
+   "antes": "Lubricante aromático Menta Dulce Tout Temps 30ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "hnhpE4aCGy7czCDOwIV1",
+   "antes": "Lubricante aromático Pepino Tout Temps 30ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "9TPc1UEmjYXArPP0J7Q2",
+   "antes": "Lubricante aromático Romero Tout Temps 30ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "jjblJwz4y7i8W6PiA3rS",
+   "antes": "Lubricante aromático Selva Negra Tout Temps 30ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "HrKGAWwI3FoJqUl9WM0x",
+   "antes": "Lubricante base agua 60 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "LZ3oGoKwX5adFdUBoIgG",
+   "antes": "Lubricante Base Agua JO 30ml H2O",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "jPeU0yL5ncIqyOkFeddX",
+   "antes": "Lubricante beso de miel 30 ml",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "Z0yhyBHvItZJ5QAow4Bo",
+   "antes": "Lubricante Cannabis Natural 60ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "uBmAjUHAvNJRZ3XUKumg",
+   "antes": "Lubricante Cannabis Natural 60ML térmico",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "qUsK3AGj9zndkQrskRvd",
+   "antes": "Lubricante comestible 4 en 1 de Cereza Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "GwefX8mfRbxwnGcdA315",
+   "antes": "Lubricante comestible 4 en 1 de Chocolate Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "3pMTRv6fAjiAymaTB50N",
+   "antes": "Lubricante Comestible 4 en 1 de Chocomenta Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "j6HQOOjSQ2Uc6fRa4TLc",
+   "antes": "Lubricante Comestible 4 en 1 de Fresa Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "MHRzEA97Gpua17Bcj4gf",
+   "antes": "Lubricante Comestible 4 en 1 de Frutos de la Pasión Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "IFafWM4GoPkneAtdHbX2",
+   "antes": "Lubricante Comestible 4 en 1 de Mango Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "bG2fuU3zIx3B2M6BqyOD",
+   "antes": "Lubricante Comestible 4 en 1 de Sandia Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "mIuvs3FFFy8ToAntMgbl",
+   "antes": "Lubricante Comestible y Gel para Masajes sabor Banana Split DiAcqua 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "FrrtqOPIXPWIELxf2VLo",
+   "antes": "Lubricante Comestible y Gel para Masajes sabor Durazno DiAcqua 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "cKogXp28ut72DcYOcrH4",
+   "antes": "Lubricante Comestible y Gel para Masajes sabor Fresas con Crema DiAcqua 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "QX3ZCN1WdXXr6lhEHpw3",
+   "antes": "Lubricante Comestible y Gel para Masajes sabor Naranja DiAcqua 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "76i4w1gUaVKNjlYOytLv",
+   "antes": "Lubricante Comestible y Gel para Masajes sabor Piña Colada DiAcqua 30ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Masaje y seducción",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "ST86tlMUb9PkCaaGOyHD",
+   "antes": "Lubricante con efecto Retardador SXO 18ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "EsZFmH8ZpyYoBSXXrJSl",
+   "antes": "Lubricante de silicon denso Lions Power 15 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "4FIuteoLyuI3t6HFVZpr",
+   "antes": "Lubricante de uso rudo Xtreme ID 12ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "INmtgM5HyxJJKZdq4FOA",
+   "antes": "Lubricante Desensibilizante Anal Lions Power 20ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "KqIniauYdIGUeEZmH5ns",
+   "antes": "Lubricante en gel Comestible imitación Semen SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "OvI4EcdIwTVJfI86ykF0",
+   "antes": "Lubricante estimulador de clitoris Excite C-spot 10gr",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "d7t8X41tlRpk7lnF86J7",
+   "antes": "Lubricante Estimulante y Estrechador Vaginal Eternal Virgin Tout Temps 10 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "Cv8iajAebYTAlkw4fRuq",
+   "antes": "Lubricante Estimulante y Estrechador Vaginal Eternal Virgin Tout Temps 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "094TUbs3rNXoX5J3Guin",
+   "antes": "Lubricante Multiorgasmico Unisex Tout Temps 30 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "eOkWSC98EgWMLFAzK7gc",
+   "antes": "Lubricante Natural con Cannabis (CBD) Yantra 10ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "o7tZi9pxxI4RtpI7B1RJ",
+   "antes": "Lubricante Natural con Efecto Frio Pluton en Extasis Tout Temps 30ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "ebq6mCX96ewHK3Z4T1Z8",
+   "antes": "Lubricante Natural Premium Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "yKlObJNMBnVK4YCaK4RS",
+   "antes": "Lubricante Premium con efecto Caliente Sensation ID 10ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "K0MSWgMnpk3SZqpWyvkq",
+   "antes": "Lubricante Premium con efecto Caliente Sensation ID 12 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "MDo9bnNPPQLyRhEU7zv0",
+   "antes": "Lubricante Premium de Silicon Tout Temps 30ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "0UOLnPWpkpeeslp3YdpO",
+   "antes": "Lubricante Premium Natural Feel ID 12ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "lYj97QTlWcVkaaZn9wH5",
+   "antes": "Lubricante Premium Pleasure ID 10ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "sbgdwl9K7TMRGt9lvlve",
+   "antes": "Lubricante retardante Erection Retarde Tout Temps 30ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "JOX0uwZjdnocUKzs5ras",
+   "antes": "Lubricante sensación fria 30 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "MmdyPvOGLfUnQblQsOIf",
+   "antes": "Lubricante simulador Semen HotSex 60ML",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "qMF19073vpnHC91vt2OI",
+   "antes": "Lubricante térmico tout temps 30 ml",
+   "categoriasExactas": [
+    "Lubricantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "QcsMQOTp0I22ybCfdI0W",
+   "antes": "Lubricante unisex Horny Honey 2ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "mil7pmvj9Up5IySJkzrY",
+   "antes": "Lubricante Vibrador liquido SXO 3ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "xLWqC131JQWCsgsumnQp",
+   "antes": "Lubrigel anal SXO 18 ml",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "q9BIpWpKApRzWMFNlw0S",
+   "antes": "Lubrigel Comestible sabor Chicle SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "lVAxVpDd1Oz7D9ZpLAbd",
+   "antes": "Lubrigel Comestible sabor Chocolate SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "vPvlYVysZdA4BULRpJHq",
+   "antes": "Lubrigel Comestible sabor Fresas con Champaña SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "pAUxdwf046UXCT9tovrT",
+   "antes": "Lubrigel Comestible sabor Piña Colada SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "9GW4TbvavVDbDxVRAK3N",
+   "antes": "Lubrigel Comestible sabor Tequila SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "7UGT4Nk6WSgu1hFyJhpy",
+   "antes": "Lubrigel Comestible sabor Uva SXO 18ML",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": []
+  },
+  {
+   "id": "xPpH2HJEj9TCI4svoxyq",
+   "antes": "Máquina sexual retráctil automática con dildos intercambiables",
+   "categoriasExactas": [
+    "Dildos y arneses",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-pareja",
+    "para-ella",
+    "para-el"
+   ]
+  },
+  {
+   "id": "JzYzb5PInq9ro7dI58MA",
+   "antes": "Masajeador anal con control por app",
+   "categoriasExactas": [
+    "Anal",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "NCiw9kgUmKYKqJFoGXZ3",
+   "antes": "Masajeador prostático de silicón con anillo ergonómico",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "qtpO1628lJ8gBoG0SXSu",
+   "antes": "Mascara con orejas",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "zYk576fWIXEgLQLI5OQR",
+   "antes": "Masturbador 3 en 1 claro",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "nresi2Y1OQzLgcHyfIGB",
+   "antes": "Masturbador 3 en 1 glúteos Maria",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "ZaYYa4Xn2RAD0xHN5Zdy",
+   "antes": "Masturbador ano futbolista Fredy",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "empezando"
+   ]
+  },
+  {
+   "id": "U27iVrxqGt6c3Atp6J2Q",
+   "antes": "Masturbador en tubo vagina y ano 22 cm largo (liquidación)",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "a9AhPQWurGCGzxM4EHr3",
+   "antes": "Masturbador en tubo vagina y boca 22 cm largo",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "FIJrQuPZCPldvsB4Ya6m",
+   "antes": "Masturbador inteligente recargable 360°",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "7rw5wNdqHTcsqp6XUFmi",
+   "antes": "Masturbador masculino 10 modos de vibración Tere",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "e5qiVER9XyNAHIFLQC5O",
+   "antes": "Masturbador muñeca 17 cm",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "DuXfbCTKmmih27jYDYUI",
+   "antes": "Masturbador realista automatico con sonido",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "ZhM0880ziY1iy0GwWSOh",
+   "antes": "Masturbador realista para hombre vagina y ano Lulu",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "4rNnSvZ0lEmxxU6evgRX",
+   "antes": "Masturbador rojo vibrador con control por aplicación",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "KW8RJtE9fEDwmRHY4qe1",
+   "antes": "Masturbador super real vagina y ano con calefacción",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "pduhxtC4Gmf48W8dzRw1",
+   "antes": "Masturbador tipo ano suave",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Oq9xJNvaWpkp4m0oz3T0",
+   "antes": "Masturbador tipo funda",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "xJoYcP1cgGjHWVEJTJ9L",
+   "antes": "Masturbador training cup",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "UBRgADSAVnbsjifEAZII",
+   "antes": "Masturbador trasero grande Leticia",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "njTstTPW5X3Mll3HZsL6",
+   "antes": "Masturbador vagina cupido",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "XPba1ont8pokQpTqx48R",
+   "antes": "Masturbador vagina Zoe",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "H1Nj8kBT6E6SCIHQkMkw",
+   "antes": "Masturbador vibrador con calefacción Satisfyer Man Heat Vibration",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "pQFjsQkHkDG2bjKAArA2",
+   "antes": "Masturbador vibrador garganta profunda",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "F7vKTAQT9nUAy8tnUbUK",
+   "antes": "Medias Negras 5737",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "LlE991ODuMuef5EU9mEI",
+   "antes": "Mega dildo negro",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "pEkeKMDZoUApbRn5UKEA",
+   "antes": "Microfono morado",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": []
+  },
+  {
+   "id": "j6d9oMmxKoqZR5jO3CRf",
+   "antes": "Mini brief negro y rojo Cartoon wear",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "empezando",
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "X0vim1207YtdoQPjKlvK",
+   "antes": "Mini dildo transparente 9 cm (liquidación)",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "PxAG9Wjya7kUrBJOSkwC",
+   "antes": "Mini Kit de Lubricantes y Aceites para Masaje SXO (4 piezas)",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "iHkvDaAe5NYnl2J3GgAl",
+   "antes": "Mini kit dulces",
+   "categoriasExactas": [
+    "Comestibles"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "8Gh6HhTVlrHMIg5wJEhp",
+   "antes": "Mini kit hombre SXO",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "empezando",
+    "para-el"
+   ]
+  },
+  {
+   "id": "vnFV1s0qNXWEvjTUYrTR",
+   "antes": "Mini kit lubrigel SXO",
+   "categoriasExactas": [
+    "Lubricantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "hDas4wpKBzib2Xa07FaL",
+   "antes": "Mini kit mujer SXO",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "sD8VLBNy3n54RhZ4sOF9",
+   "antes": "Mini Kit Pareja SXO",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "jWLdTJhIpyXplbcmbpfw",
+   "antes": "Mini motivador femenino 3 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "MX2KIhCy9XCbYWSfr3O5",
+   "antes": "Mini Ricky",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "so5TQi5Qz6bu6eMyuCxt",
+   "antes": "Mini vibrador dedo",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "empezando",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "8x8DqARbWXNROoyLWpSD",
+   "antes": "Mr. Bill Balls Flexible",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "fU04nrEBM6ZWwrvfPoaL",
+   "antes": "Mr. Ricky Dildo Flexible",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "wedFP0qeYj7Ni3pgKE5U",
+   "antes": "Muñeca mini",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "empezando",
+    "para-el"
+   ]
+  },
+  {
+   "id": "no2H9p9NVkyt8zlwjySD",
+   "antes": "Naipes con tématica sexual",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "GCoqA46z6rIe798HElwg",
+   "antes": "Nipple nibblers",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "YItkMxwakx4vMo9S6eyg",
+   "antes": "Paquete de 4 piezas cola de zorro (liquidación)",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "56KrvIauiS6rJx5J83X4",
+   "antes": "Paquete de 6 plugs morados",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "8g92j6daTyw4sIZF7YwH",
+   "antes": "Paquete de fundas para pene con vibración y texturas",
+   "categoriasExactas": [
+    "Anillos y fundas"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "5WDsFeI3rtqVHu6OUocC",
+   "antes": "Paquete de pantaletas de encaje 79013",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "3xgTQeBaH5zoyyfKDY3x",
+   "antes": "Par de copas succionadora ampliadora de pezón",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "zFUnMx1NifmjWmlGRLX9",
+   "antes": "Par de ligueros negros C81250",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "gNNmuTLBpnosiBmPG8zr",
+   "antes": "Par de ventosas de silicon para pezones",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "s336wAOjHCKne51ct7xY",
+   "antes": "Pezoneras con vibración",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "5PEyjB7yKIAv5o8eHo4U",
+   "antes": "Pinzas para pezón",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "eMJbqZiINxiKjUd18usC",
+   "antes": "Pinzas para pezón con cadena",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "wUwMqJtaqmCzYnV8ks7l",
+   "antes": "Plug anal con anillo para testiculos",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "Lw1sQoec4viOWO3MYD3l",
+   "antes": "Plug anal con gema de silicon",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "BDDZO617eqofa2WFnLN8",
+   "antes": "Plug anal en ancla",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "NlXfQlerr3Ah3uqt3ckq",
+   "antes": "Plug cola de zorro",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "OpDJ1WV6oJJpRPg6yDq1",
+   "antes": "Plug con cola de conejo",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "ZABS0Ytk0DBCQMS2PRBB",
+   "antes": "Plug con vibración y luces con aplicación",
+   "categoriasExactas": [
+    "Anal",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "dLrsrpeZank6BPnsB14T",
+   "antes": "Plug corazon metalico",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "105sFbbRJyT5hLIjSYMy",
+   "antes": "Plug de perlas",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": []
+  },
+  {
+   "id": "41ZXSNNGkN7yIqvg2uWU",
+   "antes": "Plug gema metalico",
+   "categoriasExactas": [
+    "Anal"
+   ],
+   "needs": [
+    "empezando"
+   ]
+  },
+  {
+   "id": "AjKscpIdCobFKLeA8DSZ",
+   "antes": "Plug vibrador anal con anillo para testiculos",
+   "categoriasExactas": [
+    "Anal",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el"
+   ]
+  },
+  {
+   "id": "zYviixmjcKwA9yuhnMBr",
+   "antes": "Plug vibrador con control por app 9 cm",
+   "categoriasExactas": [
+    "Anal",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "uim3ySxWuTAmn8SFgR7C",
+   "antes": "Pluma estimuladora",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "d426LHvHEIA4WDW81n0N",
+   "antes": "Puerco estimulador de clitoris recargable",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "ays7SWbftL4fD07Dv6qz",
+   "antes": "Pump Jock Azul",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "D5kZs6XZqOgNmSk7AtNj",
+   "antes": "Pump Jock Naranja",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "c2y3I6MDckjLO5hAqUAm",
+   "antes": "Pump Jock Rojo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "D4NWnsnjKmg14ZDSlmnf",
+   "antes": "Retardador en spray 4.5 ml lions power",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "TfAYq82XC64MXisZv1Ms",
+   "antes": "Retardador en spray Rabbit 4.5 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "xbvkPxjeSMR024gWwQMJ",
+   "antes": "Retardador SXO 3 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "BsIQm6UAl4iYCZIiigHh",
+   "antes": "Ricky Dildo Flexible",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "WjKC8alvsqKwuesgitz6",
+   "antes": "Rosa con lengua vibradora",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "sfE119B55j26EusEz77d",
+   "antes": "Sensibilizante para pezones y zonas erógenas sabor Chicle SXO 15ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "F28lbj0tlSsMR7zQouIz",
+   "antes": "Sensibilizante para pezones y zonas erógenas sabor Fresa SXO 15ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "iAUXHzinImh6QxXVCf48",
+   "antes": "Sensibilizante para pezones y zonas erógenas sabor Sandia SXO 15 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes",
+    "Comestibles"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "G5UGzftimZP1Q8XjPNF1",
+   "antes": "Slip amarillo con grecas doradas zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "VtiACEKXiSOGoUpl7tRb",
+   "antes": "Slip azul con grecas doradas zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "9xQhKwCgE846lvdWftrT",
+   "antes": "Slip blanco con grecas doradas zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "NvWUxJKzhqz8UzRBa4UR",
+   "antes": "Slip blanco con grecas plateadas zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "AwCVIsWZ4nNWWvOgfdoQ",
+   "antes": "Slip gris cartoon wear",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "1fGaPkd30jsTyr5b5QdB",
+   "antes": "Slip negro cartoon wear",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Ab9BAxN789WGD1zsLr24",
+   "antes": "Slip negro con grecas plateadas zuppo",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "OdKwde53jQifOKpDo0jt",
+   "antes": "Slip verde cartoon wear",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "QQUjB3N5icv6xYe7JcM8",
+   "antes": "Slip zuppo fetish",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "ew9DYvaY242aP7b50cUg",
+   "antes": "Spray retardante Intemporel Tout Temps 30ML",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "TxSkYDWLwoyaabdHAWBV",
+   "antes": "Spray retardante reforzado Stud Plus Tout Temps 30 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "3T6HkUCospwPsSRKUc75",
+   "antes": "Succionador de clitoris y pezones recargable",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "bm6v2UkVANczBKXVj8Fy",
+   "antes": "Succionador de clitoris y pezones Seahorse",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "1n6hjtqu8QkmNFoTu1cP",
+   "antes": "Succionador rosa",
+   "categoriasExactas": [
+    "Succionadores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "16ei9v6ipW9TNO1AvWgk",
+   "antes": "Suplemento alimenticio para hombre",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": [
+    "para-el"
+   ]
+  },
+  {
+   "id": "eRr30oyCvXFEjXERaPD7",
+   "antes": "Suspensorio Arjen Kroos",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "SevizW1XecZyYo6LPyAL",
+   "antes": "Suspensorio brave person blanco",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "XY1qQX1JpNLZPKQHrxZO",
+   "antes": "Suspensorio rayas",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "7Z8xCLAOOtH7qHg424yR",
+   "antes": "Tanga AussieBum Slick",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "SkFhmIVl4kM3Kwt7KBnU",
+   "antes": "Tanga con arneses talla L",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "jGIf8G0uiKIKKcPjJdV1",
+   "antes": "Tanga de encaje rosa 101",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Pd9OBKlruc0Eg9NIARUI",
+   "antes": "Tanga talla L con dos lineas",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "IAtgutSmVypL9XLphHDl",
+   "antes": "Tanga tipo braguita de vendaje enjaulado negro – XL P5100-1P1116",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "ank5zK6HNeDTAY2Ohvv8",
+   "antes": "Tanga Yutata",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "sPj6LL0gL2pZUc5EEuEb",
+   "antes": "Tarjeta de regalo $1000",
+   "categoriasExactas": [
+    "Tarjetas de regalo"
+   ],
+   "needs": [
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Mn0osa6sj8rsFx5sNJ8C",
+   "antes": "Tarjeta de regalo $300 MXN",
+   "categoriasExactas": [
+    "Tarjetas de regalo"
+   ],
+   "needs": [
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "H3COvH8Rk5x03qw9fSba",
+   "antes": "Tarjeta de regalo $500 MXN",
+   "categoriasExactas": [
+    "Tarjetas de regalo"
+   ],
+   "needs": [
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "Bc45sztQP16CXw2zRlVt",
+   "antes": "Teddy y tanga Morado 71008",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "beOUigqlG258pVjKhmSE",
+   "antes": "The Master Dildo Flexible",
+   "categoriasExactas": [
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "YMtQifpmzBYj86ivyjyT",
+   "antes": "Uniforme enfermera",
+   "categoriasExactas": [
+    "Lencería"
+   ],
+   "needs": [
+    "para-ella",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "66SolhBqPCIR8TNm2JqO",
+   "antes": "Vagina de 14 cm",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "HZAtITjDDET8EsFvBN8W",
+   "antes": "Vagina en tubo masturbador con vibración bussy",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "w7iPAsX6DsGriBMfVyp8",
+   "antes": "Vagina vibradora 22.5 cm Natalia",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "ClzjcrZZhmd1wKBBYG5Y",
+   "antes": "Varita con pluma sensitiva",
+   "categoriasExactas": [
+    "Bondage"
+   ],
+   "needs": []
+  },
+  {
+   "id": "0FOMz2hhOMJWmgr37M6T",
+   "antes": "Vela Aromática con Feromonas SexAppeal 75gr",
+   "categoriasExactas": [
+    "Masaje y seducción"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "xjKHZtrtHyppU3kjbM7j",
+   "antes": "Verdad o trago juego despedida de soltera",
+   "categoriasExactas": [
+    "Juegos y despedidas"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "I8DmBerDqRnQTOGDL3oo",
+   "antes": "Vibrador 20 cm largo",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "VXsbc47WWnbugjvRPHvO",
+   "antes": "Vibrador 3 en 1 control por app butterfly",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "VLeI44LuVq27HWZlbpri",
+   "antes": "Vibrador Anal Satisfyer Plugilicious 2",
+   "categoriasExactas": [
+    "Anal",
+    "Vibradores"
+   ],
+   "needs": []
+  },
+  {
+   "id": "hbgKXFxFFewbcGiThzhz",
+   "antes": "Vibrador brocha (color negro)",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "owShrfjkDID7GqkmLN6T",
+   "antes": "Vibrador con aplicación",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "8BYqMIoxhlEHfEJbt0nv",
+   "antes": "Vibrador con aplicación conejo",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "XDfZqgZ71WCVrEyeZ1ZJ",
+   "antes": "Vibrador con app ballena verde",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "wMpLbofdvYo5yG2WTOks",
+   "antes": "Vibrador con control remoto",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "13evqQFzb8xaITKflKfN",
+   "antes": "Vibrador conejo recargable",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "koJ5viU7VQoPnf3cs8d1",
+   "antes": "Vibrador conejo recargable diferentes modos de vibración",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "RpDEOfJd0AvIEaVrFlNH",
+   "antes": "Vibrador conejo rojo",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "BMP9hqSz4AjeY8MNlUZE",
+   "antes": "Vibrador curvo de doble estimulación",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "OwM8Xwhc1SDNZl8gWyPY",
+   "antes": "Vibrador de 12 cm recargable color lila",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "YNoieofpVypePZ4RDMIt",
+   "antes": "Vibrador de gel con relieves",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "2jmhiGWlZXyCZ74t5gCW",
+   "antes": "Vibrador doble color rosa fashion",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "mQaJOl44TQJUQQVq2kQ3",
+   "antes": "Vibrador entrenador 12 cm",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "qZewwPIsrkhHiiHta1Ku",
+   "antes": "Vibrador estimulador clitoris y pene 17 cm",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "EgecYYHx9PloOf2CBvtJ",
+   "antes": "Vibrador estimulador de silicon 20 modos de vibración",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "kyaZ9f5iLUuqURnhdjKU",
+   "antes": "Vibrador labial de baterias",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella",
+    "compartir-pareja",
+    "empezando"
+   ]
+  },
+  {
+   "id": "kqzDPlYftgkRRAp6czHu",
+   "antes": "Vibrador líquido con aceite de cáñamo Hemp! Intense Orgasm Orgie 15 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "brIwvf1QYTtuVqV5ikeO",
+   "antes": "Vibrador líquido extra fuerte Sexy Vibe! High Voltage Orgie sobre 2 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "nbL853M7DVKRVYTqOGFE",
+   "antes": "Vibrador líquido Hemp! Intense Orgasm Orgie sobre 2 ml",
+   "categoriasExactas": [
+    "Estimulantes y retardantes"
+   ],
+   "needs": []
+  },
+  {
+   "id": "tQinZdRkv8UHRLOZdhr2",
+   "antes": "Vibrador magnético portátil",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "vUtuw9TTYHJ7deGv2nmO",
+   "antes": "Vibrador mariposa 9 cm largo control por app",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "a2zrBpCPFUMuXJyDDVvD",
+   "antes": "Vibrador mariposa control por aplicación",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "8oo7Qn9p0BDKRzVDVwUf",
+   "antes": "Vibrador negro entrenador para pene",
+   "categoriasExactas": [
+    "Masturbadores"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "U6folaum0fkBmbgm01wt",
+   "antes": "Vibrador para parejas Satisfyer Double Plus Remote",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "xzKmirHFyHaCIMh12n1w",
+   "antes": "Vibrador para parejas Satisfyer Luxury Double Love",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja"
+   ]
+  },
+  {
+   "id": "P7zZgYOjurF2rdrDNtAx",
+   "antes": "Vibrador recargable 3 en 1",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "jOUOasEfOnsTsjH7HuZ4",
+   "antes": "Vibrador retráctil con aplicación",
+   "categoriasExactas": [
+    "Vibradores",
+    "Dildos y arneses"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "QliigctWx0OOv6yk29BK",
+   "antes": "Vibrador rosa doble 10 modos de vibración",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "hgm0h7A2AuZladcB0zDh",
+   "antes": "Vibrador Satisfyer Sexy Secret Panty Vibrator",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "PBYpWwKZDTJaHPep9qlK",
+   "antes": "Vibrador verde",
+   "categoriasExactas": [
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "dcd1rbClNB4udu210QTO",
+   "antes": "Vibrador y succionador con app y control remoto color purpura",
+   "categoriasExactas": [
+    "Succionadores",
+    "Vibradores"
+   ],
+   "needs": [
+    "compartir-pareja",
+    "para-ella"
+   ]
+  },
+  {
+   "id": "sD3vYIpkwPIkeasXIkne",
+   "antes": "Vibrador y succionador de clitoris Satisfyer Cutie Heart",
+   "categoriasExactas": [
+    "Succionadores",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "uEa8ZIRPKirjLbL7K90e",
+   "antes": "Vibrador y succionador de clítoris y pezones",
+   "categoriasExactas": [
+    "Succionadores",
+    "Vibradores"
+   ],
+   "needs": [
+    "para-ella"
+   ]
+  },
+  {
+   "id": "F7Z8FB4CGO9FszrhfmJO",
+   "antes": "WonderJock AIR Aussiebum",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  },
+  {
+   "id": "UfLWtBw7Dr9Yl9KAH9EN",
+   "antes": "WonderJock Aussiebum",
+   "categoriasExactas": [
+    "Ropa para él"
+   ],
+   "needs": [
+    "para-el",
+    "para-pareja"
+   ]
+  }
+ ]
 }

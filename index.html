@@ -1172,11 +1172,10 @@ const PALETTE = ["#993477","#BC355C","#ED7578","#F6A030","#7AB71A","#20B7CA","#0
 const ICONS = ["✦","●","◐","▲","♥","◆","■","◯","✧","✺","❖","✤"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
 const DEFAULT_NEEDS = [
-  {key:'para-mi', label:'Para mí'},
-  {key:'para-pareja', label:'Para mi pareja'},
   {key:'para-ella', label:'Para ella'},
   {key:'para-el', label:'Para él'},
-  {key:'compartir-pareja', label:'Para compartir en pareja'},
+  {key:'compartir-pareja', label:'En pareja'},
+  {key:'para-pareja', label:'Para regalar'},
   {key:'empezando', label:'Estoy empezando'},
 ];
 function catColor(cat){ const i = state.settings.categories.indexOf(cat); return PALETTE[(i<0?0:i) % PALETTE.length]; }
@@ -2003,6 +2002,10 @@ function genericCartSuggestions(){
   const seen = new Set(); return [...comp, ...sameCat, ...featured, ...rest].filter(x=>!seen.has(x.id) && seen.add(x.id)).slice(0,4);
 }
 function productCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+// Categorías de nov 2026 → nombres anteriores. Los productos relacionados y el quiz se escribieron
+// con los nombres anteriores; legacyCats() devuelve ambas para que sigan funcionando igual.
+const CAT_LEGACY = {'Vibradores':'Juguetes','Succionadores':'Juguetes','Anillos y fundas':'Juguetes','Dildos y arneses':'Dildos','Anal':'Plugs','Estimulantes y retardantes':'Lubricantes','Masaje y seducción':'Complementos','Condones y cuidado':'Complementos','Bondage':'Sadomasoquismo','Juegos y despedidas':'Juegos','Lencería':'Ropa femenina','Ropa para él':'Ropa masculina'};
+function legacyCats(p){ const c = productCats(p); return [...c, ...c.map(x=>CAT_LEGACY[x]).filter(Boolean)]; }
 function vImage(p, v){ return (v && typeof v.imageIdx==='number' && p && p.images && p.images[v.imageIdx]) || null; }
 function cartKey(productId, variantId){ return variantId ? `${productId}::${variantId}` : productId; }
 function parseCartKey(key){
@@ -3408,7 +3411,7 @@ const REL_SLOTS = {
   Juegos:          [{cats:['Comestibles']}, {cats:['Complementos'], any:['vela','aceite']}, {cats:['Juegos']}, {any:['condon']}],
 };
 function relSlotsFor(p){
-  const name = searchClean(p.name), cats = productCats(p);
+  const name = searchClean(p.name), cats = legacyCats(p);
   if(/condon|preservativo/.test(name)) return REL_SLOTS.condon;
   if(/\banal\b|\bplug\b|dilatador/.test(name) || cats.includes('Plugs')) return REL_SLOTS.anal;
   for(const c of ['Masturbadores','Dildos','Plugs','Ropa femenina','Ropa masculina','Sadomasoquismo','Lubricantes','Comestibles','Juegos','Complementos','Juguetes']) if(cats.includes(c)) return REL_SLOTS[c];
@@ -3416,7 +3419,7 @@ function relSlotsFor(p){
 }
 function relMatches(x, slot){
   const nm = searchClean(x.name);
-  if(slot.cats && !productCats(x).some(c=>slot.cats.includes(c))) return false;
+  if(slot.cats && !legacyCats(x).some(c=>slot.cats.includes(c))) return false;
   if(slot.any && !slot.any.some(w=>nm.includes(w))) return false;
   if(slot.avoid && slot.avoid.some(w=>nm.includes(w))) return false;
   return true;
@@ -3440,8 +3443,8 @@ function relatedProducts(p, n){
   if(slots) slots.forEach(slot=> add(rank(pool.filter(x=>relMatches(x, slot) && !out.some(o=>o.id===x.id)))[0]));
   // Si faltan, lo de antes: comparte "Para quién", de preferencia de otra categoría y popular.
   if(out.length<n){
-    const myNeeds = new Set(p.needs||[]), myCats = new Set(productCats(p));
-    pool.map((x,i)=>{ const shared=(x.needs||[]).filter(k=>myNeeds.has(k)).length; const same=productCats(x).some(c=>myCats.has(c)); return {x,i,sc:shared*3+(same?1:2)+(popRank(x.id)<12?2:0)}; })
+    const myNeeds = new Set(p.needs||[]), myCats = new Set(legacyCats(p));
+    pool.map((x,i)=>{ const shared=(x.needs||[]).filter(k=>myNeeds.has(k)).length; const same=legacyCats(x).some(c=>myCats.has(c)); return {x,i,sc:shared*3+(same?1:2)+(popRank(x.id)<12?2:0)}; })
       .sort((a,b)=>b.sc-a.sc||a.i-b.i).forEach(o=>add(o.x));
   }
   return out.slice(0, n);
@@ -3563,22 +3566,22 @@ const QUIZ_BUDGETS = [
    del nombre del producto. "extraCat" es la categoría que decide la pregunta extra (vibración, tipo de
    lubricante, talla…) y "catalogCat" a cuál categoría lleva "Ver más opciones como estas". */
 const QUIZ_GOALS = [
-  {k:'ext',   ico:'✨', label:'Estimulación externa', sub:'Para ella: vibradores, balas, succionadores', toy:true, extraCat:'Juguetes', catalogCat:'Juguetes',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Juguetes')||c.includes('Dildos')) && /succion|bala|huevo|vibrador|estimulador|clitori|labial|masajeador|conejo|lengua|mariposa/.test(n) && !/anal|plug|\bpene\b|masturb|mastub|masculin|anillo|dilatador|cock|dildo|consolador|bomba|pump|prostat|testic/.test(n); }},
-  {k:'pen',   ico:'💗', label:'Penetración', sub:'Dildos y vibradores con forma', toy:true, extraCat:'Dildos', catalogCat:'Dildos',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Dildos') || /dildo|consolador|conejo|realista/.test(n)) && !/anal|plug|dilatador|masturbador|anillo/.test(n); }},
+  {k:'ext',   ico:'✨', label:'Estimulación externa', sub:'Para ella: vibradores, balas, succionadores', toy:true, extraCat:'Juguetes', catalogCat:'Vibradores',
+    fn:p=>{ const n=quizName(p), c=legacyCats(p); return (c.includes('Juguetes')||c.includes('Dildos')) && /succion|bala|huevo|vibrador|estimulador|clitori|labial|masajeador|conejo|lengua|mariposa/.test(n) && !/anal|plug|\bpene\b|masturb|mastub|masculin|anillo|dilatador|cock|dildo|consolador|bomba|pump|prostat|testic/.test(n); }},
+  {k:'pen',   ico:'💗', label:'Penetración', sub:'Dildos y vibradores con forma', toy:true, extraCat:'Dildos', catalogCat:'Dildos y arneses',
+    fn:p=>{ const n=quizName(p), c=legacyCats(p); return (c.includes('Dildos') || /dildo|consolador|conejo|realista/.test(n)) && !/anal|plug|dilatador|masturbador|anillo/.test(n); }},
   {k:'el',    ico:'🔥', label:'Algo para él', sub:'Masturbadores, anillos, fundas', toy:true, extraCat:'Masturbadores', catalogCat:'Masturbadores',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Masturbadores') || /anillo|cock ring|funda|\bpene\b|masturb|mastub|prostat|bomba de succion|pump/.test(n) && !c.includes('Lubricantes') && !c.includes('Comestibles'); }},
-  {k:'anal',  ico:'🍑', label:'Explorar lo anal', sub:'Plugs, bolas, dilatadores', toy:true, extraCat:'Plugs', catalogCat:'Plugs',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Plugs') || /\banal\b|plug|dilatador|bolas? chinas|perlas/.test(n) && !c.includes('Lubricantes'); }},
-  {k:'pareja',ico:'💞', label:'Jugar en pareja', sub:'Juegos, esposas, aceites, control remoto', extraCat:null, catalogCat:'Juegos',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return c.includes('Juegos') || c.includes('Sadomasoquismo') || /pareja|control remoto|aplicacion|masaje|vela|dados|cartas|esposa|antifaz/.test(n); }},
-  {k:'lenc',  ico:'👙', label:'Sorprender con lencería', sub:'Ropa sexy para ella o para él', extraCat:'Ropa femenina', catalogCat:'Ropa femenina',
-    fn:p=>{ const c=productCats(p); return c.includes('Ropa femenina') || c.includes('Ropa masculina'); }},
-  {k:'durar', ico:'⏱️', label:'Durar más o sentir más', sub:'Retardantes, potenciadores, geles', extraCat:null, catalogCat:'Lubricantes',
+    fn:p=>{ const n=quizName(p), c=legacyCats(p); return c.includes('Masturbadores') || /anillo|cock ring|funda|\bpene\b|masturb|mastub|prostat|bomba de succion|pump/.test(n) && !c.includes('Lubricantes') && !c.includes('Comestibles'); }},
+  {k:'anal',  ico:'🍑', label:'Explorar lo anal', sub:'Plugs, bolas, dilatadores', toy:true, extraCat:'Plugs', catalogCat:'Anal',
+    fn:p=>{ const n=quizName(p), c=legacyCats(p); return c.includes('Plugs') || /\banal\b|plug|dilatador|bolas? chinas|perlas/.test(n) && !c.includes('Lubricantes'); }},
+  {k:'pareja',ico:'💞', label:'Jugar en pareja', sub:'Juegos, esposas, aceites, control remoto', extraCat:null, catalogCat:'Juegos y despedidas',
+    fn:p=>{ const n=quizName(p), c=legacyCats(p); return c.includes('Juegos') || c.includes('Sadomasoquismo') || /pareja|control remoto|aplicacion|masaje|vela|dados|cartas|esposa|antifaz/.test(n); }},
+  {k:'lenc',  ico:'👙', label:'Sorprender con lencería', sub:'Ropa sexy para ella o para él', extraCat:'Ropa femenina', catalogCat:'Lencería',
+    fn:p=>{ const c=legacyCats(p); return c.includes('Ropa femenina') || c.includes('Ropa masculina'); }},
+  {k:'durar', ico:'⏱️', label:'Durar más o sentir más', sub:'Retardantes, potenciadores, geles', extraCat:null, catalogCat:'Estimulantes y retardantes',
     fn:p=>{ const n=quizName(p); return /retard|vigoriz|potenci|multiorgasm|excitante|estimulante|erecci|prolong|capsula|intens|calor|efecto|sensibiliz/.test(n) && !/desensibiliz|feromona|splash|perfume|body spray|aroma/.test(n); }},
   {k:'lub',   ico:'💧', label:'Lubricar y cuidar', sub:'Lubricantes, limpiadores, condones', extraCat:'Lubricantes', catalogCat:'Lubricantes',
-    fn:p=>{ const n=quizName(p), c=productCats(p); return (c.includes('Lubricantes') && !/retard|vigoriz|potenci|multiorgasm|sensibiliz|excitante|estimulante|garganta|feromona|perfume|splash|body spray|estrechador|erecci|prolong/.test(n)) || /limpiador|condon/.test(n); }},
+    fn:p=>{ const n=quizName(p), c=legacyCats(p); return (c.includes('Lubricantes') && !/retard|vigoriz|potenci|multiorgasm|sensibiliz|excitante|estimulante|garganta|feromona|perfume|splash|body spray|estrechador|erecci|prolong/.test(n)) || /limpiador|condon/.test(n); }},
 ];
 function quizGoal(a){ a = a || state.quizAnswers; return QUIZ_GOALS.find(g=>g.k===a.cat) || null; }
 /* Coherencia de género. Si eligió "Para ella" nunca salen productos de uso masculino (ni la opción
@@ -3593,7 +3596,7 @@ const QUIZ_FEMALE_RX = /clitori|femenin|mujer|braga|brasier|babydoll|baby doll|p
 function quizGenderOf(a){ a = a || state.quizAnswers; return QUIZ_NEED_GENDER[a.need] || QUIZ_GOAL_GENDER[a.cat] || (a.cat==='lenc' && a.extra==='lenc-f' ? 'f' : a.cat==='lenc' && a.extra==='lenc-m' ? 'm' : null); }
 function quizGenderOk(p, gen){
   if(!gen) return true;
-  const n = quizName(p), c = productCats(p);
+  const n = quizName(p), c = legacyCats(p);
   if(gen==='f') return !c.includes('Ropa masculina') && !(QUIZ_MALE_RX.test(n) && !/vagin|clitori|para ella|femenin/.test(n));
   return !c.includes('Ropa femenina') && !(QUIZ_FEMALE_RX.test(n) && !/masturb|mastub|para el|hombre|masculin/.test(n));
 }
@@ -3678,8 +3681,8 @@ function quizExtraDef(a){
   if(g && g.k==='lenc' && !QUIZ_NEED_GENDER[a.need]){
     const pool = quizPool();
     const opts = [
-      {k:'lenc-f', label:'Para ella', fn:p=>productCats(p).includes('Ropa femenina')},
-      {k:'lenc-m', label:'Para él', fn:p=>productCats(p).includes('Ropa masculina')},
+      {k:'lenc-f', label:'Para ella', fn:p=>legacyCats(p).includes('Ropa femenina')},
+      {k:'lenc-m', label:'Para él', fn:p=>legacyCats(p).includes('Ropa masculina')},
     ].map(o=>({...o, count:pool.filter(o.fn).length})).filter(o=>o.count>0);
     return opts.length>=2 ? {title:'¿La lencería es para…?', opts} : null;
   }
@@ -3907,7 +3910,7 @@ function renderQuizDrawer(){
     const field = steps[step], needs = state.settings.needs || DEFAULT_NEEDS;
     let Q;
     // Íconos y una línea de ayuda: "Para mi pareja" (regalo) y "Para compartir en pareja" (usar juntos) se confundían.
-    const NEED_UI = {'para-mi':['🙋','Algo para disfrutar tú'], 'para-pareja':['🎁','Un regalo para tu pareja'], 'para-ella':['👩','Productos para mujer'], 'para-el':['👨','Productos para hombre'], 'compartir-pareja':['💞','Para usar juntos'], 'empezando':['🌱','Opciones sencillas para tu primera vez']};
+    const NEED_UI = {'para-mi':['🙋','Algo para disfrutar tú'], 'para-pareja':['🎁','Un detalle para sorprender a alguien'], 'para-ella':['👩','Productos para mujer'], 'para-el':['👨','Productos para hombre'], 'compartir-pareja':['💞','Para usar juntos'], 'empezando':['🌱','Opciones sencillas para tu primera vez']};
     if(field==='need') Q = {title:'¿Para quién es?', opts:needs.map(n=>{ const u = NEED_UI[n.key]; return [n.key, u ? `<span class="qo-ico">${u[0]}</span><span class="qo-txt"><b>${escHtml(n.label)}</b><small>${u[1]}</small></span>` : escHtml(n.label)]; }), skip:'Muéstrame lo más vendido'};
     else if(field==='cat') Q = {title:'¿Qué te gustaría?', opts:quizCatOptions(a.need).map(x=>[x[0].k,`<span class="qo-ico">${x[0].ico}</span><span class="qo-txt"><b>${x[0].label}</b><small>${x[0].k==='lenc' && QUIZ_NEED_GENDER[a.need] ? (QUIZ_NEED_GENDER[a.need]==='f'?'Ropa sexy para ella':'Ropa sexy para él') : x[0].sub}</small></span>`]), skip:'Sorpréndeme con lo más popular'};
     else if(field==='level') Q = {title:'¿Es tu primera vez con algo así?', opts:[['nuevo','<span class="qo-ico">🌱</span><span class="qo-txt"><b>Sí, es mi primera vez</b><small>Te mostramos opciones sencillas y fáciles de usar</small></span>'],['exp','<span class="qo-ico">⭐</span><span class="qo-txt"><b>Ya tengo experiencia</b><small>Te mostramos lo más completo</small></span>']], skip:'Prefiero no decir'};

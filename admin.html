@@ -1352,11 +1352,10 @@ window.addEventListener('unhandledrejection', (ev)=>{
 const PALETTE =["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
 const DEFAULT_NEEDS = [
-  {key:'para-mi', label:'Para mí'},
-  {key:'para-pareja', label:'Para mi pareja'},
   {key:'para-ella', label:'Para ella'},
   {key:'para-el', label:'Para él'},
-  {key:'compartir-pareja', label:'Para compartir en pareja'},
+  {key:'compartir-pareja', label:'En pareja'},
+  {key:'para-pareja', label:'Para regalar'},
   {key:'empezando', label:'Estoy empezando'},
 ];
 const STATUS_FLOW = ["Nuevo","Preparando","En camino","Entregado","Cancelado"];
@@ -16756,7 +16755,10 @@ function renderProductModal(){
 function has_(name, ...words){ return words.some(w=>name.includes(w)); }
 function suggestNeedsForProduct(p){
   const name = normName(p.name||'');
-  const cat = normName((p.categories&&p.categories[0]) || p.cat || '');
+  // Categorías de nov 2026 → el criterio original (que usaba los nombres anteriores).
+  const CAT_ALIAS = {'lenceria':'ropa femenina','ropa para el':'ropa masculina','bondage':'sadomasoquismo','dildos y arneses':'dildos','anal':'plugs','juegos y despedidas':'juegos','estimulantes y retardantes':'lubricantes','masaje y seduccion':'complementos','condones y cuidado':'complementos','vibradores':'juguetes','succionadores':'juguetes','anillos y fundas':'juguetes','masturbadores':'juguetes'};
+  const cat0 = normName((p.categories&&p.categories[0]) || p.cat || '');
+  const cat = CAT_ALIAS[cat0] || cat0;
   let tags = new Set();
 
   if(cat==='ropa femenina') tags = new Set(['para-mi','para-ella','para-pareja']);
