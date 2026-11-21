@@ -936,6 +936,8 @@ document.addEventListener('wheel', function(e){
   .ci-cat.main{background:var(--primary);color:#fff;}
   .ci-cat.main small{opacity:.8;font-size:10.5px;}
   .ci-cat button{border:0;background:none;color:inherit;opacity:.75;width:30px;height:30px;font-size:16px;cursor:pointer;}
+  .ci-need{border:1.5px solid var(--border);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;min-height:38px;font-family:inherit;cursor:pointer;}
+  .ci-need.on{background:var(--primary);color:#fff;border-color:var(--primary);}
   .ci-new{background:var(--amber);color:#2B1620;border-radius:999px;font-size:10.5px;padding:1px 6px;font-weight:700;}
   .ci-old{margin-top:8px;font-size:13px;color:var(--ink-soft);}
   .ci-old summary{cursor:pointer;min-height:32px;display:flex;align-items:center;}
@@ -945,6 +947,22 @@ document.addEventListener('wheel', function(e){
   .ci-actions{position:sticky;bottom:0;background:var(--surface);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--border);margin-top:6px;}
   .ci-actions button{min-height:48px;}
   .ci-back{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:900;background:var(--primary);color:#fff;border:0;border-radius:999px;padding:12px 18px;font-weight:700;font-size:14px;box-shadow:var(--shadow-md);display:inline-flex;align-items:center;gap:6px;font-family:inherit;cursor:pointer;}
+  .mv-modal{max-width:640px;}
+  .mv-sec{font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px;}
+  .mv-group{border:1.5px solid var(--border);border-radius:14px;margin-bottom:8px;overflow:hidden;}
+  .mv-head{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;background:none;border:0;padding:12px;text-align:left;font-family:inherit;color:var(--ink);cursor:pointer;min-height:52px;}
+  .mv-head b{display:block;font-size:14px;overflow-wrap:anywhere;} .mv-head small{color:var(--ink-soft);font-size:12px;}
+  .mv-body{padding:0 12px 12px;}
+  .mv-lbl{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin:10px 0 4px;}
+  .mv-in{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;font:inherit;font-size:16px;background:var(--surface);color:var(--ink);}
+  .mv-row{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px dashed var(--border);}
+  .mv-row img,.mv-noimg{width:48px;height:48px;flex:0 0 48px;border-radius:10px;object-fit:cover;background:var(--surface-soft);}
+  .mv-info{flex:1;min-width:0;} .mv-name{font-size:13px;font-weight:600;overflow-wrap:anywhere;}
+  .mv-val{margin-top:6px;padding:8px 10px;}
+  .mv-main{border:0;background:none;font-size:20px;color:var(--primary);width:36px;height:44px;cursor:pointer;}
+  .mv-actions{display:flex;gap:8px;margin-top:10px;} .mv-actions button{min-height:46px;}
+  .mv-pick{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border);font-size:14px;min-height:44px;}
+  .mv-pick input{width:20px;height:20px;accent-color:var(--primary);} .mv-pick small{margin-left:auto;color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -4542,7 +4560,7 @@ function renderDuplicatesModal(){
    (1 lectura al abrir, 1 escritura por decisión). Antes de aplicar se relee el producto (1 lectura)
    para no pisar existencias que cambiaron por ventas mientras el panel estaba abierto. */
 const CI_FILTERS = [
-  {k:'pend', l:'Por revisar'}, {k:'precio', l:'Cambian de precio'}, {k:'foto', l:'Foto por cambiar'},
+  {k:'pend', l:'Por revisar'}, {k:'precio', l:'Cambian de precio'}, {k:'foto', l:'Foto por cambiar'}, {k:'agotado', l:'Agotados'},
   {k:'skip', l:'Para después'}, {k:'hechos', l:'Hechos'}];
 async function openCatalogImprove(){
   if(state.ciStash){ state.ci = state.ciStash; state.ciStash = null; render(); return; }
@@ -4572,12 +4590,13 @@ function ciMatches(it, f){
   if(s) return false;
   if(f==='precio') return Number(it.precio)>0 && Math.round(Number(it.precio))!==Math.round(Number(p.price));
   if(f==='foto') return !!(it.foto && it.foto.estado && it.foto.estado!=='ok');
+  if(f==='agotado') return !!it.agotado;
   return true;
 }
 function ciList(){ const c = state.ci; return c ? c.items.filter(it=>ciMatches(it, c.filter)) : []; }
 function ciEd(it){
   const k = ciKey(it), c = state.ci;
-  if(!c.ed[k]) c.ed[k] = {name:it.nombre||'', price:it.precio||'', desc:it.desc||'', cats:[...(it.categorias||[])], off:{}};
+  if(!c.ed[k]) c.ed[k] = {name:it.nombre||'', price:it.precio||'', desc:it.desc||'', cats:[...(it.categorias||[])], needs:Array.isArray(it.paraQuien)?[...it.paraQuien]:null, hide:!!(it.agotado && it.agotado.accion==='ocultar'), off:{}};
   return c.ed[k];
 }
 function ciChanged(it){
@@ -4587,6 +4606,7 @@ function ciChanged(it){
     price: Number(e.price)>0 && Math.round(Number(e.price))!==Math.round(Number(p.price)||0),
     desc: !!e.desc.trim() && e.desc.trim()!==(p.desc||'').trim(),
     cats: e.cats.length>0 && (norm(e.cats)!==norm(ciCurCats(p)) || e.cats[0]!==ciCurCats(p)[0]),
+    needs: Array.isArray(e.needs) && norm(e.needs)!==norm(p.needs||[]),
   };
 }
 function ciMarginTxt(price, cost){
@@ -4609,6 +4629,14 @@ function ciAddCat(k, cat){
   const it = ciFind(k); if(!it || !cat) return;
   if(cat==='__otra__'){ cat = (prompt('Nombre de la categoría nueva:')||'').trim(); if(!cat) { render(); return; } }
   const e = ciEd(it); if(!e.cats.includes(cat)) e.cats.push(cat); render();
+}
+function ciToggleNeed(k, key){ const it = ciFind(k); if(!it) return; const e = ciEd(it); if(!Array.isArray(e.needs)) e.needs = [...(ciProduct(it).needs||[])]; e.needs = e.needs.includes(key) ? e.needs.filter(x=>x!==key) : [...e.needs, key]; render(); }
+function ciSetHide(k, on){ const it = ciFind(k); if(!it) return; ciEd(it).hide = !!on; }
+async function ciTrash(k){
+  const it = ciFind(k), p = ciProduct(it); if(!p) return;
+  if(!confirm(`¿Mandar "${p.name}" a la papelera? Se puede restaurar durante 30 días.`)) return;
+  await moveProductsToTrash([p.id]);
+  if(!state.products.some(x=>x.id===p.id)) await ciSaveDecision(k, {s:'no', at:new Date().toISOString(), by:(state.user && state.user.email)||'', parts:['papelera']});
 }
 function ciMainCat(k, cat){ const it = ciFind(k); if(!it) return; const e = ciEd(it); e.cats = [cat, ...e.cats.filter(c=>c!==cat)]; render(); }
 function ciSetFilter(f){ state.ci.filter = f; state.ci.idx = 0; render(); const m = document.querySelector('.ci-modal'); if(m) m.scrollTop = 0; }
@@ -4660,6 +4688,8 @@ async function ciApprove(k){
   if(ch.price && !e.off.price){ fields.price = Math.round(Number(e.price)); parts.push('precio'); }
   if(ch.cats && !e.off.cats){ fields.categories = [...e.cats]; fields.cat = e.cats[0]; parts.push('categorías'); }
   if(ch.desc && !e.off.desc){ fields.desc = e.desc.trim(); parts.push('descripción'); }
+  if(ch.needs && !e.off.needs){ fields.needs = [...e.needs]; parts.push('para quién'); }
+  if(e.hide && !p.hidden){ fields.hidden = true; parts.push('ocultar'); }
   const rec = {s:'ok', at:new Date().toISOString(), by:(state.user && state.user.email)||'', parts};
   if(!parts.length){ await ciSaveDecision(k, rec); showToast('Marcado como revisado'); return; }
   const before = {}; Object.keys(fields).forEach(f=>{ before[f] = JSON.parse(JSON.stringify(p[f] ?? (f==='categories' ? ciCurCats(p) : ''))); });
@@ -4739,6 +4769,14 @@ function renderCatalogImproveModal(){
       ${it.catNota?`<div class="ci-why">${escDescHtml(it.catNota)}</div>`:''}`)}
     ${box('desc','Descripción', ch.desc, `<textarea rows="9" ${done?'disabled':''} oninput='ciSetField(${kq},"desc",this.value)'>${escDescHtml(e.desc)}</textarea>
       <details class="ci-old"><summary>Ver la descripción actual</summary><div>${escDescHtml(p.desc||'(vacía)').replace(/\n/g,'<br>')}</div></details>`)}
+    ${Array.isArray(e.needs) ? box('needs','Para quién', ch.needs, `<div class="ci-now">Ahora: ${escDescHtml((p.needs||[]).map(x=>((state.settings.needs||DEFAULT_NEEDS).find(n=>n.key===x)||{label:x}).label).join(', ')||'sin etiqueta')}</div>
+      <div class="ci-catchips">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="ci-need ${e.needs.includes(n.key)?'on':''}" ${done?'disabled':''} aria-pressed="${e.needs.includes(n.key)}" onclick='ciToggleNeed(${kq},${escDescHtml(JSON.stringify(n.key))})'>${escDescHtml(n.label)}</button>`).join('')}</div>`) : ''}
+    ${it.agotado ? `<div class="ci-part">
+      <div class="ci-part-h"><span>Agotado</span><span class="ci-badge" style="background:${it.agotado.accion==='pedir'?'var(--green-ink)':it.agotado.accion==='ocultar'?'var(--amber)':'var(--rose)'}">${it.agotado.accion==='pedir'?'Vuelve a pedirlo':it.agotado.accion==='ocultar'?'Ocúltalo':'A la papelera'}</span></div>
+      ${it.agotado.nota?`<div class="ci-why">${escDescHtml(it.agotado.nota)}</div>`:''}
+      ${it.agotado.accion==='ocultar' && !p.hidden && !done ? `<label class="ci-part-h" style="font-weight:600;margin-top:8px;"><input type="checkbox" ${e.hide?'checked':''} onchange='ciSetHide(${kq},this.checked)'> Ocultarlo de la tienda al aprobar</label>` : ''}
+      ${it.agotado.accion==='papelera' && !done ? `<button class="btn-tertiary" style="margin-top:8px;" onclick='ciTrash(${kq})'>${icon('trash',13)} Mandar a la papelera</button>` : ''}
+    </div>` : ''}
     <div class="ci-part">
       <div class="ci-part-h"><span>Fotos (${(p.images||[]).length})</span>${f.estado?`<span class="ci-badge" style="background:${fotoTone[f.estado]||'var(--ink-soft)'}">${fotoLabel[f.estado]||escDescHtml(f.estado)}</span>`:''}</div>
       ${f.nota?`<div class="ci-why">${escDescHtml(f.nota)}</div>`:''}
@@ -4751,6 +4789,161 @@ function renderCatalogImproveModal(){
            <button class="btn-secondary" onclick='ciDecide(${kq},"skip")'>Después</button>
            <button class="btn-primary" style="flex:1;" ${c.saving?'disabled':''} onclick='ciApprove(${kq})'>${c.saving?'Guardando…':'Aprobar'}</button>`}
     </div>`);
+}
+/* ============== UNIR COMO VARIANTES ==============
+   Junta productos que son el mismo en otro sabor, color, talla o tamaño (p. ej. los 7 lubricantes
+   4 en 1 de Tout Temps) en UN producto con variantes. El principal conserva su id, historial y
+   ventas; los demás pasan a ser variantes con su propio stock por centro, SKU, costo, precio (si
+   es distinto) y foto, y se mandan a la papelera (se pueden restaurar 30 días). Solo productos sin
+   variantes. Las sugerencias salen de nombres iguales salvo una palabra de color/sabor/talla/tamaño. */
+const MV_COLORS = ['negro','negra','negras','negros','blanco','blanca','blancos','rojo','roja','rosa','azul','verde','morado','morada','amarillo','naranja','gris','beige','nude','dorado','doradas','plateado','plateadas','lila','fucsia','transparente','purpura'];
+const MV_FLAVORS = ['fresa','fresas','chocolate','capuchino','hierbabuena','sandia','chocomenta','mango','cereza','chicle','champana','pina','colada','tequila','uva','menta','maracuya','pepino','romero','selva','negra','banana','durazno','naranja','coco','vainilla','frutos','pasion'];
+const MV_SIZES = ['xs','s','m','l','xl','xxl','2xl','3xl','4xl','talla','unitalla','chica','chico','mediana','mediano','grande','ml','g','gr','10g','56g','10ml','12ml','18ml','30ml','60ml','100ml','150ml'];
+function mvTokens(name){ return normName(name).split(' ').filter(Boolean); }
+function mvPropFor(diffTokens){
+  const t = diffTokens.filter(x=>!/^\d+$/.test(x));
+  if(t.length && t.every(x=>MV_COLORS.includes(x))) return 'Color';
+  if(t.length && t.every(x=>MV_FLAVORS.includes(x) || ['sabor','de','con','la','y'].includes(x))) return 'Sabor';
+  if(diffTokens.some(x=>/^\d+(ml|g|gr)$/.test(x) || MV_SIZES.includes(x))) return /talla|^x*l$|^\d?xl$|^m$|^s$/.test(diffTokens.join(' ')) ? 'Talla' : 'Presentación';
+  return 'Modelo';
+}
+function mvTitle(s){ return s.split(' ').map(w=>w ? w[0].toUpperCase()+w.slice(1) : w).join(' '); }
+// Valor de cada producto = las palabras de su nombre que no comparte con los demás del grupo.
+function mvValues(products){
+  const toks = products.map(p=>mvTokens(p.name));
+  const common = toks.reduce((acc,t)=>acc.filter(x=>t.includes(x)), toks[0]);
+  return products.map((p,i)=>{
+    const raw = p.name.split(/\s+/);
+    const diff = raw.filter(w=>{ const n = normName(w); return n && !common.includes(n) && !/^[a-z]?\d{3,}[a-z0-9-]*$/.test(n); });
+    return diff.join(' ').replace(/^(sabor|color|de)\s+/i,'').trim() || ('Opción '+(i+1));
+  });
+}
+function mvSuggestGroups(){
+  const ignored = new Set(state.settings.variantMergeIgnored||[]);
+  const VAR = new Set([...MV_COLORS, ...MV_FLAVORS, ...MV_SIZES, 'sabor','color','talla','de','con','la','y']);
+  const by = new Map();
+  state.products.forEach(p=>{
+    if((p.variants||[]).length || p.isKit || p.isMysteryBox || (p.categories||[p.cat]).includes('Tarjetas de regalo')) return;
+    const key = (p.categories&&p.categories[0] || p.cat || '') + '|' + mvTokens(p.name).filter(t=>!VAR.has(t) && !/^\d+(ml|g|gr|cm)?$/.test(t) && !/^[a-z]?\d{3,}[a-z0-9-]*$/.test(t)).join(' ');
+    if(!by.has(key)) by.set(key, []); by.get(key).push(p);
+  });
+  return [...by.entries()].filter(([k,ps])=>ps.length>1 && k.split('|')[1].length>=4)
+    .map(([k,ps])=>({key:k, products:ps.sort((a,b)=>a.name.localeCompare(b.name,'es'))}))
+    .filter(g=>!ignored.has(g.key) && !ignored.has(g.products.map(p=>p.id).sort().join(',')))
+    .sort((a,b)=>b.products.length-a.products.length);
+}
+function openMergeVariants(){
+  const groups = mvSuggestGroups().map(g=>mvGroupState(g.products, g.key));
+  state.mv = {groups, q:'', manual:[]};
+  render();
+}
+function mvGroupState(products, key){
+  const vals = mvValues(products);
+  const toks = products.map(p=>mvTokens(p.name)), common = toks.reduce((acc,t)=>acc.filter(x=>t.includes(x)), toks[0]);
+  const diffTok = toks.flatMap(t=>t.filter(x=>!common.includes(x)));
+  const main = products.slice().sort((a,b)=>(b.images||[]).length-(a.images||[]).length || (b.stock||0)-(a.stock||0))[0];
+  const words = main.name.split(/\s+/).filter(w=>{ const n = normName(w); return !n || common.includes(n); });
+  return {key: key || products.map(p=>p.id).sort().join(','), ids:products.map(p=>p.id), mainId:main.id, prop:mvPropFor(diffTok),
+    name: words.join(' ').replace(/\s+(sabor|color|de|con)$/i,'').replace(/\s{2,}/g,' ').trim(),
+    values:Object.fromEntries(products.map((p,i)=>[p.id, mvTitle(vals[i])])), open:false};
+}
+function closeMergeVariants(){ state.mv = null; render(); }
+function mvSet(gi, field, val, pid){ const g = state.mv.groups[gi]; if(!g) return; if(field==='value') g.values[pid] = val; else g[field] = val; if(field==='mainId' || field==='open') render(); }
+function mvRemove(gi, pid){ const g = state.mv.groups[gi]; g.ids = g.ids.filter(x=>x!==pid); if(g.mainId===pid) g.mainId = g.ids[0]; if(g.ids.length<2) state.mv.groups.splice(gi,1); render(); }
+async function mvIgnore(gi){
+  const g = state.mv.groups[gi]; if(!g) return;
+  state.settings.variantMergeIgnored = [...(state.settings.variantMergeIgnored||[]), g.key];
+  state.mv.groups.splice(gi,1); render(); await saveSettings();
+}
+function mvManualToggle(pid){
+  const m = state.mv.manual; const i = m.indexOf(pid); if(i>=0) m.splice(i,1); else m.push(pid); render();
+}
+function mvManualCreate(){
+  const ps = state.mv.manual.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  if(ps.length<2){ showToast('Elige al menos 2 productos'); return; }
+  if(ps.some(p=>(p.variants||[]).length)){ showToast('Solo se pueden unir productos que todavía no tienen variantes'); return; }
+  const g = mvGroupState(ps); g.open = true; state.mv.groups.unshift(g); state.mv.manual = []; state.mv.q = ''; render();
+  const m = document.querySelector('.mv-modal'); if(m) m.scrollTop = 0;
+}
+async function mvApply(gi){
+  const g = state.mv.groups[gi]; if(!g || state.mv.saving) return;
+  const ps = g.ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+  if(ps.length<2) return;
+  const vals = ps.map(p=>(g.values[p.id]||'').trim());
+  if(vals.some(v=>!v)){ showToast('A cada producto ponle su '+g.prop.toLowerCase()); return; }
+  if(new Set(vals.map(v=>normName(v))).size !== vals.length){ showToast('Hay dos con el mismo '+g.prop.toLowerCase()+'; cámbialo para distinguirlos'); return; }
+  if(!g.name.trim()){ showToast('Ponle nombre al producto'); return; }
+  if(!confirm(`Se unirán ${ps.length} productos en "${g.name.trim()}" con ${ps.length} opciones de ${g.prop.toLowerCase()}. Los otros ${ps.length-1} se van a la papelera (puedes restaurarlos 30 días). ¿Continuar?`)) return;
+  state.mv.saving = true; render();
+  try{
+    // Releer todos para no pisar existencias que cambiaron por ventas.
+    const fresh = [];
+    for(const p of ps){ const s = await db.collection('products').doc(p.id).get(); if(!s.exists) throw new Error('Un producto ya no existe'); const f = {id:p.id, ...s.data()}; if((f.variants||[]).length) throw new Error(`"${f.name}" ya tiene variantes`); fresh.push(f); const i = state.products.findIndex(x=>x.id===p.id); if(i>=0) state.products[i] = f; }
+    const main = fresh.find(p=>p.id===g.mainId) || fresh[0];
+    const images = []; const imgIdx = {};
+    [main, ...fresh.filter(p=>p.id!==main.id)].forEach(p=>(p.images||[]).forEach((src,i)=>{ if(!images.includes(src)) images.push(src); if(i===0) imgIdx[p.id] = images.indexOf(src); }));
+    const basePrice = Number(main.price)||0;
+    const variants = fresh.map(p=>{
+      const v = {id:uid('var_'), combo:{[g.prop]: g.values[p.id].trim()}, sku:p.sku||'', stock:Number(p.stock)||0, stockByCenter:{...(p.stockByCenter||{})}};
+      if(Number(p.price)!==basePrice) v.priceOverride = Number(p.price)||0;
+      if(isPromoActive(p)) v.promoPriceOverride = Number(p.promoPrice);
+      if(Number(p.cost)>0) v.cost = Number(p.cost);
+      if(imgIdx[p.id]!=null) v.imageIdx = imgIdx[p.id];
+      return v;
+    });
+    const merged = {...main, name:g.name.trim(), images, variantGroups:[{name:g.prop, values:fresh.map(p=>g.values[p.id].trim())}], variants,
+      categories:[...new Set(fresh.flatMap(p=>p.categories&&p.categories.length?p.categories:[p.cat]).filter(Boolean))].sort((a,b)=>a===main.cat?-1:b===main.cat?1:0),
+      needs:[...new Set(fresh.flatMap(p=>p.needs||[]))], promoPrice: isPromoActive(main) ? main.promoPrice : 0};
+    merged.cat = merged.categories[0] || main.cat;
+    vProductSync(merged);
+    await saveProduct(merged);
+    const now = state.products.find(x=>x.id===main.id);
+    if(!now || !(now.variants||[]).length) throw new Error('No se guardó el producto unido');
+    const others = fresh.filter(p=>p.id!==main.id).map(p=>p.id);
+    await moveProductsToTrash(others);
+    logAdminAction('union_variantes', 'producto', merged.name, `Unió ${fresh.length} productos como variantes de ${g.prop}: ${fresh.map(p=>`${p.name} → ${g.values[p.id]}`).join(' · ')}`.slice(0,900), main.id);
+    state.mv.groups.splice(gi,1);
+    showToast(`Listo: "${merged.name}" con ${fresh.length} opciones`);
+  }catch(e){ console.error(e); showToast('No se pudo unir: '+(e.message||'error')); }
+  if(state.mv) state.mv.saving = false; render();
+}
+function renderMergeVariantsModal(){
+  const s = state.mv; const PROPS = ['Sabor','Color','Talla','Tamaño','Presentación','Aroma','Modelo'];
+  const q = normName(s.q||'');
+  const results = q.length>=2 ? state.products.filter(p=>!(p.variants||[]).length && normName(p.name).includes(q)).slice(0,12) : [];
+  const card = (g, gi)=>{
+    const ps = g.ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
+    const prices = new Set(ps.map(p=>Number(p.price)));
+    return `<div class="mv-group">
+      <button class="mv-head" onclick="mvSet(${gi},'open',${!g.open})"><span><b>${escDescHtml(g.name)}</b><small>${ps.length} productos · ${escDescHtml(g.prop)}</small></span><span>${g.open?'▴':'▾'}</span></button>
+      ${g.open ? `<div class="mv-body">
+        <label class="mv-lbl">Nombre del producto unido</label>
+        <input class="mv-in" value="${escDescHtml(g.name)}" oninput="mvSet(${gi},'name',this.value)">
+        <label class="mv-lbl">Qué cambia entre ellos</label>
+        <select class="mv-in" onchange="mvSet(${gi},'prop',this.value)">${[...new Set([g.prop,...PROPS])].map(x=>`<option ${x===g.prop?'selected':''}>${x}</option>`).join('')}</select>
+        <label class="mv-lbl">Cada producto será una opción (el marcado con ● conserva el historial)</label>
+        ${ps.map(p=>`<div class="mv-row">
+          <button class="mv-main ${g.mainId===p.id?'on':''}" title="Usar como principal" aria-label="Usar como principal" onclick="mvSet(${gi},'mainId','${p.id}')">${g.mainId===p.id?'●':'○'}</button>
+          ${(p.images||[])[0]?`<img src="${escDescHtml(p.images[0])}" alt="">`:'<span class="mv-noimg"></span>'}
+          <div class="mv-info"><div class="mv-name">${escDescHtml(p.name)}</div><div class="row-sub">${money(p.price||0)} · stock ${p.stock||0}</div>
+            <input class="mv-in mv-val" value="${escDescHtml(g.values[p.id]||'')}" placeholder="${escDescHtml(g.prop)}" oninput='mvSet(${gi},"value",this.value,"${p.id}")'></div>
+          <button class="icon-btn" title="Quitar del grupo" aria-label="Quitar del grupo" onclick="mvRemove(${gi},'${p.id}')">${icon('x',14)}</button>
+        </div>`).join('')}
+        ${prices.size>1?`<div class="note-box" style="margin:8px 0;">Tienen precios distintos: cada opción conserva su propio precio.</div>`:''}
+        <div class="mv-actions"><button class="btn-secondary" onclick="mvIgnore(${gi})">No son variantes</button><button class="btn-primary" style="flex:1;" ${s.saving?'disabled':''} onclick="mvApply(${gi})">${s.saving?'Uniendo…':'Unir'}</button></div>
+      </div>` : ''}
+    </div>`;
+  };
+  return `<div class="modal-overlay" onclick="if(event.target===this)closeMergeVariants()"><div class="modal mv-modal">
+    <div class="ci-head"><div><h3>Unir como variantes</h3><div class="ci-sub">Un solo producto con selector de sabor, color o talla</div></div><button class="icon-btn" aria-label="Cerrar" onclick="closeMergeVariants()">${icon('x')}</button></div>
+    <div class="panel-sub" style="margin-top:0;">Cada opción conserva su stock por centro, SKU, costo, precio y foto. Los productos que se vuelven opciones se van a la papelera (se restauran durante 30 días).</div>
+    <div class="mv-sec">Sugerencias (${s.groups.length})</div>
+    ${s.groups.length ? s.groups.map(card).join('') : `<div class="empty-state">${icon('check',16)} No hay más sugerencias.</div>`}
+    <div class="mv-sec">Elegir a mano</div>
+    <input class="mv-in" type="search" placeholder="Busca productos para unir…" value="${escDescHtml(s.q||'')}" oninput="state.mv.q=this.value;clearTimeout(window.__mvT);window.__mvT=setTimeout(()=>{render();const i=document.querySelector('.mv-modal input[type=search]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}},250)">
+    ${results.map(p=>`<label class="mv-pick"><input type="checkbox" ${s.manual.includes(p.id)?'checked':''} onchange="mvManualToggle('${p.id}')"> ${escDescHtml(p.name)} <small>${money(p.price||0)}</small></label>`).join('')}
+    ${s.manual.length ? `<button class="btn-primary" style="width:100%;margin:8px 0 16px;" onclick="mvManualCreate()">Preparar unión de ${s.manual.length} productos</button>` : '<div style="height:16px"></div>'}
+  </div></div>`;
 }
 const TRASH_DAYS = 30;
 async function deleteProduct(id){
@@ -6406,6 +6599,7 @@ function renderAdmin(){
   ${state.promoPickOpen ? renderPromoPickModal() : ''}
   ${state.duplicatesOpen ? renderDuplicatesModal() : ''}
   ${state.ci ? renderCatalogImproveModal() : ''}
+  ${state.mv ? renderMergeVariantsModal() : ''}
   ${state.ciStash && !state.ci && !state.productModal ? `<button class="ci-back" onclick="openCatalogImprove()">‹ Volver a Mejorar productos</button>` : ''}
   ${state.needsManageOpen ? renderOrganizeModal('need') : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
@@ -9062,6 +9256,7 @@ function renderProductos(){
             <button onclick="state.productToolsOpen=false;publishStoreNow()">${icon('refresh-cw',15)} Publicar cambios en la tienda ahora</button>
             <div class="tools-menu-label">Organizar</div>
             <button onclick="state.productToolsOpen=false;openCatalogImprove()">${icon('star',15)} Mejorar productos (nombre, precio, fotos)</button>
+            <button onclick="state.productToolsOpen=false;openMergeVariants()">${icon('copy',15)} Unir como variantes (sabores, colores, tallas)</button>
             <button onclick="state.productToolsOpen=false;state.catManageOpen=true;render()">${icon('edit',15)} Categorías</button>
             <button onclick="state.productToolsOpen=false;state.needsManageOpen=true;render()">${icon('tag',15)} Etiquetas "para quién"</button>
             <div class="tools-menu-label">Precios</div>
@@ -18313,7 +18508,7 @@ const NAV_ADMIN_MODALS = [
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],
   ['productHistoryOpen', ()=>closeProductHistory()], ['needsManageOpen', false], ['catManageOpen', false],
-  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['promoPickOpen', false], ['duplicatesOpen', false], ['ci', ()=>closeCatalogImprove()],
+  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['promoPickOpen', false], ['duplicatesOpen', false], ['ci', ()=>closeCatalogImprove()], ['mv', ()=>closeMergeVariants()],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
   ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],

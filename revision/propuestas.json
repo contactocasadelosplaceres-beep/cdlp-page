@@ -22,14 +22,20 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
-"catNota": "\"Anillos y fundas\" es la categoría nueva que te propuse; si no la quieres, quítala con la ×.",
 "desc": "Un kit completo para jugar con texturas, grosor y largo. Trae 11 fundas con relieves diferentes y 6 anillos de silicona para variar cada vez.\n\n• Las fundas dan sensaciones nuevas a ella\n• Los anillos ayudan a mantener la erección firme por más tiempo\n• Transparentes y reutilizables\n• Úsalas con lubricante a base de agua",
 "foto": {
 "estado": "mejorar",
 "nota": "Se entiende, pero es chica (500 px) y es un dibujo. Una foto real del kit vende más."
+},
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
+"agotado": {
+"accion": "ocultar",
+"nota": "Tienes el set de 5 fundas con stock, que cubre lo mismo. Ocúltalo mientras no lo vuelvas a pedir; si lo pides, ya queda con el nombre y precio nuevos."
 },
 "lote": 1
 },
@@ -61,13 +67,18 @@
 ],
 "categorias": [
 "Masturbadores",
-"Juguetes"
+"Dildos y arneses"
 ],
 "desc": "Dos juguetes en uno: de un lado una vagina suave con textura por dentro, del otro un dildo realista. Sirve para él, para ella o para jugar en pareja.\n\n• Vagina con textura interior\n• Dildo realista del lado contrario\n• Úsalo con lubricante a base de agua\n\nMedidas:\n• Largo total: 18 cm\n• Entrada: 8 × 6 cm",
 "foto": {
 "estado": "ok",
 "nota": "Bien. Si consigues una foto de lado donde se vean las dos puntas, agrégala."
 },
+"paraQuien": [
+"para-el",
+"para-ella"
+],
+"catNota": "Sale también en Dildos y arneses, porque de un lado es dildo.",
 "lote": 1
 },
 {
@@ -90,14 +101,18 @@
 }
 ],
 "categorias": [
-"Sadomasoquismo",
-"Juguetes"
+"Bondage"
 ],
 "desc": "Esposas de vinipiel con volantes de encaje: se ven sexis y no lastiman. Perfectas para empezar a jugar con el control.\n\n• Correa con hebilla ajustable\n• Cadena entre las muñecas\n• Incluye 2 pares: uno blanco y uno negro\n\nMedidas:\n• Esposa: 31.5 cm de largo y 7 cm de ancho\n• Cadena: 12 cm",
 "foto": {
 "estado": "ok",
 "nota": "Muy bien, tiene 3 fotos con medidas."
 },
+"paraQuien": [
+"compartir-pareja",
+"para-pareja",
+"empezando"
+],
 "lote": 1
 },
 {
@@ -127,14 +142,18 @@
 }
 ],
 "categorias": [
-"Complementos"
+"Bondage"
 ],
-"catNota": "No es sado: es un accesorio. Lo paso a Complementos.",
 "desc": "El look de un piercing en los pezones, sin perforar nada. Las perlas metálicas se sostienen con imán, una de cada lado del pezón, y dan una presión suave y excitante.\n\n• Sin perforación: te las pones y te las quitas cuando quieras\n• Incluye 2 pares\n• Cada perla mide 1 cm",
 "foto": {
 "estado": "cambiar",
 "nota": "Solo tiene una ilustración. Hace falta una foto real del producto, aunque sea en la mano o sobre fondo blanco."
 },
+"paraQuien": [
+"para-ella",
+"compartir-pareja"
+],
+"catNota": "No es sado como tal, pero es juego de pezones: va con pinzas y ventosas en Bondage.",
 "lote": 1
 },
 {
@@ -164,14 +183,18 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Tres anillos transparentes de diferente tamaño con perlitas en relieve. Se colocan en la base del pene para una erección más firme y duradera, y las texturas la estimulan a ella durante la penetración.\n\n• 3 tamaños para encontrar el tuyo\n• Elásticos y reutilizables\n• Fáciles de lavar",
 "foto": {
 "estado": "mejorar",
 "nota": "Solo tiene una foto y es chica (500 px). Agrega una donde se vea el tamaño en la mano."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja",
+"empezando"
+],
 "lote": 1
 },
 {
@@ -201,15 +224,17 @@
 }
 ],
 "categorias": [
-"Plugs",
-"Juguetes"
+"Anal"
 ],
-"catNota": "Quito \"Dildos\": no es un dildo y confunde al filtrar.",
 "desc": "Cuatro bolas de silicona suave unidas para explorar el placer anal paso a paso. El cordón de la base da seguridad y facilita sacarlas. Mucha gente las saca justo en el orgasmo para hacerlo más intenso.\n\n• Silicona suave y flexible\n• Cordón de seguridad en la base\n• Úsalas siempre con lubricante\n\nMedidas:\n• Largo: 19 cm\n• Cada bola: 3.5 cm\n• Separación entre bolas: 1.5 cm",
 "foto": {
 "estado": "cambiar",
 "nota": "La foto es muy chica (276 × 326 px) y se ve borrosa. Hay que cambiarla."
 },
+"paraQuien": [
+"para-ella",
+"para-el"
+],
 "lote": 1
 },
 {
@@ -239,14 +264,17 @@
 }
 ],
 "categorias": [
-"Juegos"
+"Juegos y despedidas"
 ],
-"catNota": "Es un juego, no un juguete ni un complemento. Lo paso a Juegos.",
 "desc": "Se acabaron las citas aburridas. Lancen la moneda para ver a quién le toca escoger y rasquen una tarjeta para descubrir su próxima cita. Cada tarjeta dice el lugar, el tiempo y el presupuesto.\n\n• 40 tarjetas raspables\n• Moneda de decisión\n• Tarjeta guía\n• 42 cintas doble cara para armar su álbum de recuerdos\n• Regalo perfecto para aniversario o San Valentín",
 "foto": {
 "estado": "ok",
 "nota": "Muy bien."
 },
+"paraQuien": [
+"compartir-pareja",
+"para-pareja"
+],
 "lote": 1
 },
 {
@@ -264,14 +292,17 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Cinco fundas transparentes, cada una con una textura diferente: picos, anillos y relieves. Agregan grosor y sensaciones nuevas para ella.\n\n• 5 texturas diferentes\n• Elásticas y reutilizables\n• Úsalas con lubricante a base de agua\n\nMedidas:\n• Largo: 12.5 cm\n• Ancho: 3.5 cm",
 "foto": {
 "estado": "ok",
 "nota": "Bien."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 1
 },
 {
@@ -295,14 +326,22 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "nota": "Está agotado y es bajo pedido. Si ya no lo vas a pedir, mejor ocúltalo desde su ficha.",
 "desc": "Producto bajo pedido: se aparta con 50 % de anticipo y está sujeto a disponibilidad.\n\nAnillo de silicona suave que ayuda a una erección más firme y a durar más, con vibraciones que los estimulan a los dos. Lo controlas con su botón o desde la app gratuita Satisfyer Connect, que incluso lo hace vibrar al ritmo de tu música.\n\n• Control con app (iOS y Android)\n• Silicona de grado médico, suave al tacto\n• Sumergible (IPX7)\n• Recargable por USB magnético",
 "foto": {
 "estado": "ok",
 "nota": "Excelente, son las oficiales."
+},
+"paraQuien": [
+"para-el",
+"compartir-pareja",
+"para-pareja"
+],
+"agotado": {
+"accion": "ocultar",
+"nota": "Satisfyer lo vende en Amazon en $749.95, así que solo conviene si tu costo te deja venderlo abajo de $900. Ocúltalo hasta que revises el costo con Sensuality."
 },
 "lote": 1
 },
@@ -327,14 +366,21 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "nota": "Está agotado.",
 "desc": "Anillo para el pene con un estimulador texturizado para ella. Sus 9 modos de vibración hacen la penetración más rica para los dos y ayudan a mantener la erección.\n\n• 9 modos de vibración\n• Recargable: carga en 1.5 a 2.5 horas y dura unos 50 minutos\n• Silicona elástica\n\nMedidas:\n• 7.6 × 4.3 cm\n• Abertura: 3.4 cm",
 "foto": {
 "estado": "mejorar",
 "nota": "Se ven bien, pero los textos de las fotos están en inglés."
+},
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
+"agotado": {
+"accion": "pedir",
+"nota": "Es recargable, de 9 modos y está en buen precio contra Amazon. Vale la pena volver a pedirlo."
 },
 "lote": 1
 },
@@ -364,14 +410,17 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo para el pene con una lengüeta texturizada que estimula el clítoris durante la penetración. La bala vibradora le da vibración a los dos y ayuda a mantener la erección firme.\n\n• Bala vibradora incluida\n• Funciona con pilas de botón (incluidas)\n• Silicona suave y elástica\n• Úsalo con lubricante a base de agua",
 "foto": {
 "estado": "ok",
 "nota": "Bien. Una foto con medidas ayudaría, porque la descripción dice \"medidas en imágenes\" y no vienen."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -401,14 +450,17 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Un anillo doble de silicona: un aro va en la base del pene y el otro rodea los testículos. Mantiene la erección firme por más tiempo y ayuda a retrasar la eyaculación.\n\n• Silicona suave y elástica\n• Cómodo de poner y quitar\n• Reutilizable y fácil de lavar\n• No lo uses más de 30 minutos seguidos",
 "foto": {
 "estado": "mejorar",
 "nota": "Solo tiene una foto. Agrega una del anillo solo, sobre fondo blanco."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -432,14 +484,19 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "El anillo vibrador de siempre, perfecto para probar por primera vez. Se coloca en la base del pene y su vibración los estimula a los dos durante la penetración.\n\n• Silicona suave y ajustable\n• Funciona con pilas de botón (incluidas)\n• Diámetro: 4 cm, se estira\n• Ideal para regalar o agregar a tu pedido",
 "foto": {
 "estado": "mejorar",
 "nota": "Solo tiene una foto. Una segunda puesta en un dildo ayudaría a ver el tamaño."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja",
+"empezando",
+"para-pareja"
+],
 "lote": 2
 },
 {
@@ -463,8 +520,7 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo para el pene con una lengüeta texturizada que roza el clítoris en cada movimiento. Su vibración los estimula a los dos y ayuda a mantener la erección.\n\n• Silicona y ABS\n• Funciona con 3 pilas LR44 (incluidas)\n\nMedidas:\n• 8 × 3.5 cm",
 "nota": "En las fotos sale en rosa y morado, pero la descripción dice rosa y solo te queda 1 pieza. Revisa qué color es.",
@@ -472,6 +528,10 @@
 "estado": "ok",
 "nota": "Muy bien, tiene 6 fotos."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -495,8 +555,7 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo para el pene con unas orejitas de conejo que vibran justo sobre el clítoris. Un juguete divertido para estrenar en pareja.\n\n• Orejas que estimulan el clítoris\n• Silicona y ABS\n\nMedidas:\n• 8 × 3.5 cm",
 "nota": "Confirma si funciona con pilas y si vienen incluidas, para agregarlo a la descripción.",
@@ -504,6 +563,10 @@
 "estado": "mejorar",
 "nota": "Solo tiene una foto. Agrega una con medidas o puesto en un dildo."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -533,14 +596,17 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo doble para pene y testículos con un estimulador en forma de rosa para ella. Lo controlas desde tu celular, así que tu pareja puede elegir la vibración.\n\n• Control por app\n• 9 modos de vibración\n• Recargable\n• Totalmente sumergible\n\nMedidas:\n• Largo: 12 cm\n• Ancho de la rosa: 4 cm",
 "foto": {
 "estado": "ok",
 "nota": "Bien, con foto de medidas en español."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -570,14 +636,17 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo para el pene con una almohadilla texturizada que vibra justo donde ella la necesita. Sus 10 modos de vibración los estimulan a los dos y ayudan a mantener la erección firme.\n\n• 10 modos de vibración\n• Recargable\n• Almohadilla con textura\n\nMedidas:\n• 11.2 × 6.3 cm\n• Anillo: 3.3 cm",
 "foto": {
 "estado": "mejorar",
 "nota": "Solo tiene una foto y trae un emoji encima. Una limpia sobre fondo blanco se vería más profesional."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -601,8 +670,7 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo doble que rodea el pene y los testículos, con una bala vibradora que estimula a los dos. Ayuda a mantener la erección por más tiempo.\n\n• Silicona flexible con textura\n• Bala vibradora incluida\n• Funciona con pila de botón (incluida)\n\nMedidas:\n• Largo: 9 cm",
 "nota": "Solo te queda 1 pieza.",
@@ -610,6 +678,10 @@
 "estado": "ok",
 "nota": "Bien."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -639,14 +711,17 @@
 }
 ],
 "categorias": [
-"Anillos y fundas",
-"Juguetes"
+"Anillos y fundas"
 ],
 "desc": "Anillo doble de silicona: uno va en la base del pene y el otro rodea los testículos. Su vibración estimula a los dos, mantiene la erección firme y ayuda a retrasar la eyaculación.\n\n• Recargable por USB\n• Silicona suave y elástica\n• Vibración que también estimula a ella",
 "foto": {
 "estado": "ok",
 "nota": "Bien, 3 fotos."
 },
+"paraQuien": [
+"para-el",
+"compartir-pareja"
+],
 "lote": 2
 },
 {
@@ -676,14 +751,17 @@
 }
 ],
 "categorias": [
-"Dildos",
-"Juguetes"
+"Dildos y arneses"
 ],
 "desc": "Arnés con correas ajustables y un dildo realista de silicona para disfrutar en pareja. El dildo se quita del arnés y su ventosa se pega en superficies lisas para jugar a solas.\n\n• Dildo de silicona realista de 21 cm\n• Ventosa para usarlo sin el arnés\n• Correas ajustables a cintura y piernas\n• Fácil de limpiar\n• Úsalo con lubricante a base de agua",
 "foto": {
 "estado": "ok",
 "nota": "Bien, trae foto de medidas en español."
 },
+"paraQuien": [
+"compartir-pareja",
+"para-ella"
+],
 "lote": 2
 }
 ]
