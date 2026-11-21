@@ -10,8 +10,12 @@ on:
         default: '1'
         required: true
       limit:
-        description: 'Máximo de productos en esta corrida (0 = todos)'
+        description: 'Máximo de productos en esta corrida (0 = todos) — solo modo mover'
         default: '0'
+        required: false
+      modo:
+        description: 'reparar = compara products contra productCosts y deja el costo más nuevo · mover = copia a ciegas (migración original)'
+        default: 'reparar'
         required: false
 permissions:
   contents: read
@@ -29,7 +33,7 @@ jobs:
         with: { node-version: 22 }
       - run: npm install --prefix tools/costos --no-audit --no-fund
       - name: Mover costos
-        run: node tools/costos/migrar.js
+        run: node tools/costos/${{ inputs.modo == 'mover' && 'migrar.js' || 'reconciliar.js' }}
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DRY_RUN: ${{ inputs.dry_run }}

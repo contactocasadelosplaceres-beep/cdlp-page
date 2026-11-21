@@ -1176,21 +1176,30 @@ try{
   }
   // ---- lectura ----
   const qGet = F.Query.prototype.get, dGet = F.DocumentReference.prototype.get;
+  // Si la lectura de productCosts falla (sin red, cuota), se vuelve a intentar en la siguiente
+  // lectura de productos en vez de quedarse apagado toda la sesión: con la capa apagada los costos
+  // se escribían en "products" y al volver a abrir el panel se veía el costo viejo de productCosts.
   async function ensurePrivate(fs){
-    if(S.loaded) return; if(S.loading) return S.loading;
+    if(S.loaded && S.ok) return; if(S.loading) return S.loading;
     S.loading = (async ()=>{
       try{
         // Con la copia local del panel (syncedList) solo se piden los costos que cambiaron.
         const snap = (typeof syncedList==='function') ? await syncedList(PRIV_COL, {fullHours:24}) : await qGet.call(fs.collection(PRIV_COL));
         snap.docs.forEach(d=>{ const v = d.data(); if(v) cache.set(d.id, v); });
         S.ok = true;
-      }catch(e){ S.ok = false; }
-      S.loaded = true;
+      }catch(e){ S.ok = false; console.warn('No se pudieron leer los costos privados', e); }
+      S.loaded = true; S.loading = null;
     })();
     return S.loading;
   }
   window.cdlpEnsurePrivate = ()=>ensurePrivate(firebase.firestore());
-  F.Query.prototype.get = async function(o){ if(this.id==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return qGet.call(this, o); };
+  // Pega los costos a un producto ya leído (p. ej. de la copia local del panel, que no pasa por .data()).
+  S.merge = (id, d)=> merge(id, d);
+  // Colección de una consulta: una consulta con filtro (where/orderBy/limit) no tiene .id, solo la
+  // colección. Antes solo se revisaba .id, así que la carga "solo cambios" de productos (where _sync)
+  // nunca encendía la capa privada y los costos se iban a "products".
+  const qCol = q => { try{ if(q.id) return q.id; const p = q._delegate && q._delegate._query && q._delegate._query.path; return p && typeof p.canonicalString==='function' ? p.canonicalString() : null; }catch(e){ return null; } };
+  F.Query.prototype.get = async function(o){ if(qCol(this)==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return qGet.call(this, o); };
   F.DocumentReference.prototype.get = async function(o){ if(colOf(this)==='products'){ try{ await ensurePrivate(this.firestore); }catch(e){} } return dGet.call(this, o); };
   [F.DocumentSnapshot, F.QueryDocumentSnapshot].forEach(C=>{
     if(!C || !C.prototype || Object.prototype.hasOwnProperty.call(C.prototype,'__cdlpPriv')) return;
@@ -1671,7 +1680,11 @@ async function syncedList(col, o){
   o = o || {};
   const key = 'sync:'+col, now = Date.now(), df = o.dateField || '', lim = o.limit || 0;
   const stat = window.__readStats.byCol[col] = window.__readStats.byCol[col] || {docsRead:0, fromCache:0, kind:''};
-  const wrap = rows => ({docs: rows.map(r=>({id:r.id, data:()=>r.data})), size: rows.length});
+  // Productos: primero se cargan los costos privados y luego se pegan a CADA producto, también a los
+  // que vienen de la copia local (esos no pasan por .data() y podían traer un costo viejo o ninguno).
+  const priv = col==='products' && window.cdlpPrivate && typeof window.cdlpEnsurePrivate==='function';
+  if(priv){ try{ await window.cdlpEnsurePrivate(); }catch(e){} }
+  const wrap = rows => ({docs: rows.map(r=>({id:r.id, data:()=> (priv && window.cdlpPrivate.ok && window.cdlpPrivate.merge) ? window.cdlpPrivate.merge(r.id, Object.assign({}, r.data||{})) : r.data})), size: rows.length});
   const toRow = d => { const x = Object.assign({}, d.data() || {}); const m = syncMs(x._sync); delete x._sync; return {id:d.id, data:x, m}; };
   const sortTrim = rows => { if(df) rows.sort((a,b)=> String((b.data||{})[df]||'').localeCompare(String((a.data||{})[df]||''))); return lim ? rows.slice(0, lim) : rows; };
   let c = null; try{ c = await rcGet(key); }catch(e){}
@@ -4356,7 +4369,15 @@ function nextPromoSince(p, old){
   if(old && isPromoActive(old) && Number(old.promoPrice)===Number(p.promoPrice)) return old.promoSince || null;
   return new Date().toISOString();
 }
+// Antes de escribir un costo: la capa de costos privados tiene que estar encendida; si no, el costo
+// se iría a "products" y la próxima vez el panel mostraría el costo viejo (parecía que no se guardaba).
+async function privateCostsReady(){
+  try{ if(typeof window.cdlpEnsurePrivate==='function') await window.cdlpEnsurePrivate(); }catch(e){}
+  if(window.cdlpPrivate && !window.cdlpPrivate.ok){ showToast('No se pudieron cargar los costos. Revisa tu conexión y vuelve a intentar.'); return false; }
+  return true;
+}
 async function saveProduct(p){
+  if(!(await privateCostsReady())){ state.savingProduct = false; render(); return; }
   const newCats = (p.categories||[p.cat]).filter(c=>c && !state.settings.categories.includes(c));
   if(newCats.length){ state.settings.categories.push(...newCats); await saveSettings(); }
   const old = p.id ? state.products.find(x=>x.id===p.id) : null;
@@ -4866,6 +4887,7 @@ function mvManualCreate(){
   const m = document.querySelector('.mv-modal'); if(m) m.scrollTop = 0;
 }
 async function mvApply(gi){
+  if(!(await privateCostsReady())) return;
   const g = state.mv.groups[gi]; if(!g || state.mv.saving) return;
   const ps = g.ids.map(id=>state.products.find(p=>p.id===id)).filter(Boolean);
   if(ps.length<2) return;
@@ -9117,6 +9139,7 @@ function productHasNoCost(p){
 }
 // Captura rápida del costo desde la lista (filtro "Sin costo capturado"): también lo guarda en el historial de costos.
 async function quickSaveCost(id){
+  if(!(await privateCostsReady())) return;
   const p = state.products.find(x=>x.id===id); const inp = document.getElementById('qcost-'+id);
   const val = Math.round((Number(inp && inp.value)||0)*100)/100;
   if(!p || !(val>0)){ showToast('Escribe el costo (mayor a 0)'); return; }
@@ -13916,6 +13939,7 @@ function openReceiveGoodsModal(supplierId){
 }
 function closeReceiveGoodsModal(){ state.receiveGoodsModalOpen = false; state.receiveGoodsSupplierId = null; state.receiveGoodsQuantities = {}; render(); }
 async function confirmReceiveGoods(){
+  if(!(await privateCostsReady())) return;
   const supplierId = state.receiveGoodsSupplierId;
   const items = state.restockItems.filter(r=>(r.supplierId||'')===(supplierId||''));
   const supplier = state.suppliers.find(s=>s.id===supplierId);
