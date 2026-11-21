@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - run: npm install --prefix tools/diag --no-audit --no-fund
-      - run: node tools/diag/pedidos.js
+      - run: node tools/diag/salud.js
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DESDE: ${{ inputs.desde }}
