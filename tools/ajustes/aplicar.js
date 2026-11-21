@@ -98,6 +98,15 @@ async function run({ db, FieldValue }){
     console.log(`  • ${c.sku}  ${p.notes.join(' · ')}`);
   }
   problemas.forEach(x => console.log(`  ✗ ${x}`));
+  // Productos que no vienen en la lista (p. ej., ocultos que no salen en catalogo.json): se listan para revisarlos.
+  if(cambios.some(c => c.id)){
+    const ids = new Set(cambios.map(c => c.id).filter(Boolean));
+    const fuera = live.filter(d => !ids.has(d.id));
+    if(fuera.length){
+      console.log(`Productos que NO están en la lista (${fuera.length}):`);
+      fuera.forEach(d => { const x = d.data(); console.log(`  ? ${JSON.stringify({ id: d.id, name: x.name, cat: x.cat, categories: x.categories || null, needs: x.needs || [], hidden: !!x.hidden, stock: x.stock || 0, price: x.price })}`); });
+    }
+  }
   console.log(`::notice::${DRY_RUN ? 'Prueba' : 'Aplicando'}: ${todo.length} producto(s) a cambiar · ${problemas.length} sin tocar por algún problema`);
   if(DRY_RUN){ console.log('DRY_RUN: no se tocó Firestore.'); return { changed: 0, problemas }; }
 
