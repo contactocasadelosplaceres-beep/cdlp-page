@@ -895,6 +895,56 @@ document.addEventListener('wheel', function(e){
   .rs-list ol{margin:0;padding-left:18px;font-size:13px;line-height:1.6;}
   .rs-list li b{color:#993477;margin-left:4px;}
   .rs-empty{font-size:12.5px;color:var(--ink-soft);margin:6px 0;}
+  /* Mejorar productos (propuestas con Claude) */
+  .ci-modal{max-width:640px;padding-bottom:0;}
+  .ci-head{display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:-22px;z-index:3;margin:-22px -20px 10px;padding:14px 20px 10px;background:var(--surface);border-bottom:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+  .ci-head h3{position:static;border:0;padding:0;margin:0;background:none;}
+  .ci-head .icon-btn{flex:0 0 auto;}
+  .ci-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .ci-chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;margin-bottom:6px;scrollbar-width:none;}
+  .ci-chip{flex:0 0 auto;border:1.5px solid var(--border);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:13px;min-height:38px;font-family:inherit;cursor:pointer;}
+  .ci-chip b{font-weight:700;opacity:.75;margin-left:2px;}
+  .ci-chip.on{background:var(--primary);color:#fff;border-color:var(--primary);}
+  .ci-nav{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink-soft);margin-bottom:8px;}
+  .ci-nav .icon-btn{font-size:22px;min-width:44px;min-height:40px;}
+  .ci-prod{display:flex;gap:12px;align-items:center;margin-bottom:12px;}
+  .ci-prod img,.ci-noimg{width:76px;height:76px;flex:0 0 76px;object-fit:cover;border-radius:12px;background:var(--surface-soft);cursor:pointer;}
+  .ci-noimg{display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--ink-soft);}
+  .ci-pname{font-weight:700;font-size:15px;line-height:1.25;overflow-wrap:anywhere;}
+  .ci-part{border:1.5px solid var(--border);border-radius:14px;padding:12px;margin-bottom:10px;}
+  .ci-part.same{opacity:.8;}
+  .ci-part-h{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;min-height:30px;flex-wrap:wrap;}
+  .ci-part-h input{width:22px;height:22px;accent-color:var(--primary);margin:0;}
+  .ci-same{font-size:11.5px;font-weight:600;color:var(--ink-soft);background:var(--surface-soft);border-radius:999px;padding:2px 8px;}
+  .ci-now{font-size:12.5px;color:var(--ink-soft);margin:4px 0 8px;overflow-wrap:anywhere;}
+  .ci-part textarea,.ci-price input,.ci-addcat{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px;font:inherit;font-size:16px;background:var(--surface);color:var(--ink);line-height:1.4;}
+  .ci-part textarea:disabled,.ci-price input:disabled{opacity:.7;}
+  .ci-price{display:flex;align-items:center;gap:6px;font-weight:700;font-size:18px;}
+  .ci-price input{max-width:160px;font-size:18px;font-weight:700;}
+  .ci-mg{font-size:13px;margin-top:6px;color:var(--green-ink);}
+  .ci-mg.bad{color:var(--danger-ink);font-weight:700;}
+  .ci-why{font-size:13px;color:var(--ink);background:var(--surface-soft);border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.45;}
+  .ci-reftitle{font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:10px;text-transform:uppercase;letter-spacing:.04em;}
+  .ci-refs{margin:4px 0 0;padding:0;list-style:none;font-size:13px;}
+  .ci-refs li{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-top:1px dashed var(--border);}
+  .ci-refs li span{min-width:0;overflow-wrap:anywhere;}
+  .ci-refs small{color:var(--ink-soft);}
+  .ci-refs a{color:var(--primary);font-weight:600;}
+  .ci-refs b{white-space:nowrap;}
+  .ci-catchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .ci-cat{display:inline-flex;align-items:center;gap:4px;background:var(--surface-soft);border-radius:999px;padding:4px 4px 4px 11px;font-size:13px;min-height:34px;}
+  .ci-cat.main{background:var(--primary);color:#fff;}
+  .ci-cat.main small{opacity:.8;font-size:10.5px;}
+  .ci-cat button{border:0;background:none;color:inherit;opacity:.75;width:30px;height:30px;font-size:16px;cursor:pointer;}
+  .ci-new{background:var(--amber);color:#2B1620;border-radius:999px;font-size:10.5px;padding:1px 6px;font-weight:700;}
+  .ci-old{margin-top:8px;font-size:13px;color:var(--ink-soft);}
+  .ci-old summary{cursor:pointer;min-height:32px;display:flex;align-items:center;}
+  .ci-old div{padding:8px 0;line-height:1.45;}
+  .ci-badge{border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;color:#fff;}
+  .ci-note{background:var(--surface-soft);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:10px;line-height:1.45;}
+  .ci-actions{position:sticky;bottom:0;background:var(--surface);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--border);margin-top:6px;}
+  .ci-actions button{min-height:48px;}
+  .ci-back{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:900;background:var(--primary);color:#fff;border:0;border-radius:999px;padding:12px 18px;font-weight:700;font-size:14px;box-shadow:var(--shadow-md);display:inline-flex;align-items:center;gap:6px;font-family:inherit;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -4483,6 +4533,226 @@ function renderDuplicatesModal(){
     </div>
   </div>`;
 }
+/* ============== MEJORAR PRODUCTOS (propuestas preparadas con Claude) ==============
+   Claude prepara propuestas por lotes (nombre que vende, precio comparado con tiendas de México,
+   descripción, categorías y estado de las fotos) en revision/propuestas.json, que viaja con la
+   página: leerlo no gasta lecturas de Firestore. Aquí se revisan una por una, pensado para el
+   celular. "Aprobar" aplica solo las partes palomeadas con saveProduct (mismo historial,
+   bitácora y separación de costos que editar a mano) y se puede deshacer; "Después" la deja
+   para luego y "No aplicar" la descarta. Las decisiones viven en settings/catalogImprove
+   (1 lectura al abrir, 1 escritura por decisión). Antes de aplicar se relee el producto (1 lectura)
+   para no pisar existencias que cambiaron por ventas mientras el panel estaba abierto. */
+const CI_FILTERS = [
+  {k:'pend', l:'Por revisar'}, {k:'precio', l:'Cambian de precio'}, {k:'foto', l:'Foto por cambiar'},
+  {k:'skip', l:'Para después'}, {k:'hechos', l:'Hechos'}];
+async function openCatalogImprove(){
+  if(state.ciStash){ state.ci = state.ciStash; state.ciStash = null; render(); return; }
+  state.ci = {loading:true, items:[], dec:{}, filter:'pend', idx:0, ed:{}, saving:false, err:''};
+  render();
+  try{
+    const [r, snap] = await Promise.all([
+      fetch('revision/propuestas.json?t='+Date.now(), {cache:'no-store'}).then(x=>{ if(!x.ok) throw new Error('sin propuestas'); return x.json(); }),
+      db.collection('settings').doc('catalogImprove').get().catch(()=>null)
+    ]);
+    state.ci.items = Array.isArray(r.items) ? r.items : [];
+    state.ci.updated = r.actualizado || '';
+    state.ci.dec = (snap && snap.exists && (snap.data()||{}).d) || {};
+  }catch(e){ state.ci.err = 'Todavía no hay propuestas en la tienda. Aparecen después de la siguiente publicación.'; }
+  if(state.ci){ state.ci.loading = false; render(); }
+}
+function closeCatalogImprove(){ state.ci = null; state.ciStash = null; render(); }
+function ciKey(it){ return it.id + '@' + (it.lote||0); }
+function ciFind(k){ return state.ci && state.ci.items.find(x=>ciKey(x)===k); }
+function ciProduct(it){ return it ? (state.products.find(p=>p.id===it.id) || null) : null; }
+function ciCurCats(p){ return (p.categories && p.categories.length) ? p.categories : (p.cat ? [p.cat] : []); }
+function ciMatches(it, f){
+  const p = ciProduct(it); if(!p) return false;
+  const d = state.ci.dec[ciKey(it)], s = d && d.s;
+  if(f==='hechos') return s==='ok' || s==='no';
+  if(f==='skip') return s==='skip';
+  if(s) return false;
+  if(f==='precio') return Number(it.precio)>0 && Math.round(Number(it.precio))!==Math.round(Number(p.price));
+  if(f==='foto') return !!(it.foto && it.foto.estado && it.foto.estado!=='ok');
+  return true;
+}
+function ciList(){ const c = state.ci; return c ? c.items.filter(it=>ciMatches(it, c.filter)) : []; }
+function ciEd(it){
+  const k = ciKey(it), c = state.ci;
+  if(!c.ed[k]) c.ed[k] = {name:it.nombre||'', price:it.precio||'', desc:it.desc||'', cats:[...(it.categorias||[])], off:{}};
+  return c.ed[k];
+}
+function ciChanged(it){
+  const p = ciProduct(it), e = ciEd(it), norm = a => JSON.stringify([...a].sort());
+  return {
+    name: !!e.name.trim() && e.name.trim()!==(p.name||'').trim(),
+    price: Number(e.price)>0 && Math.round(Number(e.price))!==Math.round(Number(p.price)||0),
+    desc: !!e.desc.trim() && e.desc.trim()!==(p.desc||'').trim(),
+    cats: e.cats.length>0 && (norm(e.cats)!==norm(ciCurCats(p)) || e.cats[0]!==ciCurCats(p)[0]),
+  };
+}
+function ciMarginTxt(price, cost){
+  price = Number(price); cost = Number(cost);
+  if(!(cost>0)) return {t:'Sin costo registrado: no puedo calcular tu margen.', bad:false};
+  if(!(price>0)) return {t:'', bad:false};
+  const m = Math.round((price-cost)/price*100);
+  return {t:`Ganas ${money(price-cost)} por pieza, margen de ${m} % (costo ${money(cost)}).`, bad: m<30};
+}
+function ciSetField(k, field, v){
+  const it = ciFind(k); if(!it) return; const e = ciEd(it); e[field] = v;
+  if(field==='price'){
+    const p = ciProduct(it), el = document.getElementById('ci-mg');
+    if(el && p){ const r = ciMarginTxt(v, p.cost); el.textContent = r.t; el.className = 'ci-mg'+(r.bad?' bad':''); }
+  }
+}
+function ciToggle(k, part, on){ const it = ciFind(k); if(!it) return; ciEd(it).off[part] = !on; }
+function ciRemoveCat(k, cat){ const it = ciFind(k); if(!it) return; const e = ciEd(it); e.cats = e.cats.filter(c=>c!==cat); render(); }
+function ciAddCat(k, cat){
+  const it = ciFind(k); if(!it || !cat) return;
+  if(cat==='__otra__'){ cat = (prompt('Nombre de la categoría nueva:')||'').trim(); if(!cat) { render(); return; } }
+  const e = ciEd(it); if(!e.cats.includes(cat)) e.cats.push(cat); render();
+}
+function ciMainCat(k, cat){ const it = ciFind(k); if(!it) return; const e = ciEd(it); e.cats = [cat, ...e.cats.filter(c=>c!==cat)]; render(); }
+function ciSetFilter(f){ state.ci.filter = f; state.ci.idx = 0; render(); const m = document.querySelector('.ci-modal'); if(m) m.scrollTop = 0; }
+function ciGo(d){ const n = ciList().length; if(!n) return; state.ci.idx = (state.ci.idx + d + n) % n; render(); const m = document.querySelector('.ci-modal'); if(m) m.scrollTop = 0; }
+function ciOpenProduct(id){
+  const p = state.products.find(x=>x.id===id); if(!p) return;
+  state.ciStash = state.ci; state.ci = null;
+  state.productModal = JSON.parse(JSON.stringify(p)); render();
+}
+async function ciSaveDecision(k, rec){
+  const c = state.ci || state.ciStash; if(!c) return false;
+  const prev = c.dec[k];
+  if(rec) c.dec[k] = rec; else delete c.dec[k];
+  render();
+  try{
+    const ref = db.collection('settings').doc('catalogImprove');
+    if(rec) await ref.set({d:{[k]:rec}}, {merge:true});
+    else await ref.update(new firebase.firestore.FieldPath('d', k), firebase.firestore.FieldValue.delete());
+    return true;
+  }catch(e){
+    console.error(e);
+    if(prev) c.dec[k] = prev; else delete c.dec[k];
+    showToast('No se pudo guardar la decisión. Revisa tu conexión.'); render(); return false;
+  }
+}
+function ciDecide(k, s){
+  return ciSaveDecision(k, {s, at:new Date().toISOString(), by:(state.user && state.user.email)||'', parts:[]});
+}
+// Relee el producto y lo pone en el estado del panel antes de guardar, para que saveProduct
+// (que reemplaza el documento completo) no regrese existencias viejas.
+async function ciFresh(id){
+  const snap = await db.collection('products').doc(id).get();
+  if(!snap.exists) throw new Error('El producto ya no existe');
+  const fresh = {id, ...snap.data()};
+  const i = state.products.findIndex(x=>x.id===id); if(i>=0) state.products[i] = fresh;
+  return fresh;
+}
+async function ciApplyFields(id, fields){
+  const fresh = await ciFresh(id);
+  await saveProduct({...fresh, ...fields});
+  const now = state.products.find(x=>x.id===id);
+  return !!now && Object.keys(fields).every(f=>JSON.stringify(now[f])===JSON.stringify(fields[f]));
+}
+async function ciApprove(k){
+  const c = state.ci; if(!c || c.saving) return;
+  const it = ciFind(k), p = ciProduct(it); if(!p) return;
+  const e = ciEd(it), ch = ciChanged(it), fields = {}, parts = [];
+  if(ch.name && !e.off.name){ fields.name = e.name.trim(); parts.push('nombre'); }
+  if(ch.price && !e.off.price){ fields.price = Math.round(Number(e.price)); parts.push('precio'); }
+  if(ch.cats && !e.off.cats){ fields.categories = [...e.cats]; fields.cat = e.cats[0]; parts.push('categorías'); }
+  if(ch.desc && !e.off.desc){ fields.desc = e.desc.trim(); parts.push('descripción'); }
+  const rec = {s:'ok', at:new Date().toISOString(), by:(state.user && state.user.email)||'', parts};
+  if(!parts.length){ await ciSaveDecision(k, rec); showToast('Marcado como revisado'); return; }
+  const before = {}; Object.keys(fields).forEach(f=>{ before[f] = JSON.parse(JSON.stringify(p[f] ?? (f==='categories' ? ciCurCats(p) : ''))); });
+  c.saving = true; render();
+  let ok = false;
+  try{ ok = await ciApplyFields(p.id, fields); }catch(err){ console.error(err); }
+  c.saving = false;
+  if(!ok){ showToast('No se pudo guardar. Revisa tu conexión e intenta otra vez.'); render(); return; }
+  rec.before = before;
+  await ciSaveDecision(k, rec);
+  showUndo(`Listo: ${parts.join(', ')}`, ()=>ciUndo(k));
+}
+async function ciUndo(k){
+  const c = state.ci || state.ciStash; if(!c) return;
+  const d = c.dec[k], it = ciFind(k) || (c.items||[]).find(x=>ciKey(x)===k);
+  if(d && d.s==='ok' && d.before && Object.keys(d.before).length && it){
+    let ok = false;
+    try{ ok = await ciApplyFields(it.id, d.before); }catch(err){ console.error(err); }
+    if(!ok){ showToast('No se pudo deshacer. Intenta otra vez.'); return; }
+  }
+  await ciSaveDecision(k, null);
+  showToast('Regresó a "Por revisar"');
+}
+function ciRefsHtml(it){
+  const refs = it.refs || []; if(!refs.length) return '';
+  return `<ul class="ci-refs">${refs.map(r=>`<li><span>${r.u?`<a href="${escDescHtml(r.u)}" target="_blank" rel="noopener">${escDescHtml(r.t||'Tienda')}</a>`:escDescHtml(r.t||'Tienda')}${r.n?`<small> · ${escDescHtml(r.n)}</small>`:''}</span><b>${r.p?'$'+Number(r.p).toLocaleString('es-MX',{maximumFractionDigits:2}):''}</b></li>`).join('')}</ul>`;
+}
+function renderCatalogImproveModal(){
+  const c = state.ci;
+  const head = `<div class="ci-head"><div><h3>Mejorar productos</h3><div class="ci-sub">Propuestas preparadas con Claude${c.updated?` · actualizadas ${escDescHtml(c.updated)}`:''}</div></div><button class="icon-btn" title="Cerrar" aria-label="Cerrar" onclick="closeCatalogImprove()">${icon('x')}</button></div>`;
+  const wrap = body => `<div class="modal-overlay" onclick="if(event.target===this)closeCatalogImprove()"><div class="modal ci-modal">${head}${body}</div></div>`;
+  if(c.loading) return wrap(`<div class="empty-state">Cargando propuestas…</div>`);
+  if(c.err) return wrap(`<div class="empty-state">${escDescHtml(c.err)}</div>`);
+  const chips = `<div class="ci-chips">${CI_FILTERS.map(f=>{ const n = c.items.filter(it=>ciMatches(it, f.k)).length; return `<button class="ci-chip ${c.filter===f.k?'on':''}" onclick="ciSetFilter('${f.k}')">${f.l} <b>${n}</b></button>`; }).join('')}</div>`;
+  const list = ciList();
+  if(c.idx >= list.length) c.idx = Math.max(0, list.length-1);
+  const it = list[c.idx];
+  if(!it){
+    const msg = c.filter==='pend' ? 'Revisaste todas las propuestas que hay por ahora. Se van agregando más por lotes.' : 'No hay productos aquí.';
+    return wrap(chips + `<div class="empty-state">${icon('check',16)} ${msg}</div>`);
+  }
+  const k = ciKey(it), p = ciProduct(it), e = ciEd(it), ch = ciChanged(it), d = c.dec[k];
+  const kq = escDescHtml(JSON.stringify(k));
+  const done = d && (d.s==='ok' || d.s==='no');
+  const box = (part, title, changed, inner) => `
+    <div class="ci-part ${changed?'':'same'}">
+      <label class="ci-part-h">${changed && !done ? `<input type="checkbox" ${e.off[part]?'':'checked'} onchange='ciToggle(${kq},"${part}",this.checked)'>` : ''}<span>${title}</span>${changed?'':'<span class="ci-same">sin cambio</span>'}</label>
+      ${inner}
+    </div>`;
+  const img = (p.images||[])[0];
+  const mg = ciMarginTxt(e.price, p.cost), mgNow = ciMarginTxt(p.price, p.cost);
+  const promo = (typeof isPromoActive==='function' && isPromoActive(p) && Number(p.promoPrice)>=Number(e.price)) ? `<div class="ci-mg bad">Tiene promoción en ${money(p.promoPrice)}: queda arriba del precio nuevo, cámbiala en la ficha.</div>` : '';
+  const curCats = ciCurCats(p);
+  const allCats = (state.settings.categories||[]).filter(x=>!e.cats.includes(x));
+  const fotoTone = {ok:'var(--green-ink)', mejorar:'var(--amber)', cambiar:'var(--rose)'};
+  const fotoLabel = {ok:'Bien', mejorar:'Se puede mejorar', cambiar:'Hay que cambiarla'};
+  const f = it.foto || {};
+  return wrap(`${chips}
+    <div class="ci-nav"><button class="icon-btn" aria-label="Anterior" onclick="ciGo(-1)">‹</button><span>${c.idx+1} de ${list.length}${it.lote?` · lote ${it.lote}`:''}</span><button class="icon-btn" aria-label="Siguiente" onclick="ciGo(1)">›</button></div>
+    <div class="ci-prod">
+      ${img?`<img src="${escDescHtml(img)}" alt="" onclick="ciOpenProduct('${p.id}')">`:`<div class="ci-noimg">Sin foto</div>`}
+      <div style="min-width:0;"><div class="ci-pname">${escDescHtml(p.name)}</div><div class="row-sub">${money(p.price||0)} · stock ${p.stock||0}${p.sku?` · ${escDescHtml(p.sku)}`:''}${p.hidden?' · oculto':''}</div></div>
+    </div>
+    ${d ? `<div class="ci-note"><b>${d.s==='ok'?'Aprobado':d.s==='no'?'No se aplicó':'Lo dejaste para después'}</b>${d.parts&&d.parts.length?`: ${escDescHtml(d.parts.join(', '))}`:''}${d.at?` · ${new Date(d.at).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}`:''}</div>` : ''}
+    ${it.nota ? `<div class="ci-note">${icon('alert-triangle',14)} ${escDescHtml(it.nota)}</div>` : ''}
+    ${box('name','Nombre', ch.name, `<div class="ci-now">Ahora: ${escDescHtml(p.name)}</div>
+      <textarea rows="2" ${done?'disabled':''} oninput='ciSetField(${kq},"name",this.value)'>${escDescHtml(e.name)}</textarea>
+      ${it.nombreNota?`<div class="ci-why">${escDescHtml(it.nombreNota)}</div>`:''}`)}
+    ${box('price','Precio', ch.price, `<div class="ci-now">Ahora: ${money(p.price||0)}${p.cost>0?` · ${escDescHtml(mgNow.t)}`:''}</div>
+      <div class="ci-price"><span>$</span><input type="number" inputmode="numeric" min="0" step="1" ${done?'disabled':''} value="${escDescHtml(e.price)}" oninput='ciSetField(${kq},"price",this.value)'></div>
+      <div id="ci-mg" class="ci-mg${mg.bad?' bad':''}">${escDescHtml(mg.t)}</div>${promo}
+      ${it.precioNota?`<div class="ci-why">${escDescHtml(it.precioNota)}</div>`:''}
+      ${it.refs&&it.refs.length?`<div class="ci-reftitle">Precios en otras tiendas de México</div>${ciRefsHtml(it)}`:''}`)}
+    ${box('cats','Categorías', ch.cats, `<div class="ci-now">Ahora: ${escDescHtml(curCats.join(', ')||'sin categoría')}</div>
+      <div class="ci-catchips">${e.cats.map((x,i)=>`<span class="ci-cat ${i===0?'main':''}">${i===0?'<small>principal</small> ':''}${escDescHtml(x)}${(state.settings.categories||[]).includes(x)?'':' <span class="ci-new">nueva</span>'}${done?'':`${i>0?`<button title="Hacer principal" aria-label="Hacer principal" onclick='ciMainCat(${kq},${escDescHtml(JSON.stringify(x))})'>★</button>`:''}<button title="Quitar" aria-label="Quitar" onclick='ciRemoveCat(${kq},${escDescHtml(JSON.stringify(x))})'>×</button>`}</span>`).join('')}</div>
+      ${done?'':`<select class="ci-addcat" onchange='ciAddCat(${kq},this.value)'><option value="">+ Agregar categoría</option>${allCats.map(x=>`<option value="${escDescHtml(x)}">${escDescHtml(x)}</option>`).join('')}<option value="__otra__">Otra (nueva)…</option></select>`}
+      ${it.catNota?`<div class="ci-why">${escDescHtml(it.catNota)}</div>`:''}`)}
+    ${box('desc','Descripción', ch.desc, `<textarea rows="9" ${done?'disabled':''} oninput='ciSetField(${kq},"desc",this.value)'>${escDescHtml(e.desc)}</textarea>
+      <details class="ci-old"><summary>Ver la descripción actual</summary><div>${escDescHtml(p.desc||'(vacía)').replace(/\n/g,'<br>')}</div></details>`)}
+    <div class="ci-part">
+      <div class="ci-part-h"><span>Fotos (${(p.images||[]).length})</span>${f.estado?`<span class="ci-badge" style="background:${fotoTone[f.estado]||'var(--ink-soft)'}">${fotoLabel[f.estado]||escDescHtml(f.estado)}</span>`:''}</div>
+      ${f.nota?`<div class="ci-why">${escDescHtml(f.nota)}</div>`:''}
+      ${f.estado && f.estado!=='ok' ? `<button class="btn-tertiary" style="margin-top:8px;" onclick="ciOpenProduct('${p.id}')">${icon('edit',13)} Abrir la ficha para cambiar fotos</button>` : ''}
+    </div>
+    <div class="ci-actions">
+      ${done || (d && d.s==='skip')
+        ? `<button class="btn-secondary" style="flex:1;" onclick='ciUndo(${kq})'>${d.s==='ok'&&d.before&&Object.keys(d.before).length?'Deshacer cambios':'Regresar a por revisar'}</button>`
+        : `<button class="btn-secondary" onclick='ciDecide(${kq},"no")'>No aplicar</button>
+           <button class="btn-secondary" onclick='ciDecide(${kq},"skip")'>Después</button>
+           <button class="btn-primary" style="flex:1;" ${c.saving?'disabled':''} onclick='ciApprove(${kq})'>${c.saving?'Guardando…':'Aprobar'}</button>`}
+    </div>`);
+}
 const TRASH_DAYS = 30;
 async function deleteProduct(id){
   return moveProductsToTrash([id]);
@@ -6136,6 +6406,8 @@ function renderAdmin(){
   ${state.promoListOpen ? renderPromoListModal() : ''}
   ${state.promoPickOpen ? renderPromoPickModal() : ''}
   ${state.duplicatesOpen ? renderDuplicatesModal() : ''}
+  ${state.ci ? renderCatalogImproveModal() : ''}
+  ${state.ciStash && !state.ci && !state.productModal ? `<button class="ci-back" onclick="openCatalogImprove()">‹ Volver a Mejorar productos</button>` : ''}
   ${state.needsManageOpen ? renderOrganizeModal('need') : ''}
   ${state.productHistoryOpen ? renderProductHistoryModal() : ''}
   ${state.auditLogOpen ? renderAuditLogModal() : ''}
@@ -8790,6 +9062,7 @@ function renderProductos(){
             <div class="tools-menu-label">Tienda en línea</div>
             <button onclick="state.productToolsOpen=false;publishStoreNow()">${icon('refresh-cw',15)} Publicar cambios en la tienda ahora</button>
             <div class="tools-menu-label">Organizar</div>
+            <button onclick="state.productToolsOpen=false;openCatalogImprove()">${icon('star',15)} Mejorar productos (nombre, precio, fotos)</button>
             <button onclick="state.productToolsOpen=false;state.catManageOpen=true;render()">${icon('edit',15)} Categorías</button>
             <button onclick="state.productToolsOpen=false;state.needsManageOpen=true;render()">${icon('tag',15)} Etiquetas "para quién"</button>
             <div class="tools-menu-label">Precios</div>
@@ -18038,7 +18311,7 @@ const NAV_ADMIN_MODALS = [
   ['receiveGoodsModalOpen', ()=>closeReceiveGoodsModal()], ['priceHistoryOpen', ()=>closeProductPriceHistory()],
   ['assignCommissionOrderId', null], ['commissionAgentModal', null], ['auditLogOpen', ()=>closeAuditLog()],
   ['productHistoryOpen', ()=>closeProductHistory()], ['needsManageOpen', false], ['catManageOpen', false],
-  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['promoPickOpen', false], ['duplicatesOpen', false],
+  ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['promoPickOpen', false], ['duplicatesOpen', false], ['ci', ()=>closeCatalogImprove()],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
   ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],
