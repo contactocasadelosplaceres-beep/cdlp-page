@@ -964,6 +964,21 @@ document.addEventListener('wheel', function(e){
   .mv-pick{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border);font-size:14px;min-height:44px;}
   .mv-pick input{width:20px;height:20px;accent-color:var(--primary);} .mv-pick small{margin-left:auto;color:var(--ink-soft);}
 </style>
+<script>/* CUADROS QUE SE CIERRAN AL TOCAR AFUERA: solo se cierran si el toque EMPIEZA y TERMINA en el
+   fondo oscuro. Antes, si alguien seleccionaba texto (o arrastraba el dedo/mouse) dentro de un cuadro
+   y soltaba afuera, el navegador lo contaba como un clic en el fondo y el cuadro se cerraba solo,
+   perdiendo lo que estaba haciendo. Este guardia frena ese "clic" antes de que llegue al fondo. */
+(function(){
+  var FONDOS = '.overlay,.modal-overlay,.pv-overlay,.m-sheet-overlay,.row-more-overlay,.order-actions-overlay,.top-more-overlay';
+  var empezoEnFondo = false;
+  function esFondo(el){ return !!(el && el.nodeType===1 && el.matches && el.matches(FONDOS)); }
+  window.addEventListener('pointerdown', function(e){ empezoEnFondo = esFondo(e.target); }, true);
+  window.addEventListener('click', function(e){
+    if(esFondo(e.target) && !empezoEnFondo){ e.stopPropagation(); e.preventDefault(); }
+    empezoEnFondo = false;
+  }, true);
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>
