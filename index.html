@@ -1088,6 +1088,21 @@
   .drawer-foot .btn-primary{min-height:48px;}
   .drawer-foot .dw-foot-note{margin-top:6px;}
 </style>
+<script>/* CUADROS QUE SE CIERRAN AL TOCAR AFUERA: solo se cierran si el toque EMPIEZA y TERMINA en el
+   fondo oscuro. Antes, si alguien seleccionaba texto (o arrastraba el dedo/mouse) dentro de un cuadro
+   y soltaba afuera, el navegador lo contaba como un clic en el fondo y el cuadro se cerraba solo,
+   perdiendo lo que estaba haciendo. Este guardia frena ese "clic" antes de que llegue al fondo. */
+(function(){
+  var FONDOS = '.overlay,.modal-overlay,.pv-overlay,.m-sheet-overlay,.row-more-overlay,.order-actions-overlay,.top-more-overlay';
+  var empezoEnFondo = false;
+  function esFondo(el){ return !!(el && el.nodeType===1 && el.matches && el.matches(FONDOS)); }
+  window.addEventListener('pointerdown', function(e){ empezoEnFondo = esFondo(e.target); }, true);
+  window.addEventListener('click', function(e){
+    if(esFondo(e.target) && !empezoEnFondo){ e.stopPropagation(); e.preventDefault(); }
+    empezoEnFondo = false;
+  }, true);
+})();
+</script>
 </head>
 <body>
 <div id="root"><div class="sk-msg sk-msg-boot" role="status"><span class="sk-spin" aria-hidden="true"></span>Se está cargando el catálogo…</div></div>
