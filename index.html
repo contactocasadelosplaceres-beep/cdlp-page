@@ -1409,7 +1409,9 @@ async function openProductFromURL(){
   const p = state.products.find(x=>x.id===id);
   const url = new URL(location.href); url.searchParams.delete('producto');
   history.replaceState(history.state, '', url.toString());
-  if(p && !p.hidden){ openProductDetail(p.id); }
+  const vid = params.get('variante');
+  if(vid){ url.searchParams.delete('variante'); history.replaceState(history.state, '', url.toString()); }
+  if(p && !p.hidden){ openProductDetail(p.id, vid||undefined); }
   else { showToast('Ese producto ya no está disponible'); }
 }
 // Cuando ya está el catálogo completo, lo que siga en el carrito sin existir (se ocultó o se

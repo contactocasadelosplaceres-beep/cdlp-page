@@ -178,7 +178,10 @@ function writeSeoPages(ROOT, SITE, products, settings, when) {
         .concat([{ '@type': 'ListItem', position: cs[0] ? 3 : 2, name: p.name, item: purl(p) }]) },
     ];
     const shop = `/?producto=${encodeURIComponent(p.id)}`;
-    const body = `<main>
+    // Enlace compartido desde el panel (/p/<nombre>/?w=1&v=<variante>): WhatsApp lee la vista previa
+    // de esta página (no corre JavaScript) y a la clienta la manda directo al producto en la tienda.
+    const go = `<script>(function(){try{var q=new URLSearchParams(location.search);if(q.get('w')==='1'){var v=q.get('v');location.replace(${JSON.stringify(shop)}+(v?'&variante='+encodeURIComponent(v):''))}}catch(e){}})()</script>`;
+    const body = `${go}<main>
 <nav class="bc"><a href="/">Inicio</a>${cs[0] ? ` › <a href="/c/${catSlug.get(cs[0])}/">${esc(cs[0])}</a>` : ''} › ${esc(p.name)}</nav>
 <div class="prod">
 <div class="gal">${imgs[0] ? `<img src="${esc(imgs[0].replace(SITE, ''))}" alt="${esc(p.name)}" width="480" height="480">` : ''}${imgs.length > 1 ? `<div class="th">${imgs.slice(1).map(s => `<img src="${esc(s.replace(SITE, ''))}" alt="${esc(p.name)}" loading="lazy" width="72" height="72">`).join('')}</div>` : ''}</div>
@@ -226,7 +229,9 @@ ${related.length ? `<h2>También te puede gustar</h2><div class="grid">${related
       layout({ site: SITE, title, desc, canonical: curl(c), ogImage: SITE + '/logo.png', jsonld, body }))) written++;
   });
 
-  const removed = prune(path.join(ROOT, 'p'), new Set(slugOf.values())) + prune(path.join(ROOT, 'c'), new Set(catSlug.values()));
+  const removed = prune(path.join(ROOT, 'p'), new Set([...slugOf.values(), 'enlaces.json'])) + prune(path.join(ROOT, 'c'), new Set(catSlug.values()));
+  // Qué página le tocó a cada producto: el panel la usa para compartir el enlace correcto.
+  writeIfChanged(path.join(ROOT, 'p', 'enlaces.json'), JSON.stringify({ links: Object.fromEntries(slugOf) }));
 
   // sitemap.xml: inicio, categorías y productos (las direcciones ?producto= ya no se listan).
   const u = (loc, extra) => `  <url><loc>${esc(loc)}</loc>${extra || ''}</url>`;
