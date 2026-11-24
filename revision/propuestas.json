@@ -1,44 +1,7 @@
 {
 "version": 1,
-"actualizado": "20/11/2026",
+"actualizado": "23/11/2026",
 "items": [
-{
-"id": "ySI49j2joOx82ObVdrQu",
-"nombre": "Kit de 17 fundas y anillos para pene transparentes",
-"nombreNota": "Dice qué trae y cuántas piezas; \"funda de pene\" solo no explica que también trae anillos.",
-"precio": 399,
-"precioNota": "Un set de 5 fundas parecido está desde $129 en Amazon y tu set de 5 cuesta $200 ($40 por pieza). A $500 el kit de 17 sale más caro por pieza que ese; a $399 queda como la opción de volumen. Está agotado: decide si lo vuelves a pedir.",
-"refs": [
-{
-"t": "Amazon México",
-"n": "Set de 5 fundas transparentes",
-"p": 129,
-"u": "https://www.amazon.com.mx/gp/bestsellers/hpc/9846009011"
-},
-{
-"t": "Tu tienda",
-"n": "Set de 5 fundas",
-"p": 200
-}
-],
-"categorias": [
-"Anillos y fundas"
-],
-"desc": "Un kit completo para jugar con texturas, grosor y largo. Trae 11 fundas con relieves diferentes y 6 anillos de silicona para variar cada vez.\n\n• Las fundas dan sensaciones nuevas a ella\n• Los anillos ayudan a mantener la erección firme por más tiempo\n• Transparentes y reutilizables\n• Úsalas con lubricante a base de agua",
-"foto": {
-"estado": "mejorar",
-"nota": "Se entiende, pero es chica (500 px) y es un dibujo. Una foto real del kit vende más."
-},
-"paraQuien": [
-"para-el",
-"compartir-pareja"
-],
-"agotado": {
-"accion": "ocultar",
-"nota": "Tienes el set de 5 fundas con stock, que cubre lo mismo. Ocúltalo mientras no lo vuelvas a pedir; si lo pides, ya queda con el nombre y precio nuevos."
-},
-"lote": 1
-},
 {
 "id": "NLBkyfrXKLupSWrwVEJ6",
 "nombre": "Masturbador 2 en 1 vagina y dildo realista 18 cm",
@@ -1494,6 +1457,381 @@
 "nota": "Solo tiene una foto. Agrega una que muestre cómo se usa."
 },
 "lote": 4
+},
+{
+"id": "dSMBDgtnVpGOIzs2fUTY",
+"nombre": "Estimulador de clítoris con lengua vibradora recargable",
+"nombreNota": "\"Lengua vibradora\" solo no dice para qué es. Así lo buscan.",
+"precio": 349,
+"precioNota": "Estimuladores con lengua en Amazon: $199 (10 modos), $310 y $388. A $399 quedas arriba. Sugiero $349.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Vibrador con lengua, 10 modos",
+"p": 199,
+"u": "https://www.amazon.com.mx/vibrador-lengua/s?k=vibrador+lengua"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador con lengua para mujeres",
+"p": 310,
+"u": "https://amazon.com.mx/Estimulador-Cli%CC%81toris-Lamiendo-Cl%C3%ADtoris-Vibrador/dp/B0D2WYV1XS"
+},
+{
+"t": "Amazon México",
+"n": "Lengua con 8 modos de movimiento",
+"p": 388,
+"u": "https://www.amazon.com.mx/vibrador-lengua/s?k=vibrador+lengua"
+}
+],
+"categorias": [
+"Succionadores"
+],
+"catNota": "Lo paso a Succionadores, donde están los estimuladores de clítoris con lengua.",
+"paraQuien": [
+"para-ella",
+"para-pareja"
+],
+"desc": "Una lengua de silicona suave que se mueve y vibra como un beso justo donde más lo sientes. Perfecta para el clítoris y los pezones.\n\n• Varios modos de vibración\n• Recargable\n• Fácil de lavar\n\nMedidas:\n• Largo total: 11 cm\n• Parte de la lengua: 7 cm",
+"foto": {
+"estado": "ok",
+"nota": "Bien, trae foto de medidas."
+},
+"lote": 5
+},
+{
+"id": "uim3ySxWuTAmn8SFgR7C",
+"nombre": "Vibrador de precisión tipo pluma con 3 accesorios",
+"nombreNota": "\"Pluma estimuladora\" se confunde con una pluma de cosquillas. Es un vibrador delgado con puntas intercambiables.",
+"precio": 399,
+"precioNota": "Vibradores de precisión con diseño elegante, como el lápiz labial vibrador de Amazon, están en $549. A $399 estás bien. Lo dejo igual.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Lápiz labial vibrador recargable",
+"p": 549,
+"u": "https://www.amazon.com.mx/L%C3%A1piz-Labial-Patrones-Diferentes-Vibraci%C3%B3n/dp/B0BYWHWWN8"
+}
+],
+"categorias": [
+"Vibradores"
+],
+"paraQuien": [
+"para-ella",
+"para-pareja"
+],
+"desc": "Un vibrador delgado y elegante para estimular con precisión el clítoris y los pezones. Trae 3 puntas intercambiables para cambiar la sensación cada vez.\n\n• Incluye 3 accesorios\n• Recargable\n• Medidas en las fotos",
+"foto": {
+"estado": "ok",
+"nota": "Bien, trae medidas."
+},
+"lote": 5
+},
+{
+"id": "WjKC8alvsqKwuesgitz6",
+"nombre": "Rosa con lengua vibradora para clítoris, 10 modos",
+"nombreNota": "Agrega para qué sirve y los modos.",
+"precio": 379,
+"precioNota": "En Mercado Libre una rosa con lengua está en $369 y en Amazon parecidas van de $344.15 a $358.92. A $440 quedas arriba. Sugiero $379. Tienes 8 piezas.",
+"refs": [
+{
+"t": "Mercado Libre",
+"n": "Rose lengua con carga magnética",
+"p": 369,
+"u": "https://articulo.mercadolibre.com.mx/MLM-1921972413-rose-lengua-lamiendo-vibrador-carga-magnetica-_JM"
+},
+{
+"t": "Amazon México",
+"n": "Rosa con lengua vibratoria",
+"p": 358.92,
+"u": "https://www.amazon.com.mx/Vibrador-vibratoria-estimulaci%C3%B3n-recargable-resistente/dp/B0FDP3C4VR"
+},
+{
+"t": "Amazon México",
+"n": "Illuminaughty Rose Toy",
+"p": 344.15,
+"u": "https://www.amazon.com.mx/rose-toy/s?k=rose+toy"
+}
+],
+"categorias": [
+"Succionadores"
+],
+"catNota": "Lo paso a Succionadores, donde están las demás rosas.",
+"paraQuien": [
+"para-ella",
+"para-pareja"
+],
+"desc": "La famosa rosa, ahora con una lengua que se mueve y vibra sobre el clítoris como un beso. Discreta, bonita y muy potente.\n\n• 10 modos de vibración\n• Recargable\n• Silicona suave\n\nMedidas:\n• 8 × 5.5 cm",
+"foto": {
+"estado": "ok",
+"nota": "Bien, trae medidas."
+},
+"lote": 5
+},
+{
+"id": "8BYqMIoxhlEHfEJbt0nv",
+"nombre": "Vibrador conejito para parejas con control por app, 9 modos",
+"nombreNota": "Dice que es para parejas, que es lo que lo hace distinto.",
+"precio": 499,
+"precioNota": "Uno parecido con app y forma de conejo está en $530.52 en Amazon, y el Satisfyer Double Plus para parejas en $775.95. Sugiero $499 para que quede abajo de esos.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Healexcer vibrador conejo con app",
+"p": 530.52,
+"u": "https://www.amazon.com.mx/Healexcer-Vibrador-aplicaci%C3%B3n-distancia-estimulador/dp/B0DYNHF69W"
+},
+{
+"t": "Amazon México",
+"n": "Satisfyer Double Plus Remote",
+"p": 775.95,
+"u": "https://www.amazon.com.mx/Satisfyer-Double-Vibrador-Parejas-Control/dp/B0785NJXMJ"
+}
+],
+"categorias": [
+"Vibradores"
+],
+"paraQuien": [
+"para-ella",
+"compartir-pareja",
+"para-pareja"
+],
+"desc": "Una parte va dentro y las orejitas de conejo quedan sobre el clítoris. Úsalo sola o durante la penetración, y deja que tu pareja lo controle desde su celular.\n\n• Control por app\n• 9 modos de vibración\n• Recargable\n• Lavable\n• Medidas en las fotos",
+"agotado": {
+"accion": "ocultar",
+"nota": "Tienes otro vibrador para parejas con app con stock. Ocúltalo mientras no lo vuelvas a pedir."
+},
+"foto": {
+"estado": "ok",
+"nota": "Bien."
+},
+"lote": 5
+},
+{
+"id": "XDfZqgZ71WCVrEyeZ1ZJ",
+"nombre": "Vibrador ballena verde para usar en la ropa interior con control por app",
+"nombreNota": "Mismo nombre que la ballena rosa, para que se vean como el mismo producto en otro color.",
+"precio": 399,
+"precioNota": "Es el mismo modelo que la ballena rosa. En Mercado Libre está en $267. Te sugerí $399 para la rosa, así que esta debería quedar igual. Si las unes como variantes de color, mejor.",
+"refs": [
+{
+"t": "Mercado Libre",
+"n": "Vibrador ballena con app",
+"p": 267,
+"u": "https://articulo.mercadolibre.com.mx/MLM-1756461848-consolador-vibrador-con-diseno-de-ballena-y-8-modos-rosa-v-_JM"
+}
+],
+"categorias": [
+"Vibradores"
+],
+"paraQuien": [
+"para-ella",
+"compartir-pareja",
+"para-pareja"
+],
+"nota": "Es la misma ballena que la rosa: úsala en \"Unir como variantes\" para dejar un solo producto con dos colores.",
+"desc": "Una ballenita que se coloca dentro de la ropa interior y vibra justo sobre el clítoris. Tu pareja la controla desde su celular, aunque estén lejos.\n\n• Control por app\n• Recargable\n• Silicona\n\nMedidas:\n• 9.5 × 5 cm",
+"foto": {
+"estado": "cambiar",
+"nota": "Las fotos son muy chicas (352 px). Usa las de la ballena rosa si son del mismo proveedor."
+},
+"lote": 5
+},
+{
+"id": "wMpLbofdvYo5yG2WTOks",
+"nombre": "Vibrador para parejas con control remoto",
+"nombreNota": "Dice para quién es.",
+"precio": 399,
+"precioNota": "En Mercado Libre uno parecido está en $759.05 y en Amazon desde $257.77. A $399 estás bien. Lo dejo igual.",
+"refs": [
+{
+"t": "Mercado Libre",
+"n": "Vibrador para parejas con control remoto",
+"p": 759.05,
+"u": "https://articulo.mercadolibre.com.mx/MLM-705158381-vibrador-para-parejas-multiorgasmico-c-control-remoto-_JM"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador de pareja con control",
+"p": 257.77,
+"u": "https://www.amazon.com.mx/frecuencias-aplicaci%C3%B3n-impermeable-recargable-estimulador/dp/B09FLK39G6"
+}
+],
+"categorias": [
+"Vibradores"
+],
+"paraQuien": [
+"para-ella",
+"compartir-pareja",
+"para-pareja"
+],
+"desc": "Se coloca dentro y sobre el clítoris al mismo tiempo, y se queda puesto durante la penetración para que los dos sientan la vibración. Con control remoto para cambiar el ritmo sin detenerse.\n\n• Control remoto\n• Recargable\n• Medidas en las fotos",
+"agotado": {
+"accion": "pedir",
+"nota": "Es tu vibrador para parejas más barato y está bien de precio contra la competencia. Vale la pena volver a pedirlo."
+},
+"foto": {
+"estado": "ok",
+"nota": "Bien."
+},
+"lote": 5
+},
+{
+"id": "13evqQFzb8xaITKflKfN",
+"nombre": "Vibrador conejo recargable punto G y clítoris, 22.5 cm",
+"nombreNota": "Dice qué estimula, que es lo que se busca en un conejo.",
+"precio": 399,
+"precioNota": "Conejos recargables en Amazon: $298, $399 y $499. A $480 quedas arriba. Sugiero $399.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo AGGP",
+"p": 298,
+"u": "https://www.amazon.com.mx/Vibradores-Vibradorador-Estimulador-Recargable-Impermeable/dp/B0CKSVGMFC"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo 12 modos",
+"p": 399,
+"u": "https://www.amazon.com.mx/vibrador-recargable/s?k=vibrador+recargable"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo YICO",
+"p": 499,
+"u": "https://www.amazon.com.mx/Vibrador-Vibradorador-masajeador-recargable-Aut%C3%A9ntico/dp/B0987PQQS8"
+}
+],
+"categorias": [
+"Vibradores",
+"Dildos y arneses"
+],
+"paraQuien": [
+"para-ella"
+],
+"desc": "El clásico conejo: el cuerpo estimula el punto G mientras las orejitas vibran sobre el clítoris. Silencioso, recargable y resistente al agua.\n\n• Varios modos de vibración\n• Recargable\n• Silencioso\n• Resistente al agua\n\nMedidas:\n• Largo: 22.5 cm\n• Diámetro: 3.5 cm",
+"foto": {
+"estado": "mejorar",
+"nota": "Solo tiene una foto. Agrega una con medidas."
+},
+"lote": 5
+},
+{
+"id": "koJ5viU7VQoPnf3cs8d1",
+"nombre": "Vibrador conejo rosa con mango, 21.5 cm",
+"nombreNota": "Tenía casi el mismo nombre que el otro conejo. Así se distinguen.",
+"precio": 349,
+"precioNota": "Conejos en Amazon van de $238 a $399. Tienes 3 conejos y este debe quedar como el económico. Sugiero $349. Tienes 7 piezas.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Vibrador conejo 10 modos",
+"p": 238,
+"u": "https://www.amazon.com.mx/vibrador-recargable/s?k=vibrador+recargable"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo AGGP",
+"p": 298,
+"u": "https://www.amazon.com.mx/Vibradores-Vibradorador-Estimulador-Recargable-Impermeable/dp/B0CKSVGMFC"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo 12 modos",
+"p": 399,
+"u": "https://www.amazon.com.mx/vibrador-recargable/s?k=vibrador+recargable"
+}
+],
+"categorias": [
+"Vibradores",
+"Dildos y arneses"
+],
+"paraQuien": [
+"para-ella",
+"empezando"
+],
+"desc": "Conejo con mango para manejarlo cómodo: el cuerpo llega al punto G y las orejas vibran sobre el clítoris. Varios modos para encontrar tu favorito.\n\n• Varios modos de vibración\n• Recargable\n\nMedidas:\n• Largo total: 21.5 cm\n• Largo que se introduce: 10.5 cm\n• Ancho: 2.6 cm",
+"foto": {
+"estado": "mejorar",
+"nota": "Solo tiene una foto."
+},
+"lote": 5
+},
+{
+"id": "RpDEOfJd0AvIEaVrFlNH",
+"nombre": "Vibrador conejo rojo compacto, 14 cm",
+"nombreNota": "\"Compacto\" lo distingue de los otros conejos.",
+"precio": 399,
+"precioNota": "Conejos genéricos en Amazon van de $298 a $499 y el Maui de Platanomelón cuesta $656.80. A $490 está arriba de los genéricos. Sugiero $399.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo AGGP",
+"p": 298,
+"u": "https://www.amazon.com.mx/Vibradores-Vibradorador-Estimulador-Recargable-Impermeable/dp/B0CKSVGMFC"
+},
+{
+"t": "Amazon México",
+"n": "Vibrador de conejo YICO",
+"p": 499,
+"u": "https://www.amazon.com.mx/Vibrador-Vibradorador-masajeador-recargable-Aut%C3%A9ntico/dp/B0987PQQS8"
+},
+{
+"t": "Amazon México",
+"n": "Platanomelón Maui",
+"p": 656.8,
+"u": "https://www.amazon.com.mx/vibrador-conejito/s?k=vibrador+conejito"
+}
+],
+"categorias": [
+"Vibradores",
+"Dildos y arneses"
+],
+"paraQuien": [
+"para-ella"
+],
+"desc": "Un conejo elegante y compacto: el cuerpo con relieves estimula por dentro mientras las orejas vibran sobre el clítoris.\n\n• Recargable\n• Resistente al agua\n\nMedidas:\n• Largo: 14 cm\n• Largo que se introduce: 9 cm\n• Ancho: 3 cm",
+"foto": {
+"estado": "mejorar",
+"nota": "Solo tiene una foto."
+},
+"lote": 5
+},
+{
+"id": "BMP9hqSz4AjeY8MNlUZE",
+"nombre": "Vibrador curvo de doble estimulación con control remoto",
+"nombreNota": "Agrega el control remoto, que es lo que más vende.",
+"precio": 799,
+"precioNota": "Vibradores de doble estimulación con control: Satisfyer Double Plus $775.95 y el conejo IMO $866.20 en Amazon. A $799 estás en rango. Lo dejo igual.",
+"refs": [
+{
+"t": "Amazon México",
+"n": "Satisfyer Double Plus Remote",
+"p": 775.95,
+"u": "https://www.amazon.com.mx/Satisfyer-Double-Vibrador-Parejas-Control/dp/B0785NJXMJ"
+},
+{
+"t": "Amazon México",
+"n": "IMO vibrador de conejo",
+"p": 866.2,
+"u": "https://www.amazon.com.mx/IMO-Upgraded-impermeable-recargable-Masajeador/dp/B07BC9XVP1"
+}
+],
+"categorias": [
+"Vibradores",
+"Dildos y arneses"
+],
+"paraQuien": [
+"para-ella",
+"para-el",
+"compartir-pareja"
+],
+"desc": "Estimula por dentro y por fuera al mismo tiempo. Tiene modo especial para próstata, así que también lo puede disfrutar él. Con control remoto para cambiar el ritmo sin soltarlo.\n\n• Control remoto\n• 10 modos de vibración\n• Recargable\n• Modo para próstata\n\nMedidas:\n• Largo: 17.5 cm\n• Largo que se introduce: 15 cm\n• Diámetro: 3.5 cm",
+"foto": {
+"estado": "mejorar",
+"nota": "Solo tiene una foto."
+},
+"lote": 5
 }
 ]
 }
