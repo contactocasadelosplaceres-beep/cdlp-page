@@ -207,6 +207,44 @@ document.addEventListener('wheel', function(e){
   .quick-actions{display:flex;gap:8px;margin-bottom:18px;}
   .quick-actions > *{flex:1 1 0;min-width:0;}
   .quick-actions a,.quick-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:70px;border-radius:var(--radius-md);background:var(--surface);border:1.5px solid var(--border);font-size:12.5px;font-weight:700;color:var(--primary-deep);text-decoration:none;text-align:center;padding:8px;}
+  .quick-actions.qa-4{flex-wrap:wrap;} .quick-actions.qa-4 > *{flex:1 1 calc(50% - 4px);min-height:58px;flex-direction:row;}
+  .gs-overlay{align-items:flex-start;}
+  .gs-modal{max-width:620px;width:100%;padding:12px 12px 0;display:flex;flex-direction:column;max-height:calc(100dvh - 24px);}
+  .gs-head,.gs-filters,.gs-ctx,.gs-scan,.gs-selbar{flex:none;}
+  .gs-head{display:flex;gap:8px;align-items:center;}
+  .gs-input{flex:1;display:flex;align-items:center;gap:6px;border:1.5px solid var(--primary);border-radius:12px;padding:0 4px 0 10px;background:var(--surface);color:var(--ink-soft);}
+  .gs-input input{flex:1;border:none !important;box-shadow:none !important;background:transparent;font-size:16px;padding:11px 2px;min-width:0;outline:none;}
+  .gs-ico,.gs-close{background:none;border:none;padding:8px;color:var(--primary-deep);display:flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;}
+  .gs-ctx{margin:8px 0 0;padding:7px 10px;border-radius:10px;background:#e3f6ee;color:#0b5a3e;font-size:13px;display:flex;align-items:center;gap:6px;}
+  .gs-ctx button{margin-left:auto;background:none;border:none;color:inherit;padding:4px;}
+  .gs-filters{display:flex;gap:6px;overflow-x:auto;padding:10px 0 8px;scrollbar-width:none;}
+  .gs-filters::-webkit-scrollbar{display:none;}
+  .gs-filters button,.gs-chips button{flex:none;border:1.5px solid var(--border);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;color:var(--ink-soft);white-space:nowrap;display:inline-flex;align-items:center;gap:5px;}
+  .gs-filters button.on{background:var(--primary-deep);border-color:var(--primary-deep);color:var(--surface);}
+  .gs-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .gs-body{overflow-y:auto;flex:1;padding-bottom:14px;-webkit-overflow-scrolling:touch;}
+  .gs-sec{margin-bottom:14px;} .gs-sec .panel-title{margin-bottom:8px;}
+  .gs-card{border:1.5px solid var(--border);border-radius:14px;padding:10px;margin-bottom:8px;background:var(--surface);}
+  .gs-card.picked{border-color:var(--primary);}
+  .gs-row{display:flex;gap:10px;align-items:center;} .gs-row .row-main{min-width:0;flex:1;}
+  .gs-check{width:34px;height:34px;flex:none;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--primary-deep);}
+  .gs-card.picked .gs-check{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .gs-vars{display:flex;gap:6px;overflow-x:auto;margin-top:8px;scrollbar-width:none;}
+  .gs-vars button{flex:none;border:1.5px solid var(--border);border-radius:999px;padding:5px 10px;font-size:12.5px;background:var(--surface);color:var(--ink);}
+  .gs-vars button.on{border-color:var(--primary);background:var(--primary);color:#fff;} .gs-vars button.out{opacity:.55;text-decoration:line-through;}
+  .gs-hint{font-size:11.5px;color:var(--ink-soft);margin-top:4px;}
+  .gs-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;}
+  .gs-actions > *{flex:1 1 auto;min-height:40px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface);font-size:13px;font-weight:700;color:var(--primary-deep);display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 10px;text-decoration:none;}
+  .gs-pact{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;flex-wrap:nowrap;}
+  .gs-pact > *{flex-direction:column;gap:1px;padding:5px 4px;min-height:46px;} .gs-pact > .gs-wa{flex-direction:row;gap:6px;} .gs-pact small{font-size:11px;font-weight:700;}
+  .gs-actions .gs-wa,.gs-selbar .gs-wa{background:#1fa855;border-color:#1fa855;color:#fff;}
+  .gs-more{width:100%;background:none;border:none;color:var(--primary-deep);font-weight:700;padding:8px;text-decoration:underline;}
+  .gs-scan{margin:4px 0 8px;text-align:center;} .gs-scan #gs-scan-view{border-radius:12px;overflow:hidden;min-height:120px;background:#000;}
+  .gs-scan button{margin-top:6px;background:none;border:none;color:var(--primary-deep);font-weight:700;text-decoration:underline;}
+  .gs-selbar{position:sticky;bottom:0;display:flex;gap:6px;align-items:center;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);}
+  .gs-selbar span{flex:1;font-size:13px;} .gs-selbar button{min-height:42px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);padding:0 12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;color:var(--primary-deep);}
+  .gs-flash{animation:gsFlash 2.2s ease;border-radius:10px;}
+  @keyframes gsFlash{0%,60%{box-shadow:0 0 0 3px var(--primary);background:rgba(200,80,150,.08);}100%{box-shadow:none;}}
   .dash-sec{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);margin-bottom:12px;box-shadow:var(--shadow-sm);}
   .dash-sec > summary{list-style:none;display:flex;align-items:center;gap:10px;padding:15px 16px;cursor:pointer;min-height:52px;}
   .dash-sec > summary::-webkit-details-marker{display:none;}
@@ -1555,7 +1593,7 @@ let state = {
   cashRegisters:[], cajaFilter:"todas", cajaCenterFilter:"Todos", cajaDetail:null,
   orderDiscountEditing:false, orderDiscountType:"fixed", orderDiscountValueInput:"", orderDiscountCouponInput:"", orderDiscountReasonInput:"",
   abandonedCarts:[], abandonedCartsOpen:false,
-  globalSearchOpen:false, globalSearchQuery:"",
+  globalSearchOpen:false, globalSearchQuery:"", gsFilter:'todo', gsShowAll:false, gsSel:[], gsVar:{}, gsCtx:null, gsScanOpen:false, gsReplyEdit:null, gsTplEdit:false, gsFocusOnce:false, shortcutsEditOpen:false,
   histImportFileName:"", histImportData:null, histImportPreview:null, histImportBusy:false, histImportResult:null,
   newOrderCount:0, lastOrderCheck:null, healthOpen:null, healthShowDismissed:false,
   promoBannerEditId:null, promoBannerDraft:null,
@@ -2380,7 +2418,7 @@ const SETTINGS_FIELD_LABELS = {
   featuredProductIds:'Productos destacados', recurringExpenses:'Gastos fijos mensuales', testimonials:'Testimonios', socialInstagram:'Instagram',
   socialFacebook:'Facebook', contactEmail:'Correo de contacto', customCss:'CSS personalizado',
   storeAddress:'Dirección de origen', deliveryWhatsapp:'WhatsApp del repartidor', slackWebhookUrl:'Webhook de notificaciones',
-  shippingNote:'Nota de envío', localShippingCity:'Ciudad de envío local', localShippingCost:'Costo de envío local', checkoutReminderCategories:'Categorías de venta complementaria', checkoutReminderTitle:'Título de venta complementaria', checkoutReminderText:'Texto de venta complementaria', wholesaleTiers:'Precios de mayoreo', coupons:'Cupones', promotions:'Promociones',
+  shareTemplate:'Mensaje al compartir productos', shareTemplateMulti:'Mensaje al compartir varios productos', quickReplies:'Respuestas rápidas', shippingNote:'Nota de envío', localShippingCity:'Ciudad de envío local', localShippingCost:'Costo de envío local', checkoutReminderCategories:'Categorías de venta complementaria', checkoutReminderTitle:'Título de venta complementaria', checkoutReminderText:'Texto de venta complementaria', wholesaleTiers:'Precios de mayoreo', coupons:'Cupones', promotions:'Promociones',
   logoUrl:'Logo', salesGoalMonthly:'Meta de venta mensual', checkoutReminderProducts:'Productos sugeridos al pagar',
   faqItems:'Preguntas frecuentes', seasonCustomEvents:'Temporadas personalizadas', seasonHidden:'Temporadas ocultas',
   theme:'Apariencia (colores/tipografía)', deliverySurveyQuestions:'Preguntas de la encuesta post-entrega',
@@ -2675,6 +2713,7 @@ function icon(name, size){
   const P = {
     x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
     check:'<path d="M20 6 9 17l-5-5"/>',
+    scan:'<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M14 8v8M17 8v8"/>',
     activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
     calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
@@ -3128,95 +3167,513 @@ function renderAbandonedCartsModal(){
   </div>`;
 }
 
-/* ============== BÚSQUEDA GLOBAL ==============
-   Un solo buscador (botón "Buscar" en la barra superior) que busca a la vez en productos,
-   pedidos/ventas y clientes, y al hacer clic en un resultado te lleva directo a la pestaña
-   y abre el detalle correspondiente. Cada grupo de resultados solo se muestra si la cuenta
-   tiene permiso para esa sección (igual criterio que canAccessTab/TAB_PERMISSION). */
-function openGlobalSearch(){ state.globalSearchOpen=true; render(); }
-function closeGlobalSearch(){ state.globalSearchOpen=false; state.globalSearchQuery=""; render(); }
+/* ============== BÚSQUEDA GLOBAL → CENTRO DE ACCIONES ==============
+   Un solo buscador (lupa de arriba, botón "Buscar" del inicio) que encuentra productos, pedidos,
+   clientes, cupones, códigos de mayoreo, ajustes, secciones y acciones, y deja HACER cosas desde el
+   resultado: compartir un producto por WhatsApp (con foto o solo enlace, una variante en específico
+   o varios a la vez), escribirle a la clienta, avanzar un pedido, copiar un cupón o ir directo a un
+   ajuste. Todo sale de lo que el panel ya tiene cargado: no gasta lecturas de Firebase.
+   Cada grupo solo aparece si la cuenta tiene permiso para esa sección (canAccessTab). */
+const GS_LIMIT = 8, GS_ALL = 60;
+const GS_FILTERS = [['todo','Todo'],['productos','Productos'],['pedidos','Pedidos'],['clientes','Clientes'],['ajustes','Ajustes y acciones'],['respuestas','Respuestas']];
+const GS_DEFAULT_SHARE = '¡Hola! Te comparto este producto 😊\n*{nombre}*{variante}\n{precio}\n{enlace}';
+const GS_DEFAULT_SHARE_MULTI = '¡Hola! Te comparto estas opciones 😊\n\n{lista}\n\nCualquier duda aquí estoy.';
+function gsDefaultReplies(){
+  const s = state.settings||{};
+  return [
+    {id:'horario', title:'Horario', text:`Nuestro horario es ${s.schedule||'(escribe tu horario)'} 😊`},
+    {id:'comprar', title:'Cómo comprar', text:`Puedes pedir directo en la tienda: ${gsStoreBase()}\nEliges tus productos, llenas tus datos y te confirmamos por WhatsApp. Pagas al recibir.`},
+    {id:'envio', title:'Envío y pago', text:`El envío en ${s.localShippingCity||'Cd. Guzmán'} cuesta $${s.localShippingCost!=null&&s.localShippingCost!==''?s.localShippingCost:35}. Otras ciudades: te cotizamos. Pagas al recibir.`},
+    {id:'discreto', title:'Empaque discreto', text:'Todo se entrega en empaque discreto, sin marcas ni nombre del producto. Nadie sabe qué hay adentro 🤫'},
+  ];
+}
+function gsReplies(){ const r = (state.settings||{}).quickReplies; return Array.isArray(r) ? r : gsDefaultReplies(); }
+function gsCanEditSettings(){ return canAccessTab('configuración'); }
+function gsStoreBase(){ return location.href.replace(/admin(\.html)?([?#].*)?$/, ''); }
+const gsEsc = s => (typeof escDescHtml==='function' ? escDescHtml(s) : String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+// Texto seguro dentro de onclick="f('...')": sin comillas, sin < > & ni diagonales.
+const gsJsArg = s => String(s==null?'':s).replace(/[\\'"<>&`]/g,'');
+const gsMoney = n => '$' + (Math.round(Number(n||0)*100)/100).toLocaleString('es-MX', {maximumFractionDigits:2});
+function gsLS(k, d){ try{ const v = JSON.parse(localStorage.getItem(k)||'null'); return v==null ? d : v; }catch(e){ return d; } }
+function gsLSset(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+// ---- Enlaces de producto ----
+// Las páginas /p/<nombre>/ (las genera la publicación del catálogo) se ven en WhatsApp con el nombre
+// y el precio del producto; con ?w=1 mandan a la clienta directo al producto en la tienda.
+// p/enlaces.json dice qué página le tocó a cada producto. Si todavía no tiene (producto recién
+// creado y sin publicar), se usa el enlace normal de la tienda.
+let _gsLinks = null, _gsLinksLoading = null;
+function gsLoadLinks(){
+  if(_gsLinks) return Promise.resolve();
+  if(_gsLinksLoading) return _gsLinksLoading;
+  _gsLinksLoading = fetch(gsStoreBase()+'p/enlaces.json', {cache:'no-cache'}).then(r=>r.ok?r.json():{}).then(j=>{ _gsLinks = (j && j.links) || {}; }).catch(()=>{ _gsLinks = {}; }).finally(()=>{ _gsLinksLoading = null; });
+  return _gsLinksLoading;
+}
+function storeProductLink(p, vid){
+  const base = gsStoreBase(), slug = _gsLinks && _gsLinks[p.id];
+  if(slug) return `${base}p/${slug}/?w=1${vid?'&v='+encodeURIComponent(vid):''}`;
+  return `${base}?producto=${encodeURIComponent(p.id)}${vid?'&variante='+encodeURIComponent(vid):''}`;
+}
+// Precio como lo ve la clienta (con promoción y precio propio de la variante).
+function gsPrice(p, v){
+  const list = v && v.priceOverride>0 ? Number(v.priceOverride) : Number(p.price)||0;
+  let now = list;
+  if(v && v.promoPriceOverride>0 && v.promoPriceOverride<list) now = Number(v.promoPriceOverride);
+  else if(!(v && v.priceOverride>0) && p.promoPrice>0 && p.promoPrice<list) now = Number(p.promoPrice);
+  return {list, now};
+}
+function gsPriceTxt(p, v){
+  if(!v && (p.variants||[]).length){
+    const ns = p.variants.map(x=>gsPrice(p,x).now).filter(n=>n>0);
+    const lo = Math.min(...ns), hi = Math.max(...ns);
+    if(ns.length && lo!==hi) return `Desde ${gsMoney(lo)}`;
+  }
+  const pr = gsPrice(p, v);
+  return pr.now<pr.list ? `${gsMoney(pr.now)} (antes ${gsMoney(pr.list)})` : gsMoney(pr.now);
+}
+function gsFill(tpl, map){ return String(tpl||'').replace(/\{(\w+)\}/g, (m,k)=> map[k]!=null ? map[k] : m); }
+function gsShareText(p, vid){
+  const v = vid ? (p.variants||[]).find(x=>x.id===vid) : null;
+  const s = state.settings||{};
+  return gsFill(s.shareTemplate || GS_DEFAULT_SHARE, {nombre:p.name, variante: v ? ` (${varLabelOf(v)})` : '', precio: gsPriceTxt(p, v), enlace: storeProductLink(p, vid), tienda: s.storeName||''}).trim();
+}
+function gsMultiText(ids){
+  const s = state.settings||{};
+  const lista = ids.map(id=>{
+    const [pid, vid] = id.split('::'); const p = state.products.find(x=>x.id===pid); if(!p) return '';
+    const v = vid ? (p.variants||[]).find(x=>x.id===vid) : null;
+    return `• *${p.name}*${v?` (${varLabelOf(v)})`:''} — ${gsPriceTxt(p, v)}\n  ${storeProductLink(p, vid)}`;
+  }).filter(Boolean).join('\n');
+  return gsFill(s.shareTemplateMulti || GS_DEFAULT_SHARE_MULTI, {lista, tienda:s.storeName||''}).trim();
+}
+// A quién se manda: si el buscador se abrió desde una clienta o un pedido, directo a su número.
+function gsWaUrl(text){
+  const num = (state.gsCtx && state.gsCtx.phone || '').replace(/\D/g,'');
+  const full = num.length===10 ? '52'+num : num;
+  return full ? `https://wa.me/${full}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+function gsOpenWa(text){ window.open(gsWaUrl(text), '_blank'); }
+function gsCopy(text, msg){
+  const ok = ()=>showToast(msg||'Copiado');
+  try{ navigator.clipboard.writeText(text).then(ok).catch(()=>gsCopyFallback(text, ok)); }catch(e){ gsCopyFallback(text, ok); }
+}
+function gsCopyFallback(text, ok){
+  const t = document.createElement('textarea'); t.value = text; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select();
+  try{ document.execCommand('copy'); ok(); }catch(e){ showToast('No se pudo copiar'); } t.remove();
+}
+function gsNoteShared(key){
+  const r = gsLS('cdlp_gs_shared', []).filter(x=>x!==key); r.unshift(key); gsLSset('cdlp_gs_shared', r.slice(0,12));
+}
+function gsVarOf(pid){ return (state.gsVar||{})[pid] || ''; }
+// Se abre en el mismo toque (sin esperar nada): si el celular ve una espera, bloquea la ventana nueva.
+function gsShareWa(pid){
+  const p = state.products.find(x=>x.id===pid); if(!p) return;
+  const vid = gsVarOf(pid); gsNoteShared(pid+(vid?'::'+vid:''));
+  gsOpenWa(gsShareText(p, vid));
+}
+function gsCopyLink(pid){
+  const p = state.products.find(x=>x.id===pid); if(!p) return;
+  const vid = gsVarOf(pid); gsNoteShared(pid+(vid?'::'+vid:''));
+  gsCopy(gsShareText(p, vid), 'Mensaje con enlace copiado — pégalo en el chat');
+}
+// Foto + enlace: abre el menú "Compartir" del celular con la foto ya adjunta (en JPG, porque
+// WhatsApp manda las .webp como sticker). Si el celular no deja compartir archivos, manda solo el texto.
+async function gsSharePhoto(pid){
+  const p = state.products.find(x=>x.id===pid); if(!p) return;
+  const vid = gsVarOf(pid); const v = vid ? (p.variants||[]).find(x=>x.id===vid) : null;
+  const text = gsShareText(p, vid);
+  const src = (p.images||[])[v && typeof v.imageIdx==='number' && p.images[v.imageIdx] ? v.imageIdx : 0];
+  gsNoteShared(pid+(vid?'::'+vid:''));
+  if(!src || !navigator.share){ gsOpenWa(text); return; }
+  showToast('Preparando la foto…');
+  try{
+    const blob = await (await fetch(src)).blob();
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement('canvas'); const k = Math.min(1, 1280/Math.max(bmp.width, bmp.height));
+    c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+    const jpg = await new Promise(r=>c.toBlob(r, 'image/jpeg', 0.88));
+    const file = new File([jpg], (p.sku||'producto')+'.jpg', {type:'image/jpeg'});
+    if(navigator.canShare && !navigator.canShare({files:[file]})) throw new Error('sin archivos');
+    try{ await navigator.clipboard.writeText(text); }catch(e){}
+    await navigator.share({files:[file], text});
+  }catch(e){
+    if(e && e.name==='AbortError') return;
+    gsCopy(text, 'No se pudo adjuntar la foto: el mensaje quedó copiado, usa el botón WhatsApp');
+  }
+}
+function gsToggleSel(key){
+  const s = new Set(state.gsSel||[]); s.has(key) ? s.delete(key) : (s.size>=10 ? showToast('Máximo 10 a la vez') : s.add(key));
+  state.gsSel = [...s]; render();
+}
+function gsShareSelWa(){ const ids = state.gsSel||[]; if(!ids.length) return; ids.forEach(gsNoteShared); gsOpenWa(gsMultiText(ids)); }
+function gsCopySel(){ const ids = state.gsSel||[]; if(!ids.length) return; gsCopy(gsMultiText(ids), 'Lista copiada — pégala en el chat'); }
+function gsPickVar(pid, vid){ state.gsVar = {...(state.gsVar||{}), [pid]: gsVarOf(pid)===vid ? '' : vid}; render(); }
+
+// ---- Abrir / cerrar ----
+function openGlobalSearch(filter, ctx){
+  state.globalSearchOpen = true; state.gsFilter = filter||'todo'; state.gsShowAll = false;
+  if(ctx!==undefined) state.gsCtx = ctx;
+  state.gsFocusOnce = !ctx && filter!=='respuestas'; gsLoadLinks(); render();
+}
+function closeGlobalSearch(){
+  gsStopScan(true);
+  state.globalSearchOpen=false; state.globalSearchQuery=""; state.gsSel=[]; state.gsVar={}; state.gsCtx=null; state.gsReplyEdit=null; state.gsTplEdit=false; render();
+}
+// Desde un pedido o una clienta: abre el buscador para mandarle productos directo a su WhatsApp.
+function gsShareTo(phone, name){ openGlobalSearch('productos', {phone, name}); state.gsFocusOnce = true; render(); }
+function gsSetQuery(v){ state.globalSearchQuery = v; state.gsShowAll = false; render(); }
+function gsSetFilter(f){ state.gsFilter = f; state.gsShowAll = false; render(); }
+function gsRemember(type, id, label){
+  const r = gsLS('cdlp_gs_recent', []).filter(x=>!(x.type===type && x.id===id)); r.unshift({type, id, label}); gsLSset('cdlp_gs_recent', r.slice(0,8));
+}
+
+// ---- Ajustes, secciones y acciones ----
+// "find" = texto a buscar en la pantalla de destino para bajar hasta él y resaltarlo.
+function gsSettingsIndex(){
+  const L = [];
+  const add = (t, sub, kw, go, opt)=>L.push({t, sub, kw:(t+' '+sub+' '+(kw||'')), go, ...(opt||{})});
+  const navTab = t => `${adminGoTabJs(t).replace(/render\(\);window\.scrollTo\(0,0\)$/, '')}`;
+  ADMIN_NAV_GROUPS.forEach(g=>g.tabs.filter(canAccessTab).forEach(t=> add(adminTabName(t), 'Sección', (TAB_HINT[t]||'')+' '+t, `${adminGoTabJs(t)}`, {ic:TAB_ICON[t]||'grid', tab:t})));
+  if(canAccessTab('marketing')) MARKETING_SUBPANELS.forEach(sp=>add(sp.label, 'Marketing', sp.key, `${navTab('marketing')}state.marketingSubpanel='${sp.key}';render();window.scrollTo(0,0)`, {ic:'star'}));
+  if(canAccessTab('diseño')) DESIGN_SUBPANELS.forEach(sp=>add(sp.label, 'Diseño de la tienda', sp.key, `${navTab('diseño')}state.designSubpanel='${sp.key}';render();window.scrollTo(0,0)`, {ic:'palette'}));
+  if(canAccessTab('configuración')) CONFIG_SUBPANELS.filter(sp=>!sp.ownerOnly || !state.myPermissions).forEach(sp=>add(sp.label, 'Configuración', sp.key, `${navTab('configuración')}state.configSubpanel='${sp.key}';render();window.scrollTo(0,0)`, {ic:'sliders'}));
+  if(canAccessTab('configuración')){
+    const op = `${navTab('configuración')}state.configSubpanel='operativo';render();`;
+    [
+      ['WhatsApp de la tienda', 'whatsapp numero telefono confirmaciones', 'WhatsApp para confirmaciones'],
+      ['Horario de la tienda', 'horario hora abierto cerrado atencion', 'Horario mostrado en la tienda'],
+      ['Costo y ciudad de envío', 'envio envío costo ciudad entrega domicilio', 'Envío local'],
+      ['Dirección de origen', 'direccion domicilio origen ubicacion', 'Dirección de origen'],
+      ['WhatsApp del repartidor', 'repartidor reparto entrega chofer', 'WhatsApp del repartidor'],
+      ['Pausar la tienda', 'pausa cerrar vacaciones cerrada', 'Mensaje que verán los clientes'],
+      ['Aviso de privacidad y devoluciones', 'privacidad devoluciones cambios politica terminos', 'Aviso de privacidad completo'],
+      ['Límite de pedidos por celular', 'limite pedidos spam abuso', 'Máximo de pedidos por celular'],
+      ['Modo vitrina (tablet)', 'vitrina tablet kiosco mostrador', 'modo vitrina'],
+      ['Apartados con abonos', 'apartado abono anticipo enganche', 'Apartados con abonos'],
+      ['Avisos a Slack', 'slack notificaciones avisos', 'Avisos a Slack'],
+    ].forEach(([t, kw, find])=>add(t, 'Configuración › Datos operativos', kw, op, {ic:'sliders', find}));
+    add('Mensaje para compartir productos', 'Buscador', 'plantilla compartir whatsapp mensaje enlace', `state.gsFilter='respuestas';state.gsTplEdit=true;state.globalSearchQuery='';render();`, {ic:'share', keep:true});
+  }
+  // Acciones
+  if(canAccessTab('productos')) add('Nuevo producto', 'Acción', 'agregar alta crear producto', `state.adminTab='productos';state.productModal=newProductModal();render();`, {ic:'package'});
+  if(canAccessTab('marketing')){
+    add('Nuevo cupón', 'Acción', 'crear cupon descuento codigo', `${navTab('marketing')}state.marketingSubpanel='cupones';render();openCouponModal(null);`, {ic:'tag'});
+    add('Nueva promoción', 'Acción', 'crear promocion 2x1 regalo', `${navTab('marketing')}state.marketingSubpanel='promociones';render();`, {ic:'star'});
+    add('Nueva tabla de mayoreo', 'Acción', 'crear mayoreo precio especial', `${navTab('marketing')}state.marketingSubpanel='mayoreo';render();openWholesaleModal(null);`, {ic:'package'});
+  }
+  if(canAccessTab('apartados') && typeof lyOpenNew==='function') add('Nuevo apartado', 'Acción', 'apartar abono reservar', `${navTab('apartados')}render();lyOpenNew();`, {ic:'bag'});
+  if(canAccessTab('caja')) add('Corte de caja', 'Acción', 'corte caja cierre apertura efectivo', `${adminGoTabJs('caja')}`, {ic:'dollar-sign'});
+  if(!state.myPermissions) add('Punto de venta', 'Acción', 'pos vender cobrar venta', `window.open('pos.html','_blank');`, {ic:'bag'});
+  add('Actualizar datos', 'Acción', 'recargar refrescar sincronizar', `refreshNow();`, {ic:'refresh-cw'});
+  add(isDarkTheme()?'Tema claro':'Tema oscuro', 'Acción', 'tema oscuro claro noche modo', `toggleTheme();`, {ic:isDarkTheme()?'sun':'moon'});
+  return L;
+}
+// La política de seguridad del panel no deja convertir texto en código (new Function), así que
+// la acción de cada ajuste va escrita directo en el onclick del renglón: antes gsPreGo y después gsPostGo.
+function gsPreGo(i){
+  const it = (state._gsSetIdx||[])[i]; if(!it) return;
+  gsRemember('ajuste', it.t, it.t);
+  if(!it.keep){ gsStopScan(true); state.globalSearchOpen=false; state.globalSearchQuery=''; state.gsSel=[]; state.gsCtx=null; }
+}
+function gsPostGo(i){ const it = (state._gsSetIdx||[])[i]; if(it && it.find) setTimeout(()=>gsHighlight(it.find), 150); }
+function gsHighlight(txt){
+  const want = String(txt).toLowerCase();
+  const el = [...document.querySelectorAll('.admin-main label, .admin-main .panel-title, .admin-main h3, .admin-main h4, .admin-main summary, .admin-main .form-field')].find(e=>e.textContent.toLowerCase().includes(want));
+  if(!el) return;
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  const box = el.closest('.form-field') || el; box.classList.add('gs-flash'); setTimeout(()=>box.classList.remove('gs-flash'), 2200);
+}
+
+// ---- Resultados ----
+function gsBestSellers(n){
+  const since = Date.now() - 30*864e5, count = new Map();
+  (state.orders||[]).forEach(o=>{ if(o.status==='Cancelado' || new Date(o.date).getTime()<since) return; (o.items||[]).forEach(i=>{ const id=i.id||i.productId; if(id) count.set(id, (count.get(id)||0)+(Number(i.qty)||1)); }); });
+  return [...count.entries()].sort((a,b)=>b[1]-a[1]).map(([id])=>state.products.find(p=>p.id===id)).filter(p=>p && !p.hidden && totalStock(p)>0).slice(0, n);
+}
 function computeGlobalSearchResults(){
   const q = (state.globalSearchQuery||'').trim().toLowerCase();
-  const empty = {products:[], orders:[], customers:[], q};
-  if(!q) return empty;
-  const LIMIT = 8;
-  const result = {q, products:[], orders:[], customers:[]};
-  if(canAccessTab('productos')){
-    result.products = searchProducts(q, state.products).slice(0, LIMIT);
+  const f = state.gsFilter || 'todo', all = state.gsShowAll;
+  const lim = sec => (all || f===sec) ? GS_ALL : GS_LIMIT;
+  const r = {q, products:[], orders:[], customers:[], codes:[], settings:[], replies:[], more:{}};
+  if(!q) return r;
+  const want = sec => f==='todo' || f===sec;
+  const cut = (sec, arr) => { r.more[sec] = arr.length > lim(sec) ? arr.length : 0; return arr.slice(0, lim(sec)); };
+  if(want('productos') && canAccessTab('productos')){
+    // Por código de barras o SKU exacto primero (lo que regresa el escáner).
+    const exact = state.products.filter(p=>!p.deletedAt && ((p.sku && String(p.sku).toLowerCase()===q) || (p.barcode && String(p.barcode).toLowerCase()===q) || (p.variants||[]).some(v=>(v.sku&&String(v.sku).toLowerCase()===q)||(v.barcode&&String(v.barcode).toLowerCase()===q))));
+    const rest = searchProducts(q, state.products.filter(p=>!p.deletedAt && !exact.includes(p)));
+    r.products = cut('productos', [...exact, ...rest]);
   }
-  if(canAccessTab('pedidos')){
-    result.orders = state.orders
+  if(want('pedidos') && canAccessTab('pedidos')){
+    r.orders = cut('pedidos', state.orders
       .filter(o=> tolMatch(q, formatFolio(o.orderNumber), o.orderNumber, o.customer, o.customerName, o.phone, o.customerPhone))
-      .sort((a,b)=> new Date(b.date) - new Date(a.date))
-      .slice(0, LIMIT);
+      .sort((a,b)=> new Date(b.date) - new Date(a.date)));
   }
-  if(canAccessTab('clientes')){
-    result.customers = computeCustomersList()
-      .filter(c=>tolMatch(q, c.name, c.phone, c.email))
-      .slice(0, LIMIT);
+  if(want('clientes') && canAccessTab('clientes')){
+    r.customers = cut('clientes', computeCustomersList().filter(c=>tolMatch(q, c.name, c.phone, c.email)));
   }
-  return result;
+  if(want('ajustes')){
+    if(canAccessTab('marketing')){
+      const codes = [
+        ...(state.settings.coupons||[]).map(c=>({kind:'cupon', id:c.id, code:c.code, name:c.description||c.name||'', active:c.active!==false, c})),
+        ...(state.settings.wholesaleTiers||[]).filter(t=>t.code).map(t=>({kind:'mayoreo', id:t.id, code:t.code, name:t.name||'', active:!!t.active, t})),
+      ];
+      r.codes = cut('ajustes', codes.filter(x=>tolMatch(q, x.code, x.name, x.kind==='cupon'?'cupon cupón descuento':'mayoreo')));
+    }
+    const idx = gsSettingsIndex(); state._gsSetIdx = idx;
+    r.settings = idx.map((it,i)=>({...it, i})).filter(it=>tolMatch(q, it.t, it.kw)).slice(0, (all||f==='ajustes') ? GS_ALL : GS_LIMIT);
+  }
+  if(want('respuestas')) r.replies = gsReplies().filter(x=>tolMatch(q, x.title, x.text));
+  return r;
 }
+function gsProductCard(p){
+  const vs = p.variants||[], sel = gsVarOf(p.id), key = p.id+(sel?'::'+sel:'');
+  const v = sel ? vs.find(x=>x.id===sel) : null;
+  const picked = (state.gsSel||[]).includes(key);
+  const pr = gsPrice(p, v);
+  const img = (p.images||[])[v && typeof v.imageIdx==='number' && p.images[v.imageIdx] ? v.imageIdx : 0];
+  return `<div class="gs-card ${picked?'picked':''}">
+    <div class="gs-row">
+      ${img?`<img class="row-swatch" src="${img}" alt="" loading="lazy">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
+      <div class="row-main">
+        <div class="row-title">${gsEsc(p.name)}</div>
+        <div class="row-sub">${pr.now<pr.list?`<s>${gsMoney(pr.list)}</s> <b>${gsMoney(pr.now)}</b>`:`<b>${v?gsMoney(pr.now):gsPriceTxt(p)}</b>`} · ${v?`${v.stock||0} de esta variante`:`${totalStock(p)} en existencia`}${p.hidden?' · <span style="color:var(--rose)">oculto en tienda</span>':''}</div>
+      </div>
+      <button class="gs-check" aria-pressed="${picked}" aria-label="Elegir para mandar varios" onclick="gsToggleSel('${key}')">${picked?icon('check',16):''}</button>
+    </div>
+    ${vs.length ? `<div class="gs-vars">${vs.slice(0,24).map(x=>`<button class="${sel===x.id?'on':''} ${(x.stock||0)<=0?'out':''}" onclick="gsPickVar('${p.id}','${x.id}')">${gsEsc(varLabelOf(x))} · ${x.stock||0}</button>`).join('')}</div>
+      <div class="gs-hint">${sel?'Se comparte esta variante. Tócala otra vez para compartir el producto completo.':'Toca una variante para compartirla ya elegida.'}</div>` : ''}
+    <div class="gs-actions gs-pact">
+      <button class="gs-wa" onclick="gsShareWa('${p.id}')">${icon('message-circle',16)} WhatsApp</button>
+      <button onclick="gsSharePhoto('${p.id}')" aria-label="Mandar con foto">${icon('image',16)}<small>Con foto</small></button>
+      <button onclick="gsCopyLink('${p.id}')" aria-label="Copiar mensaje">${icon('copy',16)}<small>Copiar</small></button>
+      ${canAccessTab('productos')?`<button onclick="goToGlobalSearchProduct('${p.id}')" aria-label="Editar producto">${icon('edit',16)}<small>Editar</small></button>`:''}
+    </div>
+  </div>`;
+}
+const GS_NEXT = {'Nuevo':'Preparando', 'Preparando':'En camino', 'En camino':'Entregado'};
+function gsAdvanceOrder(id){
+  const o = state.orders.find(x=>x.id===id); if(!o) return; const nx = GS_NEXT[o.status]; if(!nx) return;
+  if(nx==='Entregado' && !confirm(`¿Marcar ${formatFolio(o.orderNumber)} como entregado? Se descuenta del inventario.`)) return;
+  updateOrderStatus(id, nx).then(()=>render());
+}
+function gsOrderRow(o){
+  const ph = o.phone||o.customerPhone||'', name = o.customer||o.customerName||'';
+  const nx = o.source!=='pos' && GS_NEXT[o.status];
+  const hi = `Hola${name?' '+name.split(' ')[0]:''} 😊 Te escribo de ${state.settings.storeName||'la tienda'} por tu pedido ${formatFolio(o.orderNumber)}.`;
+  return `<div class="gs-card">
+    <div class="gs-row" style="cursor:pointer;" onclick="goToGlobalSearchOrder('${o.id}')">
+      <div class="row-main"><div class="row-title">${formatFolio(o.orderNumber)} · ${gsEsc(name||'Sin nombre')}</div><div class="row-sub">${o.source==='pos'?'Venta en tienda':'Pedido en línea'} · ${gsEsc(o.status||'')} · ${new Date(o.date).toLocaleDateString('es-MX',{day:'numeric',month:'short'})}</div></div>
+      <b style="color:var(--primary-deep);white-space:nowrap;">${gsMoney(o.total||0)}</b>
+    </div>
+    <div class="gs-actions">
+      ${ph?`<a class="gs-wa" href="${waLink(ph.replace(/\D/g,'').length===10?'52'+ph:ph, hi)}" target="_blank" rel="noopener">${icon('message-circle',15)} Escribirle</a>`:''}
+      ${nx?`<button onclick="gsAdvanceOrder('${o.id}')">${icon('arrow-up',15)} Pasar a ${nx}</button>`:''}
+      ${ph&&canAccessTab('productos')?`<button onclick="gsShareTo('${gsJsArg(ph)}','${gsJsArg(name)}')">${icon('share',15)} Mandarle productos</button>`:''}
+      <button onclick="goToGlobalSearchOrder('${o.id}')">${icon('receipt',15)} Ver</button>
+    </div>
+  </div>`;
+}
+function gsCustomerRow(c){
+  const ph = c.phone||'';
+  return `<div class="gs-card">
+    <div class="gs-row" style="cursor:pointer;" onclick="goToGlobalSearchCustomer('${(c.phone||c.name||'').replace(/'/g,"\\'")}')">
+      <div class="row-main"><div class="row-title">${gsEsc(c.name)}</div><div class="row-sub">${gsEsc(c.phone||c.email||'')} · ${c.purchaseCount} compra(s)</div></div>
+      <b style="color:var(--primary-deep);white-space:nowrap;">${gsMoney(c.totalSpent)}</b>
+    </div>
+    <div class="gs-actions">
+      ${ph?`<a class="gs-wa" href="${waLink(ph.replace(/\D/g,'').length===10?'52'+ph:ph, `Hola ${String(c.name||'').split(' ')[0]} 😊`)}" target="_blank" rel="noopener">${icon('message-circle',15)} Escribirle</a>`:''}
+      ${ph&&canAccessTab('productos')?`<button onclick="gsShareTo('${gsJsArg(ph)}','${gsJsArg(c.name)}')">${icon('share',15)} Mandarle productos</button>`:''}
+      <button onclick="goToGlobalSearchCustomer('${(c.phone||c.name||'').replace(/'/g,"\\'")}')">${icon('user',15)} Ver compras</button>
+    </div>
+  </div>`;
+}
+function gsCodeText(x){
+  const base = gsStoreBase();
+  if(x.kind==='mayoreo') return `Te comparto tu acceso a precios de mayoreo 😊\n${typeof wholesaleLink==='function'?wholesaleLink(x.code):base}`;
+  return `Usa el código *${x.code}* al pagar en ${base} 🎁`;
+}
+function gsCodeRow(x){
+  return `<div class="gs-card">
+    <div class="gs-row">
+      <div class="row-swatch" style="display:flex;align-items:center;justify-content:center;background:var(--surface-2,#f6eef2);">${icon(x.kind==='cupon'?'tag':'package',18)}</div>
+      <div class="row-main"><div class="row-title">${gsEsc(x.code)}</div><div class="row-sub">${x.kind==='cupon'?'Cupón':'Mayoreo'}${x.name?' · '+gsEsc(x.name):''} · ${x.active?'Activo':'<span style="color:var(--rose)">Inactivo</span>'}</div></div>
+    </div>
+    <div class="gs-actions">
+      <button class="gs-wa" onclick="gsOpenWa(gsCodeText((state._gsCodes||{})['${x.id}']))">${icon('message-circle',15)} WhatsApp</button>
+      <button onclick="gsCopy(((state._gsCodes||{})['${x.id}']||{}).code||'','Código copiado')">${icon('copy',15)} Copiar código</button>
+      <button onclick="state.globalSearchOpen=false;state.globalSearchQuery='';${adminGoTabJs('marketing').replace(/render\(\);window\.scrollTo\(0,0\)$/,'')}state.marketingSubpanel='${x.kind==='cupon'?'cupones':'mayoreo'}';render();${x.kind==='cupon'?`openCouponModal('${x.id}')`:`openWholesaleModal('${x.id}')`}">${icon('edit',15)} Editar</button>
+    </div>
+  </div>`;
+}
+function gsSettingRow(it){
+  return `<div class="list-row" style="cursor:pointer;" onclick="gsPreGo(${it.i});${it.go.replace(/"/g,'&quot;')};gsPostGo(${it.i})">
+    <div class="row-swatch" style="display:flex;align-items:center;justify-content:center;background:var(--surface-2,#f6eef2);">${icon(it.ic||'sliders',17)}</div>
+    <div class="row-main"><div class="row-title">${gsEsc(it.t)}</div><div class="row-sub">${gsEsc(it.sub)}</div></div>
+    <span class="chev">›</span>
+  </div>`;
+}
+// ---- Respuestas rápidas ----
+function gsReplyRow(x){
+  return `<div class="gs-card">
+    <div class="row-title">${gsEsc(x.title)}</div>
+    <div class="row-sub" style="white-space:pre-wrap;margin-top:2px;">${gsEsc(x.text)}</div>
+    <div class="gs-actions">
+      <button class="gs-wa" onclick="gsSendReply('${x.id}')">${icon('message-circle',15)} Mandar</button>
+      <button onclick="gsCopy(gsReplyText('${x.id}'),'Copiado — pégalo en el chat')">${icon('copy',15)} Copiar</button>
+      ${gsCanEditSettings()?`<button onclick="state.gsReplyEdit={...gsReplies().find(r=>r.id==='${x.id}')};render()">${icon('edit',15)} Editar</button>`:''}
+    </div>
+  </div>`;
+}
+function gsReplyText(id){ const x = gsReplies().find(r=>r.id===id); return x ? gsFill(x.text, {horario:state.settings.schedule||'', tienda:gsStoreBase()}) : ''; }
+function gsSendReply(id){ gsOpenWa(gsReplyText(id)); }
+async function gsSaveReply(){
+  const e = state.gsReplyEdit; if(!e) return;
+  const title = (document.getElementById('gs-r-title').value||'').trim(), text = (document.getElementById('gs-r-text').value||'').trim();
+  if(!title || !text){ showToast('Escribe un nombre y el mensaje'); return; }
+  const list = gsReplies().slice(); const i = list.findIndex(r=>r.id===e.id);
+  const item = {id: e.id || ('r'+Date.now().toString(36)), title, text};
+  if(i>=0) list[i] = item; else list.push(item);
+  state.settings.quickReplies = list; state.gsReplyEdit = null; await saveSettings(); showToast('Respuesta guardada'); render();
+}
+async function gsDeleteReply(id){
+  if(!confirm('¿Borrar esta respuesta rápida?')) return;
+  state.settings.quickReplies = gsReplies().filter(r=>r.id!==id); state.gsReplyEdit = null; await saveSettings(); render();
+}
+async function gsSaveTpl(){
+  state.settings.shareTemplate = (document.getElementById('gs-tpl-1').value||'').trim() || GS_DEFAULT_SHARE;
+  state.settings.shareTemplateMulti = (document.getElementById('gs-tpl-2').value||'').trim() || GS_DEFAULT_SHARE_MULTI;
+  state.gsTplEdit = false; await saveSettings(); showToast('Mensaje guardado'); render();
+}
+function gsRepliesPanel(){
+  const e = state.gsReplyEdit, s = state.settings||{};
+  if(e) return `<div class="gs-card">
+      <div class="form-field"><label>Nombre (solo lo ves tú)</label><input id="gs-r-title" value="${gsEsc(e.title||'')}" placeholder="Horario"></div>
+      <div class="form-field"><label>Mensaje</label><textarea id="gs-r-text" rows="5" placeholder="Nuestro horario es…">${gsEsc(e.text||'')}</textarea>
+      <div class="gs-hint">Puedes usar {horario} y {tienda} (el enlace de tu tienda).</div></div>
+      <div class="gs-actions"><button class="gs-wa" onclick="gsSaveReply()">${icon('check',15)} Guardar</button><button onclick="state.gsReplyEdit=null;render()">Cancelar</button>${e.id?`<button onclick="gsDeleteReply('${e.id}')" style="color:var(--rose)">${icon('trash',15)} Borrar</button>`:''}</div>
+    </div>`;
+  if(state.gsTplEdit) return `<div class="gs-card">
+      <div class="form-field"><label>Mensaje al compartir un producto</label><textarea id="gs-tpl-1" rows="5">${gsEsc(s.shareTemplate||GS_DEFAULT_SHARE)}</textarea>
+      <div class="gs-hint">{nombre} {variante} {precio} {enlace} {tienda}</div></div>
+      <div class="form-field"><label>Mensaje al compartir varios</label><textarea id="gs-tpl-2" rows="4">${gsEsc(s.shareTemplateMulti||GS_DEFAULT_SHARE_MULTI)}</textarea>
+      <div class="gs-hint">{lista} es la lista de productos con precio y enlace.</div></div>
+      <div class="gs-actions"><button class="gs-wa" onclick="gsSaveTpl()">${icon('check',15)} Guardar</button><button onclick="state.gsTplEdit=false;render()">Cancelar</button></div>
+    </div>`;
+  return `${gsReplies().map(gsReplyRow).join('')}
+    ${gsCanEditSettings()?`<div class="gs-actions" style="margin-top:4px;"><button onclick="state.gsReplyEdit={id:'',title:'',text:''};render()">+ Nueva respuesta</button><button onclick="state.gsTplEdit=true;render()">${icon('share',15)} Mensaje al compartir productos</button></div>`:''}`;
+}
+
+// ---- Escáner de código de barras ----
+let _gsScanner = null, _gsScanBusy = false;
+function gsOpenScan(){
+  state.gsScanOpen = true; render();
+  auditLoadQrLib().then(()=>{ if(state.gsScanOpen) gsStartScan(); }).catch(()=>{ showToast('No se pudo cargar el lector de cámara'); gsStopScan(); });
+}
+function gsStartScan(){
+  if(_gsScanBusy || !state.gsScanOpen || typeof Html5Qrcode==='undefined') return;
+  const view = document.getElementById('gs-scan-view'); if(!view) return;
+  _gsScanBusy = true;
+  setTimeout(()=>{
+    try{
+      _gsScanner = new Html5Qrcode('gs-scan-view');
+      _gsScanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:240,height:120}}, txt=>{ state.gsFilter='productos'; gsStopScan(true); gsSetQuery(String(txt).trim()); }, ()=>{})
+        .catch(()=>{ showToast('No se pudo abrir la cámara — revisa el permiso de este sitio'); gsStopScan(); });
+    }catch(e){ _gsScanBusy = false; }
+  }, 80);
+}
+function gsStopScan(silent){
+  const sc = _gsScanner; _gsScanner = null; _gsScanBusy = false;
+  if(sc){ try{ sc.stop().then(()=>sc.clear()).catch(()=>{}); }catch(e){} }
+  if(state.gsScanOpen){ state.gsScanOpen = false; if(!silent) render(); }
+}
+function gsScanEnsure(){
+  if(!state.gsScanOpen) return;
+  const view = document.getElementById('gs-scan-view');
+  if(view && !view.querySelector('video')){ _gsScanBusy = false; _gsScanner = null; gsStartScan(); }
+}
+
+// ---- Navegación a un resultado ----
 function goToGlobalSearchProduct(id){
   const p = state.products.find(x=>x.id===id);
   if(!p) return;
+  gsRemember('producto', id, p.name);
   closeGlobalSearch();
   state.adminTab='productos'; state.productModal=JSON.parse(JSON.stringify(p));
   render();
 }
 function goToGlobalSearchOrder(id){
+  const o = state.orders.find(x=>x.id===id); if(o) gsRemember('pedido', id, `${formatFolio(o.orderNumber)} · ${o.customer||o.customerName||''}`);
   closeGlobalSearch();
   state.adminTab='pedidos';state.showArchived=false;
   openOrderDetailModal(id);
 }
 function goToGlobalSearchCustomer(phoneOrName){
+  gsRemember('cliente', phoneOrName, phoneOrName);
   closeGlobalSearch();
   state.adminTab='clientes'; state.customerSearch=phoneOrName||'';
   render();
 }
+function gsOpenRecent(i){
+  const it = gsLS('cdlp_gs_recent', [])[i]; if(!it) return;
+  if(it.type==='producto') return goToGlobalSearchProduct(it.id);
+  if(it.type==='pedido') return goToGlobalSearchOrder(it.id);
+  if(it.type==='cliente') return goToGlobalSearchCustomer(it.id);
+  gsSetQuery(it.label);
+}
+
+// ---- Pantalla ----
 function renderGlobalSearchModal(){
   const r = computeGlobalSearchResults();
-  const hasQuery = !!r.q;
-  const totalResults = r.products.length + r.orders.length + r.customers.length;
+  state._gsCodes = Object.fromEntries(r.codes.map(x=>[x.id, x]));
+  const f = state.gsFilter||'todo', q = r.q;
+  const sec = (title, key, html, n)=> n ? `<div class="gs-sec"><div class="panel-title">${title}</div>${html}${r.more[key]?`<button class="gs-more" onclick="state.gsFilter='${key}';state.gsShowAll=true;render()">Ver los ${r.more[key]} resultados</button>`:''}</div>` : '';
+  const total = r.products.length + r.orders.length + r.customers.length + r.codes.length + r.settings.length + r.replies.length;
+  const sel = state.gsSel||[];
+  let body = '';
+  if(f==='respuestas' && !q) body = `<div class="gs-sec">${gsRepliesPanel()}</div>`;
+  else if(!q){
+    const recent = gsLS('cdlp_gs_recent', []);
+    const shared = gsLS('cdlp_gs_shared', []).map(k=>{ const [pid] = k.split('::'); return state.products.find(p=>p.id===pid); }).filter((p,i,a)=>p && a.indexOf(p)===i).slice(0,4);
+    const best = canAccessTab('productos') ? gsBestSellers(4).filter(p=>!shared.includes(p)) : [];
+    body = `
+      ${recent.length?`<div class="gs-sec"><div class="panel-title">Recientes</div><div class="gs-chips">${recent.map((x,i)=>`<button onclick="gsOpenRecent(${i})">${icon(x.type==='producto'?'package':x.type==='pedido'?'receipt':x.type==='cliente'?'user':'sliders',13)} ${gsEsc(String(x.label).slice(0,32))}</button>`).join('')}</div></div>`:''}
+      ${shared.length?`<div class="gs-sec"><div class="panel-title">Compartidos hace poco</div>${shared.map(gsProductCard).join('')}</div>`:''}
+      ${best.length?`<div class="gs-sec"><div class="panel-title">Lo más vendido (30 días)</div>${best.map(gsProductCard).join('')}</div>`:''}
+      <div class="gs-sec"><div class="panel-title">Respuestas rápidas</div>${gsReplies().slice(0,3).map(gsReplyRow).join('')}<button class="gs-more" onclick="gsSetFilter('respuestas')">Ver y editar todas</button></div>`;
+  }
+  else if(!total) body = `<div class="empty-state">No encontré nada con "${gsEsc(q)}".${f!=='todo'?` <a href="#" onclick="gsSetFilter('todo');return false;">Buscar en todo</a>`:''}</div>`;
+  else body = `
+    ${sec('Productos','productos', r.products.map(gsProductCard).join(''), r.products.length)}
+    ${sec('Pedidos y ventas','pedidos', r.orders.map(gsOrderRow).join(''), r.orders.length)}
+    ${sec('Clientes','clientes', r.customers.map(gsCustomerRow).join(''), r.customers.length)}
+    ${sec('Cupones y mayoreo','ajustes', r.codes.map(gsCodeRow).join(''), r.codes.length)}
+    ${sec('Ajustes, secciones y acciones','ajustes', r.settings.map(gsSettingRow).join(''), r.settings.length)}
+    ${sec('Respuestas rápidas','respuestas', r.replies.map(gsReplyRow).join(''), r.replies.length)}`;
   return `
-  <div class="modal-overlay">
-    <div class="modal" style="max-width:560px;">
-      <h3>${icon('search',16)} Buscar en el panel</h3>
-      <input id="global-search-input" type="search" placeholder="Buscar productos, pedidos o clientes..." value="${(state.globalSearchQuery||'').replace(/"/g,'&quot;')}" oninput="state.globalSearchQuery=this.value;render()" style="margin-bottom:14px;">
-      ${!hasQuery ? `<div class="empty-state">Escribe un nombre, folio, teléfono o SKU para buscar.</div>` : totalResults===0 ? `<div class="empty-state">No encontré nada que coincida con "${r.q}".</div>` : `
-      <div style="max-height:420px;overflow-y:auto;">
-        ${r.products.length ? `
-        <div class="panel-title" style="margin-bottom:8px;">Productos</div>
-        ${r.products.map(p=>`
-          <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchProduct('${p.id}')">
-            ${p.images&&p.images.length?`<img class="row-swatch" src="${p.images[0]}">`:`<div class="row-swatch" style="background:${catColor(p.cat)}"></div>`}
-            <div class="row-main"><div class="row-title">${p.name}</div><div class="row-sub">${p.cat||''}${p.sku?` · SKU ${p.sku}`:''}</div></div>
-            ${stockStatusBadge(p)}
-          </div>
-        `).join('')}` : ''}
-        ${r.orders.length ? `
-        <div class="panel-title" style="margin:${r.products.length?'16px':'0'} 0 8px;">Pedidos y ventas</div>
-        ${r.orders.map(o=>`
-          <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchOrder('${o.id}')">
-            <div class="row-main"><div class="row-title">${formatFolio(o.orderNumber)} — ${o.customer||o.customerName||'Sin nombre'}</div><div class="row-sub">${o.phone||o.customerPhone||''} · ${o.status||''}</div></div>
-            <div style="font-weight:800;color:var(--primary-deep);">${money(o.total||0)}</div>
-          </div>
-        `).join('')}` : ''}
-        ${r.customers.length ? `
-        <div class="panel-title" style="margin:${(r.products.length||r.orders.length)?'16px':'0'} 0 8px;">Clientes</div>
-        ${r.customers.map(c=>`
-          <div class="list-row" style="cursor:pointer;" onclick="goToGlobalSearchCustomer('${(c.phone||c.name||'').replace(/'/g,"\\'")}')">
-            <div class="row-main"><div class="row-title">${c.name}</div><div class="row-sub">${c.phone||c.email||''} · ${c.purchaseCount} compra(s)</div></div>
-            <div style="font-weight:800;color:var(--primary-deep);">${money(c.totalSpent)}</div>
-          </div>
-        `).join('')}` : ''}
-      </div>`}
-      <div class="modal-actions">
-        <button class="btn-cancel" style="flex:1;" onclick="closeGlobalSearch()">Cerrar</button>
+  <div class="modal-overlay gs-overlay">
+    <div class="modal gs-modal">
+      <div class="gs-head">
+        <div class="gs-input">${icon('search',17)}
+          <input id="global-search-input" type="search" enterkeyhint="search" autocomplete="off" placeholder="Producto, pedido, clienta, cupón o ajuste" value="${gsEsc(state.globalSearchQuery||'')}" oninput="gsSetQuery(this.value)">
+          <button class="gs-ico" aria-label="Escanear código de barras" onclick="gsOpenScan()">${icon('scan',19)}</button>
+        </div>
+        <button class="gs-close" aria-label="Cerrar" onclick="closeGlobalSearch()">${icon('x',20)}</button>
       </div>
+      ${state.gsCtx?`<div class="gs-ctx">${icon('message-circle',14)} Mandando a <b>${gsEsc(state.gsCtx.name||state.gsCtx.phone)}</b> <button onclick="state.gsCtx=null;render()" aria-label="Quitar">${icon('x',13)}</button></div>`:''}
+      <div class="gs-filters">${GS_FILTERS.filter(([k])=> k==='todo'||k==='ajustes'||k==='respuestas' || canAccessTab(k)).map(([k,l])=>`<button class="${f===k?'on':''}" onclick="gsSetFilter('${k}')">${l}</button>`).join('')}</div>
+      ${state.gsScanOpen?`<div class="gs-scan"><div id="gs-scan-view"></div><button onclick="gsStopScan()">Cerrar cámara</button></div>`:''}
+      <div class="gs-body">${body}</div>
+      ${sel.length?`<div class="gs-selbar"><span><b>${sel.length}</b> elegido${sel.length===1?'':'s'}</span>
+        <button class="gs-wa" onclick="gsShareSelWa()">${icon('message-circle',15)} Mandar juntos</button>
+        <button onclick="gsCopySel()">${icon('copy',15)}</button>
+        <button onclick="state.gsSel=[];render()" aria-label="Quitar selección">${icon('x',15)}</button></div>`:''}
     </div>
   </div>`;
 }
+{ const _r1 = render; render = function(){ _r1(); gsScanEnsure(); }; }
+setTimeout(()=>{ try{ gsLoadLinks(); }catch(e){} }, 4000);   // así "Copiar enlace" ya trae el enlace con vista previa
 
 function normalizePhoneDigits(phone){ return (phone||'').replace(/\D/g,''); }
 // Empareja por teléfono (los últimos 10 dígitos, para no fallar por un "52" o "1" de más al
@@ -3341,6 +3798,7 @@ function renderOrderDetailModal(){
             <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
             Escribir al cliente
           </a>
+          ${canAccessTab('productos') ? `<button class="btn-outline" style="display:flex;align-items:center;justify-content:center;gap:8px;" onclick="closeOrderDetailModal();gsShareTo('${gsJsArg(orderContactPhone(o))}','${gsJsArg(o.customer||o.customerName||'')}')">${icon('share',16)} Mandarle productos por WhatsApp</button>` : ''}
         ` : ''}
         <button class="btn-primary" style="background:var(--green);color:#2B1620;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="sendToDelivery('${o.id}')">
           <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16.004 3C9.376 3 4 8.373 4 15c0 2.386.703 4.612 1.918 6.481L4 29l7.72-1.876A11.94 11.94 0 0 0 16.004 27C22.632 27 28 21.627 28 15S22.632 3 16.004 3zm6.988 16.964c-.297.836-1.474 1.53-2.396 1.727-.638.13-1.47.234-4.27-.916-3.585-1.482-5.893-5.09-6.073-5.327-.176-.237-1.454-1.934-1.454-3.69 0-1.755.921-2.62 1.248-2.978.297-.324.648-.405.864-.405.216 0 .432.002.62.011.199.01.466-.075.729.556.27.649.918 2.243.999 2.406.081.163.135.352.027.567-.108.216-.163.351-.324.54-.163.19-.343.424-.49.57-.163.163-.333.34-.144.669.19.324.844 1.393 1.812 2.257 1.245 1.112 2.294 1.457 2.618 1.62.324.163.514.135.703-.081.19-.216.812-.947 1.03-1.271.216-.324.432-.27.729-.163.297.108 1.884.888 2.207 1.05.324.163.54.243.62.379.081.135.081.784-.216 1.62z"/></svg>
@@ -7560,6 +8018,52 @@ function renderDashboardNotesPanel(){
     </div>
   `;
 }
+/* ============== ATAJOS DEL INICIO ==============
+   Los botones grandes debajo de "Vendido hoy". Cada quien elige cuáles ver (se guarda en este
+   celular, no en Firebase). Solo aparecen los que la cuenta tiene permiso de usar. */
+const HOME_SHORTCUTS = [
+  {k:'compartir', label:'Compartir producto', ic:'share', ok:()=>canAccessTab('productos'), js:`openGlobalSearch('productos')`},
+  {k:'respuestas', label:'Respuestas rápidas', ic:'message-circle', ok:()=>true, js:`openGlobalSearch('respuestas')`},
+  {k:'nuevo', label:'Nuevo producto', ic:'package', ok:()=>canAccessTab('productos'), js:`state.adminTab='productos';state.productModal=newProductModal();render()`},
+  {k:'vender', label:'Punto de venta', ic:'bag', ok:()=>!state.myPermissions, href:'pos.html'},
+  {k:'buscar', label:'Buscar', ic:'search', ok:()=>true, js:`openGlobalSearch()`},
+  {k:'escanear', label:'Escanear código', ic:'scan', ok:()=>canAccessTab('productos'), js:`openGlobalSearch('productos');gsOpenScan()`},
+  {k:'apartado', label:'Nuevo apartado', ic:'bag', ok:()=>canAccessTab('apartados') && typeof lyOpenNew==='function', js:`state.adminTab='apartados';render();lyOpenNew()`},
+  {k:'caja', label:'Caja y cortes', ic:'dollar-sign', ok:()=>canAccessTab('caja'), js:`state.adminTab='caja';render();window.scrollTo(0,0)`},
+  {k:'cupon', label:'Nuevo cupón', ic:'tag', ok:()=>canAccessTab('marketing'), js:`state.adminTab='marketing';state.marketingSubpanel='cupones';render();openCouponModal(null)`},
+  {k:'reabasto', label:'Reabastecer', ic:'truck', ok:()=>canAccessTab('centros'), js:`state.adminTab='centros';render();window.scrollTo(0,0)`},
+];
+const HOME_SHORTCUTS_DEFAULT = ['compartir','respuestas','nuevo','vender'];
+function homeShortcutKeys(){
+  let k = null; try{ k = JSON.parse(localStorage.getItem('cdlp_home_shortcuts')||'null'); }catch(e){}
+  return Array.isArray(k) && k.length ? k : HOME_SHORTCUTS_DEFAULT;
+}
+function renderHomeShortcuts(){
+  const keys = homeShortcutKeys();
+  let list = keys.map(k=>HOME_SHORTCUTS.find(x=>x.k===k)).filter(x=>x && x.ok());
+  if(!list.length) list = HOME_SHORTCUTS.filter(x=>x.ok()).slice(0,3);
+  const btn = x => x.href ? `<a href="${x.href}" target="_blank">${icon(x.ic,20)} ${x.label}</a>` : `<button onclick="${x.js}">${icon(x.ic,20)} ${x.label}</button>`;
+  return `<div class="quick-actions ${list.length>3?'qa-4':''}">${list.map(btn).join('')}</div>
+    <div style="text-align:right;margin:-12px 0 14px;"><button class="link-btn" style="font-size:12px;color:var(--ink-soft);background:none;border:none;text-decoration:underline;" onclick="state.shortcutsEditOpen=true;render()">Cambiar atajos</button></div>
+    ${state.shortcutsEditOpen ? renderShortcutsModal() : ''}`;
+}
+function toggleHomeShortcut(k){
+  let keys = homeShortcutKeys().slice();
+  if(keys.includes(k)) keys = keys.filter(x=>x!==k);
+  else { if(keys.length>=4){ showToast('Máximo 4 atajos: quita uno primero'); return; } keys.push(k); }
+  try{ localStorage.setItem('cdlp_home_shortcuts', JSON.stringify(keys.length?keys:HOME_SHORTCUTS_DEFAULT)); }catch(e){}
+  render();
+}
+function renderShortcutsModal(){
+  const keys = homeShortcutKeys();
+  return `<div class="modal-overlay" onclick="if(event.target===this){state.shortcutsEditOpen=false;render()}"><div class="modal" style="max-width:420px;">
+    <h3>Atajos del inicio</h3>
+    <div class="panel-sub" style="margin-bottom:10px;">Elige hasta 4. Se guardan en este celular.</div>
+    ${HOME_SHORTCUTS.filter(x=>x.ok()).map(x=>{ const on = keys.includes(x.k); return `<button class="list-row" style="width:100%;background:${on?'var(--surface-soft)':'transparent'};border:1.5px solid ${on?'var(--primary)':'var(--border)'};border-radius:12px;margin-bottom:6px;text-align:left;" onclick="toggleHomeShortcut('${x.k}')">
+      <span style="display:inline-flex;width:28px;">${icon(x.ic,18)}</span><span class="row-main"><span class="row-title">${x.label}</span></span>${on?icon('check',16):''}</button>`; }).join('')}
+    <div class="modal-actions"><button class="btn-primary" style="flex:1;" onclick="state.shortcutsEditOpen=false;render()">Listo</button></div>
+  </div></div>`;
+}
 function renderResumen(){
   const m = computeMetrics();
   const g = computeMonthProgress();
@@ -7588,11 +8092,7 @@ function renderResumen(){
         <button onclick="${goTo('En camino')}"><b>${m.pendingCamino}</b><span>En camino</span></button>
       </div>
     </div>
-    <div class="quick-actions">
-      ${canAccessTab('productos') ? `<button onclick="state.adminTab='productos';state.productModal=newProductModal();render()">${icon('package',20)} Nuevo producto</button>` : ''}
-      ${!state.myPermissions ? `<a class="m-hide" href="pos.html" target="_blank">${icon('bag',20)} Punto de venta</a>` : ''}
-      <button onclick="openGlobalSearch()">${icon('search',20)} Buscar</button>
-    </div>
+    ${renderHomeShortcuts()}
     ${renderTodayPanel()}
     ${maint.length ? dashSec('mant', 'Mantenimiento de la semana', `${maint.length} pendiente${maint.length===1?'':'s'}`, renderMaintenancePanel(maint), false) : ''}
     ${health.level!=='verde' ? `<div id="salud-panel"><div class="panel" style="border-left:5px solid ${healthColor};">
@@ -9443,7 +9943,8 @@ function duplicateProduct(id){
   render();
 }
 function copyProductLink(id){
-  const url = location.href.replace(/admin(\.html)?([?#].*)?$/, '') + '?producto=' + encodeURIComponent(id);
+  const p = state.products.find(x=>x.id===id);
+  const url = p ? storeProductLink(p) : location.href.replace(/admin(\.html)?([?#].*)?$/, '') + '?producto=' + encodeURIComponent(id);
   try{
     navigator.clipboard.writeText(url);
     showToast('Enlace copiado — pégalo donde quieras compartirlo');
@@ -18492,7 +18993,7 @@ function render(){
   if(state.postModalProductId && document.getElementById('post-canvas')){ drawPostCanvas(); }
   toastStack();
   const pinField = document.getElementById('pin-field'); if(pinField && !focusInfo) pinField.focus();
-  const searchField = document.getElementById('global-search-input'); if(searchField && document.activeElement!==searchField && !focusInfo){ searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
+  const searchField = document.getElementById('global-search-input'); if(searchField && state.gsFocusOnce && document.activeElement!==searchField && !focusInfo){ state.gsFocusOnce=false; searchField.focus(); const v=searchField.value; searchField.setSelectionRange(v.length,v.length); }
   restoreFocusState(root, focusInfo);
   restoreScrollPositions(root, scrollPositions);
   try{ fitFloatingMenus(); }catch(e){}
@@ -18543,7 +19044,7 @@ const NAV_ADMIN_MODALS = [
   ['productHistoryOpen', ()=>closeProductHistory()], ['needsManageOpen', false], ['catManageOpen', false],
   ['bulkTagModal', null], ['auditScannerOpen', ()=>closeAuditScanner()], ['trashOpen', false], ['promoListOpen', false], ['promoPickOpen', false], ['duplicatesOpen', false], ['ci', ()=>closeCatalogImprove()], ['mv', ()=>closeMergeVariants()],
   ['recompressOpen', ()=>closeRecompressTool()], ['orderDetailModal', ()=>closeOrderDetailModal()], ['cropOpen', false],
-  ['cashierModal', null], ['globalSearchOpen', ()=>closeGlobalSearch()], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
+  ['cashierModal', null], ['globalSearchOpen', ()=>{ if(state.gsScanOpen) gsStopScan(); else if(state.gsReplyEdit||state.gsTplEdit){ state.gsReplyEdit=null; state.gsTplEdit=false; render(); } else if((state.gsSel||[]).length){ state.gsSel=[]; render(); } else closeGlobalSearch(); }], ['shortcutsEditOpen', false], ['abandonedCartsOpen', false], ['failModal', null], ['productModal', null],
   ['customerModal', ()=>closeCustomerModal()], ['wholesaleModal', ()=>closeWholesaleModal()], ['flashModal', ()=>closeFlashModal()], ['couponModal', ()=>closeCouponModal()],
   ['promoModal', ()=>closePromoModal()], ['centerModal', null], ['cajaDetail', null], ['importOpen', false], ['customerImportOpen', false],
   ['catImportOpen', false], ['catAssignOpen', false], ['needAssignOpen', false], ['catalogMaintOpen', false], ['bgFixOpen', false],
