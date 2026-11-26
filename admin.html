@@ -1412,7 +1412,21 @@ window.addEventListener('error', (ev)=>{ logSystemError(ev.message, ev.error && 
 window.addEventListener('unhandledrejection', (ev)=>{
   const r = ev.reason;
   logSystemError(r && r.message ? r.message : String(r), r && r.stack ? r.stack : '');
+  // Red de seguridad: un error de Firebase que nadie atrapó ya no pasa en silencio.
+  const msg = r && (r.code || r.message) ? String(r.code||r.message) : '';
+  if(/firestore|permission|invalid data|unsupported field|unavailable|network/i.test(msg) && typeof showToast==='function'){
+    showToast('No se pudo guardar: ' + fsErrMsg(r));
+  }
 });
+function fsErrMsg(e){
+  const code = (e && e.code) || '';
+  const m = String((e && e.message) || e || '');
+  if(code==='permission-denied' || /permission/i.test(m)) return 'tu cuenta no tiene permiso para este cambio';
+  if(code==='unavailable' || /offline|network|unavailable/i.test(m)) return 'no hay conexión, inténtalo de nuevo';
+  if(/undefined|invalid data|unsupported field/i.test(m)) return 'faltan datos en el registro (avísame para revisarlo)';
+  if(code==='resource-exhausted') return 'se acabó la cuota de Firebase de hoy';
+  return m.slice(0,140) || 'error desconocido';
+}
 
 const PALETTE =["#BC355C","#6E2159","#1AA0B2","#0A4A5B","#ED7578","#4A1642","#F6A030","#6E9E1A","#8a6b78","#993477","#20B7CA","#7AB71A"];
 const DEFAULT_CATEGORIES = ["Juguetes","Dildos","Lubricantes","Plugs","Ropa interior","Masturbadores","Dilatadores","Anillos","Otros"];
@@ -2466,7 +2480,7 @@ async function hashCashierPin(pin, salt){
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 async function saveCashierDoc(c){
-  const payload = {name:c.name, active:c.active, email:c.email||'', role:c.role||'cajero', notify:c.notify||{}, permissions:c.permissions||{}};
+  const payload = {name:c.name, active:!!c.active, email:c.email||'', role:c.role||'cajero', notify:c.notify||{}, permissions:c.permissions||{}};
   if(c.pin){ const salt = newPinSalt(); payload.pinSalt = salt; payload.pinHash = await hashCashierPin(c.pin, salt); }
   else if(c.pinHash){ payload.pinSalt = c.pinSalt||''; payload.pinHash = c.pinHash; }
   if(c.id){ await db.collection('cashiers').doc(c.id).set(payload); }
@@ -2689,7 +2703,8 @@ async function syncStaffPermissions(email, permissions, oldEmail){
     if(clean){
       await db.collection('staffPermissions').doc(clean).set({permissions: permissions||{}});
     }
-  }catch(e){ console.error('No se pudo sincronizar los permisos', e); }
+    return true;
+  }catch(e){ console.error('No se pudo sincronizar los permisos', e); return false; }
 }
 function computeMyPermissions(){
   const myEmail = (state.user && state.user.email || '').trim().toLowerCase();
@@ -6082,7 +6097,8 @@ async function toggleArchiveOrder(id,archived,silent,fromUndo){ const o=state.or
 async function saveSettingsForm(s){ state.settings={...state.settings,...s}; await saveSettings(); showToast('Configuración guardada'); render(); }
 
 /* ============== USUARIOS Y NOTIFICACIONES (antes "Cajeros") ============== */
-async function saveCashierForm(){
+async function saveCashierForm(btn){
+  if(state.savingCashier) return;
   const name = document.getElementById('cash-name').value.trim();
   const email = document.getElementById('cash-email').value.trim();
   const role = document.getElementById('cash-role').value;
@@ -6093,16 +6109,23 @@ async function saveCashierForm(){
   if(pin && !/^\d{4,6}$/.test(pin)){ showToast('El PIN debe tener de 4 a 6 números'); return; }
   if(role==='colaborador' && !email){ showToast('Los colaboradores necesitan el correo con el que van a iniciar sesión'); return; }
   if(role==='colaborador' && (state.user.email||'').trim().toLowerCase()===email.trim().toLowerCase()){ showToast('No puedes usar tu propio correo — te quedarías sin acceso completo'); return; }
+  const emailKey = email.trim().toLowerCase();
+  if(emailKey && state.cashiers.some(x=>x.id!==state.cashierModal.id && (x.email||'').trim().toLowerCase()===emailKey)){ showToast('Ya hay otro usuario con ese correo'); return; }
   const notify = state.cashierModal.notify || {};
   const permissions = role==='colaborador' ? (state.cashierModal.permissions||{}) : {};
   const existing = state.cashierModal.id ? state.cashiers.find(c=>c.id===state.cashierModal.id) : null;
   const oldEmail = existing ? existing.email : null;
   const pinEff = pin || (existing && !existing.pinHash ? (existing.pin||'') : '');
   const c = existing ? {...existing, name, email, role, pin:pinEff, notify, permissions} : {name, email, role, pin:pinEff, notify, permissions, active:true};
+  state.savingCashier = true;
+  const btnText = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando…'; }
+  let permsOk = true;
+  try{
   await saveCashierDoc(c);
   // El acceso real siempre lo decide "staffPermissions", no la lista de cajeros: si el
   // rol dejó de ser "colaborador" o se cambió el correo, hay que revocar el correo anterior.
-  await syncStaffPermissions(role==='colaborador' ? email : '', role==='colaborador' ? permissions : {}, oldEmail);
+  permsOk = await syncStaffPermissions(role==='colaborador' ? email : '', role==='colaborador' ? permissions : {}, oldEmail);
   if(!existing){
     logAdminAction('alta_personal', 'persona', name, role==='colaborador' ? `Colaborador · ${email}` : 'Cajero');
   }else if(role==='colaborador'){
@@ -6112,7 +6135,15 @@ async function saveCashierForm(){
   if(!existing) state.cashiers.push(c);
   else{ Object.assign(existing, c); delete existing.pin; }
   if(state.user && (state.user.email||'').trim().toLowerCase()===(email||'').trim().toLowerCase()) computeMyPermissions();
-  state.cashierModal=null; showToast('Guardado'); render();
+  }catch(e){
+    console.error(e);
+    showToast('No se pudo guardar el usuario: ' + fsErrMsg(e));
+    if(btn){ btn.disabled = false; btn.textContent = btnText; }
+    return;
+  }finally{ state.savingCashier = false; }
+  state.cashierModal=null;
+  showToast(permsOk ? 'Guardado' : 'Se guardó el usuario, pero no sus permisos. Vuelve a abrirlo y guarda otra vez.');
+  render();
 }
 function permissionsDiffSummary(oldPerms, newPerms){
   const changes = [];
@@ -6124,7 +6155,10 @@ function permissionsDiffSummary(oldPerms, newPerms){
 }
 async function toggleCashierActive(id){
   const c = state.cashiers.find(x=>x.id===id); if(!c) return;
-  c.active = !c.active; await saveCashierDoc(c);
+  const next = !c.active;
+  try{ await saveCashierDoc({...c, active:next}); }
+  catch(e){ console.error(e); showToast('No se pudo cambiar: ' + fsErrMsg(e)); return; }
+  c.active = next;
   // Desactivar a un colaborador debe revocar su acceso real de inmediato, no solo la
   // etiqueta visual — si no, su cuenta de Firebase seguiría entrando con sus permisos viejos.
   if(c.role==='colaborador') await syncStaffPermissions(c.active ? c.email : '', c.active ? (c.permissions||{}) : {}, c.active ? null : c.email);
@@ -10560,7 +10594,7 @@ function renderCashierModal(){
       ${secNotify}
       <div class="modal-actions">
         <button class="btn-cancel" onclick="state.cashierModal=null;render()">Cancelar</button>
-        <button class="btn-primary" onclick="saveCashierForm()">Guardar</button>
+        <button class="btn-primary" onclick="saveCashierForm(this)">Guardar</button>
       </div>
     </div>
   </div>`;
@@ -10740,21 +10774,25 @@ function renderKitEditor(p){
 }
 
 async function saveCenterDoc(c){
-  if(c.id){ await db.collection('distributionCenters').doc(c.id).set({name:c.name, isDefault:!!c.isDefault, active:c.active}); }
+  if(c.id){ await db.collection('distributionCenters').doc(c.id).set({name:c.name, isDefault:!!c.isDefault, active:!!c.active}, {merge:true}); }
   else{ const ref = await db.collection('distributionCenters').add({name:c.name, isDefault:false, active:true, createdAt:new Date().toISOString()}); c.id = ref.id; }
 }
 async function addCenter(){
   const name = state.newCenterInput.trim();
   if(!name){ showToast('Ponle un nombre al centro'); return; }
   const c = {name, isDefault:false, active:true};
-  await saveCenterDoc(c);
+  try{ await saveCenterDoc(c); }
+  catch(e){ console.error(e); showToast('No se pudo agregar: ' + fsErrMsg(e)); return; }
   state.centers.push(c);
   state.newCenterInput='';
   showToast('Centro agregado'); render();
 }
 async function toggleCenterActive(id){
   const c = state.centers.find(x=>x.id===id); if(!c) return;
-  c.active = !c.active; await saveCenterDoc(c); render();
+  const next = !c.active;
+  try{ await saveCenterDoc({...c, active:next}); }
+  catch(e){ console.error(e); showToast('No se pudo cambiar: ' + fsErrMsg(e)); return; }
+  c.active = next; render();
 }
 function centerPiecesLeft(id){
   let n=0; const items=[];
@@ -10789,8 +10827,10 @@ async function saveCenterModal(){
   const name = document.getElementById('center-name-input').value.trim();
   if(!name){ showToast('Ponle un nombre al centro'); return; }
   const c = state.centers.find(x=>x.id===state.centerModal.id);
+  if(!c){ state.centerModal=null; render(); return; }
+  try{ await saveCenterDoc({...c, name}); }
+  catch(e){ console.error(e); showToast('No se pudo guardar: ' + fsErrMsg(e)); return; }
   c.name = name;
-  await saveCenterDoc(c);
   state.centerModal = null; showToast('Centro actualizado'); render();
 }
 
