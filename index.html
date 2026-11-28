@@ -5378,14 +5378,18 @@ window.addEventListener('resize', adjustTopbarSpacer);
    solo agrega movimiento a las mismas filas que ya existían. Como toda la página se
    vuelve a dibujar con cada render(), esto busca los elementos en el DOM en cada cuadro
    en vez de guardar una referencia fija, así sigue funcionando después de cualquier click. */
-// Las filas ya no se mueven solas: el movimiento dejaba la primera opción cortada a la izquierda.
-// Que hay más se indica con el desvanecido del borde derecho y "Desliza ›".
-const AUTOSCROLL_SELECTORS = [];
+// Nov 2026: vuelven a moverse solas ("¿Para quién es?", "Lo más vendido" y categorías). Antes se
+// habían apagado porque la primera opción quedaba cortada a la izquierda; ahora cada fila espera
+// quieta unos segundos al aparecer y al llegar a cada orilla, así la primera opción siempre se ve
+// completa antes de que empiece a moverse.
+const AUTOSCROLL_SELECTORS = ['.hx-needs-row', '#destacados .best-row', '.cat-tiles'];
+const AUTOSCROLL_START_WAIT = 2500, AUTOSCROLL_EDGE_WAIT = 1800;
+const autoScrollSeen = new WeakSet();
 const autoScrollDir = {};
 const autoScrollFrac = {}; // resto (menor a 1px) que un movimiento tan lento deja pendiente entre cuadros
 const autoScrollPausedUntil = {};
 function pauseAutoScrollFor(target){
-  AUTOSCROLL_SELECTORS.forEach(sel=>{ if(target.closest && target.closest(sel)) autoScrollPausedUntil[sel] = Date.now() + 4000; });
+  AUTOSCROLL_SELECTORS.forEach(sel=>{ const row = target.closest && target.closest(sel); if(row){ autoScrollPausedUntil[sel] = Date.now() + 5000; row.style.scrollSnapType = ''; } });
 }
 document.addEventListener('pointerdown', (e)=>pauseAutoScrollFor(e.target), {passive:true});
 document.addEventListener('wheel', (e)=>pauseAutoScrollFor(e.target), {passive:true});
@@ -5400,7 +5404,13 @@ function autoScrollTick(ts){
       if(!el) return;
       const maxScroll = el.scrollWidth - el.clientWidth;
       if(maxScroll<=4) return; // no hay nada que deslizar
+      // Fila recién dibujada (al entrar o después de cualquier render): espera quieta en el inicio.
+      if(!autoScrollSeen.has(el)){ autoScrollSeen.add(el); autoScrollDir[sel] = 1; autoScrollFrac[sel] = 0;
+        autoScrollPausedUntil[sel] = Math.max(autoScrollPausedUntil[sel]||0, Date.now() + AUTOSCROLL_START_WAIT); return; }
       if(autoScrollPausedUntil[sel] && Date.now() < autoScrollPausedUntil[sel]) return;
+      // El "imán" de las tarjetas (scroll-snap) regresaría la fila a su lugar en cada cuadro y no la
+      // dejaría avanzar: se apaga mientras se mueve sola y vuelve en cuanto la persona la toca.
+      if(el.style.scrollSnapType!=='none') el.style.scrollSnapType = 'none';
       const dir = autoScrollDir[sel] || 1;
       const speed = 22; // px/segundo, sutil pero visible
       // A esta velocidad el avance por cuadro es menor a 1px, y scrollLeft solo acepta
@@ -5412,8 +5422,8 @@ function autoScrollTick(ts){
       autoScrollFrac[sel] = frac - wholePixels;
       if(wholePixels!==0){
         let next = el.scrollLeft + wholePixels;
-        if(next >= maxScroll){ next = maxScroll; autoScrollDir[sel] = -1; autoScrollFrac[sel] = 0; }
-        else if(next <= 0){ next = 0; autoScrollDir[sel] = 1; autoScrollFrac[sel] = 0; }
+        if(next >= maxScroll){ next = maxScroll; autoScrollDir[sel] = -1; autoScrollFrac[sel] = 0; autoScrollPausedUntil[sel] = Date.now() + AUTOSCROLL_EDGE_WAIT; }
+        else if(next <= 0){ next = 0; autoScrollDir[sel] = 1; autoScrollFrac[sel] = 0; autoScrollPausedUntil[sel] = Date.now() + AUTOSCROLL_EDGE_WAIT; }
         el.scrollLeft = next;
       }
     });
