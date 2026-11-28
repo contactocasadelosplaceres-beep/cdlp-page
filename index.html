@@ -1088,6 +1088,33 @@
   .drawer-foot .btn-primary{min-height:48px;}
   .drawer-foot .dw-foot-note{margin-top:6px;}
 
+
+/* ===== PORTADA LIMPIA + TARJETAS PAREJAS (nov 2026) ===== */
+.cat-cta{margin:26px 16px 8px;padding:22px 18px;border-radius:18px;background:#fff;border:1px solid #EBDDE5;text-align:center;box-shadow:0 14px 30px -24px rgba(82,28,62,.45);}
+.cat-cta-t{font-family:var(--font-heading);font-size:20px;font-weight:700;color:#5C1F49;}
+.cat-cta-s{margin-top:4px;font-size:13.5px;color:var(--ink-soft);}
+.cat-cta-btn{margin-top:14px;width:100%;max-width:360px;min-height:50px;border:0;border-radius:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:#993477;color:#fff;font-family:inherit;font-size:15px;font-weight:700;box-shadow:0 10px 22px -14px rgba(153,52,119,.8);}
+.cat-cta-btn:active{transform:scale(.98);}
+.grid{align-items:stretch;}
+.grid>.card{height:100%;}
+.card-body{display:flex;flex-direction:column;flex:1 1 auto;}
+.card-body>.card-add,.card-body>button:last-child{margin-top:auto;}
+.card-price{margin-top:auto;}
+.card-price~.card-add,.card-price~button{margin-top:8px;}
+.card-short{font-size:12px;line-height:1.35;color:var(--ink-soft);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
+.card-desc{display:none !important;}
+.card-image-wrap{aspect-ratio:1/1 !important;background:#fff !important;}
+.card-image-wrap img{object-fit:contain !important;}
+.best-row{align-items:stretch;}
+.rel-card{display:flex;flex-direction:column;}
+.rel-card>.rel-add{margin-top:auto;}
+.rel-card>.rel-price{margin-top:auto;}
+.rel-card>.rel-price+.rel-add{margin-top:8px;}
+.rel-img{aspect-ratio:1/1;background:#fff !important;}
+.rel-img img{object-fit:contain !important;}
+@media(min-width:768px){ .cat-cta{max-width:720px;margin:34px auto 10px;padding:30px;} }
+@media(max-width:767px){ #catalogo .grid{margin:0 -8px;padding:12px 0 8px;gap:10px;} }
 /* ===== HERO v2 (nov 2026) — pensado primero para celular ===== */
 .hx{position:relative;overflow:hidden;isolation:isolate;color:#fff;
   background:radial-gradient(130% 85% at 105% -5%, rgba(153,52,119,.95) 0%, rgba(153,52,119,0) 62%), linear-gradient(165deg,#521C3E 0%,#45162F 100%);
@@ -2330,12 +2357,12 @@ function clampCartToStock(){
 function removeFromCart(key){ delete state.cart[key]; saveCart(); render(); }
 
 function scrollToId(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth', block:'start'}); }
-function goHome(){ state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; state.activeBestSellers=false; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+function goHome(){ state.showAllCatalog=false; state.searchQuery=''; state.activeCat='Todos'; state.activeNeed=null; state.activeBestSellers=false; render(); window.scrollTo({top:0, behavior:'smooth'}); }
 // "Ver más vendidos" ya no lleva a una sección fija de la página — filtra el catálogo para
 // mostrar solo esos productos, igual que al elegir una categoría, con un botón claro para
 // quitar el filtro y ver todo de nuevo (ver renderGridSection).
 function goToFeatured(){
-  state.activeBestSellers = true; state.activeCat = 'Todos'; state.activeNeed = null; state.searchQuery = ''; state.gridRenderLimit = 20;
+  state.showAllCatalog = true; state.activeBestSellers = true; state.activeCat = 'Todos'; state.activeNeed = null; state.searchQuery = ''; state.gridRenderLimit = 20;
   render();
   requestAnimationFrame(()=>scrollToId('catalogo'));
 }
@@ -2395,8 +2422,8 @@ function detailTouchEnd(e){
   if(Math.abs(delta) < 40) return;
   if(delta < 0) detailNextImage(); else detailPrevImage();
 }
-function goToCatalog(cat){ state.activeBestSellers=false; state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
-function filterByNeed(key){ state.activeBestSellers=false; state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function goToCatalog(cat){ state.showAllCatalog=true; state.activeBestSellers=false; state.activeCat=cat||'Todos'; state.activeNeed=null; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
+function filterByNeed(key){ state.showAllCatalog=true; state.activeBestSellers=false; state.activeNeed=key; state.activeCat='Todos'; state.searchQuery=''; state.gridRenderLimit=20; render(); requestAnimationFrame(()=>scrollToId('catalogo')); }
 // Búsquedas sin resultado: cuando alguien escribe algo en el buscador, se espera a que deje de
 // teclear; si con el catálogo COMPLETO ya cargado no coincide con ningún producto, se guarda solo
 // el texto (anónimo, sin ningún dato de la persona) para que en el panel veas qué te piden y no
@@ -4160,6 +4187,7 @@ function newArrivals(){
     .sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
 }
 function renderNewRow(){
+  if(!homeIsClean()) return '';
   if(state.activeNeed || (state.activeCat && state.activeCat!=='Todos') || state.searchQuery.trim() || state.activeBestSellers) return '';
   const items = newArrivals().slice(0,10);
   if(items.length<4) return '';
@@ -4178,6 +4206,21 @@ function renderRecentRow(){
   if(items.length<2) return '';
   return `<div class="best-row-block">
     <div class="best-row-head"><h2 class="section-heading" style="margin:0;">Vistos recientemente</h2></div>
+    <div class="best-row">${items.map(p=>renderMiniCard(p,{})).join('')}</div>
+  </div>`;
+}
+/* Ideas para regalar: productos reales marcados "Para regalar" en el admin, con existencia y foto.
+   Primero los que Ale puso como destacados, luego el resto en el orden del día. Con menos de 4 no sale. */
+function giftNeed(){ return (state.settings.needs||DEFAULT_NEEDS).find(n=>/regal/i.test(n.label||'')); }
+function renderGiftRow(){
+  if(!homeIsClean()) return '';
+  const need = giftNeed(); if(!need) return '';
+  const feat = featuredPidSet();
+  const items = dailyShuffledProducts().filter(p=>p.stock>0 && (p.images||[]).length && (p.needs||[]).includes(need.key))
+    .map((p,i)=>({p,i})).sort((a,b)=>(feat.has(b.p.id)-feat.has(a.p.id)) || a.i-b.i).map(x=>x.p).slice(0,10);
+  if(items.length<4) return '';
+  return `<div class="best-row-block" id="regalos">
+    <div class="best-row-head"><h2 class="section-heading" style="margin:0;">Ideas para regalar</h2><button class="best-row-all" onclick="filterByNeed('${need.key}')">Ver todas</button></div>
     <div class="best-row">${items.map(p=>renderMiniCard(p,{})).join('')}</div>
   </div>`;
 }
@@ -4371,7 +4414,23 @@ function renderPriceFilterDrawer(){
 }
 
 /* ============== CATÁLOGO COMPLETO ============== */
+/* Portada limpia (nov 2026): sin ningún filtro, la portada ya no dibuja los 529 productos; muestra
+   secciones elegidas (más vendidos, categorías, novedades, regalos) y este botón. El catálogo
+   completo aparece al tocar "Ver catálogo", una categoría, "¿Para quién es?" o al buscar. */
+function homeIsClean(){
+  return !state.showAllCatalog && !state.activeBestSellers && !state.searchQuery.trim() && !state.activeNeed
+    && !(state.activeCat && state.activeCat!=='Todos') && !priceFilterActive();
+}
+function renderCatalogCta(){
+  const n = state.products.length;
+  return `<div id="catalogo" class="cat-cta">
+    <div class="cat-cta-t">¿Quieres ver todo?</div>
+    <div class="cat-cta-s">${n} productos, con filtros por precio y categoría.</div>
+    <button class="cat-cta-btn" onclick="goToCatalog('Todos')">Ver catálogo completo ${icon('chevron-right',16)}</button>
+  </div>`;
+}
 function renderGridSection(){
+  if(homeIsClean()) return renderCatalogCta();
   let filtered = dailyShuffledProducts();
   let heading = 'Catálogo completo';
   let showClearBtn = false;
@@ -4555,7 +4614,6 @@ function renderProductBadges(p, ctx){
 }
 function renderProductCard(p, forceBest){
   const isBest = forceBest || featuredPidSet().has(p.id);
-  const isGenericDesc = p.desc && /^Compra en línea .+ por \$[\d.,]+\.? Haz tu pedido y paga en línea\.?$/i.test(p.desc.trim());
   const hasVariants = p.variantGroups && p.variantGroups.length>0;
   const hasPromo = !!productDisplayPrice(p).was;
   const tier = activeWholesaleTier();
@@ -4575,7 +4633,7 @@ function renderProductCard(p, forceBest){
         </div>
         <div class="card-body">
           <h3 class="card-name"><a class="card-link" href="?producto=${p.id}" onclick="event.preventDefault()">${p.name}</a></h3>
-          ${p.desc && !isGenericDesc ? `<div class="card-desc">${p.desc}</div>` : ''}
+          ${p.shortLine ? `<div class="card-short">${escHtml(p.shortLine)}</div>` : ''}
           <div class="card-price">${priceHtml(p,12)}</div>
           ${savingsLabel(p) ? `<div class="card-save">${savingsLabel(p)}</div>` : ''}
           ${isKioskMode() ? '' : cardAction(p,'card')}
@@ -5200,12 +5258,12 @@ function renderStore(){
     order.splice(insertPos, 0, defSection.key);
     knownKeys.add(defSection.key);
   });
-  const before = { grid: ['kits'] }; // fixed sections inserted right before a configurable one
+  const before = { grid: ['kits','newrow','giftrow'] }; // fixed sections inserted right before a configurable one
   // Orden pensado para vender: promesa + 2 botones → ofertas relámpago → para quién → lo más
   // vendido (prueba social) → categorías y catálogo → "¿no te decides?" (quiz) → confianza → pie.
   // La franja de 3 íconos (compra segura/empaque/pago) se quitó: ya lo dicen la barra de arriba y el hero.
-  const after = { hero: ['flash','needs','bestrow'], grid: ['newrow','recent'], testimonials: ['discretion','faqfix'] };
-  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, bestrow: renderBestRow, newrow: renderNewRow, recent: renderRecentRow, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection, faqfix: renderFaqSection };
+  const after = { hero: ['flash','needs','bestrow'], grid: ['recent'], testimonials: ['discretion','faqfix'] };
+  const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, bestrow: renderBestRow, newrow: renderNewRow, giftrow: renderGiftRow, recent: renderRecentRow, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection, faqfix: renderFaqSection };
 
   const searching = state.searchQuery.trim().length>0;
   let body = '';

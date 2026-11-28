@@ -4873,6 +4873,9 @@ async function saveProduct(p){
     // arma de componentes fijos sino de una selección aleatoria al momento del pedido.
     stock: isKit ? computeKitStock({kitItems}) : p.stock,
     desc:p.desc, images:p.images||[], needs:p.needs||[],
+    // Frase corta (opcional) que sale bajo el nombre en las tarjetas de la tienda. Si quien guarda
+    // no la manda (ediciones masivas, revisiones), se conserva la que ya tenía.
+    shortLine: p.shortLine!=null ? String(p.shortLine).trim().slice(0,60) : ((old && old.shortLine) || ''),
     stockByCenter: isKit ? {} : (p.stockByCenter||{}), hidden: !!p.hidden,
     variantGroups: p.variantGroups||[], variants: p.variants||[],
     batches: p.batches||[],
@@ -17408,7 +17411,10 @@ function renderProductModal(){
         <div class="panel-sub" style="margin:8px 0 0;">El total se suma solo a partir de cada centro.</div>`});
 
   const secDesc = pmSection('desc','Descripción',{icon:'edit', status:true, hint:'Lo que tus clientes leen en la tienda', body:`
-      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" spellcheck="true" lang="es" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value;pmLive()">${p.desc||''}</textarea>${renderSpellPanel()}</div>`});
+      <div class="form-field" style="margin-bottom:0;"><textarea id="pf-desc" spellcheck="true" lang="es" rows="4" aria-label="Descripción breve" placeholder="Cuenta de qué trata el producto en pocas líneas…" oninput="state.productModal.desc=this.value;pmLive()">${p.desc||''}</textarea>${renderSpellPanel()}</div>
+      <div class="form-field" style="margin:12px 0 0;"><label>Frase corta para la tarjeta <small style="font-weight:500;">(opcional, máx. 60 letras)</small></label>
+        <input id="pf-short" maxlength="60" value="${escDescHtml(p.shortLine||'')}" placeholder="Ej. Silencioso y con 10 velocidades" oninput="state.productModal.shortLine=this.value">
+        <div class="panel-sub" style="margin:6px 0 0;">Sale debajo del nombre en el catálogo. Si la dejas vacía, la tarjeta muestra solo nombre y precio.</div></div>`});
 
   const secCats = pmSection('categorias','Categorías y público',{icon:'tag', status:true, hint:'Para que tus clientes lo encuentren', body:`
       ${isNew && p._copied ? `<div class="pm-copied">${icon('copy',13)} Copié la categoría, el proveedor y la ubicación del último producto que diste de alta. <button type="button" class="btn-tertiary" onclick="pmClearCopied()">Empezar en blanco</button></div>` : ''}
@@ -17981,6 +17987,8 @@ function handleSaveProduct(existingId, skipWarn){
   const promoPrice = Number(document.getElementById('pf-promo').value)||0;
   const cost = Number(document.getElementById('pf-cost').value)||0;
   const desc = document.getElementById('pf-desc').value.trim();
+  const shortEl = document.getElementById('pf-short');
+  const shortLine = String(shortEl ? shortEl.value : (state.productModal.shortLine||'')).trim();
   const hidden = document.getElementById('pf-hidden').checked;
   if(!name){ state.savingProduct = false; showToast('Ponle un nombre al producto'); render(); pmGoTo('foto','pf-name'); return; }
   if(!(price>0) && !(state.productModal.variants||[]).some(v=>Number(v.priceOverride)>0)){ state.savingProduct = false; showToast('Ponle precio de venta al producto'); render(); pmGoTo('precio','pf-price'); return; }
@@ -18012,7 +18020,7 @@ function handleSaveProduct(existingId, skipWarn){
     stockByCenter = tmp.stockByCenter; stock = tmp.stock;
   }
   saveProduct({
-    id: existingId||null, name, sku, location, supplierId, expirationDate, batches, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc,
+    id: existingId||null, name, sku, location, supplierId, expirationDate, batches, lowStockThreshold, cat, categories, price, promoPrice, cost, stock, stockByCenter, desc, shortLine,
     hidden, images: state.productModal.images||[], needs: state.productModal.needs||[],
     variantGroups: state.productModal.variantGroups||[], variants: state.productModal.variants||[],
     costHistory: state.productModal.costHistory||[],
