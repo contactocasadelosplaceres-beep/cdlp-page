@@ -1469,7 +1469,7 @@ const DEFAULT_SETTINGS = {
   announceEnabled:true, announceText:"Atendemos {horario}", announceLink:"", announceColor:"navy",
   trustBarEnabled:true, trustBarShort:"Te llega en empaque sin marcas y pagas al recibir", trustBarItems:["Empaque sin marcas ni logos","Pagas hasta que lo recibes","Nadie sabe qué pediste"],
   searchSynonyms:[],
-  heroTitle:"Tu catálogo, con total discreción.",
+  heroTitle:"Todo para tu placer, directo a tu puerta.",
   heroSubtitle:"Explora, arma tu pedido y recíbelo en la puerta de tu casa. Empaque neutro, pago contra entrega, sin preguntas incómodas.",
   categories:[...DEFAULT_CATEGORIES],
   hiddenCategories:[],
@@ -15786,15 +15786,14 @@ function renderHeroSubpanel(){
   <div class="panel">
     <div class="panel-title">Mensaje de bienvenida</div>
     <div class="panel-sub">El título y texto grandes que ven tus clientes justo al entrar a la tienda. Actívalo u ocúltalo desde "Secciones de la página de inicio".</div>
-    <div class="form-field"><label>Título principal</label><input id="hero-title" value="${s.heroTitle}"></div>
-    <div class="form-field"><label>Subtítulo</label><textarea id="hero-sub">${s.heroSubtitle}</textarea></div>
+    <div class="form-field"><label>Título principal</label><input id="hero-title" value="${['Tu catálogo, con total discreción.','Descubre nuevas formas de disfrutar.'].includes(String(s.heroTitle||'').trim()) ? DEFAULT_SETTINGS.heroTitle : s.heroTitle}"></div>
+    <div class="panel-sub" style="margin:-4px 0 12px;">Debajo del título la tienda ya muestra sola: Empaque sin marcas · Pagas al recibir · Envío $35 en Cd. Guzmán.</div>
     <button class="btn-primary" onclick="saveHeroSettings()">Guardar</button>
   </div>`;
 }
 function saveHeroSettings(){
   saveSettingsForm({
     heroTitle: document.getElementById('hero-title').value.trim() || DEFAULT_SETTINGS.heroTitle,
-    heroSubtitle: document.getElementById('hero-sub').value.trim() || DEFAULT_SETTINGS.heroSubtitle,
   });
 }
 

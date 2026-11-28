@@ -1087,6 +1087,41 @@
   .tot-note{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:#0A4A5B;background:#E6F2F4;border-radius:8px;padding:6px 8px;margin-top:6px;line-height:1.35;}
   .drawer-foot .btn-primary{min-height:48px;}
   .drawer-foot .dw-foot-note{margin-top:6px;}
+
+/* ===== HERO v2 (nov 2026) — pensado primero para celular ===== */
+.hx{position:relative;overflow:hidden;isolation:isolate;color:#fff;
+  background:radial-gradient(130% 85% at 105% -5%, rgba(153,52,119,.95) 0%, rgba(153,52,119,0) 62%), linear-gradient(165deg,#521C3E 0%,#45162F 100%);
+  padding:22px 18px 20px;}
+.hx-art{position:absolute;z-index:-1;top:-14px;right:-70px;width:330px;height:auto;pointer-events:none;}
+.hx-in{position:relative;max-width:640px;}
+.hx-title{font-family:var(--font-heading);font-size:30px;line-height:1.08;font-weight:700;letter-spacing:-.01em;color:#fff;max-width:13ch;margin:0;text-wrap:balance;}
+.hx-line{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;font-weight:600;color:#F6DDEA;}
+.hx-line li{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+.hx-line svg{color:#F6A030;flex:0 0 auto;}
+.hx-actions{display:flex;flex-direction:column;gap:10px;margin-top:18px;}
+.hx-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;padding:0 16px;border:0;border-radius:14px;cursor:pointer;
+  background:#fff;color:#5C1F49;font-family:inherit;font-size:15.5px;font-weight:700;box-shadow:0 12px 26px -14px rgba(0,0,0,.55);transition:transform .12s ease;}
+.hx-cta svg{color:#BC355C;}
+.hx-ghost{display:flex;align-items:center;justify-content:center;text-align:center;width:100%;min-height:46px;border-radius:14px;cursor:pointer;background:transparent;color:#fff;font-family:inherit;font-size:14.5px;font-weight:600;border:1.5px solid rgba(255,255,255,.5);}
+.hx-cta:active,.hx-ghost:active{transform:scale(.98);}
+.hx-needs{margin-top:20px;}
+.hx-needs-lbl{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#E9C9DC;margin-bottom:8px;}
+.hx-needs-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin:0 -18px;padding:0 18px 2px;scroll-padding-inline:18px;}
+.hx-needs-row::-webkit-scrollbar{display:none;}
+.hx-pill{flex:0 0 auto;min-height:40px;padding:0 15px;border-radius:999px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;
+  background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);}
+.hx-pill.active{background:#fff;color:#5C1F49;border-color:#fff;}
+@media(max-width:359px){ .hx-title{font-size:26px;} .hx-line{font-size:11.5px;gap:5px 10px;} .hx-cta{font-size:14.5px;} }
+@media(min-width:768px){
+  .hx{padding:52px 24px 44px;text-align:center;}
+  .hx-in{margin:0 auto;}
+  .hx-art{right:-20px;top:-30px;width:480px;}
+  .hx-title{font-size:46px;max-width:22ch;margin:0 auto;}
+  .hx-line{justify-content:center;font-size:14px;margin-top:16px;}
+  .hx-actions{flex-direction:row;justify-content:center;max-width:560px;margin:24px auto 0;}
+  .hx-cta{flex:1.4;} .hx-ghost{flex:1;min-height:52px;}
+  .hx-needs-row{justify-content:center;flex-wrap:wrap;margin:0;padding:0;}
+}
 </style>
 </head>
 <body>
@@ -4002,20 +4037,59 @@ function renderHeader(){
 }
 
 /* ============== HERO ============== */
+/* Primera pantalla (nov 2026): título de beneficio, una línea con lo que más tranquiliza (empaque,
+   pago al recibir, envío local), el quiz como botón principal, el catálogo como secundario y los
+   botones "¿Para quién es?" ya dentro del hero, para que todo quepa en la primera pantalla del
+   celular. El dibujo de fondo es abstracto (listones de seda en los colores de la marca), nada
+   explícito y sin fotos: pesa casi nada y no retrasa la carga. */
+const HERO_OLD_TITLES = ['Tu catálogo, con total discreción.', 'Descubre nuevas formas de disfrutar.'];
+const HERO_NEW_TITLE = 'Todo para tu placer, directo a tu puerta.';
+function heroTitleText(){
+  const t = String(state.settings.heroTitle||'').trim();
+  return (!t || HERO_OLD_TITLES.includes(t)) ? HERO_NEW_TITLE : t;
+}
+function heroSilkArt(){
+  return `<svg class="hx-art" viewBox="0 0 400 320" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="hxg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ED7578"/><stop offset="1" stop-color="#BC355C"/></linearGradient>
+      <linearGradient id="hxg2" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#F6A030" stop-opacity=".9"/><stop offset="1" stop-color="#ED7578" stop-opacity=".2"/></linearGradient>
+      <radialGradient id="hxg3" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ED7578" stop-opacity=".55"/><stop offset="1" stop-color="#ED7578" stop-opacity="0"/></radialGradient>
+    </defs>
+    <circle cx="300" cy="90" r="120" fill="url(#hxg3)"/>
+    <path d="M40 300 C 140 250, 160 120, 260 110 S 380 40, 420 -10" fill="none" stroke="url(#hxg1)" stroke-width="26" stroke-linecap="round" opacity=".55"/>
+    <path d="M90 330 C 190 270, 200 170, 300 150 S 400 100, 430 60" fill="none" stroke="url(#hxg2)" stroke-width="12" stroke-linecap="round" opacity=".7"/>
+    <path d="M150 340 C 230 300, 260 220, 340 200 S 420 170, 440 150" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity=".35"/>
+    <circle cx="250" cy="60" r="3" fill="#F6A030" opacity=".9"/><circle cx="355" cy="185" r="2.5" fill="#fff" opacity=".7"/><circle cx="205" cy="38" r="2" fill="#fff" opacity=".6"/>
+  </svg>`;
+}
+function renderHeroNeeds(){
+  return `<div class="hx-needs">
+      <div class="hx-needs-lbl">¿Para quién es?</div>
+      <div class="hx-needs-row">${(state.settings.needs||DEFAULT_NEEDS).map(n=>`<button class="hx-pill ${state.activeNeed===n.key?'active':''}" aria-pressed="${state.activeNeed===n.key}" onclick="filterByNeed('${n.key}')">${n.label}</button>`).join('')}</div>
+    </div>`;
+}
 function renderHeroSection(){
+  const ic = (d)=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const pkg = ic('<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/>');
+  const cash = ic('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>');
+  const pin = ic('<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/>');
   return `
-  <div class="hero">
-    <div class="hero-inner">
-      <div class="hero-copy">
-        <h1>${state.settings.heroTitle}</h1>
-        <p class="hero-sub-desk">${state.settings.heroSubtitle}</p>
-        <div class="hero-actions hero-actions-2">
-          <button class="hero-btn-primary" onclick="goToCatalog('Todos')">Ver catálogo</button>
-          <button class="hero-btn-outline" onclick="openQuiz()">${sparkIcon(16)} Encuentra tu ideal</button>
-        </div>
+  <section class="hx" aria-label="Bienvenida">
+    ${heroSilkArt()}
+    <div class="hx-in">
+      <h1 class="hx-title">${escHtml(heroTitleText())}</h1>
+      <ul class="hx-line">
+        <li>${pkg}Empaque sin marcas</li>
+        <li>${cash}Pagas al recibir</li>
+        <li>${pin}Envío $35 en Cd. Guzmán</li>
+      </ul>
+      <div class="hx-actions">
+        <button class="hx-cta" onclick="openQuiz()">${sparkIcon(18)}<span>Encuentra tu ideal en 1 minuto</span></button>
+        <button class="hx-ghost" onclick="goToCatalog('Todos')">Ver catálogo</button>
       </div>
+      ${renderHeroNeeds()}
     </div>
-  </div>`;
+  </section>`;
 }
 
 /* ============== TRUST BAR (fixed) ============== */
@@ -4030,6 +4104,7 @@ function renderTrustBar(){
 
 /* ============== QUÉ ESTÁS BUSCANDO (fixed, va directo a WhatsApp con intención) ============== */
 function renderNeedsSection(){
+  if(sectionVisible('hero')) return '';   // ya va dentro del hero
   return `
   <div class="needs-block">
     <div class="needs-lbl">¿Para quién es?</div>
@@ -4573,7 +4648,7 @@ function renderDiscretionSection(){
         <div class="discretion-item"><span class="ic">${icon('package',20)}</span>Empaque sin marcas</div>
         <div class="discretion-item"><span class="ic">${icon('banknote',20)}</span>Pagas al recibir</div>
         <div class="discretion-item"><span class="ic">${icon('home',20)}</span>Directo a tu puerta</div>
-        <div class="discretion-item"><span class="ic">${icon('message-circle',20)}</span>Atención discreta por WhatsApp</div>
+        <div class="discretion-item"><span class="ic">${icon('message-circle',20)}</span>Confirmamos por WhatsApp</div>
       </div>
     </div>
   </div>`;
@@ -5129,7 +5204,7 @@ function renderStore(){
   // Orden pensado para vender: promesa + 2 botones → ofertas relámpago → para quién → lo más
   // vendido (prueba social) → categorías y catálogo → "¿no te decides?" (quiz) → confianza → pie.
   // La franja de 3 íconos (compra segura/empaque/pago) se quitó: ya lo dicen la barra de arriba y el hero.
-  const after = { hero: ['flash','needs','bestrow'], grid: ['newrow','recent','firsttime'], testimonials: ['discretion','faqfix'] };
+  const after = { hero: ['flash','needs','bestrow'], grid: ['newrow','recent'], testimonials: ['discretion','faqfix'] };
   const FIXED = { flash: renderFlashSection, trust: renderTrustBar, needs: renderNeedsSection, bestrow: renderBestRow, newrow: renderNewRow, recent: renderRecentRow, firsttime: renderFirstTimeSection, kits: renderKitsSection, discretion: renderDiscretionSection, faqfix: renderFaqSection };
 
   const searching = state.searchQuery.trim().length>0;
@@ -5152,7 +5227,7 @@ function renderStore(){
   return `
   <a class="skip-link" href="#catalogo" onclick="event.preventDefault();scrollToId('catalogo');const g=document.getElementById('catalogo');if(g){g.setAttribute('tabindex','-1');g.focus({preventScroll:true});}">Saltar al catálogo</a>
   <div class="app">
-    <div class="topbar">${renderAnnounceBar()}${renderHeader()}${isKioskMode()?'':renderTrustTop()}</div>
+    <div class="topbar">${renderAnnounceBar()}${renderHeader()}</div>
     <div class="topbar-spacer" id="topbar-spacer"></div>
     ${state.settings.storePaused ? `<div class="note-box" style="margin:14px 20px 0;background:#F6DDE3;color:#7A2E45;font-weight:600;">${icon('alert-triangle',15)} ${state.settings.storePausedMessage || 'La tienda está en pausa temporalmente y no podemos tomar pedidos.'}</div>` : ''}
     ${state.loadError ? `<div class="load-error-box"><strong>No pudimos cargar el catálogo</strong><span>Parece que la conexión está lenta o se cortó.</span><button onclick="state.loadError=false;state.loaded=false;render();loadData()">Reintentar</button></div>` : ''}
